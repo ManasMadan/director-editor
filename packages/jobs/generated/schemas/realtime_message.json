@@ -57,6 +57,20 @@
       ],
       "additionalProperties": false,
       "title": "FilesChanged"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "director.changed"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "title": "DirectorChanged"
     }
   ]
 }

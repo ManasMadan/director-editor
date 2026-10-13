@@ -2,4 +2,5 @@
 
 export { LiveUpdates } from "./components/live-updates";
 export { PreferenceSync } from "./components/preference-sync";
+export { SiteChrome } from "./components/site-chrome";
 export { SiteHeader } from "./components/site-header";

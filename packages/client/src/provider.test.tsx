@@ -10,7 +10,14 @@ import { useApi } from "./provider";
 
 const info = {
   release: "1.4.0",
-  features: { ai: true, billing: false, captcha: false, files: true, google: false },
+  features: {
+    ai: true,
+    billing: false,
+    captcha: false,
+    director: false,
+    files: true,
+    google: false,
+  },
   minimumClientVersion: "1.0.0",
   captchaSiteKey: null,
   webPushPublicKey: null,

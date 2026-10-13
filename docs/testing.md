@@ -334,6 +334,7 @@ file below 100%, or one no test loads.
 | File | Suppression | Why |
 |---|---|---|
 | `apps/web/src/lib/cookies.ts` | `biome-ignore lint/suspicious/noDocumentCookie` | the Cookie Store API isn't in every browser yet |
+| `packages/db/prisma/migrations/20261010121359_director/migration.sql` | `-- squawk-ignore` (`adding-foreign-key-constraint`, `constraint-missing-not-valid`, `require-concurrent-index-creation`) | every flagged statement acts on a table the same migration creates: it is empty and no running release reads it, so nothing waits on a scan; the foreign keys hold writes on the tables they point at only until the migration commits, bounded by `lock_timeout` |
 | `packages/ui/src/components/field.tsx` | `biome-ignore lint/a11y/useSemanticElements` | `Field` is a `div` with the group role: a fieldset brings its own border, padding and minimum width into every form row (`FieldSet` is the fieldset, for a group of fields) |
 | `packages/ui/src/components/input-otp.tsx` | `biome-ignore lint/a11y/useSemanticElements` | the separator holds an icon, which an `hr` can't |
 | `packages/ui/src/components/label.tsx` | `biome-ignore lint/a11y/noLabelWithoutControl` | `Label` is a wrapper: the caller ties it to its control (`htmlFor`, or the control inside it) through props the rule can't see |

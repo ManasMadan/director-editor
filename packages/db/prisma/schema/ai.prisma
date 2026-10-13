@@ -63,3 +63,68 @@ model AiUsage {
   @@map("usage")
   @@schema("ai")
 }
+
+/// Director: how to film one YouTube short, as Gemini worked it out from watching it.
+/// One per workspace and video, so everyone in the workspace reuses the analysis.
+model DirectorPlan {
+  id           String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  orgId        String         @map("org_id") @db.Uuid
+  createdBy    String?        @map("created_by") @db.Uuid
+  /// The YouTube video id (11 characters).
+  videoId      String         @map("video_id")
+  /// pending (queued) | analyzing | ready | failed
+  status       String         @default("pending")
+  /// Why the analysis failed (an error code).
+  error        String?
+  /// The shot plan (app/schemas.py ShotPlan), once ready.
+  plan         Json?
+  /// The model that wrote it.
+  model        String?
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  creator      User?          @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  takes        DirectorTake[]
+
+  @@unique([orgId, videoId])
+  @@index([orgId, id(sort: Desc)])
+  @@map("director_plan")
+  @@schema("ai")
+}
+
+/// One recorded clip or photo for a shot of a plan, and Gemini's review of it. The
+/// newest take of a shot is the one that goes into the final video.
+model DirectorTake {
+  id           String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  orgId        String       @map("org_id") @db.Uuid
+  planId       String       @map("plan_id") @db.Uuid
+  userId       String       @map("user_id") @db.Uuid
+  /// The shot's position in the plan (0-based).
+  shotIndex    Int          @map("shot_index")
+  /// The upload (files.file) holding the take.
+  fileId       String       @map("file_id") @db.Uuid
+  /// video | photo
+  kind         String
+  /// pending (queued) | reviewing | ready | failed
+  status       String       @default("pending")
+  error        String?
+  /// The part of a video take worth keeping, in milliseconds from its start.
+  bestStartMs  Int?         @map("best_start_ms")
+  bestEndMs    Int?         @map("best_end_ms")
+  /// 0 to 100: how closely the take follows the shot.
+  score        Int?
+  feedback     String?
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  plan         DirectorPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  file         File         @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, id(sort: Desc)])
+  @@index([planId, userId, shotIndex])
+  @@index([userId])
+  @@index([fileId])
+  @@map("director_take")
+  @@schema("ai")
+}

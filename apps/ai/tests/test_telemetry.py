@@ -5,6 +5,8 @@ the process, so it starts once for this module."""
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from opentelemetry import trace
+from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from sqlalchemy import text
@@ -76,3 +78,29 @@ async def test_queries_of_engines_opened_later_are_traced(
         if span.attributes and span.attributes.get("db.system") == "postgresql"
     ]
     assert queries, [span.name for span in exporter.get_finished_spans()]
+
+
+async def test_outgoing_urls_in_traces_lose_their_signatures() -> None:
+    from opentelemetry.sdk.trace import TracerProvider
+
+    from app.telemetry import redact_async_request, redact_request, redact_span_urls
+
+    tracer = TracerProvider().get_tracer("test")
+    with tracer.start_as_current_span("GET") as span:
+        span.set_attribute("url.full", "http://storage/files/x?X-Amz-Signature=secret")
+        span.set_attribute("http.url", "http://storage/files/x?X-Amz-Signature=secret")
+        redact_request(span, None)
+        await redact_async_request(span, None)
+        assert isinstance(span, ReadableSpan)
+        assert span.attributes == {
+            "url.full": "http://storage/files/x",
+            "http.url": "http://storage/files/x",
+        }
+    # Only the attributes a span has are touched.
+    with tracer.start_as_current_span("GET") as span:
+        span.set_attribute("url.full", "http://storage/x?sig=1")
+        redact_span_urls(span)
+        assert isinstance(span, ReadableSpan)
+        assert span.attributes == {"url.full": "http://storage/x"}
+    # A span that records nothing (tracing off) is left alone.
+    redact_span_urls(trace.INVALID_SPAN)

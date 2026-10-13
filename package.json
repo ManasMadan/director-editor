@@ -129,6 +129,7 @@
     "lint:boundaries": "depcruise apps packages --config .dependency-cruiser.cjs && bun scripts/check-web-render-only.ts && bun scripts/check-layers.ts",
     "prepare": "husky",
     "stripe:fake": "bun run --filter @repo/fake-stripe start",
+    "google:fake": "bun run --filter @repo/fake-google start",
     "db:seed": "turbo run seed --filter=@repo/api",
     "secrets:reencrypt": "turbo run secrets:reencrypt --filter=@repo/api",
     "test:coverage": "turbo run coverage && bun test --coverage ./scripts/ ./.claude/hooks/ && bun scripts/coverage.ts",

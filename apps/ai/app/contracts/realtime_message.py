@@ -34,7 +34,14 @@ class FilesChanged(BaseModel):
     type: Literal["files.changed"]
 
 
+class DirectorChanged(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    type: Literal["director.changed"]
+
+
 type RealtimeMessage = Annotated[
-    TodosChanged | NotificationsChanged | DocumentsChanged | FilesChanged,
+    TodosChanged | NotificationsChanged | DocumentsChanged | FilesChanged | DirectorChanged,
     Field(..., title="RealtimeMessage"),
 ]

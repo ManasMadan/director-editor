@@ -117,6 +117,11 @@ export const envSchema = {
   // (the same AI_SERVICE_SECRET the service verifies with).
   AI_URL: z.url().optional(),
   AI_SERVICE_SECRET: z.string().min(32).optional(),
+  // Optional: Director's Shorts feed (YouTube Data API v3). Director is on when it and
+  // the AI service are both set (src/features.ts).
+  YOUTUBE_API_KEY: z.string().min(1).optional(),
+  // Test hook: where YouTube's API lives (the tests' stand-in).
+  YOUTUBE_API_URL: z.url().default("https://www.googleapis.com/youtube/v3"),
 };
 
 export const env = createEnv({
@@ -133,4 +138,9 @@ if (env.NODE_ENV === "production" && env.STRIPE_API_URL) {
 
 if (env.NODE_ENV === "production" && env.WEBHOOK_ALLOWED_PRIVATE_ADDRESSES.length > 0) {
   throw new Error("WEBHOOK_ALLOWED_PRIVATE_ADDRESSES must be empty in production");
+}
+
+// The local mock Google (packages/fake-google) is plain HTTP: production never reads it.
+if (env.NODE_ENV === "production" && !env.YOUTUBE_API_URL.startsWith("https://")) {
+  throw new Error("YOUTUBE_API_URL must be HTTPS in production");
 }

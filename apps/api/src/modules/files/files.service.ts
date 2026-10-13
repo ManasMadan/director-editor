@@ -109,6 +109,17 @@ export class FilesService {
     return toInfo(row);
   }
 
+  /**
+   * A presigned read of a ready file of the user's, for another service to fetch (the AI
+   * service reviewing a Director take): it has no storage credentials, so the link is
+   * its only way in, and it is valid for `expiresInSeconds` only.
+   */
+  async readUrl(userId: UserId, fileId: FileId, purpose: UploadPurpose, expiresInSeconds: number) {
+    const file = await this.ready(userId, fileId, purpose);
+    const { url } = await this.storage.presignDownload(storedKey(fileId), { expiresInSeconds });
+    return { file, url };
+  }
+
   /** Deletes the row; the database queues its stored objects for removal. */
   async remove(userId: UserId, fileId: FileId) {
     await this.files.remove(userId, fileId);
@@ -128,6 +139,15 @@ export class FilesService {
       // Images are shown inline; anything else downloads rather than opening.
       ...(row.purpose !== "avatar" && { filename: row.filename }),
     });
+  }
+
+  /** downloadUrl, or FILE_NOT_FOUND when the viewer may not read such a file. */
+  async requireDownloadUrl(viewerId: UserId, fileId: FileId) {
+    const download = await this.downloadUrl(viewerId, fileId);
+    if (!download) {
+      throw new AppError("FILE_NOT_FOUND");
+    }
+    return download;
   }
 
   private async find(userId: UserId, fileId: FileId) {

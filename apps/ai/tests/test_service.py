@@ -296,6 +296,19 @@ def test_an_unknown_route_is_a_contract_error(client: TestClient) -> None:
     }
 
 
+def test_director_is_off_without_its_model(client: TestClient) -> None:
+    org, user = new_org()
+    response = client.post(
+        "/v1/director/plans", json={"videoId": "dQw4w9WgXcQ"}, headers=headers(org, user)
+    )
+    error = error_of(response)
+    assert (response.status_code, error.code, error.data.params) == (
+        404,
+        "FEATURE_DISABLED",
+        {"feature": "director"},
+    )
+
+
 def test_the_worker_indexes_queued_documents_then_summarizes_them(client: TestClient) -> None:
     org, user = new_org()
     doc = document_of(

@@ -38,7 +38,14 @@ describe("features off", () => {
   it("reports every optional feature off, with no keys for the browser", async () => {
     const info = await createSession(harness).rpc.system.info();
     expect(info).toMatchObject({
-      features: { google: false, ai: false, captcha: false, files: false, billing: false },
+      features: {
+        google: false,
+        ai: false,
+        captcha: false,
+        director: false,
+        files: false,
+        billing: false,
+      },
       captchaSiteKey: null,
       webPushPublicKey: null,
     });

@@ -2,7 +2,7 @@ import * as z from "zod";
 import { base } from "./base";
 
 /** Optional subsystems. A feature is on when its configuration is present (see apps/api/src/features.ts). */
-const FEATURES = ["ai", "billing", "captcha", "files", "google"] as const;
+const FEATURES = ["ai", "billing", "captcha", "director", "files", "google"] as const;
 export type Feature = (typeof FEATURES)[number];
 
 export const systemContract = {

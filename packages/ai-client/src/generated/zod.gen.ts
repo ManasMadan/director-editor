@@ -10,6 +10,84 @@ export const zAssistantRequest = z.object({
 });
 
 /**
+ * Box
+ */
+export const zBox = z.object({
+    height: z.number().gte(0.01).lte(1),
+    width: z.number().gte(0.01).lte(1),
+    x: z.number().gte(0).lte(1),
+    y: z.number().gte(0).lte(1)
+});
+
+export const zCameraMove = z.enum([
+    'static',
+    'up',
+    'down',
+    'left',
+    'right',
+    'forward',
+    'back',
+    'orbit',
+    'tilt-up',
+    'tilt-down'
+]);
+
+export const zDirection = z.enum([
+    'none',
+    'left',
+    'right',
+    'forward',
+    'back',
+    'turn-left',
+    'turn-right'
+]);
+
+/**
+ * DirectorPlanCreate
+ */
+export const zDirectorPlanCreate = z.object({
+    videoId: z.string().regex(/^[A-Za-z0-9_-]{11}$/)
+});
+
+/**
+ * DirectorTakeCreate
+ */
+export const zDirectorTakeCreate = z.object({
+    contentType: z.enum([
+        'video/webm',
+        'video/mp4',
+        'image/jpeg'
+    ]),
+    fileId: z.uuid(),
+    kind: z.enum(['video', 'photo']),
+    shotIndex: z.int().gte(0).lt(12),
+    sourceUrl: z.string().max(4000).regex(/^https?:\/\//),
+    videoId: z.string().regex(/^[A-Za-z0-9_-]{11}$/)
+});
+
+/**
+ * DirectorTakeOut
+ */
+export const zDirectorTakeOut = z.object({
+    bestEndMs: z.int().nullable(),
+    bestStartMs: z.int().nullable(),
+    createdAt: z.iso.datetime(),
+    error: z.string().nullable(),
+    feedback: z.string().nullable(),
+    fileId: z.uuid(),
+    id: z.uuid(),
+    kind: z.enum(['video', 'photo']),
+    score: z.int().nullable(),
+    shotIndex: z.int(),
+    status: z.enum([
+        'pending',
+        'reviewing',
+        'ready',
+        'failed'
+    ])
+});
+
+/**
  * DocumentCreate
  */
 export const zDocumentCreate = z.object({
@@ -89,6 +167,15 @@ export const zErrorCode = z.enum([
     'DOCUMENT_INDEXING_FAILED',
     'AI_BUDGET_EXCEEDED',
     'AI_RUN_LIMIT',
+    'SHORT_NOT_FOUND',
+    'SHORT_TOO_LONG',
+    'DIRECTOR_PLAN_NOT_FOUND',
+    'DIRECTOR_PLAN_NOT_READY',
+    'DIRECTOR_SHOT_NOT_FOUND',
+    'DIRECTOR_TAKE_KIND_MISMATCH',
+    'DIRECTOR_VIDEO_UNREADABLE',
+    'DIRECTOR_ANALYSIS_FAILED',
+    'DIRECTOR_REVIEW_FAILED',
     'TODO_NOT_FOUND',
     'TODO_VERSION_CONFLICT'
 ]);
@@ -133,10 +220,109 @@ export const zErrorResponse = z.object({
 });
 
 /**
+ * Framing
+ */
+export const zFraming = z.object({
+    note: z.string().min(1).max(160),
+    shotSize: z.enum([
+        'close-up',
+        'medium',
+        'full-body',
+        'wide'
+    ]),
+    subject: zBox
+});
+
+/**
  * HealthResponse
  */
 export const zHealthResponse = z.object({
     status: z.literal('ok')
+});
+
+export const zKeypointName = z.enum([
+    'nose',
+    'left_shoulder',
+    'right_shoulder',
+    'left_elbow',
+    'right_elbow',
+    'left_wrist',
+    'right_wrist',
+    'left_hip',
+    'right_hip',
+    'left_knee',
+    'right_knee',
+    'left_ankle',
+    'right_ankle'
+]);
+
+/**
+ * Keypoint
+ */
+export const zKeypoint = z.object({
+    name: zKeypointName,
+    x: z.number().gte(0).lte(1),
+    y: z.number().gte(0).lte(1)
+});
+
+/**
+ * PhoneAngle
+ */
+export const zPhoneAngle = z.object({
+    height: z.enum([
+        'floor',
+        'waist',
+        'chest',
+        'shoulder',
+        'eye',
+        'overhead'
+    ]),
+    pitch: z.number().gte(-90).lte(90),
+    roll: z.number().gte(-45).lte(45),
+    tolerance: z.number().gte(3).lte(30)
+});
+
+/**
+ * SceneCheckRequest
+ */
+export const zSceneCheckRequest = z.object({
+    image: z.string().min(100).max(400000),
+    shotIndex: z.int().gte(0).lt(12),
+    videoId: z.string().regex(/^[A-Za-z0-9_-]{11}$/)
+});
+
+/**
+ * SceneLandmark
+ */
+export const zSceneLandmark = z.object({
+    box: zBox,
+    label: z.string().min(1).max(40)
+});
+
+/**
+ * SceneCheck
+ */
+export const zSceneCheck = z.object({
+    direction: zDirection,
+    distanceMeters: z.number().gte(0).lte(50).nullable(),
+    inPlace: z.boolean(),
+    instruction: z.string().min(1).max(160),
+    landmark: zSceneLandmark.nullable(),
+    lighting: z.enum([
+        'good',
+        'too-dark',
+        'too-bright',
+        'backlit'
+    ])
+});
+
+/**
+ * ScriptLine
+ */
+export const zScriptLine = z.object({
+    endSeconds: z.number().gte(0.1).lte(60),
+    startSeconds: z.number().gte(0).lte(60),
+    text: z.string().min(1).max(240)
 });
 
 /**
@@ -160,6 +346,15 @@ export const zSentimentResponse = z.object({
 });
 
 /**
+ * ShotStep
+ */
+export const zShotStep = z.object({
+    atSeconds: z.number().gte(0).lte(60),
+    cameraMove: zCameraMove,
+    instruction: z.string().min(1).max(160)
+});
+
+/**
  * Source
  */
 export const zSource = z.object({
@@ -173,6 +368,70 @@ export const zSource = z.object({
 export const zSourcesEvent = z.object({
     sources: z.array(zSource),
     type: z.literal('sources').optional().default('sources')
+});
+
+/**
+ * TargetPose
+ */
+export const zTargetPose = z.object({
+    description: z.string().min(1).max(160),
+    keypoints: z.array(zKeypoint).max(13)
+});
+
+/**
+ * Shot
+ */
+export const zShot = z.object({
+    camera: z.enum(['front', 'back']),
+    durationSeconds: z.number().gte(0.5).lte(60),
+    framing: zFraming,
+    kind: z.enum(['video', 'photo']),
+    phoneAngle: zPhoneAngle,
+    pose: zTargetPose,
+    purpose: z.string().min(1).max(240),
+    scene: z.string().min(1).max(200),
+    sceneLandmark: z.string().max(40).nullable(),
+    script: z.array(zScriptLine).max(20),
+    sourceEndSeconds: z.number().gte(0.1).lte(180),
+    sourceStartSeconds: z.number().gte(0).lte(180),
+    steps: z.array(zShotStep).min(1).max(10),
+    title: z.string().min(1).max(80)
+});
+
+/**
+ * ShotPlan
+ */
+export const zShotPlan = z.object({
+    audio: z.enum([
+        'speech',
+        'music',
+        'speech-and-music',
+        'none'
+    ]),
+    durationSeconds: z.number().gte(0.5).lte(180),
+    format: z.string().min(1).max(60),
+    shots: z.array(zShot).min(1).max(12),
+    summary: z.string().min(1).max(400),
+    title: z.string().min(1).max(120)
+});
+
+/**
+ * DirectorPlanOut
+ */
+export const zDirectorPlanOut = z.object({
+    createdAt: z.iso.datetime(),
+    error: z.string().nullable(),
+    id: z.uuid(),
+    model: z.string().nullable(),
+    plan: zShotPlan.nullable(),
+    status: z.enum([
+        'pending',
+        'analyzing',
+        'ready',
+        'failed'
+    ]),
+    updatedAt: z.iso.datetime(),
+    videoId: z.string()
 });
 
 /**
@@ -239,6 +498,72 @@ export const zAnswerHeaders = z.object({
  * Server-sent events, each `data:` line one AssistantEvent.
  */
 export const zAnswerResponse = zAssistantEvent;
+
+export const zRequestDirectorPlanBody = zDirectorPlanCreate;
+
+export const zRequestDirectorPlanHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+/**
+ * Successful Response
+ */
+export const zRequestDirectorPlanResponse = zDirectorPlanOut;
+
+export const zGetDirectorPlanHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+export const zGetDirectorPlanPath = z.object({
+    video_id: z.string().regex(/^[A-Za-z0-9_-]{11}$/)
+});
+
+/**
+ * Successful Response
+ */
+export const zGetDirectorPlanResponse = zDirectorPlanOut;
+
+export const zListDirectorTakesHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+export const zListDirectorTakesPath = z.object({
+    video_id: z.string().regex(/^[A-Za-z0-9_-]{11}$/)
+});
+
+/**
+ * Response Listdirectortakes
+ *
+ * Successful Response
+ */
+export const zListDirectorTakesResponse = z.array(zDirectorTakeOut);
+
+export const zCheckDirectorSceneBody = zSceneCheckRequest;
+
+export const zCheckDirectorSceneHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+/**
+ * Successful Response
+ */
+export const zCheckDirectorSceneResponse = zSceneCheck;
+
+export const zCreateDirectorTakeBody = zDirectorTakeCreate;
+
+export const zCreateDirectorTakeHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+/**
+ * Successful Response
+ */
+export const zCreateDirectorTakeResponse = zDirectorTakeOut;
 
 export const zListDocumentsHeaders = z.object({
     authorization: z.string().nullish(),

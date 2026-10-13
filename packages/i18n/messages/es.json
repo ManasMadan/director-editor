@@ -26,7 +26,8 @@
     },
     "language": "Idioma",
     "captchaFailed": "No se pudo cargar la verificación de seguridad. Revisa tu conexión, permite challenges.cloudflare.com si usas un bloqueador y recarga la página.",
-    "assistant": "Asistente"
+    "assistant": "Asistente",
+    "director": "Director"
   },
   "meta": {
     "title": "Director-editor",
@@ -446,6 +447,15 @@
     "DOCUMENT_INDEXING_FAILED": "No se pudo preparar este documento para el asistente. Prueba a añadirlo de nuevo.",
     "AI_BUDGET_EXCEEDED": "Este espacio de trabajo ya usó la asignación del asistente de este mes. Se renueva el día 1.",
     "AI_RUN_LIMIT": "Esa pregunta necesitaba más trabajo del que permite una respuesta. Prueba con una pregunta más concreta.",
+    "SHORT_NOT_FOUND": "Ese short no está en YouTube o es privado.",
+    "SHORT_TOO_LONG": "Director funciona con shorts de hasta {maxSeconds, number} segundos. Elige un video más corto.",
+    "DIRECTOR_PLAN_NOT_FOUND": "Director todavía no ha visto este short. Ábrelo desde el feed de Shorts.",
+    "DIRECTOR_PLAN_NOT_READY": "Director todavía está analizando este short. Inténtalo de nuevo en un momento.",
+    "DIRECTOR_SHOT_NOT_FOUND": "Esa toma no forma parte de este plan.",
+    "DIRECTOR_TAKE_KIND_MISMATCH": "Esta toma necesita otro tipo de grabación: un video para una toma de video y una foto para una de foto.",
+    "DIRECTOR_VIDEO_UNREADABLE": "Director no pudo ver este short. Puede ser privado, tener restricción de edad o haberse eliminado.",
+    "DIRECTOR_ANALYSIS_FAILED": "Director no pudo averiguar cómo grabar este short. Inténtalo de nuevo.",
+    "DIRECTOR_REVIEW_FAILED": "Director no pudo revisar esta toma. Grábala de nuevo.",
     "APP_NOT_FOUND": "Esa aplicación no está conectada a tu cuenta.",
     "API_KEY_NOT_FOUND": "Esa clave de API no existe en este espacio de trabajo.",
     "API_KEY_LIMIT_REACHED": "Este espacio de trabajo ya tiene todas las claves de API que puede tener. Revoca alguna que ya no uses.",
@@ -962,5 +972,240 @@
       "es": "Español"
     },
     "captchaCancelled": "El control de seguridad no se completó. Inténtalo de nuevo."
+  },
+  "shorts": {
+    "title": "Shorts",
+    "homeTitle": "Inicio",
+    "savedTitle": "Tú",
+    "brand": "Director",
+    "off": "Director todavía no está configurado en este espacio de trabajo.",
+    "nav": {
+      "label": "Principal",
+      "home": "Inicio",
+      "shorts": "Shorts",
+      "saved": "Tú"
+    },
+    "topicsLabel": "Temas",
+    "topics": {
+      "all": "Todo",
+      "grwm": "GRWM",
+      "outfits": "Outfits",
+      "sneakers": "Zapatillas",
+      "dance": "Baile",
+      "cooking": "Cocina",
+      "travel": "Viajes",
+      "comedy": "Comedia",
+      "fitness": "Fitness",
+      "pets": "Mascotas"
+    },
+    "paste": {
+      "label": "Pega un enlace de Shorts",
+      "placeholder": "youtube.com/shorts/…",
+      "submit": "Abrir"
+    },
+    "views": "{count, number, ::compact-short} visualizaciones",
+    "count": "{count, number, ::compact-short}",
+    "loadMore": "Ver más",
+    "empty": "Todavía no hay shorts aquí.",
+    "embedTitle": "{title} en YouTube",
+    "player": {
+      "like": "Me gusta",
+      "comments": "Comentarios",
+      "share": "Compartir",
+      "save": "Guardar",
+      "director": "Director",
+      "copied": "Enlace copiado",
+      "next": "Siguiente short",
+      "previous": "Short anterior",
+      "by": "@{channel}",
+      "mute": "Silenciar",
+      "unmute": "Activar sonido"
+    },
+    "comments": {
+      "title": "Comentarios",
+      "disabled": "Los comentarios están desactivados en este short.",
+      "empty": "Todavía no hay comentarios.",
+      "onYouTube": "Comentar en YouTube",
+      "close": "Cerrar"
+    },
+    "saved": {
+      "liked": "Me gusta",
+      "saved": "Guardados",
+      "empty": "Todavía no hay nada. Dale me gusta o guarda un short desde el feed."
+    },
+    "account": "Tu cuenta",
+    "leave": "Volver al panel"
+  },
+  "director": {
+    "title": "Director",
+    "back": "Atrás",
+    "progress": {
+      "pending": "Director se está preparando…",
+      "analyzing": "Director está viendo el short…",
+      "hint": "Tarda alrededor de un minuto."
+    },
+    "retry": "Intentar de nuevo",
+    "needs": "Necesitas {shots, plural, one {# toma} other {# tomas}}: {videos, plural, =0 {ningún video} one {# video} other {# videos}} y {photos, plural, =0 {ninguna foto} one {# foto} other {# fotos}}.",
+    "inOrder": "Grábalas en este orden",
+    "kind": {
+      "video": "Video",
+      "photo": "Foto"
+    },
+    "seconds": "{seconds, number, ::.#} s",
+    "camera": {
+      "front": "Cámara frontal",
+      "back": "Cámara trasera"
+    },
+    "audio": {
+      "question": "Este short tiene voz. ¿La dirás tú o usarás el audio original?",
+      "voice": "Hablaré yo",
+      "original": "Usar el audio original",
+      "music": "Este short tiene música: grabarás siguiendo el audio original.",
+      "silent": "Este short no tiene sonido que seguir."
+    },
+    "record": "Grabar",
+    "watch": "Ver esta parte",
+    "shoot": {
+      "shotOf": "Toma {index, number} de {count, number}",
+      "cameraBlocked": "Director necesita tu cámara. Permítela en la configuración del navegador e inténtalo de nuevo.",
+      "cameraMissing": "En este dispositivo no hay ninguna cámara que Director pueda usar.",
+      "start": "Encender la cámara",
+      "useTilt": "Usar la inclinación del teléfono",
+      "level": {
+        "label": "Ángulo del teléfono",
+        "ok": "Ángulo fijado",
+        "tipUp": "Inclina la parte de arriba hacia atrás",
+        "tipDown": "Inclina la parte de arriba hacia delante",
+        "leanLeft": "Gíralo a la izquierda",
+        "leanRight": "Gíralo a la derecha",
+        "unavailable": "La guía de ángulo funciona en un teléfono."
+      },
+      "height": {
+        "floor": "Sujeta el teléfono cerca del suelo",
+        "waist": "Sujeta el teléfono a la altura de la cintura",
+        "chest": "Sujeta el teléfono a la altura del pecho",
+        "shoulder": "Sujeta el teléfono a la altura del hombro",
+        "eye": "Sujeta el teléfono a la altura de los ojos",
+        "overhead": "Sujeta el teléfono en alto"
+      },
+      "framing": {
+        "in-frame": "Estás en cuadro",
+        "not-seen": "Entra en el cuadro",
+        "come-closer": "Acércate",
+        "step-back": "Aléjate un paso",
+        "step-left": "Muévete a tu izquierda",
+        "step-right": "Muévete a tu derecha",
+        "aim-left": "Apunta un poco a la izquierda",
+        "aim-right": "Apunta un poco a la derecha"
+      },
+      "pose": {
+        "matched": "Pose lograda",
+        "match": "Imita la silueta",
+        "loading": "Cargando la guía de pose…",
+        "failed": "No se pudo cargar la guía de pose. Puedes grabar igualmente."
+      },
+      "scene": {
+        "checking": "Revisando tu lugar…",
+        "inPlace": "Buen lugar.",
+        "lighting": {
+          "good": "Buena luz",
+          "too-dark": "Aquí está demasiado oscuro",
+          "too-bright": "Aquí hay demasiada luz",
+          "backlit": "Tienes la luz detrás"
+        }
+      },
+      "countdown": "{seconds, number}",
+      "action": "¡Acción!",
+      "getReady": "Ahora: {title}. {scene}.",
+      "recording": "Grabando",
+      "stop": "Detener",
+      "photo": "Hacer la foto",
+      "retake": "Repetir",
+      "use": "Usar esta toma",
+      "sending": "Enviando tu toma a Director…",
+      "next": "Siguiente toma",
+      "done": "Ver tus tomas",
+      "original": "El audio original suena mientras grabas.",
+      "prompter": "Teleprompter",
+      "step": "Paso {index, number}",
+      "speak": "Leer las indicaciones en voz alta",
+      "preview": "Tu toma",
+      "recordFailed": "Director no pudo empezar a grabar con la cámara aquí. Inténtalo de nuevo o prueba con otro navegador.",
+      "doodle": {
+        "standHere": "Ponte aquí",
+        "meters": "{meters, number, ::.#} m",
+        "move": {
+          "up": "Sube el móvil",
+          "down": "Baja el móvil",
+          "left": "Mueve el móvil a la izquierda",
+          "right": "Mueve el móvil a la derecha",
+          "forward": "Acércate",
+          "back": "Aléjate",
+          "orbit": "Da la vuelta",
+          "tilt-up": "Inclina hacia arriba",
+          "tilt-down": "Inclina hacia abajo"
+        }
+      }
+    },
+    "review": {
+      "title": "Tus tomas",
+      "reviewing": "Director está revisando esta toma…",
+      "score": "{score, number}/100",
+      "keeps": "Se queda de {start, number, ::.#} s a {end, number, ::.#} s",
+      "missing": "Sin grabar",
+      "film": "Grabarla",
+      "retake": "Repetir",
+      "left": "{count, plural, one {Falta # toma} other {Faltan # tomas}} por grabar.",
+      "rendering": "Montando tu short… {done, number, ::percent}",
+      "ready": "Tu short está listo",
+      "download": "Descargar",
+      "silent": "No tiene sonido a propósito: añade el sonido original al publicarlo en YouTube (Usar este sonido).",
+      "renderFailed": "No se pudo montar tu short en este navegador. Prueba con Chrome o Safari."
+    },
+    "template": {
+      "use": "Usar plantilla",
+      "storyboard": "Guion gráfico",
+      "watchShot": "Ver la toma {index, number}: {title}",
+      "shots": "{count, plural, one {# toma} other {# tomas}}",
+      "mix": "{videos, plural, =0 {ningún vídeo} one {# vídeo} other {# vídeos}} · {photos, plural, =0 {ninguna foto} one {# foto} other {# fotos}}",
+      "playing": "Reproduciendo la toma {index, number}: {title}",
+      "watchAll": "Ver el short entero"
+    },
+    "editor": {
+      "quality": "{height, number}p",
+      "next": "Siguiente",
+      "play": "Reproducir",
+      "pause": "Pausa",
+      "undo": "Deshacer",
+      "redo": "Rehacer",
+      "second": "{seconds, number} s",
+      "clip": "Toma {index, number} · {title}",
+      "notFilmed": "La toma {index, number} aún no está grabada",
+      "loadFailed": "No se pudo cargar esta toma. Prueba a repetirla.",
+      "timeline": "Línea de tiempo",
+      "backToEdit": "Volver a editar",
+      "textHint": "Toca un subtítulo en la línea de tiempo para cambiar sus palabras.",
+      "textLabel": "Texto del subtítulo",
+      "done": "Listo",
+      "soundOn": "Mantener tu voz en el short",
+      "sound": {
+        "voice": "Tu voz",
+        "muted": "Sin sonido",
+        "original": "Sonido original · añádelo en YouTube"
+      },
+      "tools": {
+        "label": "Herramientas de edición",
+        "captions": "Subtítulos",
+        "text": "Texto",
+        "sound": "Sonido",
+        "retake": "Repetir"
+      },
+      "style": {
+        "label": "Estilo de subtítulos",
+        "pop": "Pop",
+        "classic": "Clásico",
+        "off": "Sin subtítulos"
+      }
+    }
   }
 }

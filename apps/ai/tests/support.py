@@ -29,6 +29,9 @@ ENV = {
     "AI_MODEL": "local:extractive",
     "AI_EMBEDDINGS": "hashing",
     "AI_MONTHLY_TOKENS_PER_ORG": "2000000",
+    # Off unless a test turns it on (.env.example points it at the local mock Google).
+    "DIRECTOR_MODEL": "",
+    "GOOGLE_BASE_URL": "",
     "NODE_ENV": "test",
 }
 

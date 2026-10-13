@@ -66,4 +66,13 @@ export const filesContract = {
   get: route("GET", "/files/{fileId}", "A file's status")
     .input(z.object({ fileId: fileIdSchema }))
     .output(fileSchema),
+  /**
+   * A short-lived URL to read a ready file the caller may see, for a client that must
+   * read its bytes itself (Director stitching takes in a canvas needs them CORS-clean,
+   * which a redirect from /api/v1/files/{id}/content can't give: the browser sends the
+   * storage an opaque origin after it). FILE_NOT_FOUND otherwise.
+   */
+  downloadUrl: route("GET", "/files/{fileId}/download-url", "A short-lived URL to a file")
+    .input(z.object({ fileId: fileIdSchema }))
+    .output(z.object({ url: z.url(), expiresAt: z.date() })),
 };

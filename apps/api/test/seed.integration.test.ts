@@ -56,7 +56,12 @@ async function command(entry: string, env: Record<string, string | undefined> = 
 }
 
 /** Production, as far as the configuration's own checks let a test go. */
-const PRODUCTION = { NODE_ENV: "production", WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "" };
+const PRODUCTION = {
+  NODE_ENV: "production",
+  WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "",
+  // .env.example points at the local mock Google, which production refuses.
+  YOUTUBE_API_URL: "https://www.googleapis.com/youtube/v3",
+};
 
 /** process.exit, stopped short so the refusal can be seen. */
 function refusingExit() {

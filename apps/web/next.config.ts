@@ -74,7 +74,10 @@ const config: NextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           {
             key: "Permissions-Policy",
-            value: "camera=(), microphone=(), geolocation=(), payment=()",
+            // Director films with the camera and microphone and reads the phone's tilt;
+            // nothing embedded may (YouTube's player is given only what it needs).
+            value:
+              "camera=(self), microphone=(self), accelerometer=(self), gyroscope=(self), geolocation=(), payment=()",
           },
         ],
       },

@@ -25,7 +25,7 @@ import * as z from "zod";
 import { jobMeta, queuePrefix, queues } from "../src/queues";
 
 /** The queues Python uses. */
-const shared = ["ai-ingest"] as const;
+const shared = ["ai-ingest", "ai-director"] as const;
 
 /**
  * What Python needs of a queue's options. Strict, so an option added to one of these
@@ -80,7 +80,7 @@ for (const queue of shared) {
     schema: z.enum(Object.keys(jobs)),
     io: "output",
   };
-  for (const [job, payload] of Object.entries(jobs)) {
+  for (const [job, payload] of Object.entries<z.ZodType>(jobs)) {
     schemas[`${snake(queue)}_${snake(job)}_job`] = {
       title: `${pascal(queue)}${pascal(job)}Job`,
       schema: z.object({ meta: jobMeta, payload }),

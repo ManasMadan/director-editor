@@ -25,18 +25,24 @@ function billing() {
   return count === set.length;
 }
 
+const ai = pair("AI service (AI_URL/AI_SERVICE_SECRET)", env.AI_URL, env.AI_SERVICE_SECRET);
+const files = Boolean(env.S3_BUCKET);
+
 export const features: Record<Feature, boolean> = {
   google: pair(
     "Google sign-in (GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET)",
     env.GOOGLE_CLIENT_ID,
     env.GOOGLE_CLIENT_SECRET,
   ),
-  ai: pair("AI service (AI_URL/AI_SERVICE_SECRET)", env.AI_URL, env.AI_SERVICE_SECRET),
+  ai,
+  // The feed needs YouTube, the plans the AI service (which also needs DIRECTOR_MODEL;
+  // until then it answers FEATURE_DISABLED itself), and the takes uploads.
+  director: ai && files && Boolean(env.YOUTUBE_API_KEY),
   captcha: pair(
     "Captcha (TURNSTILE_SITE_KEY/TURNSTILE_SECRET_KEY)",
     env.TURNSTILE_SITE_KEY,
     env.TURNSTILE_SECRET_KEY,
   ),
-  files: Boolean(env.S3_BUCKET),
+  files,
   billing: billing(),
 };

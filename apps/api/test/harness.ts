@@ -39,6 +39,7 @@ const OPTIONAL_FEATURES_OFF = {
   STRIPE_API_URL: "",
   AI_URL: "",
   AI_SERVICE_SECRET: "",
+  YOUTUBE_API_KEY: "",
 };
 
 /** Local object storage (docker compose --profile files); CI runs the same. */

@@ -4,7 +4,7 @@ packages/fake-stripe on the TypeScript side)."""
 
 import json
 import threading
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -90,3 +90,79 @@ def openai_unavailable(_body: bytes) -> Reply:
 def otlp_collector(_body: bytes) -> Reply:
     """An OpenTelemetry collector's OTLP/HTTP endpoint, accepting everything."""
     return 200, {}
+
+
+GEMINI_MODEL = "gemini-test"
+GEMINI_PATH = f"/v1beta/models/{GEMINI_MODEL}:generateContent"
+
+
+def gemini_output(args: Mapping[str, object], *, tokens: int = 1_000) -> Callable[[bytes], Reply]:
+    """The Gemini API's generateContent answering with Pydantic AI's output tool
+    (`final_result`) called with `args`, having used `tokens` tokens."""
+
+    def reply(_body: bytes) -> Reply:
+        return 200, {
+            "candidates": [
+                {
+                    "content": {
+                        "role": "model",
+                        "parts": [{"functionCall": {"name": "final_result", "args": args}}],
+                    },
+                    "finishReason": "STOP",
+                    "index": 0,
+                }
+            ],
+            "usageMetadata": {
+                "promptTokenCount": tokens - 100,
+                "candidatesTokenCount": 100,
+                "totalTokenCount": tokens,
+            },
+            "modelVersion": GEMINI_MODEL,
+            "responseId": "fake-response",
+        }
+
+    return reply
+
+
+def gemini_error(status: int, reason: str, message: str = "") -> Callable[[bytes], Reply]:
+    """A refusal or outage, as the Gemini API reports one (403 PERMISSION_DENIED for a
+    video it may not watch, 500 INTERNAL, ...)."""
+
+    def reply(_body: bytes) -> Reply:
+        return status, {"error": {"code": status, "message": message or reason, "status": reason}}
+
+    return reply
+
+
+@contextmanager
+def serve_files(files: dict[str, tuple[str, bytes]]) -> Generator[Fake]:
+    """Object storage answering presigned GETs: each path's content type and bytes."""
+    fake = Fake(url="")
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            fake.received.append((self.path, b""))
+            found = files.get(self.path.split("?")[0])
+            if found is None:
+                self.send_response(404)
+                self.send_header("content-length", "0")
+                self.end_headers()
+                return
+            content_type, data = found
+            self.send_response(200)
+            self.send_header("content-type", content_type)
+            self.send_header("content-length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, format: str, *args: object) -> None:
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    fake.url = f"http://127.0.0.1:{server.server_address[1]}"
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield fake
+    finally:
+        server.shutdown()

@@ -35,6 +35,17 @@ export type FileId = z.infer<typeof fileIdSchema>;
 export const documentIdSchema = z.uuid().brand<"DocumentId">();
 export type DocumentId = z.infer<typeof documentIdSchema>;
 
+export const directorPlanIdSchema = z.uuid().brand<"DirectorPlanId">();
+
+export const directorTakeIdSchema = z.uuid().brand<"DirectorTakeId">();
+
+/** A YouTube video id: 11 characters of URL-safe base64. */
+export const videoIdSchema = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]{11}$/)
+  .brand<"VideoId">();
+export type VideoId = z.infer<typeof videoIdSchema>;
+
 export const notificationIdSchema = z.uuid().brand<"NotificationId">();
 export type NotificationId = z.infer<typeof notificationIdSchema>;
 

@@ -60,3 +60,23 @@ model AppProcessedEvent {
   @@map("processed_event")
   @@schema("app")
 }
+
+/// A YouTube short a member liked or saved (the Shorts feed's like and save buttons).
+model ShortReaction {
+  id           String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  orgId        String       @map("org_id") @db.Uuid
+  userId       String       @map("user_id") @db.Uuid
+  /// The YouTube video id (11 characters).
+  videoId      String       @map("video_id")
+  /// like | save
+  kind         String
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId, videoId, kind])
+  @@index([orgId, id(sort: Desc)])
+  @@index([userId])
+  @@map("short_reaction")
+  @@schema("app")
+}

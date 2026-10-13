@@ -27,7 +27,8 @@ declare const messages: {
     },
     "language": "Language",
     "captchaFailed": "The security check couldn't load. Check your connection, allow challenges.cloudflare.com if you use a blocker, and reload.",
-    "assistant": "Assistant"
+    "assistant": "Assistant",
+    "director": "Director"
   },
   "meta": {
     "title": "Director-editor",
@@ -447,6 +448,15 @@ declare const messages: {
     "DOCUMENT_INDEXING_FAILED": "This document couldn't be prepared for the assistant. Try adding it again.",
     "AI_BUDGET_EXCEEDED": "This workspace has used this month's assistant allowance. It resets on the 1st.",
     "AI_RUN_LIMIT": "That question needed more work than one answer allows. Try a narrower question.",
+    "SHORT_NOT_FOUND": "That short isn't on YouTube, or it's private.",
+    "SHORT_TOO_LONG": "Director works with shorts up to {maxSeconds, number} seconds long. Pick a shorter video.",
+    "DIRECTOR_PLAN_NOT_FOUND": "Director hasn't looked at this short yet. Open it from the Shorts feed.",
+    "DIRECTOR_PLAN_NOT_READY": "Director is still working out this short. Try again in a moment.",
+    "DIRECTOR_SHOT_NOT_FOUND": "That shot isn't part of this plan.",
+    "DIRECTOR_TAKE_KIND_MISMATCH": "This shot needs a different kind of take: a video for a video shot, a photo for a photo shot.",
+    "DIRECTOR_VIDEO_UNREADABLE": "Director couldn't watch this short. It may be private, age-restricted or removed.",
+    "DIRECTOR_ANALYSIS_FAILED": "Director couldn't work out how to film this short. Try again.",
+    "DIRECTOR_REVIEW_FAILED": "Director couldn't review this take. Record it again.",
     "APP_NOT_FOUND": "That app isn't connected to your account.",
     "API_KEY_NOT_FOUND": "That API key doesn't exist in this workspace.",
     "API_KEY_LIMIT_REACHED": "This workspace has as many API keys as it can have. Revoke one you no longer use.",
@@ -963,6 +973,241 @@ declare const messages: {
       "es": "Español"
     },
     "captchaCancelled": "The security check wasn't finished. Try again."
+  },
+  "shorts": {
+    "title": "Shorts",
+    "homeTitle": "Home",
+    "savedTitle": "You",
+    "brand": "Director",
+    "off": "Director isn't set up in this workspace yet.",
+    "nav": {
+      "label": "Main",
+      "home": "Home",
+      "shorts": "Shorts",
+      "saved": "You"
+    },
+    "topicsLabel": "Topics",
+    "topics": {
+      "all": "All",
+      "grwm": "GRWM",
+      "outfits": "Outfits",
+      "sneakers": "Sneakers",
+      "dance": "Dance",
+      "cooking": "Cooking",
+      "travel": "Travel",
+      "comedy": "Comedy",
+      "fitness": "Fitness",
+      "pets": "Pets"
+    },
+    "paste": {
+      "label": "Paste a Shorts link",
+      "placeholder": "youtube.com/shorts/…",
+      "submit": "Open"
+    },
+    "views": "{count, number, ::compact-short} views",
+    "count": "{count, number, ::compact-short}",
+    "loadMore": "Show more",
+    "empty": "No shorts here yet.",
+    "embedTitle": "{title} on YouTube",
+    "player": {
+      "like": "Like",
+      "comments": "Comments",
+      "share": "Share",
+      "save": "Save",
+      "director": "Director",
+      "copied": "Link copied",
+      "next": "Next short",
+      "previous": "Previous short",
+      "by": "@{channel}",
+      "mute": "Mute",
+      "unmute": "Unmute"
+    },
+    "comments": {
+      "title": "Comments",
+      "disabled": "Comments are turned off for this short.",
+      "empty": "No comments yet.",
+      "onYouTube": "Comment on YouTube",
+      "close": "Close"
+    },
+    "saved": {
+      "liked": "Liked",
+      "saved": "Saved",
+      "empty": "Nothing here yet. Like or save a short from the feed."
+    },
+    "account": "Your account",
+    "leave": "Back to the dashboard"
+  },
+  "director": {
+    "title": "Director",
+    "back": "Back",
+    "progress": {
+      "pending": "Director is getting ready…",
+      "analyzing": "Director is watching the short…",
+      "hint": "This takes about a minute."
+    },
+    "retry": "Try again",
+    "needs": "You need {shots, plural, one {# shot} other {# shots}}: {videos, plural, =0 {no videos} one {# video} other {# videos}} and {photos, plural, =0 {no photos} one {# photo} other {# photos}}.",
+    "inOrder": "Film them in this order",
+    "kind": {
+      "video": "Video",
+      "photo": "Photo"
+    },
+    "seconds": "{seconds, number, ::.#} s",
+    "camera": {
+      "front": "Front camera",
+      "back": "Back camera"
+    },
+    "audio": {
+      "question": "This short has speech. Will you say it yourself, or use the original audio?",
+      "voice": "I'll speak",
+      "original": "Use the original audio",
+      "music": "This short is set to music: you'll film along to the original audio.",
+      "silent": "This short has no sound to match."
+    },
+    "record": "Record",
+    "watch": "Watch this part",
+    "shoot": {
+      "shotOf": "Shot {index, number} of {count, number}",
+      "cameraBlocked": "Director needs your camera. Allow it in your browser's settings, then try again.",
+      "cameraMissing": "There's no camera Director can use on this device.",
+      "start": "Start the camera",
+      "useTilt": "Use the phone's tilt",
+      "level": {
+        "label": "Phone angle",
+        "ok": "Angle locked",
+        "tipUp": "Tip the top back",
+        "tipDown": "Tip the top forward",
+        "leanLeft": "Lean it left",
+        "leanRight": "Lean it right",
+        "unavailable": "The angle guide works on a phone."
+      },
+      "height": {
+        "floor": "Hold the phone near the floor",
+        "waist": "Hold the phone at waist height",
+        "chest": "Hold the phone at chest height",
+        "shoulder": "Hold the phone at shoulder height",
+        "eye": "Hold the phone at eye level",
+        "overhead": "Hold the phone up high"
+      },
+      "framing": {
+        "in-frame": "You're in frame",
+        "not-seen": "Step into the frame",
+        "come-closer": "Come closer",
+        "step-back": "Step back",
+        "step-left": "Step to your left",
+        "step-right": "Step to your right",
+        "aim-left": "Aim a little left",
+        "aim-right": "Aim a little right"
+      },
+      "pose": {
+        "matched": "Pose matched",
+        "match": "Match the outline",
+        "loading": "Loading the pose guide…",
+        "failed": "The pose guide couldn't load. You can still film."
+      },
+      "scene": {
+        "checking": "Checking your spot…",
+        "inPlace": "Great spot.",
+        "lighting": {
+          "good": "Good light",
+          "too-dark": "It's too dark here",
+          "too-bright": "It's too bright here",
+          "backlit": "The light is behind you"
+        }
+      },
+      "countdown": "{seconds, number}",
+      "action": "Action!",
+      "getReady": "Next: {title}. {scene}.",
+      "recording": "Recording",
+      "stop": "Stop",
+      "photo": "Take the photo",
+      "retake": "Retake",
+      "use": "Use this take",
+      "sending": "Sending your take to Director…",
+      "next": "Next shot",
+      "done": "See your takes",
+      "original": "The original's audio plays while you film.",
+      "prompter": "Teleprompter",
+      "step": "Step {index, number}",
+      "speak": "Read directions aloud",
+      "preview": "Your take",
+      "recordFailed": "Director couldn't start the camera's recording here. Try again, or another browser.",
+      "doodle": {
+        "standHere": "Stand here",
+        "meters": "{meters, number, ::.#} m",
+        "move": {
+          "up": "Raise the phone",
+          "down": "Lower the phone",
+          "left": "Move the phone left",
+          "right": "Move the phone right",
+          "forward": "Push in",
+          "back": "Pull back",
+          "orbit": "Circle round",
+          "tilt-up": "Tilt up",
+          "tilt-down": "Tilt down"
+        }
+      }
+    },
+    "review": {
+      "title": "Your takes",
+      "reviewing": "Director is reviewing this take…",
+      "score": "{score, number}/100",
+      "keeps": "Keeps {start, number, ::.#} s to {end, number, ::.#} s",
+      "missing": "Not filmed yet",
+      "film": "Film it",
+      "retake": "Retake",
+      "left": "{count, plural, one {# shot} other {# shots}} still to film.",
+      "rendering": "Putting your short together… {done, number, ::percent}",
+      "ready": "Your short is ready",
+      "download": "Download",
+      "silent": "It's silent on purpose: add the original sound when you post it on YouTube (Use this sound).",
+      "renderFailed": "Your short couldn't be put together in this browser. Try Chrome or Safari."
+    },
+    "template": {
+      "use": "Use template",
+      "storyboard": "Storyboard",
+      "watchShot": "Watch shot {index, number}: {title}",
+      "shots": "{count, plural, one {# shot} other {# shots}}",
+      "mix": "{videos, plural, =0 {no videos} one {# video} other {# videos}} · {photos, plural, =0 {no photos} one {# photo} other {# photos}}",
+      "playing": "Playing shot {index, number}: {title}",
+      "watchAll": "Watch the whole short"
+    },
+    "editor": {
+      "quality": "{height, number}p",
+      "next": "Next",
+      "play": "Play",
+      "pause": "Pause",
+      "undo": "Undo",
+      "redo": "Redo",
+      "second": "{seconds, number}s",
+      "clip": "Shot {index, number} · {title}",
+      "notFilmed": "Shot {index, number} isn't filmed yet",
+      "loadFailed": "This take couldn't be loaded. Try a retake.",
+      "timeline": "Timeline",
+      "backToEdit": "Back to editing",
+      "textHint": "Tap a caption on the timeline to change its words.",
+      "textLabel": "Caption text",
+      "done": "Done",
+      "soundOn": "Keep your voice in the short",
+      "sound": {
+        "voice": "Your voice",
+        "muted": "Sound off",
+        "original": "Original sound · add it on YouTube"
+      },
+      "tools": {
+        "label": "Editing tools",
+        "captions": "Captions",
+        "text": "Text",
+        "sound": "Sound",
+        "retake": "Retake"
+      },
+      "style": {
+        "label": "Caption style",
+        "pop": "Pop",
+        "classic": "Classic",
+        "off": "Off"
+      }
+    }
   }
 };
 export default messages;

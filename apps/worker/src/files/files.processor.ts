@@ -172,6 +172,20 @@ export class FilesProcessor extends JobProcessor {
         } catch {
           throw new Rejected("FILE_UNREADABLE");
         }
+      case "director-take-photo":
+        try {
+          const body = await sharp(bytes, { limitInputPixels: MAX_INPUT_PIXELS, failOn: "error" })
+            .rotate() // apply the EXIF orientation before it's dropped
+            .jpeg({ quality: 90 })
+            .toBuffer();
+          return { body, contentType: "image/jpeg" };
+        } catch {
+          throw new Rejected("FILE_UNREADABLE");
+        }
+      case "director-take-video":
+        // Kept as recorded: re-encoding video is minutes of CPU, and the browser's
+        // recorder writes no location or device metadata into it.
+        return { body: bytes, contentType: sniffed.mime };
     }
   }
 }

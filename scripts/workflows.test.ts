@@ -788,11 +788,15 @@ describe("the mobile app's release", () => {
   const { jobs } = workflow("mobile.yml");
   const eas = jobs.eas as Job;
 
-  it("checks the native dependencies against the Expo SDK in lint, which CI's lint job runs", async () => {
+  // Not whether a newer Expo patch is out: the repository installs nothing younger than
+  // three days (bunfig.toml), so that check failed every pull request after each Expo
+  // release until it was old enough to take. Renovate's Expo group keeps them current.
+  it("checks the native dependencies' health in lint, which CI's lint job runs", async () => {
     const mobile = JSON.parse(readFileSync(join(ROOT, "apps/mobile/package.json"), "utf8")) as {
       scripts: Record<string, string>;
     };
-    expect(mobile.scripts.lint).toBe("expo-doctor && expo install --check");
+    expect(mobile.scripts.lint).toBe("EXPO_DOCTOR_SKIP_DEPENDENCY_VERSION_CHECK=1 expo-doctor");
+    expect(mobile.scripts.doctor).toBe("expo-doctor");
     const { STEPS } = await import("./lint");
     expect(STEPS).toContainEqual(["bunx", "turbo", "run", "lint"]);
     expect(workflow("ci.yml").jobs.lint?.steps?.map((s) => s.run)).toContain("bun run lint");
