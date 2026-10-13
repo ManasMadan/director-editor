@@ -75,7 +75,11 @@ describe("the editor before it can open", () => {
 
 // Takes are downloaded from RustFS: the files profile (`bun run test:integration:files`).
 describe("the editor", { tags: ["files"] }, () => {
-  it("plays the edit, opens each clip and tool, undoes, and sends the member to film what's left", async () => {
+  // Records, uploads and downloads two takes before walking every tool: past the default
+  // 30 seconds on a busy CI runner.
+  it("plays the edit, opens each clip and tool, undoes, and sends the member to film what's left", {
+    timeout: 60_000,
+  }, async () => {
     await commands.storageCors();
     await signUp();
     const videoId = newVideoId();

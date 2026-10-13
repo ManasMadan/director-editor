@@ -61,12 +61,19 @@ describe("drawing a caption", () => {
     const xs = fillText.mock.calls.map(([, x]) => x);
     expect(xs).toEqual([...xs].sort((a, b) => a - b));
     expect(roundRect).toHaveBeenCalledTimes(1);
-    // The tag's top strip, above the outlined capitals whatever the font: red behind "IT" only.
-    const [tagX = 0, tagY = 0, tagW = 0] = roundRect.mock.calls[0] ?? [];
-    const tagAt = (x: number) => hue(Array.from(ctx.getImageData(x, tagY + 1.5, 1, 1).data));
+    // Red fills the tag around "IT" (whatever the font paints over it), and nothing else.
+    const [tagX = 0, tagY = 0, tagW = 0, tagH = 0] = roundRect.mock.calls[0] ?? [];
     expect(tagX).toBeLessThan(xs[1] ?? 0);
-    expect(tagAt(tagX + tagW / 2)).toBe("red");
-    expect(tagAt((xs[0] ?? 0) + 3)).not.toBe("red");
+    const red = (x: number, y: number, w: number, h: number) => {
+      const data = ctx.getImageData(x, y, w, h).data;
+      let count = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        count += hue([data[i] ?? 0, data[i + 1] ?? 0, data[i + 2] ?? 0]) === "red" ? 1 : 0;
+      }
+      return count / (w * h);
+    };
+    expect(red(tagX, tagY, tagW, tagH)).toBeGreaterThan(0.3);
+    expect(red(0, 0, tagX - 1, HEIGHT)).toBe(0);
     // The canvas's own settings are left as they were.
     expect(ctx.textBaseline).toBe("alphabetic");
   });

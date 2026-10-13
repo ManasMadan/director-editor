@@ -356,7 +356,10 @@ describe("sending a take", { tags: ["files"] }, () => {
     const preview = page.getByLabelText("Your take");
     await expect.element(preview).toBeVisible();
     expect(preview.element().tagName).toBe("VIDEO");
-    expect(preview.element().querySelector("track")?.getAttribute("src")).toMatch(/^blob:/);
+    // The captions' URL is made once the preview has mounted.
+    await expect
+      .poll(() => preview.element().querySelector("track")?.getAttribute("src"))
+      .toMatch(/^blob:/);
     expect(page.getByRole("region", { name: "Teleprompter" }).query()).toBeNull();
 
     await userEvent.click(page.getByRole("button", { name: "Retake" }));
