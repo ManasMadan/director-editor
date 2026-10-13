@@ -7,6 +7,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { INestApplicationContext } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import type { UploadPurpose } from "@repo/contracts/files";
 import { fileIdSchema } from "@repo/contracts/ids";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
 import { queuePrefix } from "@repo/jobs";
@@ -669,14 +670,19 @@ describe("uploads", { tags: ["files"] }, () => {
   }
 
   /** An upload as the browser leaves it: a pending row and the bytes in quarantine. */
-  async function upload(bytes: Buffer, declaredType = "image/png", declaredSize = bytes.length) {
+  async function upload(
+    bytes: Buffer,
+    declaredType = "image/png",
+    declaredSize = bytes.length,
+    purpose: UploadPurpose = "avatar",
+  ) {
     const userId = await newUser();
     const fileId = fileIdSchema.parse(randomUUID());
     await asRole("postgres", (client) =>
       client.query(
         `INSERT INTO files.file (id, user_id, purpose, filename, declared_type, declared_size, updated_at)
-         VALUES ($1, $2, 'avatar', 'me.png', $3, $4, now())`,
-        [fileId, userId, declaredType, declaredSize],
+         VALUES ($1, $2, $5, 'me.png', $3, $4, now())`,
+        [fileId, userId, declaredType, declaredSize, purpose],
       ),
     );
     await storage.write(`quarantine/${fileId}`, bytes, declaredType);
@@ -734,6 +740,57 @@ describe("uploads", { tags: ["files"] }, () => {
       type: "files.changed",
     });
     await subscriber.quit();
+  });
+
+  it("keeps a Director photo at its size, re-encoded as JPEG with its metadata gone", async () => {
+    const photo = await photoWithMetadata();
+    const { fileId } = await upload(photo, "image/jpeg", photo.length, "director-take-photo");
+    await files.check(fileId);
+    const stored = await storage.read(`files/${fileId}`, 10_000_000);
+    const metadata = await sharp(stored).metadata();
+    expect(metadata).toMatchObject({ format: "jpeg", width: 1200, height: 800 });
+    expect(metadata.exif).toBeUndefined();
+    expect(stored.includes(Buffer.from("Secret Name"))).toBe(false);
+    expect(await row(fileId)).toMatchObject({
+      status: "ready",
+      content_type: "image/jpeg",
+      size: stored.length,
+    });
+  });
+
+  it("rejects a Director photo that doesn't decode", async () => {
+    const jpeg = await sharp({ create: { width: 64, height: 64, channels: 3, background: "red" } })
+      .jpeg()
+      .toBuffer();
+    // Recognisably a JPEG from its first bytes, then garbage the decoder chokes on.
+    const broken = Buffer.concat([jpeg.subarray(0, 20), Buffer.alloc(200, 0xab)]);
+    const { fileId } = await upload(broken, "image/jpeg", broken.length, "director-take-photo");
+    await files.check(fileId);
+    expect(await row(fileId)).toMatchObject({
+      status: "rejected",
+      reject_reason: "FILE_UNREADABLE",
+    });
+    expect(await storage.head(`files/${fileId}`)).toBeNull();
+  });
+
+  it("keeps a Director video byte for byte, as the type its bytes say", async () => {
+    // A WebM's EBML header (doc type "webm"), the start of its segment, and some payload.
+    const webm = Buffer.concat([
+      Buffer.from(
+        "1a45dfa39f4286810142f7810142f2810442f381084282847765626d4287810242858102",
+        "hex",
+      ),
+      Buffer.from("18538067", "hex"),
+      Buffer.alloc(512, 7),
+    ]);
+    const { fileId } = await upload(webm, "video/mp4", webm.length, "director-take-video");
+    await files.check(fileId);
+    expect(await storage.read(`files/${fileId}`, 10_000_000)).toEqual(webm);
+    expect(await row(fileId)).toMatchObject({
+      status: "ready",
+      content_type: "video/webm",
+      size: webm.length,
+    });
   });
 
   it("rejects a virus, whatever it claims to be, and deletes it", async () => {
