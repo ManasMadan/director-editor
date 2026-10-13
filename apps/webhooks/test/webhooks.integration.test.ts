@@ -457,7 +457,11 @@ describe("outbound deliveries", () => {
       (n) => n === 2,
     );
     expect(received[1]?.headers["webhook-id"]).toBe(received[0]?.headers["webhook-id"]);
-    expect((await delivery(deliveryId)).status).toBe("succeeded");
+    // The worker records the answer after the receiver has it.
+    await eventually(
+      async () => (await delivery(deliveryId)).status,
+      (status) => status === "succeeded",
+    );
   });
 
   it("skips a delivery asked for under another organization, or already finished", async () => {
