@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { embedUrl, shortUrl } from "./embed";
+import { describe, expect, it, vi } from "vitest";
+import { embedUrl, sendCommand, shortUrl } from "./embed";
 
 describe("YouTube's embed", () => {
   it("plays inline from YouTube's privacy-enhanced domain, muted when asked", () => {
@@ -30,5 +30,19 @@ describe("YouTube's embed", () => {
 
   it("links to the short on YouTube", () => {
     expect(shortUrl("jNQXAC9IVRw")).toBe("https://www.youtube.com/shorts/jNQXAC9IVRw");
+  });
+
+  it("sends the player its commands, to YouTube's origin only", () => {
+    const postMessage = vi.fn();
+    sendCommand({ contentWindow: { postMessage } } as unknown as HTMLIFrameElement, "unMute");
+    expect(postMessage).toHaveBeenCalledWith(
+      JSON.stringify({ event: "command", func: "unMute", args: [] }),
+      "https://www.youtube-nocookie.com",
+    );
+  });
+
+  it("sends nothing before the player is there", () => {
+    expect(() => sendCommand(null, "mute")).not.toThrow();
+    expect(() => sendCommand({ contentWindow: null } as HTMLIFrameElement, "mute")).not.toThrow();
   });
 });
