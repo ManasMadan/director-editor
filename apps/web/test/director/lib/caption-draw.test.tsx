@@ -55,16 +55,17 @@ describe("drawing a caption", () => {
     expect(fillText.mock.calls.map(([text]) => text)).toEqual(["MAKE", "IT", "POP"]);
     expect(strokeText.mock.calls.map(([text]) => text)).toEqual(["MAKE", "IT", "POP"]);
     // One row centred below the frame's middle, and one tag, behind "IT".
-    const size = Math.round(WIDTH * 0.075);
     const ys = new Set(fillText.mock.calls.map(([, , y]) => y));
     expect(ys.size).toBe(1);
     expect([...ys][0]).toBeCloseTo(HEIGHT * 0.64);
     const xs = fillText.mock.calls.map(([, x]) => x);
     expect(xs).toEqual([...xs].sort((a, b) => a - b));
     expect(roundRect).toHaveBeenCalledTimes(1);
-    const tagAt = (x: number) =>
-      hue(Array.from(ctx.getImageData(x, HEIGHT * 0.64 - size * 0.55, 1, 1).data));
-    expect(tagAt((xs[1] ?? 0) + 3)).toBe("red");
+    // The tag's top strip, above the outlined capitals whatever the font: red behind "IT" only.
+    const [tagX = 0, tagY = 0, tagW = 0] = roundRect.mock.calls[0] ?? [];
+    const tagAt = (x: number) => hue(Array.from(ctx.getImageData(x, tagY + 1.5, 1, 1).data));
+    expect(tagX).toBeLessThan(xs[1] ?? 0);
+    expect(tagAt(tagX + tagW / 2)).toBe("red");
     expect(tagAt((xs[0] ?? 0) + 3)).not.toBe("red");
     // The canvas's own settings are left as they were.
     expect(ctx.textBaseline).toBe("alphabetic");
