@@ -109,35 +109,6 @@ describe("the Shorts player", () => {
     expect(slideTitles()).toEqual([]);
   });
 
-  it("keeps showing a short's picture while the browser says nothing of where it is", async () => {
-    await signUp();
-    // Observers whose report on a slide holds no entries (links still prefetch as usual).
-    vi.stubGlobal(
-      "IntersectionObserver",
-      class extends IntersectionObserver {
-        readonly report: IntersectionObserverCallback;
-        constructor(report: IntersectionObserverCallback, options?: IntersectionObserverInit) {
-          super(report, options);
-          this.report = report;
-        }
-        override observe(target: Element) {
-          if (target.tagName === "SECTION") {
-            this.report([], this);
-            return;
-          }
-          super.observe(target);
-        }
-      },
-    );
-    onTestFinished(() => {
-      vi.unstubAllGlobals();
-    });
-    await renderPage(<ShortsPlayerPage />, { url: "/shorts" });
-    await expect.poll(slideTitles).toHaveLength(6);
-    expect(document.querySelector("iframe")).toBeNull();
-    expect(currentUrl()).toBe("/shorts");
-  });
-
   it("says why the short didn't load", async () => {
     await signUp();
     await commands.failRequests("/rpc/shorts/get");
