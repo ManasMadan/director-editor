@@ -4,7 +4,7 @@ import { commands, userEvent } from "vitest/browser";
 import { DirectorPage } from "@/modules/director";
 import { currentUrl, renderPage } from "../render";
 import { signUp } from "../users";
-import { newVideoId, readyPlan, shot, shotPlan } from "./support";
+import { newVideoId, planShot, readyPlan, shotPlan } from "./support";
 
 const hero = () => document.querySelector("iframe") as HTMLIFrameElement;
 const heroParams = () => new URL(hero().src).searchParams;
@@ -17,8 +17,8 @@ async function showPlan(videoId: string) {
 describe("Director's page for a ready plan", () => {
   const plan = shotPlan({
     shots: [
-      shot({ title: "Walk in", sourceStartSeconds: 1.2, sourceEndSeconds: 3.6 }),
-      shot({
+      planShot({ title: "Walk in", sourceStartSeconds: 1.2, sourceEndSeconds: 3.6 }),
+      planShot({
         kind: "photo",
         title: "The look",
         purpose: "End on a smile.",

@@ -8,7 +8,7 @@ import { DoodleLayer } from "@/modules/director/components/doodle-layer";
 import { TakePreview } from "@/modules/director/components/take-preview";
 import type { DoodleScene } from "@/modules/director/lib/doodle";
 import { renderPage } from "../render";
-import { photo, recordVideo, shot } from "./support";
+import { photo, planShot, recordVideo } from "./support";
 
 let restorePixelRatio: (() => void) | null = null;
 
@@ -33,8 +33,12 @@ function noPixelRatio() {
 
 /** A browser that can't give the page a 2D canvas. */
 function no2dCanvas() {
-  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+  return vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
 }
+
+/** The next two animation frames: a canvas drawing every frame has drawn by then. */
+const frames = () =>
+  new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
 const canvas = () => document.querySelector("canvas") as HTMLCanvasElement;
 
@@ -46,7 +50,7 @@ const drawn = () => {
 };
 
 const scene: DoodleScene = {
-  shot: shot(),
+  shot: planShot(),
   target: {},
   matched: false,
   mirrored: false,
@@ -75,13 +79,14 @@ describe("the doodles", () => {
   });
 
   it("leave the camera alone where the browser has no 2D canvas", async () => {
-    no2dCanvas();
+    const getContext = no2dCanvas();
     await renderPage(
       <Viewfinder>
         <DoodleLayer scene={scene} />
       </Viewfinder>,
     );
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await expect.poll(() => getContext.mock.calls.length).toBeGreaterThan(0);
+    await frames();
     // Never sized, so never drawn on.
     expect(canvas().width).toBe(300);
   });
@@ -119,12 +124,13 @@ describe("a take's preview", () => {
 
   it("shows the take without captions where the browser has no 2D canvas", async () => {
     const take = await recordVideo(0.3);
-    no2dCanvas();
+    const getContext = no2dCanvas();
     const page = await renderPage(
       <TakePreview take={take} label="Your take" script={script} lang="en" />,
     );
     await expect.element(page.getByLabelText("Your take")).toBeInTheDocument();
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await expect.poll(() => getContext.mock.calls.length).toBeGreaterThan(0);
+    await frames();
     expect(canvas().width).toBe(300);
   });
 
@@ -147,14 +153,19 @@ describe("a take's preview", () => {
           }
         }
       }, [shown]);
-      return shown ? <TakePreview take={take} label="Your take" script={script} lang="en" /> : null;
+      return shown ? (
+        <Viewfinder>
+          <TakePreview take={take} label="Your take" script={script} lang="en" />
+        </Viewfinder>
+      ) : null;
     }
     const page = await renderPage(<Preview />);
     await expect.element(page.getByLabelText("Your take")).toBeInTheDocument();
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // The captions are drawing, frame after frame.
+    await expect.poll(() => canvas().width).toBe(180);
     hide();
     await expect.element(page.getByLabelText("Your take")).not.toBeInTheDocument();
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await frames();
     window.removeEventListener("error", onError);
     expect(errors).toEqual([]);
   });

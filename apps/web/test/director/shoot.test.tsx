@@ -10,7 +10,7 @@ import { ShootPage } from "@/modules/director";
 import { createPoseDetector } from "@/modules/director/lib/pose-detector";
 import { currentUrl, renderPage } from "../render";
 import { signUp, type User } from "../users";
-import { fakeCamera, newVideoId, readyPlan, shot, shotPlan, tiltPhone } from "./support";
+import { canvasCamera, newVideoId, planShot, readyPlan, shotPlan, tiltPhone } from "./support";
 
 vi.mock("@/modules/director/lib/pose-detector", () => ({ createPoseDetector: vi.fn() }));
 
@@ -51,7 +51,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const walkIn = shot({
+const walkIn = planShot({
   title: "Walk in",
   camera: "front",
   pose: { description: "Standing tall.", keypoints },
@@ -64,7 +64,7 @@ const walkIn = shot({
     { startSeconds: 0.6, endSeconds: 3, text: "Coffee first." },
   ],
 });
-const smile = shot({ kind: "photo", title: "Smile", durationSeconds: 1, scene: "Kitchen" });
+const smile = planShot({ kind: "photo", title: "Smile", durationSeconds: 1, scene: "Kitchen" });
 
 async function openShoot(
   plan: Parameters<typeof shotPlan>[0],
@@ -112,7 +112,7 @@ describe("Director's camera before the plan is ready", () => {
 
 describe("Director's camera", () => {
   it("asks for the camera again after it was refused, or says there's none", async () => {
-    const camera = fakeCamera(new DOMException("denied", "NotAllowedError"));
+    const camera = canvasCamera(new DOMException("denied", "NotAllowedError"));
     const { page } = await openShoot({}, { shot: "0", audio: "voice" });
     await expect
       .element(page.getByRole("alert"))
@@ -129,25 +129,25 @@ describe("Director's camera", () => {
   });
 
   it("starts at the first shot for a shot it can't read, and at the last past the end", async () => {
-    fakeCamera();
+    canvasCamera();
     const first = await openShoot({ shots: [walkIn, smile] }, { shot: "next", audio: "voice" });
     await expect.element(first.page.getByText("Shot 1 of 2")).toBeVisible();
     await expect.element(first.page.getByText("Walk in")).toBeVisible();
   });
 
   it("opens the last shot when asked for one past the end", async () => {
-    fakeCamera();
+    canvasCamera();
     const { page } = await openShoot({ shots: [walkIn, smile] }, { shot: "7", audio: undefined });
     await expect.element(page.getByText("Shot 2 of 2")).toBeVisible();
     await expect.element(page.getByText("Smile")).toBeVisible();
   });
 
   it("opens the first shot without one asked for, and films a shot with no steps to follow", async () => {
-    fakeCamera();
+    canvasCamera();
     const videoId = newVideoId();
     await readyPlan(
       videoId,
-      shotPlan({ shots: [shot({ title: "Pour", durationSeconds: 0.5 }), smile] }),
+      shotPlan({ shots: [planShot({ title: "Pour", durationSeconds: 0.5 }), smile] }),
     );
     await signUp();
     // The API's contract allows a shot without steps, though Director always gives one:
@@ -178,7 +178,7 @@ describe("Director's camera", () => {
 
   it("guides the member into place: the pose, the framing, the spot, the angle", async () => {
     const said = speech();
-    const camera = fakeCamera();
+    const camera = canvasCamera();
     poseModel(body());
     vi.spyOn(
       DeviceOrientationEvent as unknown as { requestPermission: () => Promise<string> },
@@ -233,7 +233,7 @@ describe("Director's camera", () => {
 
   it("says where to go from what the camera sees, until the member is there", async () => {
     const said = speech();
-    fakeCamera();
+    canvasCamera();
     const { page, videoId } = await openShoot({ shots: [walkIn] }, { shot: "0", audio: "voice" });
     await commands.fakeDirector(videoId, {
       scene: {
@@ -266,7 +266,7 @@ describe("Director's camera", () => {
   });
 
   it("tells the member to step in, or to change their pose", async () => {
-    fakeCamera();
+    canvasCamera();
     poseModel(null);
     const { page } = await openShoot({ shots: [walkIn] }, { shot: "0", audio: "voice" });
     await expect.element(page.getByText("Step into the frame")).toBeVisible();
@@ -275,9 +275,9 @@ describe("Director's camera", () => {
 
   it("films along to the original: no microphone, the original playing, every step said", async () => {
     const said = speech();
-    const camera = fakeCamera();
+    const camera = canvasCamera();
     const { page } = await openShoot(
-      { audio: "music", shots: [shot({ title: "Pour", steps: walkIn.steps })] },
+      { audio: "music", shots: [planShot({ title: "Pour", steps: walkIn.steps })] },
       { shot: "0", audio: "voice" },
     );
     await expect.poll(() => camera.opened).toHaveLength(1);
@@ -315,7 +315,7 @@ describe("Director's camera", () => {
 
   it("says when this browser can't record, and goes back to getting ready", async () => {
     vi.spyOn(MediaRecorder, "isTypeSupported").mockReturnValue(false);
-    fakeCamera();
+    canvasCamera();
     const { page } = await openShoot({ shots: [walkIn] }, { shot: "0", audio: "voice" });
     await record(page);
     await expect
@@ -335,7 +335,7 @@ describe("sending a take", { tags: ["files"] }, () => {
   it("records the member's voice with the teleprompter, redoes it, and sends the take", async () => {
     await commands.storageCors();
     const said = speech();
-    fakeCamera();
+    canvasCamera();
     const { page, videoId, user } = await openShoot(
       { shots: [walkIn, smile] },
       { shot: "0", audio: "voice" },
@@ -375,7 +375,7 @@ describe("sending a take", { tags: ["files"] }, () => {
 
   it("takes the last shot's photo, and goes on to the edit", async () => {
     await commands.storageCors();
-    fakeCamera();
+    canvasCamera();
     const { page, videoId, user } = await openShoot(
       { audio: "music", shots: [walkIn, smile] },
       { shot: "1", audio: "original" },
@@ -392,7 +392,7 @@ describe("sending a take", { tags: ["files"] }, () => {
 
   it("says why the take couldn't be sent, and lets the member try again", async () => {
     await commands.storageCors();
-    fakeCamera();
+    canvasCamera();
     const { page, user } = await openShoot({ shots: [smile] }, { shot: "0", audio: "voice" });
     await userEvent.click(page.getByRole("button", { name: "Take the photo" }));
     await userEvent.click(page.getByRole("button", { name: "Use this take" }));

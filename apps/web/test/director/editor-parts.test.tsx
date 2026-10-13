@@ -17,7 +17,7 @@ import {
 import type { MediaState } from "@/modules/director/hooks/use-take-media";
 import { type Clip, clipsOf, type EditLine, editLines } from "@/modules/director/lib/edit";
 import { renderPage } from "../render";
-import { photo, recordVideo, shot } from "./support";
+import { photo, planShot, recordVideo } from "./support";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -145,7 +145,7 @@ describe("the editor's tools", () => {
 });
 
 describe("the clip panel", () => {
-  const shots = [shot({ title: "Walk in" }), shot({ kind: "photo", title: "The look" })];
+  const shots = [planShot({ title: "Walk in" }), planShot({ kind: "photo", title: "The look" })];
 
   it("offers to film a shot that isn't yet", async () => {
     const [, clip] = clipsFor(shots);
@@ -221,11 +221,11 @@ describe("the timeline", () => {
     { startSeconds: 1, endSeconds: 2, text: "Coffee first." },
   ];
   const shots = [
-    shot({ title: "Walk in", script }),
-    shot({ title: "Pour", durationSeconds: 1.5 }),
-    shot({ title: "Sip", durationSeconds: 1 }),
-    shot({ title: "Look", durationSeconds: 1 }),
-    shot({ kind: "photo", title: "Smile", durationSeconds: 1 }),
+    planShot({ title: "Walk in", script }),
+    planShot({ title: "Pour", durationSeconds: 1.5 }),
+    planShot({ title: "Sip", durationSeconds: 1 }),
+    planShot({ title: "Look", durationSeconds: 1 }),
+    planShot({ kind: "photo", title: "Smile", durationSeconds: 1 }),
   ];
 
   async function timeline(options: {
@@ -351,10 +351,13 @@ describe("the timeline", () => {
     await expect
       .poll(() => (scroller.querySelector(".shrink-0") as HTMLElement).style.width)
       .toBe(`${scroller.clientWidth / 2}px`);
+    const scrolled = new Promise((resolve) =>
+      scroller.addEventListener("scroll", resolve, { once: true }),
+    );
     setTime(2);
     await expect.poll(() => scroller.scrollLeft).toBe(128);
-    // A scroll the clock made isn't a scrub.
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // A scroll the clock made isn't a scrub (the timeline has handled it by now).
+    await scrolled;
     expect(scrubs).toEqual([]);
     scroller.scrollLeft = 192;
     await expect.poll(() => scrubs).toEqual([3]);
@@ -363,13 +366,13 @@ describe("the timeline", () => {
 
 describe("the edit player", () => {
   const shots = [
-    shot({
+    planShot({
       title: "Walk in",
       durationSeconds: 1.5,
       script: [{ startSeconds: 0, endSeconds: 1, text: "Hi there" }],
     }),
-    shot({ kind: "photo", title: "Smile", durationSeconds: 1 }),
-    shot({ title: "Wave", durationSeconds: 1 }),
+    planShot({ kind: "photo", title: "Smile", durationSeconds: 1 }),
+    planShot({ title: "Wave", durationSeconds: 1 }),
   ];
 
   async function player(clips: Clip[], map: Map<number, MediaState>) {

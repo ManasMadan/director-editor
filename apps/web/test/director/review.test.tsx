@@ -9,7 +9,7 @@ import { commands, userEvent } from "vitest/browser";
 import { ReviewPage } from "@/modules/director";
 import { currentUrl, renderPage } from "../render";
 import { api, signUp } from "../users";
-import { newVideoId, photo, readyPlan, recordVideo, shot, shotPlan, take } from "./support";
+import { newVideoId, photo, planShot, readyPlan, recordVideo, shotPlan, take } from "./support";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -83,15 +83,15 @@ describe("the editor", { tags: ["files"] }, () => {
       videoId,
       shotPlan({
         shots: [
-          shot({
+          planShot({
             title: "Walk in",
             script: [
               { startSeconds: 0, endSeconds: 1, text: "Morning." },
               { startSeconds: 1, endSeconds: 2, text: "Coffee first." },
             ],
           }),
-          shot({ kind: "photo", title: "Smile", durationSeconds: 1 }),
-          shot({ title: "Wave", durationSeconds: 1 }),
+          planShot({ kind: "photo", title: "Smile", durationSeconds: 1 }),
+          planShot({ title: "Wave", durationSeconds: 1 }),
         ],
       }),
     );
@@ -210,12 +210,12 @@ describe("the editor", { tags: ["files"] }, () => {
       shotPlan({
         audio: "music",
         shots: [
-          shot({
+          planShot({
             title: "Walk in",
             durationSeconds: 1,
             script: [{ startSeconds: 0, endSeconds: 1, text: "Hi" }],
           }),
-          shot({ kind: "photo", title: "Smile", durationSeconds: 0.5 }),
+          planShot({ kind: "photo", title: "Smile", durationSeconds: 0.5 }),
         ],
       }),
     );
@@ -267,7 +267,7 @@ describe("the editor", { tags: ["files"] }, () => {
     const videoId = newVideoId();
     await readyPlan(
       videoId,
-      shotPlan({ shots: [shot({ kind: "photo", title: "Smile", durationSeconds: 0.5 })] }),
+      shotPlan({ shots: [planShot({ kind: "photo", title: "Smile", durationSeconds: 0.5 })] }),
     );
     await commands.fakeDirector(videoId, {
       takes: [
@@ -289,7 +289,7 @@ describe("the editor", { tags: ["files"] }, () => {
     const videoId = newVideoId();
     await readyPlan(
       videoId,
-      shotPlan({ shots: [shot({ kind: "photo", title: "Smile", durationSeconds: 0.5 })] }),
+      shotPlan({ shots: [planShot({ kind: "photo", title: "Smile", durationSeconds: 0.5 })] }),
     );
     await commands.fakeDirector(videoId, {
       takes: [
