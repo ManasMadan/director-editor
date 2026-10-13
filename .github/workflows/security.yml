@@ -149,7 +149,7 @@ jobs:
       # only when its file isn't there).
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.cache/boilerplate/charts
+          path: ~/.cache/director-editor/charts
           key: helm-charts-${{ hashFiles('deploy/platform/addons/**', 'infra/tofu/modules/bootstrap/variables.tf') }}
           restore-keys: helm-charts-
       # The pre-commit hook's scan: the application charts rendered as each environment
@@ -188,7 +188,7 @@ jobs:
         run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.cache/boilerplate/trivy/db
+          path: ~/.cache/director-editor/trivy/db
           key: trivy-db-${{ steps.day.outputs.day }}
           restore-keys: trivy-db-
       - run: bun scripts/image-scan.ts

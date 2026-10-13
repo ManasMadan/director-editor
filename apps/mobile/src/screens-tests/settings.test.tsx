@@ -210,7 +210,7 @@ describe("passkeys", () => {
   const LIST = "/api/auth/passkey/list-user-passkeys";
   const options = {
     challenge: "challenge-1",
-    rp: { id: "app.example.com", name: "Boilerplate" },
+    rp: { id: "app.example.com", name: "Director-editor" },
     user: { id: "user-1", name: "ada@example.com", displayName: "Ada" },
     pubKeyCredParams: [{ type: "public-key" as const, alg: -7 }],
   };

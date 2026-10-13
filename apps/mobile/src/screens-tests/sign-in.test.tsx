@@ -117,7 +117,7 @@ describe("signing in", () => {
 
     it("signs in without the session ever being in the link back to the app", async () => {
       const calls = withGoogle();
-      browser.mockResolvedValue({ type: "success", url: "boilerplate:///?handoff=handoff-1" });
+      browser.mockResolvedValue({ type: "success", url: "director-editor:///?handoff=handoff-1" });
       const app = await openApp("/sign-in");
       await continueWithGoogle();
       expect(
@@ -157,7 +157,7 @@ describe("signing in", () => {
       withGoogle({
         "/api/auth/mobile/sign-in/finish": () => fail(401, "SIGN_IN_INCOMPLETE"),
       });
-      browser.mockResolvedValue({ type: "success", url: "boilerplate:///?handoff=handoff-1" });
+      browser.mockResolvedValue({ type: "success", url: "director-editor:///?handoff=handoff-1" });
       await openApp("/sign-in");
       await continueWithGoogle();
       expect(await screen.findByRole("alert")).toHaveTextContent(

@@ -55,7 +55,7 @@ const API_KEY_PLUGIN_PATHS = [
   "/api-key/list",
 ];
 /** The mobile app's URL scheme (apps/mobile app.config.ts). */
-const MOBILE_SCHEME = "boilerplate";
+const MOBILE_SCHEME = "director-editor";
 
 const SESSION = {
   expiresIn: 7 * DAY_S,
@@ -145,12 +145,12 @@ function plugins(context: AuthContext) {
     // Backup codes are encrypted at rest: stored as-is (the default), anyone reading
     // the table could get past a user's second factor.
     twoFactor({
-      issuer: "Boilerplate",
+      issuer: "Director-editor",
       backupCodeOptions: { amount: 10, storeBackupCodes: "encrypted" },
     }),
     passkey({
       rpID: new URL(env.WEB_URL).hostname,
-      rpName: "Boilerplate",
+      rpName: "Director-editor",
       origin: passkeyOrigins(env),
     }),
     // Rejects passwords found in public breaches (k-anonymity: only a hash prefix is sent).
@@ -180,7 +180,7 @@ export function createAuth({ database = undefined, ...dependencies }: AuthDepend
   const context = authContext(dependencies);
 
   const options = {
-    appName: "Boilerplate",
+    appName: "Director-editor",
     baseURL: env.BETTER_AUTH_URL,
     secret: env.BETTER_AUTH_SECRET,
     // When set, the newest signs and encrypts and BETTER_AUTH_SECRET decrypts older values.

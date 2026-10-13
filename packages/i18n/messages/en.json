@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "Boilerplate",
+    "appName": "Director-editor",
     "signIn": "Sign in",
     "signUp": "Create account",
     "signOut": "Sign out",
@@ -29,7 +29,7 @@
     "assistant": "Assistant"
   },
   "meta": {
-    "title": "Boilerplate",
+    "title": "Director-editor",
     "description": "Ship your idea this weekend, on a foundation that scales."
   },
   "home": {
@@ -311,7 +311,7 @@
       "body": "This is your reminder for “{title}”."
     },
     "orgInvitation": {
-      "subject": "You're invited to a workspace on Boilerplate",
+      "subject": "You're invited to a workspace on Director-editor",
       "heading": "Join “{organizationName}”",
       "body": "“{inviterName}” invited you to collaborate in the workspace “{organizationName}”.",
       "cta": "Accept invitation",
@@ -830,17 +830,17 @@
     "backToApp": "Back to the app"
   },
   "sms": {
-    "phoneCode": "{code} is your Boilerplate verification code. It expires in {expiresInMinutes, number} minutes. Don't share it with anyone.",
+    "phoneCode": "{code} is your Director-editor verification code. It expires in {expiresInMinutes, number} minutes. Don't share it with anyone.",
     "securityAlert": {
-      "email-changed": "Boilerplate: the email address on your account was changed. Not you? Reset your password now.",
-      "password-changed": "Boilerplate: your password was changed. Not you? Reset your password now.",
-      "password-reset": "Boilerplate: your password was reset. Not you? Contact support now.",
-      "two-factor-enabled": "Boilerplate: two-step verification was turned on for your account.",
-      "two-factor-disabled": "Boilerplate: two-step verification was turned off. Not you? Reset your password now.",
-      "passkey-added": "Boilerplate: a passkey was added to your account. Not you? Reset your password now.",
-      "phone-added": "Boilerplate: this number was added to your account for security texts.",
-      "phone-removed": "Boilerplate: this number was removed from your account. Not you? Reset your password now.",
-      "app-connected": "Boilerplate: an app was connected to your account. Not you? Disconnect it in your security settings."
+      "email-changed": "Director-editor: the email address on your account was changed. Not you? Reset your password now.",
+      "password-changed": "Director-editor: your password was changed. Not you? Reset your password now.",
+      "password-reset": "Director-editor: your password was reset. Not you? Contact support now.",
+      "two-factor-enabled": "Director-editor: two-step verification was turned on for your account.",
+      "two-factor-disabled": "Director-editor: two-step verification was turned off. Not you? Reset your password now.",
+      "passkey-added": "Director-editor: a passkey was added to your account. Not you? Reset your password now.",
+      "phone-added": "Director-editor: this number was added to your account for security texts.",
+      "phone-removed": "Director-editor: this number was removed from your account. Not you? Reset your password now.",
+      "app-connected": "Director-editor: an app was connected to your account. Not you? Disconnect it in your security settings."
     }
   },
   "billing": {

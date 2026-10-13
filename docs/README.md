@@ -21,7 +21,7 @@ production release. `CLAUDE.md` is the same material condensed for Claude Code.
 | [web-and-mobile.md](web-and-mobile.md) | the render-only web app, packages/client and ui, the Expo app, EAS and OTA updates |
 | [testing.md](testing.md) | every test layer and its command, the coverage rule, what CI runs and when |
 | [deploy.md](deploy.md) | images, environments, staging and production releases, rollback, previews |
-| [new-project.md](new-project.md) | everything a new app made from this boilerplate needs once, in order |
+| [new-project.md](new-project.md) | everything a new app made from this director-editor needs once, in order |
 | [repository-settings.md](repository-settings.md) | the GitHub settings (and the `gh` commands that apply them), App, environments and secrets the workflows need |
 | [enhancements.md](enhancements.md) | what the template could do but doesn't yet, why, and what each would take |
 

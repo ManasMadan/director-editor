@@ -8,7 +8,7 @@
  *   bun run jobs discard <queue> <ids…>   delete failed jobs that must never run
  *
  * Uses REDIS_URL (.env). For a deployed environment, forward its Valkey and point at it:
- *   kubectl -n boilerplate port-forward svc/boilerplate-data-valkey 56380:6379
+ *   kubectl -n director-editor port-forward svc/director-editor-data-valkey 56380:6379
  *   REDIS_URL=redis://:<password from the valkey Secret>@localhost:56380 bun run jobs
  * Fix the cause before retrying: a job retried into the same failure fails again.
  */

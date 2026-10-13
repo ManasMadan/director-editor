@@ -29,7 +29,7 @@ concurrency:
 permissions: {}
 
 env:
-  REGISTRY: ghcr.io/manasmadan/boilerplate
+  REGISTRY: ghcr.io/manasmadan/director-editor
   IMAGES: api worker notifications webhooks web ai migrate
 
 jobs:

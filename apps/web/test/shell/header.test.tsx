@@ -9,7 +9,7 @@ describe("the site header", () => {
   it("offers sign in to visitors", async () => {
     const page = await renderPage(<SiteHeader />, { url: "/" });
     await expect
-      .element(page.getByRole("link", { name: "Boilerplate" }))
+      .element(page.getByRole("link", { name: "Director-editor" }))
       .toHaveAttribute("href", "/");
     await expect
       .element(page.getByRole("link", { name: "Sign in" }))
@@ -32,7 +32,7 @@ describe("the site header", () => {
     const user = await signUp();
     const page = await renderPage(<SiteHeader />, { url: "/settings" });
     await expect
-      .element(page.getByRole("link", { name: "Boilerplate" }))
+      .element(page.getByRole("link", { name: "Director-editor" }))
       .toHaveAttribute("href", "/dashboard");
     await userEvent.click(page.getByRole("button", { name: user.name }));
     await expect.element(page.getByText(user.email)).toBeVisible();

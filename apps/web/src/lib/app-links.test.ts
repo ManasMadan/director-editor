@@ -4,8 +4,8 @@ import { appleAppSiteAssociation, assetLinks, mobileApp } from "./app-links";
 const FINGERPRINT = Array.from({ length: 32 }, () => "AB").join(":");
 const app = {
   APPLE_TEAM_ID: "ABCDE12345",
-  IOS_BUNDLE_ID: "com.boilerplate.app",
-  ANDROID_PACKAGE: "com.boilerplate.app",
+  IOS_BUNDLE_ID: "com.directoreditor.app",
+  ANDROID_PACKAGE: "com.directoreditor.app",
   ANDROID_CERT_FINGERPRINTS: [FINGERPRINT],
 };
 const none = {
@@ -23,10 +23,13 @@ describe("the mobile app's association files", () => {
     expect(await response.json()).toEqual({
       applinks: {
         details: [
-          { appIDs: ["ABCDE12345.com.boilerplate.app"], components: [{ "/": "/invitations/*" }] },
+          {
+            appIDs: ["ABCDE12345.com.directoreditor.app"],
+            components: [{ "/": "/invitations/*" }],
+          },
         ],
       },
-      webcredentials: { apps: ["ABCDE12345.com.boilerplate.app"] },
+      webcredentials: { apps: ["ABCDE12345.com.directoreditor.app"] },
     });
   });
 
@@ -39,7 +42,7 @@ describe("the mobile app's association files", () => {
         ],
         target: {
           namespace: "android_app",
-          package_name: "com.boilerplate.app",
+          package_name: "com.directoreditor.app",
           sha256_cert_fingerprints: [FINGERPRINT],
         },
       },
@@ -62,8 +65,8 @@ describe("the mobile app's association files", () => {
     expect(() =>
       mobileApp({
         ...none,
-        IOS_BUNDLE_ID: "com.boilerplate.app",
-        ANDROID_PACKAGE: "com.boilerplate.app",
+        IOS_BUNDLE_ID: "com.directoreditor.app",
+        ANDROID_PACKAGE: "com.directoreditor.app",
       }),
     ).toThrow("missing: APPLE_TEAM_ID, ANDROID_CERT_FINGERPRINTS");
   });

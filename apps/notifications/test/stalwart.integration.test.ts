@@ -18,7 +18,7 @@ const MAILPIT =
   process.env.STALWART_MAILPIT_URL ?? process.env.MAILPIT_URL ?? "http://localhost:58025";
 
 const email = (to: string) => ({
-  from: "Boilerplate <no-reply@boilerplate.test>",
+  from: "Director-editor <no-reply@director-editor.test>",
   to,
   subject: "Stalwart submission",
   html: "<p>Sent through Stalwart</p>",
@@ -48,7 +48,7 @@ describe.skipIf(!SMTP_URL)("SMTP submission to Stalwart", () => {
       await fetch(`${MAILPIT}/api/v1/message/${id}/headers`)
     ).json()) as Record<string, string[]>;
     // Signed by Stalwart for our domain, and our own headers kept.
-    expect(headers["Dkim-Signature"]?.join(" ")).toMatch(/d=boilerplate\.test/);
+    expect(headers["Dkim-Signature"]?.join(" ")).toMatch(/d=director-editor\.test/);
     expect(headers["List-Unsubscribe-Post"]).toEqual(["List-Unsubscribe=One-Click"]);
     expect(headers["Message-Id"]).toEqual([`<${outgoing.idempotencyKey}@notifications>`]);
   });

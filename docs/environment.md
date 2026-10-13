@@ -182,7 +182,7 @@ written anywhere else, so a new app gets its variable here.
 | Variable | Default / example | What it does |
 |---|---|---|
 | `SMTP_URL` | `smtp://localhost:51025` (Mailpit) | Where email is submitted. Required in production, and there it must authenticate and use TLS with the certificate checked: `smtps://no-reply%40example.com:<password>@mail.example.com:465`, or `smtp://…:587?requireTLS=true` for STARTTLS; `tls.servername=<public name>` when connecting by an internal name. Refused in production: no credentials, no TLS, `ignoreTLS=true`, `tls.rejectUnauthorized=false`. |
-| `EMAIL_FROM` | `Boilerplate <no-reply@example.com>` | Sender. Required in production. Stalwart only accepts an address of the account `SMTP_URL` signs in as. |
+| `EMAIL_FROM` | `Director-editor <no-reply@example.com>` | Sender. Required in production. Stalwart only accepts an address of the account `SMTP_URL` signs in as. |
 | `DIGEST_HOUR` | 8 | Local hour (each user's time zone) from which their daily digest goes out. |
 | `NOTIFICATIONS_CRITICAL_CONCURRENCY` | 20 | Jobs per process on `notifications-critical`. |
 | `NOTIFICATIONS_BULK_CONCURRENCY` | 5 | Jobs per process on `notifications-bulk`. |
@@ -288,7 +288,7 @@ Server-only: nothing environment-specific is built into the browser bundle.
 |---|---|---|
 | `WEB_URL` | required | This site's origin (canonical URLs, sitemap). |
 | `API_URL`, `AI_URL`, `STORAGE_ORIGIN` | see above | |
-| `APPLE_TEAM_ID`, `IOS_BUNDLE_ID` | unset | The iOS app (`ABCDE12345`, `com.boilerplate.app`): `/.well-known/apple-app-site-association` names it for links and passkeys. |
+| `APPLE_TEAM_ID`, `IOS_BUNDLE_ID` | unset | The iOS app (`ABCDE12345`, `com.directoreditor.app`): `/.well-known/apple-app-site-association` names it for links and passkeys. |
 | `ANDROID_PACKAGE`, `ANDROID_CERT_FINGERPRINTS` | unset | The Android app and the SHA-256 fingerprints of its signing certificates, comma-separated (`AB:CD:…`): `/.well-known/assetlinks.json` names them. Optional, all four or none: with none set both files answer 404; with only some, the web app refuses to start and names the missing ones. The API and the mobile build read the fingerprints too ("Auth and the API", "Mobile"). |
 | `RELEASE` | `dev` | Sent to the API as `x-app-version`. |
 | `SKIP_ENV_VALIDATION` | unset | `1` only for `next typegen` inside `check-types`. |
@@ -316,7 +316,7 @@ Not read by any service.
 | `E2E_CIMD_CLIENT_ID`, `E2E_CIMD_REDIRECT_URI` | `apps/api/test/oauth.integration.test.ts` | A real Client ID Metadata Document; the test is skipped without them. |
 | `STALWART_URL` | `apps/webhooks/test/stalwart.integration.test.ts` | The local Stalwart's management API (`http://localhost:58080`, `bun run db:up:mail`); the test sends real mail through it and is skipped without it. |
 | `STALWART_SMTP_URL` | `apps/notifications/test/stalwart.integration.test.ts`, and the webhooks one | Submission to the local Stalwart, `smtps://no-reply:no-reply-password@localhost:51465?tls.rejectUnauthorized=false`; the notifications test is skipped without it. |
-| `STALWART_ADMIN_PASSWORD`, `STALWART_SMTP_PASSWORD` | `docker-compose.yml`, the webhooks test | The local Stalwart's admin and `no-reply@boilerplate.test` passwords (default `stalwart-admin`, `no-reply-password`). |
+| `STALWART_ADMIN_PASSWORD`, `STALWART_SMTP_PASSWORD` | `docker-compose.yml`, the webhooks test | The local Stalwart's admin and `no-reply@director-editor.test` passwords (default `stalwart-admin`, `no-reply-password`). |
 | `LOAD_USERS` | `apps/api/src/load-users.ts` | Signed-in users for k6 (default 50, at most 1000). |
 | `BASE_URL`, `PROFILE`, `TARGET_RPS`, `DURATION` | `load/api.ts` | k6 target (default `http://host.docker.internal:<API_PORT>`), `smoke` or `load`, rate (default 200), hold time (default `5m`). |
 | `PG_CONTAINER` | `scripts/restore-drill.ts` | Run the drill against another Postgres container (CI). |

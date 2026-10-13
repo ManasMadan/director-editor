@@ -1,5 +1,5 @@
 # Sign up, verify the email, then restart the app: the session survives (secure storage).
-appId: com.boilerplate.app.development
+appId: com.directoreditor.app.development
 env:
   EMAIL: maestro-${Date.now()}@example.com
 ---

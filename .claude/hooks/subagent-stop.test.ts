@@ -32,7 +32,7 @@ describe("a reviewer's verdict", () => {
 
   it("lets a passing review end, and tells Claude about one that didn't pass", () => {
     expect(subagentStop(done("reviewer", "Tenancy: ok\nready"))).toBeUndefined();
-    const output = subagentStop(done("boilerplate:security-reviewer", "x\nblockers found"));
+    const output = subagentStop(done("director-editor:security-reviewer", "x\nblockers found"));
     expect(contextOf(output)).toContain("security-reviewer agent's verdict is `blockers found`");
   });
 

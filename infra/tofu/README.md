@@ -72,13 +72,13 @@ cd infra/tofu/envs/k3s
 cp backend-staging.hcl.example backend-staging.hcl   # backend-production.hcl.example for production
 cp staging.tfvars.example staging.tfvars          # your machines, domain, …
 export CLOUDFLARE_API_TOKEN=…                     # see modules/cloudflare for its permissions
-export TF_VAR_ssh_private_key="$(cat ~/.ssh/boilerplate)"
+export TF_VAR_ssh_private_key="$(cat ~/.ssh/director-editor)"
 export TF_VAR_sops_age_key="$(cat staging.agekey)"
 export TF_VAR_sops_preview_age_key="$(cat preview.agekey)"   # with previews = true
 export TF_VAR_state_passphrase=…
 tofu init -backend-config=backend-staging.hcl
 tofu apply -var-file=staging.tfvars
-tofu output -raw kubeconfig > ~/.kube/boilerplate-staging
+tofu output -raw kubeconfig > ~/.kube/director-editor-staging
 ```
 
 State holds the cluster's certificate authorities, join tokens and admin key; it's
@@ -167,7 +167,7 @@ The cloudflare module sets up, in the environment's zone:
 | `_dmarc.<domain>` TXT | – | DMARC, with reports to `mail.dmarc_report_email` |
 
 `tofu output dns_records` lists them. The mail node is the one named in `mail.node`; it
-gets the label `boilerplate.dev/mail=true`, which the mail server is scheduled by, so
+gets the label `director-editor.dev/mail=true`, which the mail server is scheduled by, so
 its mail leaves from the address SPF names.
 
 Two things for mail aren't in Cloudflare:

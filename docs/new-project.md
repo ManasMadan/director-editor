@@ -1,4 +1,4 @@
-# Starting a new project from this boilerplate
+# Starting a new project from this director-editor
 
 Everything a new app needs once, in order. Each step links to where the details live;
 tick them off in your own copy of this file or in an issue.
@@ -24,13 +24,13 @@ against their checksums.
 
 - [ ] Create the repository from this one (it's a template repository once its settings
       are applied, see step 3): `gh repo create <owner>/<name> --template
-      ManasMadan/boilerplate --public --clone`.
+      ManasMadan/director-editor --public --clone`.
 - [ ] Rename the owner, repository, product and mobile app: `bun run rename <name>
       --owner <owner> --product "<Product>" --bundle-id <com.example.app>`. It rewrites
       every tracked file (the repository in Argo CD's `repoURL`s and the bootstrap, the
       image registry `ghcr.io/<owner>/<name>`, `CODEOWNERS` and the security links, the
       product name in auth, the API docs and the UI's messages, the mobile bundle id and
-      URL scheme, and the `boilerplate` name in compose, kind, Kubernetes labels and
+      URL scheme, and the `director-editor` name in compose, kind, Kubernetes labels and
       resources, cookies and test addresses), then fails naming any line it couldn't.
       The bundle id can't change once the app is in a store. Then `bun install` and
       review the diff. In Claude Code, `/new-project` walks this list with you.
@@ -72,15 +72,15 @@ against their checksums.
       on infrastructure pull requests, e.g. `["staging", "production"]`. Unset, no plans.
 - [ ] Optional: take the Claude Code setup from this template instead of keeping a copy,
       so its fixes reach this app. The template is a plugin marketplace
-      (`.claude-plugin/`): `/plugin marketplace add ManasMadan/boilerplate`, then
-      `/plugin install boilerplate@boilerplate`, and commit the two to
+      (`.claude-plugin/`): `/plugin marketplace add ManasMadan/director-editor`, then
+      `/plugin install director-editor@director-editor`, and commit the two to
       `.claude/settings.json` (`extraKnownMarketplaces`, `enabledPlugins`) for everyone.
       Then delete this app's `.claude/skills`, `.claude/agents`, `.claude/output-styles`,
       `.claude/bin` and the `hooks` block of `.claude/settings.json`, or everything runs
       twice. Keep `playwright-core` in the root `package.json`: the plugin's
       `playwright-cli` command runs the app's copy. The
       plugin has no version, so each commit to the template's default branch is an
-      update. Its skills and agents are then named `boilerplate:<name>`. Installing it
+      update. Its skills and agents are then named `director-editor:<name>`. Installing it
       also installs the plugins from Anthropic's marketplace that the template enables
       (its `dependencies`; `.claude/rules/claude-setup.md` says what each needs).
 - [ ] Optional: a Claude Code review on every pull request (`claude-review.yml`, the
@@ -129,7 +129,7 @@ and a feature stays off until its keys are set.
 apiVersion: v1
 kind: Secret
 metadata:
-  name: boilerplate-api
+  name: director-editor-api
 stringData:
   BETTER_AUTH_SECRET: ""   # openssl rand -base64 48
   ENCRYPTION_KEYS: ""      # echo "$(date +%Y-%m):$(openssl rand -base64 32)"; the same in webhooks
@@ -151,7 +151,7 @@ stringData:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: boilerplate-notifications
+  name: director-editor-notifications
 stringData:
   UNSUBSCRIBE_SECRET: ""   # the api's value
   SMTP_URL: ""             # smtps://no-reply%40<email domain>:<SMTP_PASSWORD>@<mail host>:465 (not for previews: their mail stays in their own Mailpit)
@@ -165,7 +165,7 @@ stringData:
   # APNS_KEY_ID: ""                # iOS push: the .p8 key's id (step 6)
   # APNS_TEAM_ID: ""
   # APNS_PRIVATE_KEY: ""           # the .p8 file's contents
-  # APNS_BUNDLE_ID: ""             # com.boilerplate.app, or yours after the rename
+  # APNS_BUNDLE_ID: ""             # com.directoreditor.app, or yours after the rename
   # VAPID_PUBLIC_KEY: ""           # browser push: bunx web-push generate-vapid-keys
   # VAPID_PRIVATE_KEY: ""
   # VAPID_SUBJECT: ""              # mailto:you@<domain>
@@ -177,7 +177,7 @@ stringData:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: boilerplate-webhooks
+  name: director-editor-webhooks
 stringData:
   ENCRYPTION_KEYS: ""            # the api's value
   STALWART_WEBHOOK_SECRET: ""    # the mail server's (its platform Secret below)
@@ -190,7 +190,7 @@ stringData:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: boilerplate-ai
+  name: director-editor-ai
 stringData:
   AI_SERVICE_SECRET: ""    # the api's value
   AI_MODEL: ""             # e.g. anthropic:claude-sonnet-5; production refuses local:*
@@ -366,12 +366,12 @@ Stalwart and RustFS); these need the real environment, once:
       SPF and DMARC passing (the message's `Authentication-Results` header). Send to a
       non-existent address at a real domain: the bounce reaches the webhooks service and
       the address is suppressed (notifications' logs).
-- [ ] Backups: `kubectl -n boilerplate get backups` shows a completed one, and a restore
+- [ ] Backups: `kubectl -n director-editor get backups` shows a completed one, and a restore
       into a new cluster works (deploy/README.md, "Backups and restore": try it on
       staging before production needs it).
 - [ ] Uploads: a profile picture uploads and shows (RustFS through the files host).
 - [ ] With observability on: traces in Jaeger and metrics in Grafana for every service.
-- [ ] Re-encryption: `kubectl -n boilerplate create job --from=cronjob/boilerplate-reencrypt
+- [ ] Re-encryption: `kubectl -n director-editor create job --from=cronjob/director-editor-reencrypt
       reencrypt-$(date +%s)` completes (the rotate-secrets runbook).
 - [ ] Third-party providers you turned on, each with a real account once: Google
       sign-in, Stripe test mode, Twilio, push on real devices, the AI provider.

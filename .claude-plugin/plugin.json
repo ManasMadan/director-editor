@@ -1,10 +1,10 @@
 {
-  "name": "boilerplate",
+  "name": "director-editor",
   "description": "This template's Claude Code setup: its skills, reviewer and verifier agents, guard and check hooks, output style and Postgres MCP server.",
   "author": {
     "name": "Manas Madan"
   },
-  "repository": "https://github.com/ManasMadan/boilerplate",
+  "repository": "https://github.com/ManasMadan/director-editor",
   "license": "UNLICENSED",
   "skills": ["./.claude/skills/"],
   "agents": [

@@ -1,4 +1,4 @@
-# Traces (deploy/platform/jaeger), on clusters labelled boilerplate.dev/observability.
+# Traces (deploy/platform/jaeger), on clusters labelled director-editor.dev/observability.
 addon: jaeger
 namespace: observability
 path: deploy/platform/jaeger

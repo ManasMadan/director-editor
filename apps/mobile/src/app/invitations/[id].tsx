@@ -9,7 +9,7 @@ import { useAuthErrorMessage } from "@/hooks/use-auth";
 import { authClient } from "@/lib/auth-client";
 
 /**
- * boilerplate://invitations/<id> (and the same path of the site's URL, once universal
+ * director-editor://invitations/<id> (and the same path of the site's URL, once universal
  * links are set up): shows the invitation, and joins the workspace only when the person
  * taps Accept. Any app or page can open a link, so opening one never joins anything.
  */

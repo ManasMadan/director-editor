@@ -11,7 +11,7 @@
  *
  * An image named by tag is resolved to its digest first, and scanned at that digest, so
  * the result says exactly what was scanned. A digest that passed today, with the same
- * reviewed exceptions, isn't scanned again (~/.cache/boilerplate/image-scan); Trivy keeps
+ * reviewed exceptions, isn't scanned again (~/.cache/director-editor/image-scan); Trivy keeps
  * its database and the image layers it read in its own cache. The images are read from
  * their registries, one at a time, never pulled into Docker; the dev container is built
  * (Docker's cache keeps that quick) since its Dockerfile updates what its base ships.
@@ -33,7 +33,7 @@ import { RENDERED, renderCharts, TRIVY_VERSION } from "./misconfig";
 const IMAGE = /^\s*(?:-\s+)?(?:image|imageName|imageRef):\s*["']?([^\s"'{]+:[^\s"']+)["']?\s*$/gm;
 
 /** What the dev container builds as, to be scanned. */
-export const DEVCONTAINER = "boilerplate/devcontainer:dev";
+export const DEVCONTAINER = "director-editor/devcontainer:dev";
 
 /** The files that name images: deploy/'s YAML (not tests or renders) and compose's. */
 export function imageFiles(root = ROOT) {
@@ -214,8 +214,8 @@ export function imageScan(
   images = process.argv.slice(2),
   run = runSync,
   root = ROOT,
-  cache = join(homedir(), ".cache/boilerplate/trivy"),
-  results = join(homedir(), ".cache/boilerplate/image-scan"),
+  cache = join(homedir(), ".cache/director-editor/trivy"),
+  results = join(homedir(), ".cache/director-editor/image-scan"),
   day = new Date().toISOString().slice(0, 10),
 ): number {
   // The renders the list comes from, as they are now.

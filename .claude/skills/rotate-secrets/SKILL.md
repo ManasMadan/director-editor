@@ -10,12 +10,12 @@ disable-model-invocation: true
 Where secrets live: locally in `.env` (never read it; set values with
 `bun run env:set KEY=value`). Deployed, in SOPS-encrypted Kubernetes Secrets committed
 to git: `deploy/environments/<env>/secrets/<service>.sops.yaml`, each a Secret named
-`boilerplate-<service>` whose `stringData` holds that service's variables (platform
+`director-editor-<service>` whose `stringData` holds that service's variables (platform
 Secrets, such as the Cloudflare token, are in `deploy/platform/secrets/<env>/`). Argo CD
 decrypts them into the cluster when the change reaches master (deploy/README.md,
 "Secrets with SOPS"). Services read variables at start, so restart the affected
 deployments once Argo CD has synced
-(`kubectl -n boilerplate rollout restart deployment/boilerplate-<service>`).
+(`kubectl -n director-editor rollout restart deployment/director-editor-<service>`).
 
 Never decrypt a secrets file yourself (`sops -d`, `sops <file>`, `sops decrypt`): that
 puts the values in the conversation. The user edits them with `sops <file>`, which opens
@@ -38,8 +38,8 @@ Commit only encrypted files (`charts:check` and the pre-commit hook refuse plain
 3. Re-encrypt the stored secrets with the new key (safe while the services run, safe
    to repeat): `bun run secrets:reencrypt` locally; deployed, a Job from the stack's
    suspended CronJob:
-   `kubectl -n boilerplate create job --from=cronjob/boilerplate-reencrypt reencrypt-$(date +%s)`,
-   then `kubectl -n boilerplate logs -f job/<that job>`. Never `kubectl exec` it into a
+   `kubectl -n director-editor create job --from=cronjob/director-editor-reencrypt reencrypt-$(date +%s)`,
+   then `kubectl -n director-editor logs -f job/<that job>`. Never `kubectl exec` it into a
    running api pod: the second process shares the pod's memory limit and gets the api
    OOM-killed. It prints how many rows moved; a second run prints 0.
 4. Only then drop the old key from both Secrets, commit and restart. Dropping it earlier makes

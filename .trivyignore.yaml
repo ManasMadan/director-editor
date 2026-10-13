@@ -43,7 +43,7 @@ misconfigurations:
   - id: KSV-0125
     paths: ["deploy/.rendered/local-stack.yaml"]
     statement: >-
-      The kind cluster's images (boilerplate/<image>:dev) are built on the machine and
+      The kind cluster's images (director-editor/<image>:dev) are built on the machine and
       loaded into kind by `bun run k8s:up`; nothing pulls them from a registry
 
   # The third-party add-on charts, rendered with the clusters' values (scripts/misconfig.ts:

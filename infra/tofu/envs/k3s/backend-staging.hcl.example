@@ -3,7 +3,7 @@
 # S3, …), created once. The keys can instead come from AWS_ACCESS_KEY_ID and
 # AWS_SECRET_ACCESS_KEY.
 bucket     = "your-tofu-state"
-key        = "boilerplate/staging.tfstate"
+key        = "director-editor/staging.tfstate"
 region     = "auto"
 endpoints  = { s3 = "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com" }
 access_key = "…"

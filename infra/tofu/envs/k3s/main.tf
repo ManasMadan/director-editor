@@ -12,12 +12,12 @@
 # previews run) and TF_VAR_state_passphrase.
 
 locals {
-  name = "boilerplate-${var.environment}"
+  name = "director-editor-${var.environment}"
 
   # The mail server runs on the node that its DNS points at (outgoing mail leaves from
   # the address of the node it's sent from, which SPF and reverse DNS vouch for).
   nodes = { for name, node in var.nodes : name => merge(node, {
-    labels = merge(node.labels, var.mail != null && try(var.mail.node == name, false) ? { "boilerplate.dev/mail" = "true" } : {})
+    labels = merge(node.labels, var.mail != null && try(var.mail.node == name, false) ? { "director-editor.dev/mail" = "true" } : {})
   }) }
   mail_host = var.mail == null ? null : coalesce(var.mail.host, "mail.${var.domain}")
 

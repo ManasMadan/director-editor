@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please report it privately through GitHub's
-[private vulnerability reporting](https://github.com/ManasMadan/boilerplate/security/advisories/new),
+[private vulnerability reporting](https://github.com/ManasMadan/director-editor/security/advisories/new),
 never in a public issue or pull request. Include what's affected, how to reproduce it,
 and the impact you expect.
 

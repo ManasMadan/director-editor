@@ -37,7 +37,7 @@ tests:
   - it: runs on the mail node OpenTofu labels and taints
     template: statefulset.yaml
     asserts:
-      - equal: { path: spec.template.spec.nodeSelector, value: { boilerplate.dev/mail: "true" } }
+      - equal: { path: spec.template.spec.nodeSelector, value: { director-editor.dev/mail: "true" } }
       - equal:
           path: spec.template.spec.tolerations
           value: [{ key: dedicated, operator: Equal, value: mail, effect: NoSchedule }]
@@ -74,7 +74,7 @@ tests:
           pattern: '"matchOn":\["name","domainId"\],"object":"Account".*"credentials":\{"0":\{"@type":"Password","secret":"@SMTP_PASSWORD@"\}\}.*"name":"no-reply"'
       - matchRegex:
           path: 'data["plan.ndjson"]'
-          pattern: '"object":"WebHook".*"events":\{"delivery.dsn-perm-fail":true,"delivery.dsn-temp-fail":true\},"eventsPolicy":"include".*"signatureKey":\{"@type":"EnvironmentVariable","variableName":"STALWART_WEBHOOK_SECRET"\},"url":"http://boilerplate-webhooks.boilerplate.svc.cluster.local:3004/webhooks/stalwart"'
+          pattern: '"object":"WebHook".*"events":\{"delivery.dsn-perm-fail":true,"delivery.dsn-temp-fail":true\},"eventsPolicy":"include".*"signatureKey":\{"@type":"EnvironmentVariable","variableName":"STALWART_WEBHOOK_SECRET"\},"url":"http://director-editor-webhooks.director-editor.svc.cluster.local:3004/webhooks/stalwart"'
       # One operation per line, nothing else.
       - notMatchRegex: { path: 'data["plan.ndjson"]', pattern: '\n\s*\n' }
 
@@ -108,11 +108,11 @@ tests:
     template: configmap.yaml
     set:
       relay.host: smtp.relay.example
-      relay.username: boilerplate
+      relay.username: director-editor
     asserts:
       - matchRegex:
           path: 'data["plan.ndjson"]'
-          pattern: '(?m)^\{"@type":"upsert","matchOn":\["name"\],"object":"MtaRoute","value":\{"relay":\{"@type":"Relay","address":"smtp.relay.example","allowInvalidCerts":false,"authSecret":\{"@type":"EnvironmentVariable","variableName":"RELAY_PASSWORD"\},"authUsername":"boilerplate","implicitTls":false,"name":"relay","port":587,"protocol":"smtp"\}\}\}$'
+          pattern: '(?m)^\{"@type":"upsert","matchOn":\["name"\],"object":"MtaRoute","value":\{"relay":\{"@type":"Relay","address":"smtp.relay.example","allowInvalidCerts":false,"authSecret":\{"@type":"EnvironmentVariable","variableName":"RELAY_PASSWORD"\},"authUsername":"director-editor","implicitTls":false,"name":"relay","port":587,"protocol":"smtp"\}\}\}$'
       - matchRegex:
           path: 'data["plan.ndjson"]'
           pattern: '(?m)^\{"@type":"update","object":"MtaOutboundStrategy","value":\{"route":\{"else":"\x27relay\x27","match":\[\{"if":"is_local_domain\(rcpt_domain\)","then":"\x27local\x27"\}\]\}\}\}$'
@@ -121,7 +121,7 @@ tests:
     template: statefulset.yaml
     set:
       relay.host: smtp.relay.example
-      relay.username: boilerplate
+      relay.username: director-editor
     asserts:
       - contains:
           path: "spec.template.spec.containers[0].env"

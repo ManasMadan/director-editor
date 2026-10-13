@@ -28,7 +28,7 @@
 # these containers and volumes by default. A worktree that needs its own runs
 # `bun run setup --stack <n>`: COMPOSE_PROJECT_NAME in its .env (which compose reads,
 # and which wins over `name:`) and every port 100 × n up.
-name: boilerplate
+name: director-editor
 
 services:
   postgres:
@@ -157,7 +157,7 @@ services:
   # (apps/webhooks, apps/notifications) skip themselves unless STALWART_URL and
   # STALWART_SMTP_URL are set (.env.example).
   #
-  # Local shape: domain boilerplate.test, submission user no-reply@boilerplate.test on
+  # Local shape: domain director-editor.test, submission user no-reply@director-editor.test on
   # 51465 (implicit TLS, self-signed certificate), admin API on 58080. Mail to any other
   # domain is relayed to Mailpit, so what Stalwart delivers shows up there too, except
   # bounce.test, which is sent back to this server's own port 25; it refuses to relay for
@@ -241,8 +241,8 @@ configs:
   stalwart-plan:
     content: |
       {"@type": "reconcile", "object": "Tracer", "matchOn": "*", "value": {"console": {"@type": "Stdout", "level": "info", "enable": true, "ansi": false, "buffered": false, "multiline": false, "lossy": false, "events": {}, "eventsPolicy": "exclude"}}}
-      {"@type": "upsert", "object": "Domain", "matchOn": ["name"], "value": {"dom": {"name": "boilerplate.test"}}}
-      {"@type": "update", "object": "SystemSettings", "value": {"defaultHostname": "mail.boilerplate.test", "defaultDomainId": "#dom"}}
+      {"@type": "upsert", "object": "Domain", "matchOn": ["name"], "value": {"dom": {"name": "director-editor.test"}}}
+      {"@type": "update", "object": "SystemSettings", "value": {"defaultHostname": "mail.director-editor.test", "defaultDomainId": "#dom"}}
       {"@type": "upsert", "object": "Account", "matchOn": ["name", "domainId"], "value": {"no-reply": {"@type": "User", "name": "no-reply", "domainId": "#dom", "credentials": {"0": {"@type": "Password", "secret": "${STALWART_SMTP_PASSWORD:-no-reply-password}"}}}}}
       {"@type": "upsert", "object": "MtaRoute", "matchOn": ["name"], "value": {"mailpit": {"@type": "Relay", "name": "mailpit", "description": "Everything else, to Mailpit", "address": "mailpit", "port": 1025, "protocol": "smtp", "implicitTls": false, "allowInvalidCerts": true, "authSecret": {"@type": "None"}}}}
       {"@type": "upsert", "object": "MtaRoute", "matchOn": ["name"], "value": {"refuse": {"@type": "Relay", "name": "refuse", "description": "bounce.test, refused by our own port 25", "address": "127.0.0.1", "port": 25, "protocol": "smtp", "implicitTls": false, "allowInvalidCerts": true, "authSecret": {"@type": "None"}}}}

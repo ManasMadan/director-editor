@@ -1,6 +1,6 @@
 ---
 name: new-project
-description: Turn a fresh copy of this template into the user's own product - rename the owner, repository, product, bundle id and every boilerplate identifier, then walk docs/new-project.md's checklist. Use when the user has just created a repository from this template and wants to make it theirs.
+description: Turn a fresh copy of this template into the user's own product - rename the owner, repository, product, bundle id and every director-editor identifier, then walk docs/new-project.md's checklist. Use when the user has just created a repository from this template and wants to make it theirs.
 argument-hint: <name> --owner <github owner> [--product "<Product>"] [--bundle-id <id>]
 disable-model-invocation: true
 ---

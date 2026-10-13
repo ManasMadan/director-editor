@@ -23,7 +23,7 @@ describe("image smoke", () => {
     };
     expect(await smoke("api", { run, get, ...fast })).toBe(0);
     expect(calls[0]).toStartWith("docker run --name smoke-api --network host -e PORT=3001");
-    expect(calls[0]).toEndWith("--detach boilerplate/api:dev");
+    expect(calls[0]).toEndWith("--detach director-editor/api:dev");
     expect(asked).toEqual([
       "http://127.0.0.1:3001/health/dependencies",
       "http://127.0.0.1:3001/health/dependencies",
@@ -56,7 +56,7 @@ describe("image smoke", () => {
     const passing = fakeRun();
     expect(await smoke("migrate", { run: passing.run })).toBe(0);
     expect(passing.calls).toEqual([
-      "docker run --name smoke-migrate --network host -e MIGRATOR_DATABASE_URL=postgresql://migrator:migrator@127.0.0.1:5432/app --rm boilerplate/migrate:dev",
+      "docker run --name smoke-migrate --network host -e MIGRATOR_DATABASE_URL=postgresql://migrator:migrator@127.0.0.1:5432/app --rm director-editor/migrate:dev",
     ]);
     const failing = fakeRun(() => ({ status: 1 }));
     expect(await smoke("migrate", { run: failing.run })).toBe(1);

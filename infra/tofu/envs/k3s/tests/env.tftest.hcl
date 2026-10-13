@@ -48,19 +48,19 @@ run "one_node_staging" {
   command = apply
   assert {
     condition = module.bootstrap.cluster_labels == tomap({
-      "argocd.argoproj.io/secret-type" = "cluster"
-      "boilerplate.dev/managed"        = "true"
-      "boilerplate.dev/environment"    = "staging"
-      "boilerplate.dev/previews"       = "true"
+      "argocd.argoproj.io/secret-type"  = "cluster"
+      "director-editor.dev/managed"     = "true"
+      "director-editor.dev/environment" = "staging"
+      "director-editor.dev/previews"    = "true"
     })
     error_message = "staging hosts previews, without the observability add-ons"
   }
   assert {
-    condition     = module.bootstrap.cluster_annotations["boilerplate.dev/image-policy"] == "false" && module.bootstrap.cluster_annotations["boilerplate.dev/domain"] == "example.com"
+    condition     = module.bootstrap.cluster_annotations["director-editor.dev/image-policy"] == "false" && module.bootstrap.cluster_annotations["director-editor.dev/domain"] == "example.com"
     error_message = "staging admits unsigned images; the platform config gets the domain"
   }
   assert {
-    condition     = !contains(keys(module.bootstrap.cluster_annotations), "boilerplate.dev/mail-host") && !contains(keys(module.bootstrap.cluster_annotations), "boilerplate.dev/mail-domain")
+    condition     = !contains(keys(module.bootstrap.cluster_annotations), "director-editor.dev/mail-host") && !contains(keys(module.bootstrap.cluster_annotations), "director-editor.dev/mail-domain")
     error_message = "no mail host or domain until mail is set up"
   }
   assert {
@@ -75,7 +75,7 @@ run "one_node_staging" {
     error_message = "the API on the only server"
   }
   assert {
-    condition = { for key in ["dns-provider", "trusted-hops", "origin-pulls"] : key => module.bootstrap.cluster_annotations["boilerplate.dev/${key}"] } == {
+    condition = { for key in ["dns-provider", "trusted-hops", "origin-pulls"] : key => module.bootstrap.cluster_annotations["director-editor.dev/${key}"] } == {
       "dns-provider" = "cloudflare", "trusted-hops" = "1", "origin-pulls" = "true"
     }
     error_message = "behind Cloudflare: its DNS-01 solver, and the gateway trusts its one hop and only its certificate"
@@ -108,7 +108,7 @@ run "dns_of_its_own_without_cloudflare" {
     error_message = "the same records, on the name server, unproxied"
   }
   assert {
-    condition = { for key in ["dns-provider", "trusted-hops", "origin-pulls", "dns-nameserver", "dns-tsig-key-name", "dns-tsig-algorithm"] : key => module.bootstrap.cluster_annotations["boilerplate.dev/${key}"] } == {
+    condition = { for key in ["dns-provider", "trusted-hops", "origin-pulls", "dns-nameserver", "dns-tsig-key-name", "dns-tsig-algorithm"] : key => module.bootstrap.cluster_annotations["director-editor.dev/${key}"] } == {
       "dns-provider"   = "rfc2136", "trusted-hops" = "0", "origin-pulls" = "false",
       "dns-nameserver" = "192.0.2.53:53", "dns-tsig-key-name" = "staging", "dns-tsig-algorithm" = "hmac-sha256"
     }
@@ -166,15 +166,15 @@ run "production_with_ha_and_mail" {
     }
   }
   assert {
-    condition     = module.bootstrap.cluster_labels["boilerplate.dev/observability"] == "true" && !contains(keys(module.bootstrap.cluster_labels), "boilerplate.dev/previews")
+    condition     = module.bootstrap.cluster_labels["director-editor.dev/observability"] == "true" && !contains(keys(module.bootstrap.cluster_labels), "director-editor.dev/previews")
     error_message = "production opts into observability and hosts no previews"
   }
   assert {
-    condition     = module.bootstrap.cluster_annotations["boilerplate.dev/image-policy"] == "true" && module.bootstrap.cluster_annotations["boilerplate.dev/mail-host"] == "mail.example.com" && module.bootstrap.cluster_annotations["boilerplate.dev/mail-domain"] == "example.com"
+    condition     = module.bootstrap.cluster_annotations["director-editor.dev/image-policy"] == "true" && module.bootstrap.cluster_annotations["director-editor.dev/mail-host"] == "mail.example.com" && module.bootstrap.cluster_annotations["director-editor.dev/mail-domain"] == "example.com"
     error_message = "production only runs signed images; the mail server learns its host name and email domain"
   }
   assert {
-    condition     = module.bootstrap.cluster_annotations["boilerplate.dev/alert-email"] == "ops@example.com"
+    condition     = module.bootstrap.cluster_annotations["director-editor.dev/alert-email"] == "ops@example.com"
     error_message = "the alerts add-on emails the address OpenTofu is given"
   }
   assert {
@@ -192,7 +192,7 @@ run "production_with_ha_and_mail" {
     error_message = "the mail records point at the mail node"
   }
   assert {
-    condition     = yamldecode(base64decode(regex("put /etc/rancher/k3s/config.yaml '([^']+)'", base64decode(yamldecode(output.cloud_init["agent-1"]).write_files[0].content))[0]))["node-label"] == ["boilerplate.dev/mail=true"]
+    condition     = yamldecode(base64decode(regex("put /etc/rancher/k3s/config.yaml '([^']+)'", base64decode(yamldecode(output.cloud_init["agent-1"]).write_files[0].content))[0]))["node-label"] == ["director-editor.dev/mail=true"]
     error_message = "the mail node is labelled for the mail server to run on"
   }
   assert {

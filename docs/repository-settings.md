@@ -265,7 +265,7 @@ environment a self-hosted runner inside your network.
 
 ## Packages
 
-Images are pushed to `ghcr.io/manasmadan/boilerplate/*` by `deploy.yml` and
+Images are pushed to `ghcr.io/manasmadan/director-editor/*` by `deploy.yml` and
 `preview.yml`. After the first push, in each package's settings, link it to this
 repository (**Manage Actions access → Write** for this repository) so later runs can
 push, and choose its visibility. If the packages stay private, give the clusters a pull

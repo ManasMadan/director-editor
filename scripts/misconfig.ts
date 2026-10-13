@@ -75,7 +75,7 @@ function writeRender(dir: string, name: string, manifests: string) {
 }
 
 /** Where pulled charts are kept, one file per chart and version: pulled once. */
-export const CHART_CACHE = join(homedir(), ".cache/boilerplate/charts");
+export const CHART_CACHE = join(homedir(), ".cache/director-editor/charts");
 
 /**
  * A remote chart's local copy, `<cache>/<name>-<version>.tgz`, pulled when it isn't
@@ -177,7 +177,7 @@ export function misconfig(
   root = ROOT,
   // Its own cache, which never holds a downloaded checks bundle (trivy.yaml skips the
   // update), so it uses the checks built into this version, as CI's fresh runner does.
-  cache = join(homedir(), ".cache/boilerplate/trivy"),
+  cache = join(homedir(), ".cache/director-editor/trivy"),
   charts = CHART_CACHE,
 ): number {
   if (!renderCharts(run, root, charts)) {

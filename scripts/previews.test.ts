@@ -48,11 +48,11 @@ describe("the previews ApplicationSet", () => {
   // The address is the cluster's domain, once: the site's host and what's posted.
   it("serves and announces one address, from the cluster's domain", () => {
     expect(patch).toContain(
-      '{{- $host := printf "pr-%v.preview.%s" .number (index .metadata.annotations "boilerplate.dev/domain") }}',
+      '{{- $host := printf "pr-%v.preview.%s" .number (index .metadata.annotations "director-editor.dev/domain") }}',
     );
     expect(patch).toMatch(/- name: site\.host\s+value: "\{\{ \$host \}\}"/);
-    expect(patch).toContain('boilerplate.dev/url: "https://{{ $host }}"');
-    expect(patch).toContain('boilerplate.dev/head-sha: "{{ .head_sha }}"');
+    expect(patch).toContain('director-editor.dev/url: "https://{{ $host }}"');
+    expect(patch).toContain('director-editor.dev/head-sha: "{{ .head_sha }}"');
     expect(patch).toContain('notifications.argoproj.io/subscribe.on-preview-deployed.github: ""');
   });
 });
@@ -72,16 +72,16 @@ describe("a preview's address on its pull request", () => {
       notifications.triggers["trigger.on-preview-deployed"] ?? "",
     ) as { when: string; oncePer: string; send: string[] }[];
     expect(trigger?.when).toContain("app.status.health.status == 'Healthy'");
-    expect(trigger?.oncePer).toBe('app.metadata.annotations["boilerplate.dev/head-sha"]');
+    expect(trigger?.oncePer).toBe('app.metadata.annotations["director-editor.dev/head-sha"]');
     expect(trigger?.send).toEqual(["preview-deployed"]);
     const template = Bun.YAML.parse(notifications.templates["template.preview-deployed"] ?? "") as {
       github: { revisionPath: string; pullRequestComment: { content: string; commentTag: string } };
     };
     expect(template.github.revisionPath).toBe(
-      '{{ index .app.metadata.annotations "boilerplate.dev/head-sha" }}',
+      '{{ index .app.metadata.annotations "director-editor.dev/head-sha" }}',
     );
     expect(template.github.pullRequestComment.content).toContain(
-      '{{ index .app.metadata.annotations "boilerplate.dev/url" }}',
+      '{{ index .app.metadata.annotations "director-editor.dev/url" }}',
     );
   });
 

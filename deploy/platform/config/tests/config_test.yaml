@@ -135,7 +135,7 @@ tests:
     set:
       imagePolicy.enabled: true
     asserts:
-      - equal: { path: "spec.rules[0].verifyImages[0].imageReferences", value: ["ghcr.io/manasmadan/boilerplate/*"] }
+      - equal: { path: "spec.rules[0].verifyImages[0].imageReferences", value: ["ghcr.io/manasmadan/director-editor/*"] }
 
   - it: checks signatures keylessly, against the CI workflow's identity, by default
     template: image-policy.yaml

@@ -654,7 +654,7 @@ describe("preview.yml's cleanup", () => {
       },
     };
     const context = {
-      repo: { owner: "me", repo: "boilerplate" },
+      repo: { owner: "me", repo: "director-editor" },
       payload: {
         pull_request: { number: 7 },
         repository: { owner: { login: "me", type: "User" } },
@@ -844,7 +844,7 @@ describe("the issue action", () => {
         },
       },
     };
-    const context = { repo: { owner: "me", repo: "boilerplate" } };
+    const context = { repo: { owner: "me", repo: "director-editor" } };
     Object.assign(process.env, { TITLE: "Uptime: down", BODY: body, RUN: "https://run/1" });
     const AsyncFunction = Object.getPrototypeOf(async () => undefined).constructor;
     await new AsyncFunction("github", "context", "core", script)(github, context, {
@@ -852,7 +852,7 @@ describe("the issue action", () => {
     });
     return calls;
   }
-  const repo = { owner: "me", repo: "boilerplate" };
+  const repo = { owner: "me", repo: "director-editor" };
 
   it("passes the title and body as environment variables, never into the script", () => {
     expect(step?.uses).toStartWith("actions/github-script@");

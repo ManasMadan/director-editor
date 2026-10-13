@@ -99,7 +99,7 @@ describe("the command policy", () => {
     ["bunx prisma db execute --file x.sql", "ask"],
     ["docker compose down", "ask"],
     ["docker compose --profile full down -v", "ask"],
-    ["docker volume rm boilerplate_postgres", "ask"],
+    ["docker volume rm director-editor_postgres", "ask"],
     ["docker system prune -af", "ask"],
     ["docker rm -f postgres", "ask"],
     ["docker buildx prune", "ask"],

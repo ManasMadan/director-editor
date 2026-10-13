@@ -243,7 +243,7 @@ describe("outbound deliveries", () => {
     );
     expect(verified).toMatchObject({ type: "todo.created.v1", data: { title: "Ship it" } });
     expect(request?.headers["webhook-id"]).toBe(event.id);
-    expect(request?.headers["user-agent"]).toMatch(/Boilerplate-Webhooks/);
+    expect(request?.headers["user-agent"]).toMatch(/Director-editor-Webhooks/);
   });
 
   it("signs with the rotated-out secret too until its overlap ends", async () => {

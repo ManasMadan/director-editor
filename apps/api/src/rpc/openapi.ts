@@ -23,7 +23,7 @@ export async function openApiDocument({
   const spec = await new OpenAPIGenerator({ schemaConverters: [converter] }).generate(contract, {
     // One definition every error response refers to, not a copy per status per operation.
     commonSchemas: { ErrorData: { schema: errorData } },
-    info: { title: "Boilerplate API", version },
+    info: { title: "Director-editor API", version },
     servers: [{ url: serverUrl }],
     components: {
       securitySchemes: {

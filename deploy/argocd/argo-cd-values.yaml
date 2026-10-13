@@ -93,7 +93,7 @@ notifications:
     # Once per commit: when that commit's images are running and healthy.
     trigger.on-preview-deployed: |
       - when: app.status.operationState != nil and app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
-        oncePer: app.metadata.annotations["boilerplate.dev/head-sha"]
+        oncePer: app.metadata.annotations["director-editor.dev/head-sha"]
         send: [preview-deployed]
   templates:
     # On the pull request whose head is that commit; later commits update the comment.
@@ -101,11 +101,11 @@ notifications:
       message: Preview deployed
       github:
         repoURLPath: "{{ (index .app.spec.sources 0).repoURL }}"
-        revisionPath: '{{ index .app.metadata.annotations "boilerplate.dev/head-sha" }}'
+        revisionPath: '{{ index .app.metadata.annotations "director-editor.dev/head-sha" }}'
         pullRequestComment:
           commentTag: preview
           content: |
-            Preview of `{{ index .app.metadata.annotations "boilerplate.dev/head-sha" | trunc 7 }}`: {{ index .app.metadata.annotations "boilerplate.dev/url" }}
+            Preview of `{{ index .app.metadata.annotations "director-editor.dev/head-sha" | trunc 7 }}`: {{ index .app.metadata.annotations "director-editor.dev/url" }}
 
             Removing the `preview` label deletes it.
 

@@ -23,8 +23,8 @@ services:
     # web app), and give the api the same fingerprints.
     # env:
     #   APPLE_TEAM_ID: ABCDE12345
-    #   IOS_BUNDLE_ID: com.boilerplate.app.preview
-    #   ANDROID_PACKAGE: com.boilerplate.app.preview
+    #   IOS_BUNDLE_ID: com.directoreditor.app.preview
+    #   ANDROID_PACKAGE: com.directoreditor.app.preview
     #   ANDROID_CERT_FINGERPRINTS: AB:CD:...
   api:
     autoscaling: { enabled: false }
@@ -45,4 +45,4 @@ services:
     caBundle: mailpit-tls
     env:
       SMTP_URL: smtps://no-reply%40preview.invalid:preview@mailpit:1025
-      EMAIL_FROM: Boilerplate Preview <no-reply@example.com>
+      EMAIL_FROM: Director-editor Preview <no-reply@example.com>

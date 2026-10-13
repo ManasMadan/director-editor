@@ -18,25 +18,25 @@ describe("a stack of local services", () => {
       WEB_URL: "http://localhost:3000",
     };
     const ports = { POSTGRES_PORT: "55432", VALKEY_PORT: "56379", NOT_A_PORT: "x" };
-    expect(stackValues(current, ports, 2, "boilerplate")).toEqual({
+    expect(stackValues(current, ports, 2, "director-editor")).toEqual({
       POSTGRES_PORT: "55632",
       VALKEY_PORT: "56579",
       API_DATABASE_URL: "postgresql://app_api:app_api@localhost:55632/app",
       REDIS_URL: "redis://127.0.0.1:56579",
-      COMPOSE_PROJECT_NAME: "boilerplate-stack2",
+      COMPOSE_PROJECT_NAME: "director-editor-stack2",
     });
   });
 
   it("moves from one stack to another, and back to the defaults", () => {
     const ports = { POSTGRES_PORT: "55432" };
     const onTwo = { POSTGRES_PORT: "55632", DATABASE_URL: "postgresql://localhost:55632/app" };
-    expect(stackValues(onTwo, ports, 0, "boilerplate")).toEqual({
+    expect(stackValues(onTwo, ports, 0, "director-editor")).toEqual({
       POSTGRES_PORT: "55432",
       DATABASE_URL: "postgresql://localhost:55432/app",
-      COMPOSE_PROJECT_NAME: "boilerplate",
+      COMPOSE_PROJECT_NAME: "director-editor",
     });
-    const already = { ...onTwo, COMPOSE_PROJECT_NAME: "boilerplate-stack2" };
-    expect(stackValues(already, ports, 2, "boilerplate")).toEqual({});
+    const already = { ...onTwo, COMPOSE_PROJECT_NAME: "director-editor-stack2" };
+    expect(stackValues(already, ports, 2, "director-editor")).toEqual({});
     // Without a project (the tests' environment), no name.
     expect(stackValues({}, ports, 1)).toEqual({ POSTGRES_PORT: "55532" });
   });

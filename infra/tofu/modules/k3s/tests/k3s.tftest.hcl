@@ -22,7 +22,7 @@ mock_provider "tls" {
 }
 
 variables {
-  name            = "boilerplate-staging"
+  name            = "director-editor-staging"
   ssh_private_key = "-----BEGIN OPENSSH PRIVATE KEY-----"
   nodes = {
     server-1 = { address = "203.0.113.10", role = "server" }
@@ -120,7 +120,7 @@ run "ha_servers_and_agents" {
         private_address = "10.0.0.20"
         user            = "ubuntu"
         role            = "agent"
-        labels          = { "boilerplate.dev/mail" = "true" }
+        labels          = { "director-editor.dev/mail" = "true" }
         taints          = ["dedicated=mail:NoSchedule"]
       }
     }
@@ -154,7 +154,7 @@ run "ha_servers_and_agents" {
     error_message = "cluster traffic on the private address, the public one as external"
   }
   assert {
-    condition     = tolist(local.config["agent-1"]["node-label"]) == tolist(["boilerplate.dev/mail=true"]) && local.config["agent-1"]["node-taint"] == tolist(["dedicated=mail:NoSchedule"])
+    condition     = tolist(local.config["agent-1"]["node-label"]) == tolist(["director-editor.dev/mail=true"]) && local.config["agent-1"]["node-taint"] == tolist(["dedicated=mail:NoSchedule"])
     error_message = "labels and taints"
   }
   assert {

@@ -24,7 +24,7 @@ tests:
   - it: runs the build's image and reports it as RELEASE
     documentSelector: { path: metadata.name, value: demo-api }
     asserts:
-      - equal: { path: "spec.template.spec.containers[0].image", value: ghcr.io/manasmadan/boilerplate/api:sha-abc123 }
+      - equal: { path: "spec.template.spec.containers[0].image", value: ghcr.io/manasmadan/director-editor/api:sha-abc123 }
       - contains:
           path: "spec.template.spec.containers[0].env"
           content: { name: RELEASE, value: sha-abc123 }
@@ -52,7 +52,7 @@ tests:
           content: { name: postgres-ca, mountPath: /etc/postgres-ca, readOnly: true }
       - contains:
           path: spec.template.spec.volumes
-          content: { name: postgres-ca, secret: { secretName: boilerplate-postgres-ca, items: [{ key: ca.crt, path: ca.crt }] } }
+          content: { name: postgres-ca, secret: { secretName: director-editor-postgres-ca, items: [{ key: ca.crt, path: ca.crt }] } }
       - contains:
           path: "spec.template.spec.containers[0].env"
           content:
@@ -209,7 +209,7 @@ tests:
   - it: shares the AI service's secrets with its worker, which runs the same image
     documentSelector: { path: metadata.name, value: demo-ai-worker }
     asserts:
-      - equal: { path: "spec.template.spec.containers[0].image", value: ghcr.io/manasmadan/boilerplate/ai:sha-abc123 }
+      - equal: { path: "spec.template.spec.containers[0].image", value: ghcr.io/manasmadan/director-editor/ai:sha-abc123 }
       - equal: { path: "spec.template.spec.containers[0].command", value: [python, -m, app.worker] }
       - equal:
           path: "spec.template.spec.containers[0].envFrom"

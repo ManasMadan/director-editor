@@ -120,7 +120,7 @@ screenshots are identical on every machine and in CI.
   token through its scheme (`useCaptcha()` in `src/lib/captcha.ts`; see
   [auth.md](auth.md#captcha)). A new form whose request the API guards with captcha calls
   it too.
-- **Links**: `boilerplate://` links, and the site's https invitation links once the
+- **Links**: `director-editor://` links, and the site's https invitation links once the
   site serves the association files ("Universal links and App Links" below).
 - **Passkeys**: sign-in with one, and adding and removing them in settings, through the
   same better-auth endpoints as the web app's passkey client, with the device's own
@@ -168,7 +168,7 @@ credentials`). See [repository-settings.md](repository-settings.md).
 
 ### Universal links and App Links
 
-An optional feature, off until it's configured. Besides its `boilerplate://` scheme
+An optional feature, off until it's configured. Besides its `director-editor://` scheme
 (sign-in callbacks, the captcha's answer), the app then opens the site's own https links: an invitation link sent by email opens the invitation
 in the app when it's installed, and in the browser when it isn't. A custom scheme isn't
 verified, so any other app can register the same one; an https link is, because each
@@ -195,7 +195,7 @@ neither does a development build on a LAN address, since neither platform can ve
 plain http. Associated domains
 are native settings, so they reach users only through a store build. Expo Router opens
 an https link at its path, so `https://<host>/invitations/<id>` lands on
-`invitations/[id]` like `boilerplate://invitations/<id>` does.
+`invitations/[id]` like `director-editor://invitations/<id>` does.
 
 The site side is two route handlers in the web app, built from its environment
 (`apps/web/src/lib/app-links.ts`), the only ones besides the health probe; they answer

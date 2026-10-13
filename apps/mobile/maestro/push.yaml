@@ -1,5 +1,5 @@
 # Allow notifications: the system prompt appears, and the device is registered.
-appId: com.boilerplate.app.development
+appId: com.directoreditor.app.development
 ---
 - runFlow: sign-up-and-restart.yaml
 - tapOn: "Settings"

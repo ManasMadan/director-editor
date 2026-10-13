@@ -35,7 +35,7 @@ tracks or would, as it is on disk), and fails on what the master ruleset blocks 
 on: a security alert of high severity or above, or an alert of error level, each printed
 as `file:line rule message`. `--languages python,actions` limits it to some languages.
 It runs natively, with a `codeql` of the pinned version on the PATH or the CodeQL bundle
-it downloads once (about a gigabyte) into `~/.cache/boilerplate/codeql`, checked against
+it downloads once (about a gigabyte) into `~/.cache/director-editor/codeql`, checked against
 its SHA-256; all three languages take a few minutes. The CodeQL CLI's license allows
 this on a public repository. A private project made from this template needs GitHub
 Advanced Security to run it; without that, remove its use deliberately rather than

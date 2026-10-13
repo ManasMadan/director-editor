@@ -11,7 +11,7 @@ describe("EmailSinkSmsTransport", () => {
         return { providerMessageId: "m1" };
       },
     };
-    const sink = new EmailSinkSmsTransport(email, "Boilerplate <no-reply@localhost>");
+    const sink = new EmailSinkSmsTransport(email, "Director-editor <no-reply@localhost>");
     const result = await sink.send("+14155550123", "Code <123456> & more", "key-1");
     expect(result).toEqual({ ok: true, providerMessageId: "m1" });
     expect(sent[0]).toMatchObject({

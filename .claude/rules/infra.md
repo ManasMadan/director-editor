@@ -48,7 +48,7 @@ a real cluster or cloud account. The checks below are offline.
   data charts for every environment and optional feature, the platform's own charts (the
   add-ons with a `path`) with a cluster's values, and the third-party ones (the other
   add-ons and Argo CD) at their pinned versions with `deploy/platform/values` (pulled
-  once into `~/.cache/boilerplate/charts`, without their Helm tests). A third-party
+  once into `~/.cache/director-editor/charts`, without their Helm tests). A third-party
   chart's containers get their resources and users through its values; what an operator
   or node-exporter needs by design is a reviewed exception scoped to its
   `deploy/.rendered/addon-<name>.yaml`. Trivy's own Helm rendering is off

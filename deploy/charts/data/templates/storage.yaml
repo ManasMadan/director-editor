@@ -269,7 +269,7 @@ metadata:
   labels:
     {{- include "data.labels" $ | nindent 4 }}
   annotations:
-    boilerplate.dev/external-dns: "true"
+    director-editor.dev/external-dns: "true"
 spec:
   parentRefs:
     {{- toYaml $.Values.gateway.parentRefs | nindent 4 }}

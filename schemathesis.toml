@@ -22,7 +22,7 @@ database = "none"
 with-security-parameters = false
 
 [[project]]
-title = "Boilerplate API"
+title = "Director-editor API"
 auth.openapi.session.api_key = "${FUZZ_SESSION}"
 
 # The answer streams as server-sent events. oRPC documents each event's data as the

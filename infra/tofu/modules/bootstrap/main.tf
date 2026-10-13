@@ -7,19 +7,19 @@
 locals {
   labels = merge(
     {
-      "argocd.argoproj.io/secret-type" = "cluster"
-      "boilerplate.dev/managed"        = "true"
-      "boilerplate.dev/environment"    = var.environment
+      "argocd.argoproj.io/secret-type"  = "cluster"
+      "director-editor.dev/managed"     = "true"
+      "director-editor.dev/environment" = var.environment
     },
-    var.previews ? { "boilerplate.dev/previews" = "true" } : {},
-    var.observability ? { "boilerplate.dev/observability" = "true" } : {},
+    var.previews ? { "director-editor.dev/previews" = "true" } : {},
+    var.observability ? { "director-editor.dev/observability" = "true" } : {},
   )
   annotations = merge(
-    { for key, value in var.cluster_annotations : "boilerplate.dev/${key}" => value },
+    { for key, value in var.cluster_annotations : "director-editor.dev/${key}" => value },
     {
-      "boilerplate.dev/environment"   = var.environment
-      "boilerplate.dev/previews"      = tostring(var.previews)
-      "boilerplate.dev/observability" = tostring(var.observability)
+      "director-editor.dev/environment"   = var.environment
+      "director-editor.dev/previews"      = tostring(var.previews)
+      "director-editor.dev/observability" = tostring(var.observability)
     },
   )
   root = yamldecode(file("${path.module}/../../../../deploy/argocd/root.yaml"))

@@ -9,7 +9,7 @@
  * the migrations and must exit 0. The container is removed afterwards, and its logs are
  * printed when a check fails.
  *
- * Needs Docker and the image, tagged boilerplate/<image>:dev (`docker buildx bake <image>
+ * Needs Docker and the image, tagged director-editor/<image>:dev (`docker buildx bake <image>
  * --load`).
  */
 import { randomBytes } from "node:crypto";
@@ -131,7 +131,7 @@ export async function smoke(
   const name = `smoke-${image}`;
   const env = Object.entries(spec.env()).flatMap(([key, value]) => ["-e", `${key}=${value}`]);
   const args = ["run", "--name", name, "--network", "host", ...env];
-  const tag = `boilerplate/${image}:dev`;
+  const tag = `director-editor/${image}:dev`;
   if (!spec.port) {
     return runToExit(image, args, tag, run);
   }

@@ -70,9 +70,9 @@ describe("what each environment deploys", () => {
     for (const file of ["envs.yaml", "platform.yaml", "observability.yaml"]) {
       const text = readFileSync(join(APPSETS, file), "utf8");
       expect(text).toContain(
-        "path: 'deploy/environments/{{ index .metadata.labels \"boilerplate.dev/environment\" }}/release.yaml'",
+        "path: 'deploy/environments/{{ index .metadata.labels \"director-editor.dev/environment\" }}/release.yaml'",
       );
-      const ours = [...patchOf(file).matchAll(/boilerplate\.git\n\s+targetRevision: (.+)/g)];
+      const ours = [...patchOf(file).matchAll(/director-editor\.git\n\s+targetRevision: (.+)/g)];
       expect(ours.length).toBeGreaterThan(0);
       for (const [, revision] of ours) {
         expect(revision).toBe('"{{ .revision }}"');

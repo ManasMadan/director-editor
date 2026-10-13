@@ -2,7 +2,7 @@
 # port 30080, published as port 80 on this machine: http://localhost.
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
-name: boilerplate
+name: director-editor
 nodes:
   - role: control-plane
     # The Kubernetes the clusters run (k3s's release, infra/tofu/modules/k3s), not whatever

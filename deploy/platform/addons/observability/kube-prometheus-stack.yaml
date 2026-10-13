@@ -1,5 +1,5 @@
 # Metrics and dashboards: Prometheus (which also takes the services' OTLP metrics),
-# Grafana and Alertmanager, on clusters labelled boilerplate.dev/observability.
+# Grafana and Alertmanager, on clusters labelled director-editor.dev/observability.
 addon: kube-prometheus-stack
 namespace: observability
 repoURL: https://prometheus-community.github.io/helm-charts

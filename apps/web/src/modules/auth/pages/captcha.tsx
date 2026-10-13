@@ -9,7 +9,7 @@ import { useCaptchaReturn } from "../hooks/use-captcha-return";
 
 /**
  * The security check for the mobile app, which can't render Turnstile itself: the app
- * opens this page in the system's browser sheet with `?return_to=boilerplate://captcha-done`,
+ * opens this page in the system's browser sheet with `?return_to=director-editor://captcha-done`,
  * and once the check passes the page sends the browser there with `?token=`, which the
  * app hands to the API like the web forms do (apps/mobile/src/lib/captcha.ts). Works
  * signed out.

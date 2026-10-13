@@ -1,5 +1,5 @@
 # Traces and metrics (deploy/platform/addons/observability) on the clusters that opt in
-# with the label boilerplate.dev/observability: "true" on their Argo CD Secret. The same
+# with the label director-editor.dev/observability: "true" on their Argo CD Secret. The same
 # label makes the envs and previews ApplicationSets point every service's OTLP export at
 # them. Add-on files have the same shape as the platform ApplicationSet's, and in-repo
 # charts take `clusterParameters` the same way.
@@ -19,17 +19,17 @@ spec:
                 - clusters:
                     selector:
                       matchLabels:
-                        boilerplate.dev/observability: "true"
+                        director-editor.dev/observability: "true"
                 # The revision the environment deploys from, and production's images:
                 # deploy/environments/<env>/release.yaml, read at HEAD.
                 - git:
-                    repoURL: https://github.com/ManasMadan/boilerplate.git
+                    repoURL: https://github.com/ManasMadan/director-editor.git
                     revision: HEAD
                     pathParamPrefix: release
                     files:
-                      - path: 'deploy/environments/{{ index .metadata.labels "boilerplate.dev/environment" }}/release.yaml'
+                      - path: 'deploy/environments/{{ index .metadata.labels "director-editor.dev/environment" }}/release.yaml'
           - git:
-              repoURL: https://github.com/ManasMadan/boilerplate.git
+              repoURL: https://github.com/ManasMadan/director-editor.git
               revision: "{{ .revision }}"
               # The generator's own `path` parameter (the file's location) would replace
               # an add-on's `path` key; this moves it to `.file.path`.
@@ -91,7 +91,7 @@ spec:
     spec:
       sources:
         {{- if hasKey . "path" }}
-        - repoURL: https://github.com/ManasMadan/boilerplate.git
+        - repoURL: https://github.com/ManasMadan/director-editor.git
           targetRevision: "{{ .revision }}"
           path: {{ .path }}
           helm:
@@ -105,9 +105,9 @@ spec:
               {{- if eq $field "name" }}
               {{- $value = $cluster.name }}
               {{- else if hasPrefix "label:" $field }}
-              {{- $value = index $cluster.metadata.labels (printf "boilerplate.dev/%s" (trimPrefix "label:" $field)) | default "" }}
+              {{- $value = index $cluster.metadata.labels (printf "director-editor.dev/%s" (trimPrefix "label:" $field)) | default "" }}
               {{- else }}
-              {{- $value = index $cluster.metadata.annotations (printf "boilerplate.dev/%s" $field) | default "" }}
+              {{- $value = index $cluster.metadata.annotations (printf "director-editor.dev/%s" $field) | default "" }}
               {{- end }}
               {{- $value = $value | default $fallback }}
               - name: {{ $key | quote }}
@@ -122,7 +122,7 @@ spec:
             releaseName: {{ .addon }}
             valueFiles:
               - $repo/deploy/platform/values/{{ .addon }}.yaml
-        - repoURL: https://github.com/ManasMadan/boilerplate.git
+        - repoURL: https://github.com/ManasMadan/director-editor.git
           targetRevision: "{{ .revision }}"
           ref: repo
         {{- end }}

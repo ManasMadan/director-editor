@@ -27,11 +27,11 @@ export const envSchema = {
     .optional(),
   IOS_BUNDLE_ID: z
     .string()
-    .regex(/^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/, "a bundle id, e.g. com.boilerplate.app")
+    .regex(/^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/, "a bundle id, e.g. com.directoreditor.app")
     .optional(),
   ANDROID_PACKAGE: z
     .string()
-    .regex(/^[A-Za-z]\w*(\.[A-Za-z]\w*)+$/, "a package name, e.g. com.boilerplate.app")
+    .regex(/^[A-Za-z]\w*(\.[A-Za-z]\w*)+$/, "a package name, e.g. com.directoreditor.app")
     .optional(),
   // Comma-separated SHA-256 fingerprints of the certificates the Android app is signed
   // with (AB:CD:...): Play's app signing key, and the upload key for builds installed

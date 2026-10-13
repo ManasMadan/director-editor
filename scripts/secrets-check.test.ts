@@ -8,7 +8,7 @@ import { captureOutput } from "./stand-ins";
 afterEach(() => mock.restore());
 
 const secret = (value: string, extra = "") =>
-  `apiVersion: v1\nkind: Secret\nmetadata:\n  name: boilerplate-api\n${extra}stringData:\n  BETTER_AUTH_SECRET: ${value}\n`;
+  `apiVersion: v1\nkind: Secret\nmetadata:\n  name: director-editor-api\n${extra}stringData:\n  BETTER_AUTH_SECRET: ${value}\n`;
 const sops =
   "sops:\n  age:\n    - recipient: age1example\n      enc: x\n  mac: ENC[AES256_GCM,data:m,iv:i,tag:t,type:str]\n";
 const encrypted = `${secret("ENC[AES256_GCM,data:abc,iv:def,tag:ghi,type:str]")}${sops}`;
@@ -36,7 +36,7 @@ describe("the secrets check", () => {
     expect(
       unsafeSecret(
         "api.sops.yaml",
-        `apiVersion: v1\nkind: Secret\nmetadata:\n  name: boilerplate-api\nstringData: {}\n${sops}`,
+        `apiVersion: v1\nkind: Secret\nmetadata:\n  name: director-editor-api\nstringData: {}\n${sops}`,
         false,
       ),
     ).toBe("has no values");

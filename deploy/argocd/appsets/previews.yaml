@@ -1,5 +1,5 @@
 # A preview per pull request labelled `preview` (only maintainers can add labels), on
-# the clusters that host previews (label boilerplate.dev/previews=true, normally
+# the clusters that host previews (label director-editor.dev/previews=true, normally
 # staging's), at https://pr-<number>.preview.<the cluster's domain>. It runs the images
 # CI built from the PR's head commit (sha-<commit>, only for this repository's own
 # branches) with the charts, values and shared preview Secrets of the branch it targets
@@ -22,13 +22,13 @@ spec:
           - clusters:
               selector:
                 matchLabels:
-                  boilerplate.dev/previews: "true"
+                  director-editor.dev/previews: "true"
           - matrix:
               generators:
                 - pullRequest:
                     github:
                       owner: ManasMadan
-                      repo: boilerplate
+                      repo: director-editor
                       labels: [preview]
                       tokenRef:
                         secretName: github-token
@@ -80,21 +80,21 @@ spec:
   # notifications to post the address on the pull request once it's deployed
   # (argo-cd-values.yaml): the domain is the cluster's, read here and nowhere else.
   templatePatch: |
-    {{- $host := printf "pr-%v.preview.%s" .number (index .metadata.annotations "boilerplate.dev/domain") }}
+    {{- $host := printf "pr-%v.preview.%s" .number (index .metadata.annotations "director-editor.dev/domain") }}
     {{- if eq .chart "stack" }}
     metadata:
       annotations:
         notifications.argoproj.io/subscribe.on-preview-deployed.github: ""
-        boilerplate.dev/head-sha: "{{ .head_sha }}"
-        boilerplate.dev/url: "https://{{ $host }}"
+        director-editor.dev/head-sha: "{{ .head_sha }}"
+        director-editor.dev/url: "https://{{ $host }}"
     {{- end }}
     spec:
       sources:
-        - repoURL: https://github.com/ManasMadan/boilerplate.git
+        - repoURL: https://github.com/ManasMadan/director-editor.git
           targetRevision: "{{ .target_branch }}"
           path: deploy/charts/{{ .chart }}
           helm:
-            releaseName: boilerplate
+            releaseName: director-editor
             valueFiles:
               - ../../environments/preview/{{ .chart }}.yaml
             parameters:
@@ -107,10 +107,10 @@ spec:
               - name: site.host
                 value: "{{ $host }}"
               - name: observability.enabled
-                value: {{ eq (index .metadata.labels "boilerplate.dev/observability" | default "") "true" | quote }}
+                value: {{ eq (index .metadata.labels "director-editor.dev/observability" | default "") "true" | quote }}
               {{- end }}
         {{- if eq .chart "stack" }}
-        - repoURL: https://github.com/ManasMadan/boilerplate.git
+        - repoURL: https://github.com/ManasMadan/director-editor.git
           targetRevision: "{{ .target_branch }}"
           path: deploy/environments/preview/secrets
           plugin:

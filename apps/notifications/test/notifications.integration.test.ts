@@ -800,7 +800,7 @@ describe("notifications service", () => {
       {
         to: phone,
         from: "+15005550006",
-        body: "482913 es tu código de verificación de Boilerplate. Caduca en 10 minutos. No lo compartas con nadie.",
+        body: "482913 es tu código de verificación de Director-editor. Caduca en 10 minutos. No lo compartas con nadie.",
       },
     ]);
     const [row] = await sql<{ provider_message_id: string }>(
@@ -826,7 +826,7 @@ describe("notifications service", () => {
     expect((await waitForEmail(email)).Subject).toBe("Your password was changed");
     await settleSms(jobId);
     expect(twilio.to(phone).map((message) => message.body)).toEqual([
-      "Boilerplate: your password was changed. Not you? Reset your password now.",
+      "Director-editor: your password was changed. Not you? Reset your password now.",
     ]);
   });
 
@@ -1171,7 +1171,9 @@ describe("notifications service", () => {
       },
       { jobId: randomUUID() },
     );
-    expect((await waitForEmail(to)).Subject).toBe("You're invited to a workspace on Boilerplate");
+    expect((await waitForEmail(to)).Subject).toBe(
+      "You're invited to a workspace on Director-editor",
+    );
     expect(await mailText(to)).toContain(
       "“Ada” invited you to collaborate in the workspace “Acme”.",
     );

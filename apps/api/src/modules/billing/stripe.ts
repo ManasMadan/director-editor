@@ -15,7 +15,7 @@ export function createStripe(): Stripe | null {
     // Retries reuse one idempotency key, so a retried write never happens twice.
     maxNetworkRetries: 2,
     timeout: 15_000,
-    appInfo: { name: "boilerplate" },
+    appInfo: { name: "director-editor" },
     ...(api && {
       host: api.hostname,
       port: Number(api.port),

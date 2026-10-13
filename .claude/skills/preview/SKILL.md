@@ -15,7 +15,7 @@ allowed-tools: Bash(gh pr view *) Bash(gh run list *) Bash(gh run view *) Bash(k
    labelled pull requests every two minutes and deploys `pr-<number>-data` then
    `pr-<number>-stack` into namespace `pr-<number>`, with
    `deploy/environments/preview/*.yaml`: its own Postgres and Valkey, secrets under the
-   `boilerplate-preview-` prefix. Migrations run before the services, as everywhere.
+   `director-editor-preview-` prefix. Migrations run before the services, as everywhere.
    The charts, values and secrets come from the target branch; only the images come
    from the pull request, so a PR's own `deploy/` changes don't show in its preview.
    Once the stack is running and healthy, Argo CD's notifications comment the address
@@ -32,7 +32,7 @@ allowed-tools: Bash(gh pr view *) Bash(gh run list *) Bash(gh run view *) Bash(k
   needs Pull requests: write), and the notifications controller's logs
   (`kubectl -n argocd logs deploy/argocd-notifications-controller`).
 - Images pushed but nothing deployed: the preview cluster needs the label
-  `boilerplate.dev/previews: "true"` and the `github-token` Secret in `argocd`
+  `director-editor.dev/previews: "true"` and the `github-token` Secret in `argocd`
   (a SOPS file in `deploy/platform/secrets/<env>/`; see deploy/README.md), and GHCR packages must be
   pullable (docs/repository-settings.md, Packages).
 - Deployed but failing: `kubectl -n pr-<number> get pods`, then the debug skill.

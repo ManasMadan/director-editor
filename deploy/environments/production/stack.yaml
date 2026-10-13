@@ -19,7 +19,7 @@ services:
       # Mail goes through the cluster's mail server (deploy/platform/mail): SMTP_URL,
       # with the submission password, is in secrets/notifications.sops.yaml.
       # Your sender: the mail server's submission account on its email domain.
-      EMAIL_FROM: Boilerplate <no-reply@example.com>
+      EMAIL_FROM: Director-editor <no-reply@example.com>
   web:
     autoscaling: { minReplicas: 3, maxReplicas: 20 }
     # Optional: the mobile app's https links and passkeys (docs/web-and-mobile.md,
@@ -28,8 +28,8 @@ services:
     # web app), and give the api the same fingerprints.
     # env:
     #   APPLE_TEAM_ID: ABCDE12345
-    #   IOS_BUNDLE_ID: com.boilerplate.app
-    #   ANDROID_PACKAGE: com.boilerplate.app
+    #   IOS_BUNDLE_ID: com.directoreditor.app
+    #   ANDROID_PACKAGE: com.directoreditor.app
     #   ANDROID_CERT_FINGERPRINTS: AB:CD:...
   api:
     autoscaling: { minReplicas: 3, maxReplicas: 30 }

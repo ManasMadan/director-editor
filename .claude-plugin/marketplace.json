@@ -1,5 +1,5 @@
 {
-  "name": "boilerplate",
+  "name": "director-editor",
   "description": "The Claude Code setup of apps made from this template, kept up to date from it.",
   "owner": {
     "name": "Manas Madan"
@@ -7,7 +7,7 @@
   "allowCrossMarketplaceDependenciesOn": ["claude-plugins-official"],
   "plugins": [
     {
-      "name": "boilerplate",
+      "name": "director-editor",
       "source": "./",
       "description": "Skills, agents, hooks, output style and Postgres MCP server for apps made from this template."
     }

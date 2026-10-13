@@ -99,7 +99,7 @@ describe("the other templates", () => {
       acceptUrl: "https://app.example/invitations/accept?id=1",
       expiresInDays: 7,
     });
-    expect(email.subject).toBe("You're invited to a workspace on Boilerplate");
+    expect(email.subject).toBe("You're invited to a workspace on Director-editor");
     expect(email.html).toContain("https://app.example/invitations/accept?id=1");
     expect(email.text).toContain("“Ada” invited you to collaborate in the workspace “Acme”.");
     expect(email.text).toContain("This invitation expires in 7 days.");
@@ -167,6 +167,6 @@ describe("previews", () => {
   ])("%s renders", async (_, Preview) => {
     const html = await render(createElement(Preview));
     expect(html).toContain('lang="en"');
-    expect(html).toContain("Boilerplate");
+    expect(html).toContain("Director-editor");
   });
 });

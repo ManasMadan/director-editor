@@ -41,10 +41,10 @@ const KEPT = new Set([
  * renamed project can be renamed again.
  */
 export const OLD: Identity = {
-  name: "boilerplate",
+  name: "director-editor",
   owner: "ManasMadan",
-  product: "Boilerplate",
-  bundleId: "com.boilerplate.app",
+  product: "Director-editor",
+  bundleId: "com.directoreditor.app",
 };
 
 /**

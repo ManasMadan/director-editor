@@ -11,7 +11,7 @@ import { orgIdOf, userIdOf } from "../auth/ids";
 import type { TodoService } from "../modules/todo";
 
 /** Known credentials, printed by the seed; unlikely to be in any breach list. */
-export const DEMO_PASSWORD = "boilerplate-demo-password";
+export const DEMO_PASSWORD = "director-editor-demo-password";
 export const DEMO_PEOPLE = [
   { name: "Demo User", email: "demo@example.com" },
   { name: "Team Mate", email: "teammate@example.com" },

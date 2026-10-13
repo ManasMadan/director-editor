@@ -339,7 +339,7 @@ jobs:
       REDIS_URL: redis://localhost:6379
       WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: 127.0.0.1
       SMTP_URL: smtp://localhost:1025
-      EMAIL_FROM: Boilerplate <no-reply@example.com>
+      EMAIL_FROM: Director-editor <no-reply@example.com>
       MAILPIT_URL: http://localhost:8025
       BETTER_AUTH_URL: http://localhost:3000
       WEB_URL: http://localhost:3000
@@ -795,7 +795,7 @@ jobs:
         env:
           # renovate: datasource=docker depName=aquasec/trivy
           TRIVY: aquasec/trivy:0.74.0
-          IMAGE: boilerplate/${{ matrix.image }}:dev
+          IMAGE: director-editor/${{ matrix.image }}:dev
         run: |
           mkdir -p ~/.cache/trivy
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \

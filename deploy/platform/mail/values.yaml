@@ -13,7 +13,7 @@ hostname: ""
 # one-node cluster that would keep everything else off); the toleration lets you taint
 # a node you dedicate to mail with `dedicated=mail:NoSchedule`.
 nodeSelector:
-  boilerplate.dev/mail: "true"
+  director-editor.dev/mail: "true"
 tolerations:
   - { key: dedicated, operator: Equal, value: mail, effect: NoSchedule }
 
@@ -50,7 +50,7 @@ dkim:
 # namespace, in-cluster; its network policy lets this namespace in.
 webhook:
   enabled: true
-  url: http://boilerplate-webhooks.boilerplate.svc.cluster.local:3004/webhooks/stalwart
+  url: http://director-editor-webhooks.director-editor.svc.cluster.local:3004/webhooks/stalwart
   events: [delivery.dsn-perm-fail, delivery.dsn-temp-fail]
 
 # A smarthost: send every outgoing message through another SMTP server instead of

@@ -16,7 +16,7 @@ tests:
 
   - it: runs the api's image with the api's environment, in a pod of its own
     asserts:
-      - equal: { path: "spec.jobTemplate.spec.template.spec.containers[0].image", value: ghcr.io/manasmadan/boilerplate/api:sha-abc123 }
+      - equal: { path: "spec.jobTemplate.spec.template.spec.containers[0].image", value: ghcr.io/manasmadan/director-editor/api:sha-abc123 }
       - equal: { path: "spec.jobTemplate.spec.template.spec.containers[0].command", value: [/nodejs/bin/node, dist/reencrypt.mjs] }
       - contains:
           path: "spec.jobTemplate.spec.template.spec.containers[0].env"

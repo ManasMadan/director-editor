@@ -37,7 +37,7 @@ import { signatureHeaders } from "./signing";
 
 export type AttemptResult = "succeeded" | "retry" | "failed" | "skipped";
 
-const USER_AGENT = "Boilerplate-Webhooks/1.0 (+https://www.standardwebhooks.com)";
+const USER_AGENT = "Director-editor-Webhooks/1.0 (+https://www.standardwebhooks.com)";
 
 @Injectable()
 export class DeliveryService {

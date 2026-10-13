@@ -1,6 +1,6 @@
 # Every add-on in deploy/platform/addons on every cluster Argo CD manages for an
 # environment (its Argo CD Secret, written by OpenTofu, has the label
-# boilerplate.dev/environment). The Secret's labels and annotations configure them.
+# director-editor.dev/environment). The Secret's labels and annotations configure them.
 #
 # An add-on file is one of:
 #   repoURL + chart + version   a chart from a Helm repository or OCI registry, with our
@@ -9,7 +9,7 @@
 #   secretsPath                 SOPS-encrypted manifests in <secretsPath>/<environment>/,
 #                               decrypted by Argo CD's sops plugin (argo-cd-values.yaml).
 # `clusterParameters` sets chart values from the cluster: "name" is the cluster's name,
-# "label:<key>" its boilerplate.dev/<key> label, anything else its boilerplate.dev/<key>
+# "label:<key>" its director-editor.dev/<key> label, anything else its director-editor.dev/<key>
 # annotation; "<field>|<value>" gives the value for a cluster without one (else "").
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
@@ -27,18 +27,18 @@ spec:
                 - clusters:
                     selector:
                       matchExpressions:
-                        - key: boilerplate.dev/environment
+                        - key: director-editor.dev/environment
                           operator: Exists
                 # The revision the environment deploys from, and production's images:
                 # deploy/environments/<env>/release.yaml, read at HEAD.
                 - git:
-                    repoURL: https://github.com/ManasMadan/boilerplate.git
+                    repoURL: https://github.com/ManasMadan/director-editor.git
                     revision: HEAD
                     pathParamPrefix: release
                     files:
-                      - path: 'deploy/environments/{{ index .metadata.labels "boilerplate.dev/environment" }}/release.yaml'
+                      - path: 'deploy/environments/{{ index .metadata.labels "director-editor.dev/environment" }}/release.yaml'
           - git:
-              repoURL: https://github.com/ManasMadan/boilerplate.git
+              repoURL: https://github.com/ManasMadan/director-editor.git
               revision: "{{ .revision }}"
               # The generator's own `path` parameter (the file's location) would replace
               # an add-on's `path` key; this moves it to `.file.path`.
@@ -104,14 +104,14 @@ spec:
     spec:
       sources:
         {{- if hasKey . "secretsPath" }}
-        - repoURL: https://github.com/ManasMadan/boilerplate.git
+        - repoURL: https://github.com/ManasMadan/director-editor.git
           targetRevision: "{{ .revision }}"
-          path: {{ .secretsPath }}/{{ index .metadata.labels "boilerplate.dev/environment" }}
+          path: {{ .secretsPath }}/{{ index .metadata.labels "director-editor.dev/environment" }}
           plugin:
             name: sops
         {{- else }}
         {{- if hasKey . "path" }}
-        - repoURL: https://github.com/ManasMadan/boilerplate.git
+        - repoURL: https://github.com/ManasMadan/director-editor.git
           targetRevision: "{{ .revision }}"
           path: {{ .path }}
           helm:
@@ -134,9 +134,9 @@ spec:
               {{- if eq $field "name" }}
               {{- $value = $cluster.name }}
               {{- else if hasPrefix "label:" $field }}
-              {{- $value = index $cluster.metadata.labels (printf "boilerplate.dev/%s" (trimPrefix "label:" $field)) | default "" }}
+              {{- $value = index $cluster.metadata.labels (printf "director-editor.dev/%s" (trimPrefix "label:" $field)) | default "" }}
               {{- else }}
-              {{- $value = index $cluster.metadata.annotations (printf "boilerplate.dev/%s" $field) | default "" }}
+              {{- $value = index $cluster.metadata.annotations (printf "director-editor.dev/%s" $field) | default "" }}
               {{- end }}
               {{- $value = $value | default $fallback }}
               - name: {{ $key | quote }}
@@ -144,7 +144,7 @@ spec:
               {{- end }}
             {{- end }}
         {{- if not (hasKey . "path") }}
-        - repoURL: https://github.com/ManasMadan/boilerplate.git
+        - repoURL: https://github.com/ManasMadan/director-editor.git
           targetRevision: "{{ .revision }}"
           ref: repo
         {{- end }}

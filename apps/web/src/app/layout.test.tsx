@@ -43,7 +43,7 @@ describe("the root layout", () => {
 
   it("titles pages after the site", async () => {
     expect(await generateMetadata()).toEqual({
-      title: { default: "Boilerplate", template: "%s · Boilerplate" },
+      title: { default: "Director-editor", template: "%s · Director-editor" },
       description: expect.any(String),
     });
   });

@@ -5,7 +5,7 @@
 # Every image is <registry>/<service image>:<tag>. CI builds them all with one tag
 # (sha-<commit>), and RELEASE in every service is set to it.
 image:
-  registry: ghcr.io/manasmadan/boilerplate
+  registry: ghcr.io/manasmadan/director-editor
   # Required: the build to run.
   tag: ""
   pullPolicy: IfNotPresent
@@ -63,7 +63,7 @@ env:
 
 # Traces and metrics, to the cluster's Jaeger and Prometheus (the observability
 # add-ons). The envs and previews ApplicationSets turn it on for clusters labelled
-# boilerplate.dev/observability. Off, the services export nothing.
+# director-editor.dev/observability. Off, the services export nothing.
 observability:
   enabled: false
   # OTLP over HTTP: traces (and anything without its own endpoint) to Jaeger...
@@ -82,7 +82,7 @@ database:
   # Secret <cluster>-ca it creates (the data release's name, then -postgres-ca). The
   # services' URLs get sslmode=verify-full with that CA mounted; empty leaves the URLs as
   # the Secret has them.
-  caSecret: boilerplate-postgres-ca
+  caSecret: director-editor-postgres-ca
 
 # The Secret with Valkey's connection details: keys `url`, `host`, `port`, `password`.
 redis:

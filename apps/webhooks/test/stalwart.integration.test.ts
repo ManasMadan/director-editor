@@ -30,7 +30,7 @@ const SMTP_URL =
 // The Mailpit Stalwart relays to: compose's. In CI that isn't the job's own Mailpit.
 const MAILPIT =
   process.env.STALWART_MAILPIT_URL ?? process.env.MAILPIT_URL ?? "http://localhost:58025";
-const FROM = "Boilerplate <no-reply@boilerplate.test>";
+const FROM = "Director-editor <no-reply@director-editor.test>";
 const SECRET = randomBytes(32).toString("base64");
 
 /** One call to Stalwart's management API (JMAP), as the admin. */
@@ -145,7 +145,7 @@ describe.skipIf(!STALWART_URL)("mail through Stalwart", () => {
     const headers = (await (
       await fetch(`${MAILPIT}/api/v1/message/${found[0]?.ID}/headers`)
     ).json()) as Record<string, string[]>;
-    expect(headers["Dkim-Signature"]?.join(" ")).toMatch(/d=boilerplate\.test/);
+    expect(headers["Dkim-Signature"]?.join(" ")).toMatch(/d=director-editor\.test/);
   });
 
   it("refuses submission with a wrong password or none", async () => {

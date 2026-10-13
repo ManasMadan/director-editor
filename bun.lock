@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "boilerplate",
+      "name": "director-editor",
       "devDependencies": {
         "@biomejs/biome": "^2.5.14",
         "@commitlint/cli": "^21.2.3",

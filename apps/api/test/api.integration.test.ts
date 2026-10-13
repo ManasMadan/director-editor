@@ -316,9 +316,9 @@ describe("Google sign-in on the mobile app", () => {
     const email = newEmail();
     google(email);
     const { body: handoff } = await start();
-    const back = await signIn(`boilerplate:///?handoff=${handoff.id}`);
+    const back = await signIn(`director-editor:///?handoff=${handoff.id}`);
     // The link names the hand-off and carries no session: catching it gets nothing.
-    expect(back.protocol).toBe("boilerplate:");
+    expect(back.protocol).toBe("director-editor:");
     expect(back.searchParams.get("handoff")).toBe(handoff.id);
     expect(back.searchParams.get("cookie")).toBeNull();
 
@@ -338,7 +338,7 @@ describe("Google sign-in on the mobile app", () => {
   it("burns the hand-off on a wrong secret, so a caught link can't be tried twice", async () => {
     google(newEmail());
     const { body: handoff } = await start();
-    await signIn(`boilerplate:///?handoff=${handoff.id}`);
+    await signIn(`director-editor:///?handoff=${handoff.id}`);
     const wrong = await finish({ id: handoff.id, secret: "guess" });
     expect(wrong.status).toBe(401);
     expect(await wrong.json()).toMatchObject({ code: "SIGN_IN_INCOMPLETE" });
@@ -347,9 +347,12 @@ describe("Google sign-in on the mobile app", () => {
 
   it("puts no session in a link to the app without a hand-off it started", async () => {
     google(newEmail());
-    for (const callbackURL of ["boilerplate:///", `boilerplate:///?handoff=${"x".repeat(43)}`]) {
+    for (const callbackURL of [
+      "director-editor:///",
+      `director-editor:///?handoff=${"x".repeat(43)}`,
+    ]) {
       const back = await signIn(callbackURL);
-      expect(back.protocol).toBe("boilerplate:");
+      expect(back.protocol).toBe("director-editor:");
       expect(back.searchParams.get("cookie"), callbackURL).toBeNull();
     }
     // Nor to the web app, which gets its cookie from the redirect itself.
@@ -362,7 +365,9 @@ describe("Google sign-in on the mobile app", () => {
     const early = await start();
     expect((await finish(early.body)).status).toBe(401);
     const { body: handoff } = await start();
-    const back = await signIn(`boilerplate:///?handoff=${handoff.id}`, { error: "access_denied" });
+    const back = await signIn(`director-editor:///?handoff=${handoff.id}`, {
+      error: "access_denied",
+    });
     expect(back.searchParams.get("error")).toBe("access_denied");
     expect((await finish(handoff)).status).toBe(401);
   });
@@ -2604,7 +2609,7 @@ describe("the REST API's reference", () => {
     const spec = await fetch(`${harness.baseUrl}/api/v1/openapi.json`);
     expect(spec.status).toBe(200);
     expect(((await spec.json()) as { info: object }).info).toMatchObject({
-      title: "Boilerplate API",
+      title: "Director-editor API",
     });
     const docs = await fetch(`${harness.baseUrl}/docs`);
     expect(docs.headers.get("content-type")).toContain("text/html");

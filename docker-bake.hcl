@@ -2,14 +2,14 @@
 #
 #   docker buildx bake                     all images, for this machine's platform
 #   docker buildx bake api web             some of them
-#   TAG=sha-abc123 REGISTRY=ghcr.io/you/boilerplate docker buildx bake --push \
+#   TAG=sha-abc123 REGISTRY=ghcr.io/you/director-editor docker buildx bake --push \
 #     --set '*.platform=linux/amd64,linux/arm64'
 #
 # Images are named <REGISTRY>/<name>:<TAG>. RELEASE (the git SHA in CI) is stamped into
 # each image, so logs, errors and the web app report which build is running.
 
 variable "REGISTRY" {
-  default = "boilerplate"
+  default = "director-editor"
 }
 
 variable "TAG" {
@@ -30,7 +30,7 @@ target "_common" {
     RELEASE = RELEASE
   }
   labels = {
-    "org.opencontainers.image.source"   = "https://github.com/ManasMadan/boilerplate"
+    "org.opencontainers.image.source"   = "https://github.com/ManasMadan/director-editor"
     "org.opencontainers.image.revision" = RELEASE
   }
 }

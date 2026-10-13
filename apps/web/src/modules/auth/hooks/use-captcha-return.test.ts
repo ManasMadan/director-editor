@@ -5,8 +5,8 @@ const ORIGIN = "https://site.example";
 
 describe("captchaReturnUrl", () => {
   it.each([
-    "boilerplate://captcha-done",
-    "boilerplate://captcha-done?state=1",
+    "director-editor://captcha-done",
+    "director-editor://captcha-done?state=1",
     "https://site.example/captcha",
   ])("sends the token back to the app or this origin (%s)", (returnTo) => {
     expect(captchaReturnUrl(returnTo, ORIGIN)?.href).toBe(returnTo);

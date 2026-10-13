@@ -17,7 +17,11 @@ import { apiUrl } from "./config";
 export const authClient = createAuthClient({
   baseURL: apiUrl,
   plugins: [
-    expoClient({ scheme: "boilerplate", storagePrefix: "boilerplate", storage: SecureStore }),
+    expoClient({
+      scheme: "director-editor",
+      storagePrefix: "director-editor",
+      storage: SecureStore,
+    }),
     // A sign-in that needs a second factor continues on the two-step screen.
     ...authClientPlugins({ onTwoFactorRequired: () => router.push("/two-factor") }),
   ],

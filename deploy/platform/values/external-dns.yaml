@@ -1,5 +1,5 @@
 # Records (proxied on Cloudflare: its WAF and CDN sit in front of the gateway) for the
-# HTTPRoutes annotated boilerplate.dev/external-dns: "true" only: the files host. The
+# HTTPRoutes annotated director-editor.dev/external-dns: "true" only: the files host. The
 # site, the preview wildcard and the mail records are OpenTofu's (modules/cloudflare),
 # and external-dns leaves records it doesn't own alone. The cluster's own domain and
 # owner id are set per cluster by the platform ApplicationSet.
@@ -30,7 +30,7 @@ env:
   - name: EXTERNAL_DNS_RFC2136_TSIG_SECRET_ALG
     valueFrom: { secretKeyRef: { name: external-dns-rfc2136, key: tsig-secret-alg, optional: true } }
 extraArgs:
-  - --annotation-filter=boilerplate.dev/external-dns=true
+  - --annotation-filter=director-editor.dev/external-dns=true
   - --cloudflare-proxied
   - --cloudflare-dns-records-per-page=5000
 # CPU and memory requested and limited, as for every container here (the

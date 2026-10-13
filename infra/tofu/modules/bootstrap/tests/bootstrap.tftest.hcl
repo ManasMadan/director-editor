@@ -19,18 +19,18 @@ run "registers_the_cluster_for_the_applicationsets" {
   command = apply
   assert {
     condition = kubernetes_secret_v1.cluster.metadata[0].labels == tomap({
-      "argocd.argoproj.io/secret-type" = "cluster"
-      "boilerplate.dev/managed"        = "true"
-      "boilerplate.dev/environment"    = "production"
+      "argocd.argoproj.io/secret-type"  = "cluster"
+      "director-editor.dev/managed"     = "true"
+      "director-editor.dev/environment" = "production"
     })
     error_message = "the platform and envs ApplicationSets select clusters by these labels"
   }
   assert {
-    condition     = kubernetes_secret_v1.cluster.metadata[0].annotations["boilerplate.dev/domain"] == "example.com" && kubernetes_secret_v1.cluster.metadata[0].annotations["boilerplate.dev/image-policy"] == "true"
-    error_message = "cluster facts become boilerplate.dev/ annotations"
+    condition     = kubernetes_secret_v1.cluster.metadata[0].annotations["director-editor.dev/domain"] == "example.com" && kubernetes_secret_v1.cluster.metadata[0].annotations["director-editor.dev/image-policy"] == "true"
+    error_message = "cluster facts become director-editor.dev/ annotations"
   }
   assert {
-    condition     = kubernetes_secret_v1.cluster.metadata[0].annotations["boilerplate.dev/environment"] == "production" && kubernetes_secret_v1.cluster.metadata[0].annotations["boilerplate.dev/observability"] == "false"
+    condition     = kubernetes_secret_v1.cluster.metadata[0].annotations["director-editor.dev/environment"] == "production" && kubernetes_secret_v1.cluster.metadata[0].annotations["director-editor.dev/observability"] == "false"
     error_message = "the platform config reads the environment and the opt-ins from annotations"
   }
   assert {
@@ -47,11 +47,11 @@ run "marks_the_cluster_that_hosts_previews" {
     sops_preview_age_key = "AGE-SECRET-KEY-1PPPP"
   }
   assert {
-    condition     = kubernetes_secret_v1.cluster.metadata[0].labels["boilerplate.dev/previews"] == "true"
+    condition     = kubernetes_secret_v1.cluster.metadata[0].labels["director-editor.dev/previews"] == "true"
     error_message = "the previews ApplicationSet selects clusters by this label"
   }
   assert {
-    condition     = kubernetes_secret_v1.cluster.metadata[0].annotations["boilerplate.dev/previews"] == "true"
+    condition     = kubernetes_secret_v1.cluster.metadata[0].annotations["director-editor.dev/previews"] == "true"
     error_message = "the platform config reads it to add the preview listener"
   }
 }
@@ -62,11 +62,11 @@ run "opts_into_observability" {
     observability = true
   }
   assert {
-    condition     = kubernetes_secret_v1.cluster.metadata[0].labels["boilerplate.dev/observability"] == "true" && kubernetes_secret_v1.cluster.metadata[0].annotations["boilerplate.dev/observability"] == "true"
+    condition     = kubernetes_secret_v1.cluster.metadata[0].labels["director-editor.dev/observability"] == "true" && kubernetes_secret_v1.cluster.metadata[0].annotations["director-editor.dev/observability"] == "true"
     error_message = "the observability add-ons select clusters by this label"
   }
   assert {
-    condition     = !contains(keys(kubernetes_secret_v1.cluster.metadata[0].labels), "boilerplate.dev/previews")
+    condition     = !contains(keys(kubernetes_secret_v1.cluster.metadata[0].labels), "director-editor.dev/previews")
     error_message = "previews stay off unless asked for"
   }
 }

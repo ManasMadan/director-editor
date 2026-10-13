@@ -12,7 +12,7 @@ import {
 import type { Locale, Translator } from "@repo/i18n";
 import type { ReactNode } from "react";
 
-const brand = { name: "Boilerplate", color: "#171717" };
+const brand = { name: "Director-editor", color: "#171717" };
 
 /** Every template receives the recipient's locale and a translator for it. */
 export interface LocalizedProps {

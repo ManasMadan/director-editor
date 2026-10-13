@@ -20,7 +20,7 @@ afterEach(() => {
   }
 });
 
-const KUBECTL = "kubectl --context kind-boilerplate";
+const KUBECTL = "kubectl --context kind-director-editor";
 
 /** The gateway on port 80, as a server of the test's: `answer` gets each request's host and path. */
 function gateway(answer: (host: string, path: string) => Response | Promise<Response>) {
@@ -68,10 +68,10 @@ function machine(
     if (line === "docker info --format {{.MemTotal}}") {
       return { stdout: `${8 * 1024 ** 3}\n` };
     }
-    if (line === "docker buildx inspect boilerplate") {
+    if (line === "docker buildx inspect director-editor") {
       return { status: 1 };
     }
-    if (line.startsWith(`${KUBECTL} -n boilerplate get secret`)) {
+    if (line.startsWith(`${KUBECTL} -n director-editor get secret`)) {
       return { status: 1 };
     }
     if (/ get job reencrypt-\d+ /.test(line)) {
@@ -119,7 +119,7 @@ const applied = (options: { input?: unknown }[], index: number) =>
 
 const IMAGES = ["api", "worker", "notifications", "webhooks", "web", "ai", "migrate"];
 const bake = (image: string, ...extra: string[]) =>
-  `docker buildx bake ${image} --builder boilerplate --load --set *.args.RELEASE=dev${extra.join("")}`;
+  `docker buildx bake ${image} --builder director-editor --load --set *.args.RELEASE=dev${extra.join("")}`;
 
 describe("the local cluster", () => {
   it("says how to call it", async () => {
@@ -130,7 +130,9 @@ describe("the local cluster", () => {
 
   it("comes up from nothing: cluster, add-ons, Secrets, images, data, stack, then the smoke test", async () => {
     const printed = captureOutput();
-    const logsBefore = readdirSync(tmpdir()).filter((name) => name.startsWith("boilerplate-k8s-"));
+    const logsBefore = readdirSync(tmpdir()).filter((name) =>
+      name.startsWith("director-editor-k8s-"),
+    );
     const { given, calls, options, exitHandlers, sleeps } = machine();
     expect(await k8s(["up"], given)).toBe(0);
     const helm = (...args: string[]) =>
@@ -140,10 +142,10 @@ describe("the local cluster", () => {
         "--install",
         ...args,
         "--kube-context",
-        "kind-boilerplate",
+        "kind-director-editor",
         "--wait",
       ].join(" ");
-    const namespace = `${KUBECTL} -n boilerplate`;
+    const namespace = `${KUBECTL} -n director-editor`;
     const job = calls.find((line) => line.includes(" create job "))?.split(" ")[7] ?? "";
     expect(job).toMatch(/^reencrypt-\d+$/);
     expect(calls).toEqual([
@@ -165,25 +167,25 @@ describe("the local cluster", () => {
         "--create-namespace",
       ),
       `${KUBECTL} create namespace gateway-system`,
-      `${KUBECTL} create namespace boilerplate`,
+      `${KUBECTL} create namespace director-editor`,
       `${namespace} get secret mailpit-tls`,
-      "openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj /CN=boilerplate-kind-ca -addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign,cRLSign -keyout ca.key -out ca.crt",
+      "openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj /CN=director-editor-kind-ca -addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign,cRLSign -keyout ca.key -out ca.crt",
       "openssl req -newkey rsa:2048 -nodes -subj /CN=mailpit -keyout tls.key -out tls.csr",
       "openssl x509 -req -in tls.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 3650 -extfile ext -out tls.crt",
       `${KUBECTL} apply -f -`,
-      `${namespace} get secret boilerplate-api`,
+      `${namespace} get secret director-editor-api`,
       `${KUBECTL} apply -f -`,
       `${KUBECTL} apply -f deploy/local/gateway.yaml`,
       `${KUBECTL} apply -f deploy/local/mailpit.yaml`,
-      "docker buildx inspect boilerplate",
-      "docker buildx create --name boilerplate --driver docker-container --driver-opt memory=4g --driver-opt default-load=true",
+      "docker buildx inspect director-editor",
+      "docker buildx create --name director-editor --driver docker-container --driver-opt memory=4g --driver-opt default-load=true",
       ...IMAGES.map((image) => bake(image)),
-      `kind load docker-image --name boilerplate ${IMAGES.map((image) => `boilerplate/${image}:dev`).join(" ")}`,
-      `${helm("boilerplate-data", join(ROOT, "deploy/charts/data"), "-f", join(ROOT, "deploy/environments/local/data.yaml"), "--namespace", "boilerplate")} --timeout 10m`,
-      `${KUBECTL} -n boilerplate wait cluster/boilerplate-data-postgres --for=condition=Ready --timeout=10m`,
-      `${helm("boilerplate", join(ROOT, "deploy/charts/stack"), "-f", join(ROOT, "deploy/environments/local/stack.yaml"), "--namespace", "boilerplate")} --timeout 15m`,
-      `${KUBECTL} -n boilerplate wait scaledobject/boilerplate-worker --for=condition=Ready --timeout=5m`,
-      `${namespace} create job ${job} --from=cronjob/boilerplate-reencrypt`,
+      `kind load docker-image --name director-editor ${IMAGES.map((image) => `director-editor/${image}:dev`).join(" ")}`,
+      `${helm("director-editor-data", join(ROOT, "deploy/charts/data"), "-f", join(ROOT, "deploy/environments/local/data.yaml"), "--namespace", "director-editor")} --timeout 10m`,
+      `${KUBECTL} -n director-editor wait cluster/director-editor-data-postgres --for=condition=Ready --timeout=10m`,
+      `${helm("director-editor", join(ROOT, "deploy/charts/stack"), "-f", join(ROOT, "deploy/environments/local/stack.yaml"), "--namespace", "director-editor")} --timeout 15m`,
+      `${KUBECTL} -n director-editor wait scaledobject/director-editor-worker --for=condition=Ready --timeout=5m`,
+      `${namespace} create job ${job} --from=cronjob/director-editor-reencrypt`,
       `${namespace} get job ${job} -o jsonpath={.status.succeeded},{.status.failed}`,
       `${namespace} get job ${job} -o jsonpath={.status.succeeded},{.status.failed}`,
       `${namespace} logs job/${job}`,
@@ -194,7 +196,7 @@ describe("the local cluster", () => {
     // Mailpit's certificate and its authority, from openssl's files, which are then deleted.
     const [ca, tls] = applied(options, 17);
     expect(ca).toMatchObject({
-      metadata: { name: "local-ca", namespace: "boilerplate" },
+      metadata: { name: "local-ca", namespace: "director-editor" },
       stringData: { "ca.crt": "stand-in ca.crt" },
     });
     expect(tls).toMatchObject({
@@ -212,23 +214,23 @@ describe("the local cluster", () => {
       ]),
     );
     expect(Object.keys(secrets)).toEqual([
-      "boilerplate-api",
-      "boilerplate-notifications",
-      "boilerplate-webhooks",
-      "boilerplate-ai",
+      "director-editor-api",
+      "director-editor-notifications",
+      "director-editor-webhooks",
+      "director-editor-ai",
     ]);
     const { api, notifications, webhooks, ai } = {
-      api: secrets["boilerplate-api"],
-      notifications: secrets["boilerplate-notifications"],
-      webhooks: secrets["boilerplate-webhooks"],
-      ai: secrets["boilerplate-ai"],
+      api: secrets["director-editor-api"],
+      notifications: secrets["director-editor-notifications"],
+      webhooks: secrets["director-editor-webhooks"],
+      ai: secrets["director-editor-ai"],
     };
     expect(api?.ENCRYPTION_KEYS).toMatch(/^k1:[\w+/]{43}=$/);
     expect(webhooks?.ENCRYPTION_KEYS).toBe(api?.ENCRYPTION_KEYS as string);
     expect(notifications?.UNSUBSCRIBE_SECRET).toBe(api?.UNSUBSCRIBE_SECRET as string);
     expect(ai?.AI_SERVICE_SECRET).toBe(api?.AI_SERVICE_SECRET as string);
     expect(notifications?.SMTP_URL).toMatch(
-      /^smtps:\/\/no-reply%40boilerplate\.localhost:[\w-]{22}@mailpit:1025$/,
+      /^smtps:\/\/no-reply%40director-editor\.localhost:[\w-]{22}@mailpit:1025$/,
     );
 
     const output = printed();
@@ -242,7 +244,7 @@ describe("the local cluster", () => {
     // The side-by-side steps' logs go when the process exits.
     const logs = () =>
       readdirSync(tmpdir()).filter(
-        (name) => name.startsWith("boilerplate-k8s-") && !logsBefore.includes(name),
+        (name) => name.startsWith("director-editor-k8s-") && !logsBefore.includes(name),
       );
     expect(logs()).toHaveLength(1);
     for (const handler of exitHandlers.splice(0)) {
@@ -256,9 +258,9 @@ describe("the local cluster", () => {
     const { given, calls } = machine(
       (line) => {
         if (line === "kind get clusters") {
-          return { stdout: "kind\nboilerplate\n" };
+          return { stdout: "kind\ndirector-editor\n" };
         }
-        if (line.startsWith(`${KUBECTL} -n boilerplate get secret`)) {
+        if (line.startsWith(`${KUBECTL} -n director-editor get secret`)) {
           return { status: 0 };
         }
         return undefined;
@@ -267,13 +269,15 @@ describe("the local cluster", () => {
     );
     expect(await k8s(["up"], given)).toBe(0);
     expect(calls).toContain(
-      "docker buildx create --name boilerplate --driver docker-container --driver-opt memory=8g --driver-opt default-load=true",
+      "docker buildx create --name director-editor --driver docker-container --driver-opt memory=8g --driver-opt default-load=true",
     );
     for (const image of IMAGES) {
       expect(calls).toContain(
         bake(image, ` --set ${image}.cache-from=type=gha,scope=${image}-amd64`),
       );
-      expect(calls).toContain(`kind load docker-image --name boilerplate boilerplate/${image}:dev`);
+      expect(calls).toContain(
+        `kind load docker-image --name director-editor director-editor/${image}:dev`,
+      );
     }
     // The builds start before the add-ons are installed.
     expect(
@@ -289,7 +293,7 @@ describe("the local cluster", () => {
   it("builds in the builder that's already there, without its cache in CI unless reachable", async () => {
     captureOutput();
     const { given, calls } = machine(
-      (line) => (line === "docker buildx inspect boilerplate" ? { status: 0 } : undefined),
+      (line) => (line === "docker buildx inspect director-editor" ? { status: 0 } : undefined),
       { env: { CI: "true" } },
     );
     expect(await k8s(["up"], given)).toBe(0);
@@ -370,7 +374,9 @@ describe("the local cluster", () => {
     );
     await expect(k8s(["up"], secrets.given)).rejects.toThrow("exit 1");
     expect(printed()).toContain("quota");
-    expect(secrets.calls.at(-2)).toBe(`${KUBECTL} -n boilerplate get secret boilerplate-api`);
+    expect(secrets.calls.at(-2)).toBe(
+      `${KUBECTL} -n director-editor get secret director-editor-api`,
+    );
   });
 
   it("smoke-tests a running cluster", async () => {
@@ -447,7 +453,7 @@ describe("the local cluster", () => {
     captureOutput();
     const { given, calls, options } = machine();
     expect(await k8s(["down"], given)).toBe(0);
-    expect(calls).toEqual(["kind delete cluster --name boilerplate"]);
+    expect(calls).toEqual(["kind delete cluster --name director-editor"]);
     expect(options[0]).toMatchObject({ cwd: ROOT, stdio: "inherit" });
   });
 });

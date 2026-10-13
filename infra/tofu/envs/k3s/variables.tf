@@ -149,7 +149,7 @@ variable "origin_ips" {
 variable "mail" {
   description = <<-EOT
     The mail server's DNS, or null until it's set up.
-      node                the node it runs on (labelled boilerplate.dev/mail=true): its
+      node                the node it runs on (labelled director-editor.dev/mail=true): its
                           address is the MX host's, and its reverse DNS must be the host
       host                default mail.<domain>
       ipv6                the node's IPv6 address, if it has one

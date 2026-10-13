@@ -51,10 +51,10 @@ tls:
 # application namespaces. On for production.
 imagePolicy:
   enabled: false
-  images: ["ghcr.io/manasmadan/boilerplate/*"]
-  namespaces: [boilerplate]
+  images: ["ghcr.io/manasmadan/director-editor/*"]
+  namespaces: [director-editor]
   # The workflow that signs releases, on the default branch.
-  subject: "https://github.com/ManasMadan/boilerplate/.github/workflows/*@refs/heads/master"
+  subject: "https://github.com/ManasMadan/director-editor/.github/workflows/*@refs/heads/master"
   # A cosign public key (PEM) to check signatures against instead: no dependency on
   # Sigstore's public services, and any CI can sign. Its private key is deploy.yml's
   # COSIGN_PRIVATE_KEY secret (deploy/README.md, "Image signatures").

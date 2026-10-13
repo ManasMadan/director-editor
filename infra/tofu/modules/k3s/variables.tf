@@ -1,5 +1,5 @@
 variable "name" {
-  description = "The cluster's name in the kubeconfig, e.g. boilerplate-production."
+  description = "The cluster's name in the kubeconfig, e.g. director-editor-production."
   type        = string
 }
 

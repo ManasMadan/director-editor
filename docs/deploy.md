@@ -59,7 +59,7 @@ rollback.
 `.github/workflows/deploy.yml`, after CI succeeds on a push to `master`:
 
 1. builds every image for amd64 and arm64 and pushes them to
-   `ghcr.io/manasmadan/boilerplate/<image>:sha-<commit>`;
+   `ghcr.io/manasmadan/director-editor/<image>:sha-<commit>`;
 2. merges them into multi-arch tags, signs each with cosign and attaches build
    provenance to it, and an SBOM to each of its platform images (one per architecture,
    since an SBOM describes one platform's files); staging deploys only once every image

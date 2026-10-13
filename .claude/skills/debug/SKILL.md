@@ -20,7 +20,7 @@ search covers api → queue → worker → notifications.
 - Local: the turbo UI (`bun dev`), one pane per service. Pretty logs in development,
   JSON elsewhere; `LOG_LEVEL=debug` via `bun run env:set LOG_LEVEL=debug` for more.
 - After `bun run test:e2e`: `logs/<service>.log` for every service it started.
-- A cluster: `kubectl -n boilerplate logs deploy/boilerplate-<service> | grep <requestId>`
+- A cluster: `kubectl -n director-editor logs deploy/director-editor-<service> | grep <requestId>`
   (previews: namespace `pr-<number>`).
 
 ## Where to look

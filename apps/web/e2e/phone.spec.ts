@@ -36,7 +36,7 @@ test("add a phone number with a texted code; the account is alerted", async ({ p
   );
   await expect(card.getByText(`We texted a code to ${phone}.`)).toBeVisible();
   const text = await inbox.next();
-  expect(text.Text).toMatch(/^\d{6} is your Boilerplate verification code/);
+  expect(text.Text).toMatch(/^\d{6} is your Director-editor verification code/);
   const code = /^(\d{6})/.exec(text.Text)?.[1] as string;
 
   await card.getByLabel("Code from the text").fill(code);

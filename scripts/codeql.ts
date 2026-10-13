@@ -8,7 +8,7 @@
  *
  * Uses a `codeql` on the PATH when it's this version, else the CodeQL bundle at this
  * version (the one security.yml's github/codeql-action pin uses: its src/defaults.json),
- * downloaded once into ~/.cache/boilerplate/codeql and checked against its SHA-256. The
+ * downloaded once into ~/.cache/director-editor/codeql and checked against its SHA-256. The
  * CLI's license allows it on public repositories; a private one needs GitHub Advanced
  * Security (docs/testing.md).
  */
@@ -233,7 +233,7 @@ export async function codeql(languages?: string[], deps: Deps = {}): Promise<num
   const all: Required<Deps> = {
     run: runSync,
     root: ROOT,
-    cache: join(homedir(), ".cache/boilerplate/codeql"),
+    cache: join(homedir(), ".cache/director-editor/codeql"),
     platform: process.platform,
     bundles: BUNDLES,
     ...deps,

@@ -31,7 +31,7 @@ const context = (text: string): HookOutput => ({
 
 /** Sends an agent back for its missing verdict, or tells Claude what it found. */
 export function subagentStop(input: HookInput): HookOutput {
-  // Plugin agents are namespaced (`boilerplate:reviewer`).
+  // Plugin agents are namespaced (`director-editor:reviewer`).
   const agent = input.agent_type?.split(":").at(-1) ?? "";
   const message = input.last_assistant_message ?? "";
   // Once: an agent that still can't give a verdict is Claude's to look at, not a loop.

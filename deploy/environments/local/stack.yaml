@@ -2,7 +2,7 @@
 # autoscalers, plain HTTP on http://localhost (the api's MCP server allows plain HTTP only
 # for localhost itself, not *.localhost).
 image:
-  registry: boilerplate
+  registry: director-editor
   tag: dev
   pullPolicy: IfNotPresent
 site:
@@ -13,9 +13,9 @@ gateway:
     - name: public
       namespace: gateway-system
       sectionName: http
-# The data release is boilerplate-data here (scripts/k8s.ts), so its Postgres is too.
+# The data release is director-editor-data here (scripts/k8s.ts), so its Postgres is too.
 database:
-  caSecret: boilerplate-data-postgres-ca
+  caSecret: director-editor-data-postgres-ca
 env:
   LOG_LEVEL: debug
 defaults:
@@ -50,7 +50,7 @@ services:
     # cluster's own authority; SMTP_URL is in the Secret `bun run k8s:up` creates.
     caBundle: local-ca
     env:
-      EMAIL_FROM: Boilerplate <no-reply@boilerplate.localhost>
+      EMAIL_FROM: Director-editor <no-reply@director-editor.localhost>
   webhooks:
     keda: { enabled: false }
   # kind has no model provider, so the AI service runs its development stand-ins

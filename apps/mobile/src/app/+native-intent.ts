@@ -1,5 +1,5 @@
 /**
- * Links the OS opens the app with. The captcha page's answer (`boilerplate://captcha-done?token=…`)
+ * Links the OS opens the app with. The captcha page's answer (`director-editor://captcha-done?token=…`)
  * is read by the browser session that asked for it (lib/captcha.ts), but Android also
  * hands it to the app as a link: there it isn't a screen to open over the form waiting
  * for the token.

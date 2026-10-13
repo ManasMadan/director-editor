@@ -10,11 +10,11 @@ const open = (returnTo: string) =>
 
 describe("the captcha page", () => {
   it("sends the token back to the app once the check passes", async () => {
-    const page = await open("boilerplate://captcha-done");
+    const page = await open("director-editor://captcha-done");
     await expect.element(page.getByTestId("captcha")).toHaveAttribute("data-widget");
     await expect
       .element(page.getByRole("link", { name: "Back to the app" }))
-      .toHaveAttribute("href", `boilerplate://captcha-done?token=${TOKEN}`);
+      .toHaveAttribute("href", `director-editor://captcha-done?token=${TOKEN}`);
   });
 
   it("goes back to the app's web build on this origin by itself", async () => {

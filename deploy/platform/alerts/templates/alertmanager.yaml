@@ -7,7 +7,7 @@ reads it from Alertmanager (system.alerting), and the uptime check outside the c
 fails when it stops arriving (deploy/README.md, Observability).
 */}}
 {{- if and (eq .Values.environment "production") (not .Values.email) }}
-{{- fail "email is required in production: set alert_email in OpenTofu (the cluster's boilerplate.dev/alert-email annotation)" }}
+{{- fail "email is required in production: set alert_email in OpenTofu (the cluster's director-editor.dev/alert-email annotation)" }}
 {{- end }}
 {{- with .Values.email }}
 apiVersion: monitoring.coreos.com/v1alpha1

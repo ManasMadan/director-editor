@@ -3,7 +3,7 @@
 // kubectl and Helm come from the feature below. `bun run setup` runs once it's created;
 // then `bun dev`.
 {
-  "name": "boilerplate",
+  "name": "director-editor",
   "build": { "dockerfile": "Dockerfile" },
   // The full profile (`bun dev:full`) with ClamAV and the AI service needs this much.
   "hostRequirements": { "cpus": 4, "memory": "8gb" },

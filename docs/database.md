@@ -180,7 +180,7 @@ The Python integration tests use the migrated `app` database directly (see
 ## Demo data
 
 `bun run db:seed` builds the API and runs `apps/api/src/seed.ts`: two verified users
-(`demo@example.com`, `teammate@example.com`, password `boilerplate-demo-password`), a
+(`demo@example.com`, `teammate@example.com`, password `director-editor-demo-password`), a
 shared workspace and a few todos, created through the app's own auth and services.
 Running it again changes nothing; it refuses to run in production.
 

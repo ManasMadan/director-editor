@@ -28,7 +28,7 @@ export interface McpServerDependencies {
 }
 
 export function createMcpServer(caller: McpCaller, deps: McpServerDependencies) {
-  const server = new McpServer({ name: "boilerplate", version: deps.release });
+  const server = new McpServer({ name: "director-editor", version: deps.release });
   const { orgId, userId } = caller;
 
   /**

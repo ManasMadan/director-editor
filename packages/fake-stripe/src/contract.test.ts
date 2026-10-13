@@ -64,7 +64,7 @@ async function fake(): Promise<Target> {
 /** Stripe's test mode: a seat price kept under a lookup key, so runs don't pile them up. */
 async function real(key: string): Promise<Target> {
   const stripe = new Stripe(key);
-  const lookup = "boilerplate-contract-seat";
+  const lookup = "director-editor-contract-seat";
   const existing = await stripe.prices.list({ lookup_keys: [lookup], limit: 1 });
   const price =
     existing.data[0]?.id ??

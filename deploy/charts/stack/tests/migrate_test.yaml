@@ -21,7 +21,7 @@ tests:
 
   - it: connects as the migrator, straight to the primary
     asserts:
-      - equal: { path: "spec.template.spec.containers[0].image", value: ghcr.io/manasmadan/boilerplate/migrate:sha-abc123 }
+      - equal: { path: "spec.template.spec.containers[0].image", value: ghcr.io/manasmadan/director-editor/migrate:sha-abc123 }
       - equal:
           path: "spec.template.spec.containers[0].env"
           value:

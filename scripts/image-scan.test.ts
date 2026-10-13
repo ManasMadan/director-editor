@@ -40,7 +40,7 @@ function checkout() {
   writeFileSync(join(root, "deploy/charts/data/tests/t.yaml"), "image: test/only:1\n");
   writeFileSync(
     join(root, "docker-compose.yml"),
-    `services:\n  valkey:\n    image: ${VALKEY}\n  app:\n    image: boilerplate/api:dev\n`,
+    `services:\n  valkey:\n    image: ${VALKEY}\n  app:\n    image: director-editor/api:dev\n`,
   );
   writeFileSync(
     join(root, ".devcontainer/Dockerfile"),

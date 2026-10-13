@@ -21,7 +21,7 @@ import type { ConfigContext, ExpoConfig } from "expo/config";
 
 const variant = process.env.APP_VARIANT ?? "development";
 const suffix = variant === "production" ? "" : `.${variant}`;
-const name = variant === "production" ? "Boilerplate" : `Boilerplate (${variant})`;
+const name = variant === "production" ? "Director-editor" : `Director-editor (${variant})`;
 const projectId = process.env.EAS_PROJECT_ID;
 
 /**
@@ -41,16 +41,16 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   return {
     ...config,
     name,
-    slug: "boilerplate",
-    // Deep links: boilerplate://… opens the app (sign-in callbacks, invitations).
-    scheme: "boilerplate",
+    slug: "director-editor",
+    // Deep links: director-editor://… opens the app (sign-in callbacks, invitations).
+    scheme: "director-editor",
     version: "0.1.0",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "automatic",
     runtimeVersion: { policy: "appVersion" },
     ios: {
-      bundleIdentifier: `com.boilerplate.app${suffix}`,
+      bundleIdentifier: `com.directoreditor.app${suffix}`,
       supportsTablet: true,
       infoPlist: { ITSAppUsesNonExemptEncryption: false },
       ...(iosHost && {
@@ -58,7 +58,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       }),
     },
     android: {
-      package: `com.boilerplate.app${suffix}`,
+      package: `com.directoreditor.app${suffix}`,
       adaptiveIcon: {
         backgroundColor: "#ffffff",
         foregroundImage: "./assets/android-icon-foreground.png",

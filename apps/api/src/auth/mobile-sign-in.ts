@@ -1,7 +1,7 @@
 /**
  * Social sign-in on the mobile app, without the session ever riding in a link.
  *
- * The flow ends in a redirect to the app's scheme (`boilerplate://`), and better-auth's
+ * The flow ends in a redirect to the app's scheme (`director-editor://`), and better-auth's
  * Expo plugin puts the session cookie in that redirect (`?cookie=`). A custom scheme isn't
  * verified: on Android any app can register the same one and catch the link. So this
  * keeps the Expo plugin (its origin header and its authorization proxy) but replaces its
@@ -9,7 +9,7 @@
  *
  *   1. the app asks for a hand-off (`POST /mobile/sign-in/start`) and gets an id and a
  *      secret, over its own HTTPS connection;
- *   2. it signs in with the id in its callback URL (`boilerplate://…?handoff=<id>`);
+ *   2. it signs in with the id in its callback URL (`director-editor://…?handoff=<id>`);
  *   3. when the callback redirects there, the session is kept under the id, and the link
  *      carries only the id;
  *   4. the app trades the id and the secret for the session (`POST /mobile/sign-in/finish`),

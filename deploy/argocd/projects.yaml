@@ -8,7 +8,7 @@ metadata:
 spec:
   description: Cluster add-ons and their settings (operators, CRDs, the gateway, mail, observability).
   sourceRepos:
-    - https://github.com/ManasMadan/boilerplate.git
+    - https://github.com/ManasMadan/director-editor.git
     - https://charts.jetstack.io
     - registry-1.docker.io/envoyproxy
     - https://kubernetes-sigs.github.io/external-dns/
@@ -31,10 +31,10 @@ metadata:
 spec:
   description: The application (data + stack charts) in staging and production.
   sourceRepos:
-    - https://github.com/ManasMadan/boilerplate.git
+    - https://github.com/ManasMadan/director-editor.git
   destinations:
     - server: "*"
-      namespace: boilerplate
+      namespace: director-editor
   # Namespaced resources only: the application never changes the cluster itself.
   clusterResourceWhitelist: []
 ---
@@ -46,7 +46,7 @@ metadata:
 spec:
   description: One preview per labelled pull request, each in its own namespace.
   sourceRepos:
-    - https://github.com/ManasMadan/boilerplate.git
+    - https://github.com/ManasMadan/director-editor.git
   destinations:
     - server: "*"
       namespace: "pr-*"

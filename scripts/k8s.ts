@@ -7,7 +7,7 @@
  *                       operators do after a key rotation (k8s:up runs it too)
  *   bun run k8s:down    delete the cluster (`bun run docker:clean` also removes the images)
  *
- * Then open http://localhost (email: `kubectl -n boilerplate port-forward
+ * Then open http://localhost (email: `kubectl -n director-editor port-forward
  * svc/mailpit 8025`, then http://localhost:8025).
  *
  * What differs from a cluster: no Argo CD, cert-manager or mail server. KEDA scales the
@@ -37,18 +37,18 @@ import * as z from "zod";
 import { MINUTE_MS } from "../packages/contracts/src/time";
 import { fail, messageOf, ok, ROOT, type Run, runMain, runSync } from "./lib";
 
-const CLUSTER = "boilerplate";
-const NAMESPACE = "boilerplate";
+const CLUSTER = "director-editor";
+const NAMESPACE = "director-editor";
 const HOST = "localhost";
 /** The address the stack sends email from, and signs in to Mailpit as. */
-const MAIL_DOMAIN = "boilerplate.localhost";
+const MAIL_DOMAIN = "director-editor.localhost";
 /** The uploads bucket's public host (deploy/environments/local/data.yaml). */
 const FILES_HOST = "files.localhost";
-const STACK = "boilerplate";
-const DATA = "boilerplate-data";
+const STACK = "director-editor";
+const DATA = "director-editor-data";
 const IMAGES = ["api", "worker", "notifications", "webhooks", "web", "ai", "migrate"];
 const MIN_DOCKER_MEMORY_GB = 8;
-const BUILDER = "boilerplate";
+const BUILDER = "director-editor";
 
 const addonFile = z.object({
   repoURL: z.string().min(1),
@@ -196,7 +196,7 @@ class KindCluster {
    */
   async stepAsync(label: string, command: string, args: string[]) {
     if (!this.logs) {
-      const dir = mkdtempSync(join(tmpdir(), "boilerplate-k8s-"));
+      const dir = mkdtempSync(join(tmpdir(), "director-editor-k8s-"));
       this.logs = dir;
       this.tools.onExit(() => rmSync(dir, { recursive: true, force: true }));
     }
@@ -270,7 +270,7 @@ class KindCluster {
     };
     writeFileSync(join(dir, "ext"), "subjectAltName=DNS:mailpit\nextendedKeyUsage=serverAuth\n");
     openssl(
-      "req -x509 -newkey rsa:2048 -nodes -days 3650 -subj /CN=boilerplate-kind-ca " +
+      "req -x509 -newkey rsa:2048 -nodes -days 3650 -subj /CN=director-editor-kind-ca " +
         "-addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign,cRLSign " +
         "-keyout ca.key -out ca.crt",
     );
@@ -301,7 +301,7 @@ class KindCluster {
       ok("Mailpit's certificate (exists)");
       return;
     }
-    const dir = mkdtempSync(join(tmpdir(), "boilerplate-kind-"));
+    const dir = mkdtempSync(join(tmpdir(), "director-editor-kind-"));
     let problem = "";
     try {
       const items = this.signMailpitCertificate(dir);
@@ -471,12 +471,12 @@ class KindCluster {
       "docker-image",
       "--name",
       CLUSTER,
-      ...images.map((image) => `boilerplate/${image}:dev`),
+      ...images.map((image) => `director-editor/${image}:dev`),
     ]);
   }
 
   /**
-   * Every image, as boilerplate/<image>:dev, in a builder of our own: its memory is capped
+   * Every image, as director-editor/<image>:dev, in a builder of our own: its memory is capped
    * (a build can't starve other containers) and its cache goes away with
    * `bun run docker:clean`. In CI all at once, reading the layers deploy.yml caches on
    * master when GitHub's cache is reachable, each loaded into the cluster as soon as it's

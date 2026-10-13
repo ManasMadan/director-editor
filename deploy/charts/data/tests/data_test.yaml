@@ -450,7 +450,7 @@ tests:
       - equal: { path: spec.hostnames, value: [files.example.com] }
       - equal: { path: "spec.rules[0].backendRefs", value: [{ name: demo-uploads, port: 9000 }] }
       - equal: { path: spec.parentRefs, value: [{ name: public, namespace: gateway-system }] }
-      - equal: { path: metadata.annotations, value: { boilerplate.dev/external-dns: "true" } }
+      - equal: { path: metadata.annotations, value: { director-editor.dev/external-dns: "true" } }
 
   - it: creates the uploads bucket with CORS for the site after each sync
     template: storage.yaml

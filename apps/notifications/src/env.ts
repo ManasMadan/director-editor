@@ -41,7 +41,7 @@ export const envSchema = {
     }),
     "smtp://localhost:51025",
   ),
-  EMAIL_FROM: requiredInProduction(z.string().min(3), "Boilerplate <no-reply@localhost>"),
+  EMAIL_FROM: requiredInProduction(z.string().min(3), "Director-editor <no-reply@localhost>"),
 
   // The web app's public URL, for links in messages (settings, unsubscribe).
   WEB_URL: requiredInProduction(z.url(), "http://localhost:3000"),

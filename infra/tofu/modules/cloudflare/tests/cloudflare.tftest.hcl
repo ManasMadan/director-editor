@@ -21,7 +21,7 @@ mock_provider "cloudflare" {
 variables {
   account_id = "01a7362d577a6c3019a474fd6f485823"
   zone_name  = "example.com"
-  name       = "boilerplate-production"
+  name       = "director-editor-production"
   site_hosts = ["app.example.com"]
   origin_ips = ["203.0.113.10", "203.0.113.11"]
 }

@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 /** The mobile app's URL scheme (`scheme` in apps/mobile/app.config.ts). */
-const APP_SCHEME = "boilerplate:";
+const APP_SCHEME = "director-editor:";
 
 /**
  * Where the captcha page may send its token: back into the mobile app (its scheme), or to

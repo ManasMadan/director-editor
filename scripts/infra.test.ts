@@ -24,7 +24,7 @@ describe("infra/tofu/envs/k3s", () => {
 
   it.each(environments)("has a backend example for %s, with its own state key", (env) => {
     const backend = readFileSync(join(ROOT_DIR, `backend-${env}.hcl.example`), "utf8");
-    expect(backend).toContain(`key        = "boilerplate/${env}.tfstate"`);
+    expect(backend).toContain(`key        = "director-editor/${env}.tfstate"`);
   });
 });
 
@@ -50,9 +50,9 @@ describe("the facts OpenTofu writes on the cluster", () => {
     expect(keys).toContain("domain");
   });
 
-  it.each(keys)("boilerplate.dev/%s is read by an ApplicationSet or an add-on", (key) => {
+  it.each(keys)("director-editor.dev/%s is read by an ApplicationSet or an add-on", (key) => {
     const read =
-      readers.includes(`boilerplate.dev/${key}`) ||
+      readers.includes(`director-editor.dev/${key}`) ||
       new RegExp(`:\\s*${key}(\\|\\S*)?\\s*$`, "m").test(readers);
     expect(read).toBe(true);
   });

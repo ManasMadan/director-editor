@@ -1,4 +1,4 @@
-# Boilerplate
+# Director-editor
 
 A full-stack product starter you can demo in an afternoon and still run in production a
 year later: sign-up and sign-in (passwords with emailed verification codes, passkeys,

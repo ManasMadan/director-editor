@@ -25,7 +25,7 @@ variable "observability" {
 }
 
 variable "cluster_annotations" {
-  description = "Facts about the cluster for the platform ApplicationSet (boilerplate.dev/<key>): domain, TLS email and the like."
+  description = "Facts about the cluster for the platform ApplicationSet (director-editor.dev/<key>): domain, TLS email and the like."
   type        = map(string)
   default     = {}
 }
@@ -62,7 +62,7 @@ variable "sops_keys_version" {
 variable "repo_url" {
   description = "The Git repository Argo CD deploys from."
   type        = string
-  default     = "https://github.com/ManasMadan/boilerplate.git"
+  default     = "https://github.com/ManasMadan/director-editor.git"
 }
 
 variable "argocd_version" {

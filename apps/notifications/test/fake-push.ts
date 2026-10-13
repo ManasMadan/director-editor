@@ -239,7 +239,7 @@ export async function startFakePush() {
     if (claims?.iss !== "TEAMID1234") {
       return { status: 403, reason: "InvalidProviderToken" };
     }
-    if (headers["apns-topic"] !== "dev.boilerplate.app") {
+    if (headers["apns-topic"] !== "com.directoreditor.app") {
       return { status: 400, reason: "TopicDisallowed" };
     }
     const always = APNS_REFUSED[token];
@@ -300,11 +300,11 @@ export async function startFakePush() {
       APNS_KEY_ID: "KEYID12345",
       APNS_TEAM_ID: "TEAMID1234",
       APNS_PRIVATE_KEY: pem(apnsKeys.privateKey),
-      APNS_BUNDLE_ID: "dev.boilerplate.app",
+      APNS_BUNDLE_ID: "com.directoreditor.app",
       APNS_URL: h2cUrl,
       VAPID_PUBLIC_KEY: vapid.publicKey,
       VAPID_PRIVATE_KEY: vapid.privateKey,
-      VAPID_SUBJECT: "mailto:push@boilerplate.dev",
+      VAPID_SUBJECT: "mailto:push@director-editor.dev",
       WEB_PUSH_TEST_ORIGIN: httpUrl,
     },
     /**

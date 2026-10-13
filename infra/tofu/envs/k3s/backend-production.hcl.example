@@ -5,7 +5,7 @@
 # only production's operators have). The copy in infra-production-plan (pull request
 # plans, .github/workflows/infra.yml) gets keys that can only read.
 bucket     = "your-tofu-state"
-key        = "boilerplate/production.tfstate"
+key        = "director-editor/production.tfstate"
 region     = "auto"
 endpoints  = { s3 = "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com" }
 access_key = "…"

@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "Boilerplate",
+    "appName": "Director-editor",
     "signIn": "Iniciar sesión",
     "signUp": "Crear cuenta",
     "signOut": "Cerrar sesión",
@@ -29,7 +29,7 @@
     "assistant": "Asistente"
   },
   "meta": {
-    "title": "Boilerplate",
+    "title": "Director-editor",
     "description": "Lanza tu idea este fin de semana, sobre una base que escala."
   },
   "home": {
@@ -311,7 +311,7 @@
       "body": "Este es tu recordatorio para «{title}»."
     },
     "orgInvitation": {
-      "subject": "Te invitaron a un espacio de trabajo en Boilerplate",
+      "subject": "Te invitaron a un espacio de trabajo en Director-editor",
       "heading": "Únete a «{organizationName}»",
       "body": "«{inviterName}» te invitó a colaborar en el espacio de trabajo «{organizationName}».",
       "cta": "Aceptar invitación",
@@ -830,17 +830,17 @@
     "backToApp": "Volver a la app"
   },
   "sms": {
-    "phoneCode": "{code} es tu código de verificación de Boilerplate. Caduca en {expiresInMinutes, number} minutos. No lo compartas con nadie.",
+    "phoneCode": "{code} es tu código de verificación de Director-editor. Caduca en {expiresInMinutes, number} minutos. No lo compartas con nadie.",
     "securityAlert": {
-      "email-changed": "Boilerplate: se cambió el correo de tu cuenta. ¿No fuiste tú? Restablece tu contraseña ahora.",
-      "password-changed": "Boilerplate: se cambió tu contraseña. ¿No fuiste tú? Restablécela ahora.",
-      "password-reset": "Boilerplate: se restableció tu contraseña. ¿No fuiste tú? Contacta con soporte ahora.",
-      "two-factor-enabled": "Boilerplate: se activó la verificación en dos pasos en tu cuenta.",
-      "two-factor-disabled": "Boilerplate: se desactivó la verificación en dos pasos. ¿No fuiste tú? Restablece tu contraseña ahora.",
-      "passkey-added": "Boilerplate: se añadió una llave de acceso a tu cuenta. ¿No fuiste tú? Restablece tu contraseña ahora.",
-      "phone-added": "Boilerplate: este número se añadió a tu cuenta para los SMS de seguridad.",
-      "phone-removed": "Boilerplate: este número se eliminó de tu cuenta. ¿No fuiste tú? Restablece tu contraseña ahora.",
-      "app-connected": "Boilerplate: se conectó una aplicación a tu cuenta. ¿No fuiste tú? Desconéctala en tus ajustes de seguridad."
+      "email-changed": "Director-editor: se cambió el correo de tu cuenta. ¿No fuiste tú? Restablece tu contraseña ahora.",
+      "password-changed": "Director-editor: se cambió tu contraseña. ¿No fuiste tú? Restablécela ahora.",
+      "password-reset": "Director-editor: se restableció tu contraseña. ¿No fuiste tú? Contacta con soporte ahora.",
+      "two-factor-enabled": "Director-editor: se activó la verificación en dos pasos en tu cuenta.",
+      "two-factor-disabled": "Director-editor: se desactivó la verificación en dos pasos. ¿No fuiste tú? Restablece tu contraseña ahora.",
+      "passkey-added": "Director-editor: se añadió una llave de acceso a tu cuenta. ¿No fuiste tú? Restablece tu contraseña ahora.",
+      "phone-added": "Director-editor: este número se añadió a tu cuenta para los SMS de seguridad.",
+      "phone-removed": "Director-editor: este número se eliminó de tu cuenta. ¿No fuiste tú? Restablece tu contraseña ahora.",
+      "app-connected": "Director-editor: se conectó una aplicación a tu cuenta. ¿No fuiste tú? Desconéctala en tus ajustes de seguridad."
     }
   },
   "billing": {

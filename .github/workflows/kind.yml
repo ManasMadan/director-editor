@@ -76,9 +76,9 @@ jobs:
       - name: Show what went wrong
         if: failure()
         run: |
-          kubectl --context kind-boilerplate get pods -A -o wide || true
-          kubectl --context kind-boilerplate -n boilerplate get events --sort-by=.lastTimestamp | tail -50 || true
-          kubectl --context kind-boilerplate -n boilerplate logs -l app.kubernetes.io/part-of=boilerplate --all-containers --tail=100 || true
+          kubectl --context kind-director-editor get pods -A -o wide || true
+          kubectl --context kind-director-editor -n director-editor get events --sort-by=.lastTimestamp | tail -50 || true
+          kubectl --context kind-director-editor -n director-editor logs -l app.kubernetes.io/part-of=director-editor --all-containers --tail=100 || true
 
   # The one check the master ruleset requires from this workflow (docs/repository-settings.md):
   # it always reports, so a pull request this workflow has nothing to do for isn't left

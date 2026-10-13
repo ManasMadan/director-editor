@@ -218,7 +218,7 @@ def create_mcp_server(
     issuer = f"{site}/api/auth"
     keys = ApiKeys(f"{api_url.rstrip('/')}/api/auth/jwks", _fetch_json)
     server = MCPServer(
-        name="boilerplate-documents",
+        name="director-editor-documents",
         version=release,
         token_verifier=verifier or ApiTokenVerifier(keys, issuer, resource),
         auth=AuthSettings(

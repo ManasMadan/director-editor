@@ -50,7 +50,7 @@ apps/worker is the one to copy.
 6. The chart: an entry under `services` in `deploy/charts/stack/values.yaml` (image,
    port, `database: { role, envPrefix }`, `redis`, probes, `env`, `keda.queues` for its
    queues), a test in `deploy/charts/stack/tests/`, and a Secret
-   `boilerplate-<name>` per environment if it has secrets (templates in
+   `director-editor-<name>` per environment if it has secrets (templates in
    docs/new-project.md). `bun run charts:check`.
 7. Commit scopes need nothing: `commitlint.config.ts` reads the workspace folders.
    knip: an `entry` for `src/main.ts` and `src/telemetry.ts` in `knip.jsonc`, like the

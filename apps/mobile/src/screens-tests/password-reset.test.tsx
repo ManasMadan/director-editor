@@ -61,7 +61,10 @@ describe("asking for a password reset code", () => {
   });
 
   it("passes the security check first, when the API asks for one", async () => {
-    browser.mockResolvedValue({ type: "success", url: "boilerplate://captcha-done?token=token-1" });
+    browser.mockResolvedValue({
+      type: "success",
+      url: "director-editor://captcha-done?token=token-1",
+    });
     const calls = fakeApi({ "/rpc/system/info": captchaOn, [REQUEST]: () => ({ success: true }) });
     await openApp("/forgot-password");
     await requestCode();

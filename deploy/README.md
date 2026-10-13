@@ -29,14 +29,14 @@ schemas kubeconform validates against are downloaded once into
 
 ## One app per cluster
 
-The names are fixed, not derived from the project: the namespaces `boilerplate`,
+The names are fixed, not derived from the project: the namespaces `director-editor`,
 `pr-<number>` and `mail`, the ApplicationSets `envs`, `previews`, `platform` and
-`observability`, the gateway `public`, the `boilerplate.dev/*` labels and annotations on
-clusters, OpenTofu's `boilerplate-<env>` names, and kind's cluster and image builder
-(`boilerplate`, `scripts/k8s.ts`). So each cluster runs one app built from this template,
+`observability`, the gateway `public`, the `director-editor.dev/*` labels and annotations on
+clusters, OpenTofu's `director-editor-<env>` names, and kind's cluster and image builder
+(`director-editor`, `scripts/k8s.ts`). So each cluster runs one app built from this template,
 per environment: a second app on the same cluster would share the namespaces and
 ApplicationSets with the first. Give each app its own clusters. Locally, docker compose's
-project is `boilerplate` too (`docker-compose.yml`), so one checkout's services run on a
+project is `director-editor` too (`docker-compose.yml`), so one checkout's services run on a
 machine at a time.
 
 ## Two releases per environment
@@ -182,7 +182,7 @@ cat > deploy/environments/staging/secrets/api.sops.yaml <<'YAML'
 apiVersion: v1
 kind: Secret
 metadata:
-  name: boilerplate-api
+  name: director-editor-api
 stringData:
   BETTER_AUTH_SECRET: "…"
 YAML
@@ -233,8 +233,8 @@ After rotating `BETTER_AUTH_SECRETS` or `ENCRYPTION_KEYS` (the rotate-secrets sk
 start a Job from it:
 
 ```sh
-kubectl -n boilerplate create job --from=cronjob/boilerplate-reencrypt reencrypt-$(date +%s)
-kubectl -n boilerplate logs -f job/<that job>
+kubectl -n director-editor create job --from=cronjob/director-editor-reencrypt reencrypt-$(date +%s)
+kubectl -n director-editor logs -f job/<that job>
 ```
 
 It runs the api's image with the api's environment in a pod of its own. Don't
@@ -285,22 +285,22 @@ Restoring (a mistake in the data, or a new cluster): CloudNativePG only bootstra
 cluster when it creates it, so restoring means a new cluster from the backups.
 
 1. Find the folder the backups are in: the old cluster's `postgres.backups.serverName`,
-   which defaults to its name (`boilerplate-postgres`).
+   which defaults to its name (`director-editor-postgres`).
 2. In `environments/<env>/data.yaml` set:
 
    ```yaml
    postgres:
      backups:
        enabled: true
-       serverName: boilerplate-postgres-2   # somewhere new: never over the old archive
+       serverName: director-editor-postgres-2   # somewhere new: never over the old archive
      restore:
        enabled: true
-       serverName: boilerplate-postgres     # step 1's
+       serverName: director-editor-postgres     # step 1's
        targetTime: "2026-09-30T08:15:00Z"   # or leave empty for the latest
    ```
 
 3. Commit it, and once Argo CD has synced, replace the running cluster:
-   `kubectl -n boilerplate delete cluster boilerplate-postgres`. Its volumes go with it
+   `kubectl -n director-editor delete cluster director-editor-postgres`. Its volumes go with it
    (the backups stay in RustFS); Argo CD creates it again from the new values, and
    CloudNativePG recovers the new instances from the last base backup before the
    target, then replays WAL up to it. The services fail their readiness checks until
@@ -359,7 +359,7 @@ had them, can be lost (replication is asynchronous).
 ## Mail
 
 Stalwart runs on every cluster (`platform/mail`, namespace `mail`), on the node
-OpenTofu labels `boilerplate.dev/mail=true`: SPF and reverse DNS name that node's
+OpenTofu labels `director-editor.dev/mail=true`: SPF and reverse DNS name that node's
 address, so mail must leave from it. Its ports (25, 465, 587, 993) are a LoadBalancer
 Service that k3s's ServiceLB answers only on that node, with a certificate for its
 host name from cert-manager. Inside the pod the server listens on unprivileged ports
@@ -387,7 +387,7 @@ passes on DKIM even though SPF names only the mail node.
 
 ## Observability
 
-Off unless a cluster opts in with the label `boilerplate.dev/observability: "true"` on
+Off unless a cluster opts in with the label `director-editor.dev/observability: "true"` on
 its Argo CD Secret. Then the observability ApplicationSet installs Jaeger
 (`platform/jaeger`: traces, kept in memory) and kube-prometheus-stack (Prometheus,
 Grafana, Alertmanager) in `observability`, and the envs and previews ApplicationSets
@@ -405,7 +405,7 @@ failing or stalled, no recent base backup, certificates close to expiring or not
 the gateway answering more than 5% errors, and a queue backing up. kube-prometheus-stack
 brings its own for pods crash-looping or not ready, nodes and disks. Alertmanager
 emails every warning and critical alert to OpenTofu's `alert_email` (the cluster's
-`boilerplate.dev/alert-email` annotation), through the cluster's mail server as its
+`director-editor.dev/alert-email` annotation), through the cluster's mail server as its
 submission account, with that account's password in the `alertmanager-smtp` Secret.
 Production refuses to render without an address, and OpenTofu without `alert_email`.
 Mail bounces aren't alerted on yet: Stalwart's metrics aren't scraped.
@@ -436,7 +436,7 @@ repository with no activity for 60 days; re-enable it from the Actions tab.
 OpenTofu's Cloudflare module owns the zone's records for the site, the previews
 wildcard and mail, since it knows the nodes' addresses before anything runs. The one
 host it doesn't know is the files host, so external-dns only publishes HTTPRoutes
-annotated `boilerplate.dev/external-dns: "true"` (the data chart's uploads route),
+annotated `director-editor.dev/external-dns: "true"` (the data chart's uploads route),
 proxied, and leaves every record it doesn't own alone. cert-manager validates the
 gateway's and the mail server's certificates through Cloudflare DNS.
 
@@ -470,13 +470,13 @@ Clusters describe themselves in their Argo CD cluster Secret, which OpenTofu wri
 
 | On the cluster Secret | Meaning |
 |---|---|
-| label `boilerplate.dev/environment` | `staging` or `production`: gets the platform, and that environment's releases and Secrets |
-| label `boilerplate.dev/previews: "true"` | hosts pull-request previews |
-| label `boilerplate.dev/observability: "true"` | gets Jaeger and Prometheus, and the services export to them |
-| annotation `boilerplate.dev/domain` | the DNS zone its hosts are in |
-| annotation `boilerplate.dev/tls-email` | Let's Encrypt's account email |
-| annotation `boilerplate.dev/image-policy` | `"true"`: only images CI signed run (production) |
-| annotations `boilerplate.dev/mail-host`, `mail-domain` | the mail server's name and email domain, when not `mail.<domain>` and `<domain>` |
+| label `director-editor.dev/environment` | `staging` or `production`: gets the platform, and that environment's releases and Secrets |
+| label `director-editor.dev/previews: "true"` | hosts pull-request previews |
+| label `director-editor.dev/observability: "true"` | gets Jaeger and Prometheus, and the services export to them |
+| annotation `director-editor.dev/domain` | the DNS zone its hosts are in |
+| annotation `director-editor.dev/tls-email` | Let's Encrypt's account email |
+| annotation `director-editor.dev/image-policy` | `"true"`: only images CI signed run (production) |
+| annotations `director-editor.dev/mail-host`, `mail-domain` | the mail server's name and email domain, when not `mail.<domain>` and `<domain>` |
 
 ## Locally (kind)
 

@@ -9,7 +9,7 @@ variable "zone_name" {
 }
 
 variable "name" {
-  description = "Name for this environment's resources, e.g. boilerplate-production."
+  description = "Name for this environment's resources, e.g. director-editor-production."
   type        = string
   validation {
     condition     = can(regex("^[a-z0-9][a-z0-9-]{1,40}$", var.name))

@@ -4,7 +4,7 @@ output "api_url" {
 }
 
 output "kubeconfig" {
-  description = "tofu output -raw kubeconfig > ~/.kube/boilerplate-<env>"
+  description = "tofu output -raw kubeconfig > ~/.kube/director-editor-<env>"
   sensitive   = true
   value       = module.k3s.kubeconfig
 }

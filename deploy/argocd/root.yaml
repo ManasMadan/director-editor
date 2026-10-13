@@ -10,7 +10,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/ManasMadan/boilerplate.git
+    repoURL: https://github.com/ManasMadan/director-editor.git
     targetRevision: HEAD
     path: deploy/argocd
     directory:

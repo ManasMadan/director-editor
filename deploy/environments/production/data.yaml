@@ -28,5 +28,5 @@ storage:
 offsite:
   required: true
   endpoint: https://s3.backups.example.net
-  bucket: boilerplate-offsite
+  bucket: director-editor-offsite
   prefix: production

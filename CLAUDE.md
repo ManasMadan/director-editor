@@ -1,4 +1,4 @@
-# Boilerplate
+# Director-editor
 
 Full-stack monorepo: a hackathon starter built to production standards. Everything is
 driven by `bun` scripts, and every common task has a skill in `.claude/skills/`.

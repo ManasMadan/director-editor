@@ -2,7 +2,7 @@
  * Cloudflare Turnstile, when the API has captcha on (`system.info.captchaSiteKey`): the
  * API wants a token on sign-up and on every emailed code, and the widget only runs in a
  * web page. So the app opens the site's /captcha page (apps/web) in the system's browser
- * sheet, which sends the browser back to `boilerplate://captcha-done?token=…` once the check
+ * sheet, which sends the browser back to `director-editor://captcha-done?token=…` once the check
  * passes; the token goes in the header the web forms send it in.
  *
  *   const captcha = useCaptcha();

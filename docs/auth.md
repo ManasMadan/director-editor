@@ -43,7 +43,7 @@ ships with it.
   rule from the `fresh` builder (`FRESH_SESSION_REQUIRED`). Password, 2FA and account
   deletion always ask for the password.
 - The mobile app uses better-auth's Expo plugin: the session lives in the device's secure
-  storage and travels in a header; its `boilerplate://` scheme is a trusted origin.
+  storage and travels in a header; its `director-editor://` scheme is a trusted origin.
   Social sign-in goes through the plugin's `/expo-authorization-proxy` redirect, which
   only sends people to a provider's sign-in page (`PROVIDER_ORIGINS` in `auth-hooks.ts`; add
   a provider's origin there along with the provider). The link back to the app never
@@ -268,7 +268,7 @@ web app renders the widget in its forms (`apps/web/src/components/captcha.tsx`).
 The mobile app can't run the widget, which needs a web page, so it borrows the web
 app's: `useCaptcha()` (`apps/mobile/src/lib/captcha.ts`) opens `/captcha` on the site in
 the system's browser sheet (`openAuthSessionAsync` from expo-web-browser), with
-`?return_to=boilerplate://captcha-done`. Once the check passes, the page sends the browser
+`?return_to=director-editor://captcha-done`. Once the check passes, the page sends the browser
 there with `?token=`, the sheet closes, and the app sends the token like the web forms
 do. Closing the sheet leaves the form with a message to try again. The page sends
 tokens only to the app's scheme or to its own origin, never anywhere `return_to` says
