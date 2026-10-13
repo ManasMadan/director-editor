@@ -5,7 +5,9 @@
  * into, the props they like, and how their takes have gone.
  *
  * The seam: `MemoryStore`. Today it is this browser's storage (`browserMemory`), so the
- * memory stays on the member's device and starts empty on a new one. To keep it across
+ * memory stays on the member's device and starts empty on a new one. It is kept per
+ * account: on a shared computer, the next person to sign in starts afresh rather than
+ * being greeted with someone else's habits. To keep it across
  * devices, implement `MemoryStore` over an API procedure (a `director_memory` row per
  * member, under row-level security like `ai.director_take`) and pass it to `useMemory`;
  * nothing else changes. Whatever the store, what it returns is parsed: browser storage
@@ -157,21 +159,24 @@ export function parseMemory(stored: string | null): Memory {
   }
 }
 
-/** This browser's storage; private windows and blocked storage remember nothing. */
-export const browserMemory: MemoryStore = {
-  load() {
-    try {
-      return parseMemory(window.localStorage.getItem(KEY));
-    } catch {
-      // Storage refused (a private window, site data blocked): no memory this time.
-      return FRESH;
-    }
-  },
-  save(memory) {
-    try {
-      window.localStorage.setItem(KEY, JSON.stringify(memory));
-    } catch {
-      // Storage refused or full: Director just won't remember this session.
-    }
-  },
-};
+/** This browser's storage, for one account; private windows and blocked storage remember nothing. */
+export function browserMemory(owner: string): MemoryStore {
+  const key = `${KEY}.${owner}`;
+  return {
+    load() {
+      try {
+        return parseMemory(window.localStorage.getItem(key));
+      } catch {
+        // Storage refused (a private window, site data blocked): no memory this time.
+        return FRESH;
+      }
+    },
+    save(memory) {
+      try {
+        window.localStorage.setItem(key, JSON.stringify(memory));
+      } catch {
+        // Storage refused or full: Director just won't remember this session.
+      }
+    },
+  };
+}

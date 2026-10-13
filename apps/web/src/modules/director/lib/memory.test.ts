@@ -87,15 +87,18 @@ describe("Director's memory", () => {
         setItem: (key: string, value: string) => items.set(key, value),
       },
     });
-    expect(browserMemory.load()).toBe(FRESH);
-    browserMemory.save(keep(FRESH));
-    expect(browserMemory.load().takesKept).toBe(1);
+    const mine = browserMemory("user-1");
+    expect(mine.load()).toBe(FRESH);
+    mine.save(keep(FRESH));
+    expect(mine.load().takesKept).toBe(1);
+    // Another account on the same browser starts afresh.
+    expect(browserMemory("user-2").load()).toBe(FRESH);
 
     const refuse = () => {
       throw new Error("SecurityError");
     };
     vi.stubGlobal("window", { localStorage: { getItem: refuse, setItem: refuse } });
-    expect(browserMemory.load()).toBe(FRESH);
-    expect(() => browserMemory.save(FRESH)).not.toThrow();
+    expect(mine.load()).toBe(FRESH);
+    expect(() => mine.save(FRESH)).not.toThrow();
   });
 });
