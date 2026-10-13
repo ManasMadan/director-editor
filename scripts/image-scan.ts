@@ -21,6 +21,14 @@
  * and an expiry: once it passes, the scan fails again, so someone looks for the rebuilt
  * image. Trivy: a local one of CI's version, else its image in Docker; with neither, it
  * fails and says how to get one.
+ *
+ *   bun scripts/image-scan.ts --since=<base>   only when the change decides the images
+ *
+ * A pull request or the merge queue passes its base: a change that touches nothing
+ * deciding which images run or what passes for them (deploy/, compose, the dev container,
+ * the workflows, the exceptions, this scan) skips it, since such a change can't fix what
+ * the scan finds, and a vulnerability published upstream would otherwise stop every pull
+ * request until someone reviewed it. The weekly run scans everything and reports.
  */
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -34,6 +42,26 @@ const IMAGE = /^\s*(?:-\s+)?(?:image|imageName|imageRef):\s*["']?([^\s"'{]+:[^\s
 
 /** What the dev container builds as, to be scanned. */
 export const DEVCONTAINER = "director-editor/devcontainer:dev";
+
+/** Files that decide which third-party images run, or what passes for them. */
+const DECIDES = [
+  /^deploy\//,
+  /^docker-compose[^/]*\.ya?ml$/,
+  /^\.devcontainer\//,
+  /^\.github\/workflows\/security\.yml$/,
+  /^\.trivyignores\//,
+  /^trivy\.yaml$/,
+  /^scripts\/(image-scan|charts|misconfig)\.ts$/,
+];
+
+/** Whether a change of `file` can change what the scan finds. */
+export const decidesImages = (file: string) => DECIDES.some((pattern) => pattern.test(file));
+
+/** Whether the change since `base` touches what decides the images (unknown: it does). */
+export function imagesChanged(base: string, run: Run, root = ROOT): boolean {
+  const diff = run("git", ["diff", "--name-only", `${base}...HEAD`], { cwd: root });
+  return diff.status !== 0 || diff.stdout.split("\n").some(decidesImages);
+}
 
 /** The files that name images: deploy/'s YAML (not tests or renders) and compose's. */
 export function imageFiles(root = ROOT) {
@@ -211,13 +239,19 @@ function scanOne({ run, root, trivy, results, day }: Context, { ref, source }: S
  * code.
  */
 export function imageScan(
-  images = process.argv.slice(2),
+  argv = process.argv.slice(2),
   run = runSync,
   root = ROOT,
   cache = join(homedir(), ".cache/director-editor/trivy"),
   results = join(homedir(), ".cache/director-editor/image-scan"),
   day = new Date().toISOString().slice(0, 10),
 ): number {
+  const since = argv.find((arg) => arg.startsWith("--since="))?.slice("--since=".length);
+  const images = argv.filter((arg) => !arg.startsWith("--since="));
+  if (since && !imagesChanged(since, run, root)) {
+    ok(`nothing since ${since.slice(0, 12)} decides the images: the weekly scan covers them`);
+    return 0;
+  }
   // The renders the list comes from, as they are now.
   if (images.length === 0 && !renderCharts(run, root)) {
     return 1;

@@ -73,7 +73,7 @@ with the job's own commands:
 | `bun run codeql --languages …` | CodeQL | the languages the push changes |
 | `bun scripts/osv.ts`: OSV on `bun.lock` and `apps/ai/uv.lock` | OSV | every push |
 | `bun scripts/misconfig.ts`: Trivy's misconfiguration scan, the charts rendered first | misconfig | every push |
-| `bun scripts/image-scan.ts`: Trivy on every third-party image the renders, compose and the dev container run | Third-party images | every push |
+| `bun scripts/image-scan.ts --since=<base>`: Trivy on every third-party image the renders, compose and the dev container run | Third-party images | a push changing what decides the images |
 | the licenses of the npm packages the push adds or upgrades, against `security.yml`'s list | dependency review | a `bun.lock` change |
 | gitleaks over the pushed commits | secrets | every push |
 
@@ -583,7 +583,11 @@ container as it builds, for fixable critical or high vulnerabilities, as CI's Co
 images jobs scan ours; `bun scripts/image-scan.ts <ref>` scans one. A vulnerability no
 upstream image fixes yet goes in that image's file under `.trivyignores/` (named after
 its repository), with the package, why, and an expiry about a month out; when it passes,
-the scan fails until the image moves to a fixed release.
+the scan fails until the image moves to a fixed release. Pull requests and the merge
+queue run it only when they change what decides the images (deploy/, compose, the dev
+container, the workflows, `.trivyignores/`, `trivy.yaml` or the scan:
+`--since=<base>`), since a vulnerability published upstream would otherwise stop every
+pull request until someone reviewed it; the weekly run scans every image and reports.
 
 ## Nightly and weekly
 

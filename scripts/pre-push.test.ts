@@ -210,7 +210,7 @@ const COUNTERPARTS: Record<string, Record<string, string>> = {
   },
   "security.yml:images": {
     "The day, for the database's cache key": "setup: a cache key",
-    "bun scripts/image-scan.ts": "third-party images",
+    "bun scripts/image-scan.ts ${BASE:+--since=$BASE}": "third-party images",
   },
   "security.yml:osv": {
     "google/osv-scanner-action/osv-scanner-action": "known vulnerabilities",
