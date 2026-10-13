@@ -1,0 +1,7 @@
+crds:
+  create: true
+# CPU and memory requested and limited, as for every container here (the
+# misconfiguration scan, scripts/misconfig.ts, fails without).
+resources:
+  requests: { cpu: 50m, memory: 128Mi }
+  limits: { cpu: 500m, memory: 512Mi }

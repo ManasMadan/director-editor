@@ -1,0 +1,9 @@
+{
+  // What `next build` type-checks (next.config.ts's tsconfigPath): the app, without its
+  // tests, e2e suite and scripts. Those import packages the web image's pruned build
+  // doesn't have (the database, the API's helpers); `bun run check-types` still checks
+  // everything, through tsconfig.json.
+  "extends": "./tsconfig.json",
+  "include": ["next-env.d.ts", "next.config.ts", "src", ".next/types/**/*.ts"],
+  "exclude": ["node_modules", ".next", "src/**/*.test.ts", "src/**/*.test.tsx"]
+}

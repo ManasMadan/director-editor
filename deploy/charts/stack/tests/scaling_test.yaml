@@ -1,0 +1,56 @@
+suite: scaling and disruption
+templates: [hpa.yaml, keda.yaml, pdb.yaml]
+release: { name: demo, namespace: apps }
+set:
+  image.tag: sha-abc123
+  site.host: app.example.com
+tests:
+  - it: scales the web app and api on CPU
+    template: hpa.yaml
+    asserts:
+      - hasDocuments: { count: 2 }
+      - equal: { path: "spec.metrics[0].resource.target.averageUtilization", value: 70 }
+
+  - it: scales each queue consumer on its BullMQ backlog
+    template: keda.yaml
+    documentSelector: { path: metadata.name, value: demo-worker }
+    asserts:
+      - equal: { path: spec.minReplicaCount, value: 1 }
+      - contains:
+          path: spec.triggers
+          content:
+            type: redis
+            metadata: { listName: "{files}:files:wait", listLength: "20" }
+            authenticationRef: { name: demo-valkey }
+      - lengthEqual: { path: spec.triggers, count: 4 }
+
+  - it: authenticates to Valkey from its Secret
+    template: keda.yaml
+    documentSelector: { path: kind, value: TriggerAuthentication }
+    asserts:
+      - contains:
+          path: spec.secretTargetRef
+          content: { parameter: password, name: valkey, key: password }
+
+  - it: fails when a KEDA-scaled service names no queues
+    template: keda.yaml
+    set:
+      services.worker.keda.queues: []
+    asserts:
+      - failedTemplate: { errorMessage: services.worker.keda.queues is required when KEDA is on }
+
+  - it: keeps disruption to one pod at a time
+    template: pdb.yaml
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - equal: { path: spec.maxUnavailable, value: 1 }
+      - equal: { path: spec.unhealthyPodEvictionPolicy, value: AlwaysAllow }
+
+  # Inbound provider webhooks (Stripe) are routed to webhooks: in production never fewer
+  # than two pods, however short its queues.
+  - it: keeps two webhooks pods in production
+    template: keda.yaml
+    values: [../../../environments/production/stack.yaml]
+    documentSelector: { path: metadata.name, value: demo-webhooks }
+    asserts:
+      - equal: { path: spec.minReplicaCount, value: 2 }

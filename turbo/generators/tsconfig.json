@@ -1,0 +1,7 @@
+{
+  // The code generators (turbo gen). Their templates are Handlebars, checked by running
+  // them (scripts/generators.ts); this checks the generator itself.
+  "extends": "../../packages/typescript-config/bun.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["config.ts"]
+}

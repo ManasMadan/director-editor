@@ -1,0 +1,11 @@
+apiVersion: v2
+name: data
+description: >-
+  What the application stores its data in: Postgres (a CloudNativePG cluster, with
+  continuous backups), Valkey, object storage (RustFS), and the Secrets the stack chart
+  reads to reach them, generated in the cluster. A separate release from the stack, so
+  migrations (a stack hook) always find the database already running.
+type: application
+version: 0.2.0
+appVersion: "0.2.0"
+kubeVersion: ">=1.31.0-0"

@@ -1,0 +1,13 @@
+# Alert rules, what they scrape, and where Alertmanager emails them (deploy/platform/alerts),
+# after kube-prometheus-stack's CRDs.
+addon: alerts
+namespace: observability
+path: deploy/platform/alerts
+wave: "10"
+clusterParameters:
+  environment: label:environment
+  domain: domain
+  emailDomain: mail-domain
+  mailHost: mail-host
+  # OpenTofu's alert_email: required in production.
+  email: alert-email

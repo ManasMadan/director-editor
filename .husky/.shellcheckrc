@@ -1,0 +1,2 @@
+# Husky runs every hook here with `sh -e`: shellcheck reads them as POSIX sh.
+shell=sh

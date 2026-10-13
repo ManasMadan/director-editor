@@ -1,0 +1,1 @@
+{ "extends": "@repo/typescript-config/nest.json", "include": ["src", "test", "*.config.ts"] }

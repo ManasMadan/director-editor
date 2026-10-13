@@ -1,0 +1,31 @@
+{{- range $name := keys .Values.services | sortAlpha }}
+{{- $svc := include "stack.service" (list $ $name) | fromYaml }}
+{{- if and $svc.enabled $svc.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "stack.fullname" (list $ $name) }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "stack.labels" (list $ $name) | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "stack.fullname" (list $ $name) }}
+  minReplicas: {{ $svc.autoscaling.minReplicas }}
+  maxReplicas: {{ $svc.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $svc.autoscaling.targetCPUUtilizationPercentage }}
+  behavior:
+    # Scale up at once; scale down slowly, so a burst doesn't thrash.
+    scaleDown:
+      stabilizationWindowSeconds: 300
+{{- end }}
+{{- end }}

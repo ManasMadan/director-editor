@@ -1,0 +1,26 @@
+/*
+ * The web app's stylesheet: Tailwind, shadcn's layers, the shared tokens (theme.css,
+ * also used by the mobile app) and base styles.
+ */
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "./variants.css";
+@import "./theme.css";
+
+/*
+ * Tailwind only generates classes it finds in scanned files. Scan this package and
+ * every app, so a class used anywhere in the repo exists in every app's CSS.
+ * (Paths are relative to this file: src/styles -> repo root is four levels up.)
+ */
+@source "../**/*.{ts,tsx}";
+@source "../../../../apps/*/src/**/*.{ts,tsx}";
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}

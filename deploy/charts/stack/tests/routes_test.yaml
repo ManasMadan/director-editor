@@ -1,0 +1,45 @@
+suite: gateway routes
+templates: [httproute.yaml]
+release: { name: demo, namespace: apps }
+set:
+  image.tag: sha-abc123
+  site.host: app.example.com
+tests:
+  - it: routes the web app, api, webhooks and AI service on the site's host
+    asserts:
+      - hasDocuments: { count: 4 }
+      - equal: { path: spec.hostnames, value: [app.example.com] }
+      - equal:
+          path: spec.parentRefs
+          value: [{ name: public, namespace: gateway-system }]
+
+  - it: gives the api's oRPC path (event streams) no request timeout
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - contains:
+          path: spec.rules
+          content:
+            matches: [{ path: { type: PathPrefix, value: /rpc } }]
+            backendRefs: [{ name: demo-api, port: 3001 }]
+            timeouts: { request: 0s, backendRequest: 0s }
+
+  - it: serves OAuth discovery documents at their exact paths
+    documentSelector: { path: metadata.name, value: demo-ai }
+    asserts:
+      - contains:
+          path: spec.rules
+          content:
+            matches: [{ path: { type: Exact, value: /.well-known/oauth-protected-resource/ai/mcp } }]
+            backendRefs: [{ name: demo-ai, port: 8000 }]
+
+  - it: renders no routes without a gateway
+    set:
+      gateway.enabled: false
+    asserts:
+      - hasDocuments: { count: 0 }
+
+  - it: requires the site's host
+    set:
+      site.host: ""
+    asserts:
+      - failedTemplate: { errorMessage: site.host is required }

@@ -1,0 +1,127 @@
+# Findings reviewed as not applying: our own images' (CI's Container images jobs,
+# `vulnerabilities`) and the infrastructure code's (trivy.yaml, `misconfigurations`).
+# Third-party images have a file each under .trivyignores/ (scripts/image-scan.ts).
+#
+# A vulnerability entry says why and expires: once it does, the scan fails again, so an
+# entry can't outlive its reason. The real fix is a rebuilt base image (Renovate brings
+# those in); an entry only covers the days until then.
+# None today: the distroless images were rebuilt with Debian's fixed libssl3t64.
+vulnerabilities: []
+
+# A misconfiguration entry is a design decision rather than a wait for a fix, so it
+# doesn't expire; it names the one file it applies to, never a whole check.
+misconfigurations:
+  # DS-0026: a HEALTHCHECK, for images where plain Docker can't use one. The service
+  # images have theirs; Kubernetes ignores them all and runs the stack chart's probes.
+  - id: DS-0026
+    paths: ["deploy/docker/migrate.Dockerfile"]
+    statement: One-shot (migrates and exits); there's no running service to check
+  - id: DS-0026
+    paths: ["deploy/docker/ai.Dockerfile"]
+    statement: >-
+      The image runs as the HTTP service and as the queue worker (no port; a heartbeat
+      file), so no one check fits both; the stack chart probes each its own way
+  - id: DS-0026
+    paths: [".devcontainer/Dockerfile"]
+    statement: A development container; nothing in it runs until a developer starts it
+
+  # The application charts, as scripts/misconfig.ts renders them into deploy/.rendered
+  # (<environment>-<chart>.yaml, and optional-<feature>.yaml).
+  - id: KSV-0113
+    paths: ["deploy/.rendered/*-data.yaml", "deploy/.rendered/optional-*.yaml"]
+    statement: >-
+      The credentials Job creates the data services' Secrets, so its Role must be allowed
+      to create Secrets; it can do nothing else (no get, list, update or delete), and
+      Kubernetes can't narrow create by name, since the object doesn't exist yet
+  - id: KSV-0053
+    paths: ["deploy/.rendered/staging-data.yaml", "deploy/.rendered/production-data.yaml"]
+    statement: >-
+      The restore drill runs psql in the live and the scratch database pods to compare
+      them; CloudNativePG names those pods with a counter, so they can't be listed by
+      name. Its Role is in its environment's own namespace, and only the environments
+      that turn the drill on (staging, production) render it
+  - id: KSV-0125
+    paths: ["deploy/.rendered/local-stack.yaml"]
+    statement: >-
+      The kind cluster's images (boilerplate/<image>:dev) are built on the machine and
+      loaded into kind by `bun run k8s:up`; nothing pulls them from a registry
+
+  # The third-party add-on charts, rendered with the clusters' values (scripts/misconfig.ts:
+  # deploy/.rendered/addon-<name>.yaml). Their containers' resources and users are set in
+  # deploy/platform/values; these are what an operator's job or node-exporter's needs.
+  - id: KSV-0041
+    paths: ["deploy/.rendered/addon-argocd.yaml", "deploy/.rendered/addon-cert-manager.yaml", "deploy/.rendered/addon-cloudnative-pg.yaml", "deploy/.rendered/addon-envoy-gateway.yaml", "deploy/.rendered/addon-keda.yaml", "deploy/.rendered/addon-kube-prometheus-stack.yaml", "deploy/.rendered/addon-plugin-barman-cloud.yaml"]
+    statement: >-
+      Operators that manage Secrets cluster-wide by design: Argo CD applies them, cert-manager writes certificates into them, CloudNativePG and its backup plugin keep database credentials, Envoy Gateway reads TLS keys, KEDA reads trigger credentials, the Prometheus operator writes its configuration
+  - id: KSV-0044
+    paths: ["deploy/.rendered/addon-argocd.yaml"]
+    statement: >-
+      Argo CD's application controller applies whatever the repository declares, so its role covers every resource and verb
+  - id: KSV-0046
+    paths: ["deploy/.rendered/addon-argocd.yaml", "deploy/.rendered/addon-keda.yaml", "deploy/.rendered/addon-kyverno.yaml"]
+    statement: >-
+      Argo CD applies every kind the repository declares; KEDA scales any scalable kind; Kyverno's admission controller sees every kind it has policies for
+  - id: KSV-0048
+    paths: ["deploy/.rendered/addon-argocd.yaml", "deploy/.rendered/addon-cert-manager.yaml", "deploy/.rendered/addon-cloudnative-pg.yaml", "deploy/.rendered/addon-envoy-gateway.yaml", "deploy/.rendered/addon-keda.yaml", "deploy/.rendered/addon-kube-prometheus-stack.yaml", "deploy/.rendered/addon-kyverno.yaml"]
+    statement: >-
+      Operators that create or scale workloads by design: Argo CD (the application), cert-manager (challenge solvers), CloudNativePG (Postgres pods), Envoy Gateway (the proxies), KEDA (scaling), the Prometheus operator (Prometheus and Alertmanager), Kyverno (background policies)
+  - id: KSV-0049
+    paths: ["deploy/.rendered/addon-argocd.yaml", "deploy/.rendered/addon-cloudnative-pg.yaml", "deploy/.rendered/addon-envoy-gateway.yaml", "deploy/.rendered/addon-kube-prometheus-stack.yaml", "deploy/.rendered/addon-kyverno.yaml", "deploy/.rendered/addon-plugin-barman-cloud.yaml"]
+    statement: >-
+      Operators that write their own configuration and leader-election ConfigMaps
+  - id: KSV-0050
+    paths: ["deploy/.rendered/addon-cloudnative-pg.yaml", "deploy/.rendered/addon-kyverno.yaml", "deploy/.rendered/addon-plugin-barman-cloud.yaml"]
+    statement: >-
+      CloudNativePG and its backup plugin give each Postgres cluster its own Role; Kyverno generates RBAC from policies
+  - id: KSV-0053
+    paths: ["deploy/.rendered/addon-cloudnative-pg.yaml"]
+    statement: >-
+      CloudNativePG runs commands in its Postgres pods to manage them
+  - id: KSV-0056
+    paths: ["deploy/.rendered/addon-cert-manager.yaml", "deploy/.rendered/addon-cloudnative-pg.yaml", "deploy/.rendered/addon-envoy-gateway.yaml", "deploy/.rendered/addon-kube-prometheus-stack.yaml", "deploy/.rendered/addon-kyverno.yaml"]
+    statement: >-
+      Operators that create Services and network objects for what they run: challenge solvers, Postgres, the gateway's proxies, the Prometheus operator's, Kyverno's generated policies
+  - id: KSV-0113
+    paths: ["deploy/.rendered/addon-argocd.yaml", "deploy/.rendered/addon-cert-manager.yaml", "deploy/.rendered/addon-envoy-gateway.yaml", "deploy/.rendered/addon-keda.yaml", "deploy/.rendered/addon-kube-prometheus-stack.yaml", "deploy/.rendered/addon-kyverno.yaml"]
+    statement: >-
+      Each manages the Secrets of its own namespace (its webhook certificates, Argo CD's repository and cluster credentials)
+  - id: KSV-0114
+    paths: ["deploy/.rendered/addon-cert-manager.yaml", "deploy/.rendered/addon-cloudnative-pg.yaml", "deploy/.rendered/addon-envoy-gateway.yaml", "deploy/.rendered/addon-keda.yaml", "deploy/.rendered/addon-kube-prometheus-stack.yaml", "deploy/.rendered/addon-kyverno.yaml"]
+    statement: >-
+      Each keeps the CA bundle of its own admission webhooks current, which means updating their configurations
+  - id: KSV-01010
+    paths: ["deploy/.rendered/addon-argocd.yaml", "deploy/.rendered/addon-kyverno.yaml"]
+    statement: >-
+      Not secrets: setting names containing "key" (instanceLabelKey, updateRequestThreshold) and the SOPS plugin's script naming its key file
+  - id: KSV-0009
+    paths: ["deploy/.rendered/addon-kube-prometheus-stack.yaml"]
+    statement: >-
+      node-exporter reports the node's own network, from the host network
+  - id: KSV-0010
+    paths: ["deploy/.rendered/addon-kube-prometheus-stack.yaml"]
+    statement: >-
+      node-exporter reports the node's processes, from the host's PID namespace
+  - id: KSV-0023
+    paths: ["deploy/.rendered/addon-kube-prometheus-stack.yaml"]
+    statement: >-
+      node-exporter reads the node's /, /proc and /sys, read-only
+  - id: KSV-0121
+    paths: ["deploy/.rendered/addon-kube-prometheus-stack.yaml"]
+    statement: >-
+      node-exporter reads the node's /, /proc and /sys, read-only
+  - id: KSV-0036
+    paths: ["deploy/.rendered/addon-kube-prometheus-stack.yaml"]
+    statement: >-
+      Prometheus discovers what to scrape through the Kubernetes API, with its service account's token
+  - id: KSV-0037
+    paths: ["deploy/.rendered/addon-kube-prometheus-stack.yaml"]
+    statement: >-
+      The Service that lets Prometheus scrape CoreDNS has to select CoreDNS's pods, in kube-system
+  - id: KSV-0020
+    paths: ["deploy/.rendered/addon-argocd.yaml"]
+    statement: >-
+      Argo CD's images expect their own user, 999: under another id git and ssh find no user ("No user exists for uid 10001") and its home directory isn't writable
+  - id: KSV-0021
+    paths: ["deploy/.rendered/addon-argocd.yaml"]
+    statement: >-
+      Argo CD's images expect their own group, 999, which owns their home directory

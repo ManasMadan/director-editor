@@ -1,0 +1,227 @@
+# Security checks: on every change, and weekly, because new vulnerabilities are
+# published for code that hasn't changed. Findings go to the repository's Security tab
+# (code scanning); the ones that block a merge are secrets, new vulnerable or
+# disallowed-license dependencies, known vulnerabilities in the lockfiles and the
+# third-party images, infrastructure misconfigurations, and CodeQL alerts (through branch
+# protection).
+name: Security
+
+# The merge queue too: its required checks (the secrets scan, dependency review, OSV)
+# must report there, or a queued pull request waits forever.
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches: [master]
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions: { contents: read, security-events: write }
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, python, actions]
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-extended
+      - uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          category: /language:${{ matrix.language }}
+
+  # Not in the merge queue, where it has nothing new to scan (the pull request's own run
+  # scanned the same commits) and the action doesn't know the event: skipped, the
+  # required check passes.
+  secrets:
+    name: Secrets in the history
+    if: github.event_name != 'merge_group'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Needed only when the repository belongs to an organization (gitleaks.io).
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  # New dependencies in a pull request: no known vulnerabilities, and only licenses
+  # compatible with shipping a proprietary product. Skipped (so passing) in the merge
+  # queue: the pull request's own run reviewed the same change.
+  dependencies:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: { contents: read, pull-requests: write }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: moderate
+          comment-summary-in-pr: on-failure
+          # Permissive licenses, plus LGPL for dynamically linked native libraries (libvips
+          # under sharp) and MPL for file-level copyleft.
+          allow-licenses: >-
+            MIT, MIT-0, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD, Unlicense,
+            CC0-1.0, CC-BY-4.0, BlueOak-1.0.0, Python-2.0, PSF-2.0, Zlib, BSL-1.0,
+            MPL-2.0, LGPL-3.0-or-later, LGPL-2.1-or-later
+
+  # Known vulnerabilities in everything the lockfiles pin (bun.lock and apps/ai/uv.lock),
+  # including dependencies that haven't changed. Blocks changes; the weekly run only
+  # reports (an advisory published for unchanged code shouldn't fail an unrelated build).
+  # Reviewed exceptions live in osv-scanner.toml, each with a reason and an expiry.
+  osv:
+    name: Known vulnerabilities (OSV)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: { contents: read, security-events: write }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: google/osv-scanner-action/osv-scanner-action@a345acffa64b0eaede81a3d9aae6141214d9c8fc # v2.6.0
+        with:
+          scan-args: |-
+            --config=osv-scanner.toml
+            --lockfile=bun.lock
+            --lockfile=apps/ai/uv.lock
+            --format=sarif
+            --output=osv.sarif
+        continue-on-error: ${{ github.event_name == 'schedule' }}
+      - uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        if: always()
+        with:
+          sarif_file: osv.sarif
+          category: osv
+
+  # Misconfigurations in the infrastructure code (Dockerfiles, Kubernetes manifests, Helm
+  # charts, the application charts as every environment renders them, OpenTofu), with
+  # trivy.yaml's settings, through the script the pre-commit hook runs
+  # (scripts/misconfig.ts). Any finding fails, unless .trivyignore.yaml records why it
+  # doesn't apply. The checks are the ones built into the pinned Trivy, so the weekly run
+  # finds what the pull request did.
+  misconfig:
+    name: Infrastructure misconfigurations
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions: { contents: read, security-events: write }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with: { bun-version-file: package.json }
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with: { version: v4.3.0 }
+      - uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
+        with:
+          # renovate: datasource=github-releases depName=aquasecurity/trivy
+          version: v0.74.0
+      # The third-party charts it renders, by version (scripts/misconfig.ts pulls a chart
+      # only when its file isn't there).
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/boilerplate/charts
+          key: helm-charts-${{ hashFiles('deploy/platform/addons/**', 'infra/tofu/modules/bootstrap/variables.tf') }}
+          restore-keys: helm-charts-
+      # The pre-commit hook's scan: the application charts rendered as each environment
+      # has them (Trivy can't render them without their values), then Trivy with trivy.yaml.
+      - run: bun scripts/misconfig.ts --format sarif --output trivy-config.sarif
+      # The findings reach the Security tab whether the scan passed or not.
+      - uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        if: always()
+        with:
+          sarif_file: trivy-config.sarif
+          category: trivy-config
+
+  # Known vulnerabilities in the third-party images the charts, compose and the dev
+  # container run (our own are scanned as CI builds them): each read from its registry by
+  # its pinned digest, a fixable critical or high one failing (scripts/image-scan.ts, which
+  # the pre-push runner can call too). Blocks changes; the weekly run only reports, like OSV.
+  images:
+    name: Third-party images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with: { bun-version-file: package.json }
+      - uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
+        with:
+          # renovate: datasource=github-releases depName=aquasecurity/trivy
+          version: v0.74.0
+      # Trivy's vulnerability database, fetched once a day.
+      - name: The day, for the database's cache key
+        id: day
+        run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/boilerplate/trivy/db
+          key: trivy-db-${{ steps.day.outputs.day }}
+          restore-keys: trivy-db-
+      - run: bun scripts/image-scan.ts
+        continue-on-error: ${{ github.event_name == 'schedule' }}
+
+  # The one check the master ruleset requires from this workflow (docs/repository-settings.md):
+  # it always reports, so a pull request this workflow has nothing to do for isn't left
+  # waiting on it.
+  security-ok:
+    name: Security passed
+    if: always()
+    needs: [codeql, secrets, dependencies, osv, misconfig, images]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >-
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            raw.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+            nodejs.org:443
+            registry.npmjs.org:443
+      - name: Require every job to succeed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        # Skipped is fine: the merge queue skips the secrets scan and dependency review, which the pull request's own run did.
+        run: echo "$NEEDS" | jq -e 'to_entries | all(.value.result == "success" or .value.result == "skipped")' > /dev/null

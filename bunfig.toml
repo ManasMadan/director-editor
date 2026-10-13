@@ -1,0 +1,43 @@
+# Bun configuration shared by every workspace.
+
+# Never load .env on its own. Bun would read it into `bun <file>`, `bun run` and `bun test`,
+# and every process they start would inherit it, so a test could pass, or fail, only
+# because of what one checkout's .env says; the tests use .env.example's values
+# (@repo/testing/environment) instead. A script that needs the developer's settings loads
+# them by name: `bun --env-file=.env ...` (see package.json).
+env = false
+
+[install]
+# Hoisted layout (one root node_modules, like npm/yarn): bundled services inline only
+# our own @repo/* packages and resolve every npm dependency from the root at runtime,
+# which also keeps Docker images simple (`turbo prune` + install). Undeclared
+# dependencies, the one thing isolated installs catch, are caught by knip in CI.
+linker = "hoisted"
+# Never auto-install missing peer dependencies: Bun would pick their latest versions,
+# which for React Native pulls native modules the Expo SDK wasn't built against.
+# Every dependency, peer or not, is declared explicitly (and checked by knip).
+peer = false
+# A version must have been out three days before `bun add` or `bun update` picks it, like
+# Renovate's minimumReleaseAge: most malicious or broken releases are pulled within days.
+# Any package.json change re-checks the whole lockfile against it, so a version locked
+# less than three days ago (a dependency bumped by hand) blocks every install until it
+# ages. Only then, and only to keep what bun.lock already has, run
+# `bun install --minimum-release-age=0` and check that the lockfile diff holds just your
+# change; never with `bun add`.
+minimumReleaseAge = 259200
+
+[test]
+# `bun test --coverage` (bun run test:coverage) writes LCOV for the repo's tooling (scripts/,
+# the Claude Code hooks, the packages' build scripts and presets, the code generators, the
+# load test, the images' checks: BUN_OWNS in scripts/coverage.ts), merged with every other
+# suite's by scripts/coverage.ts.
+coverageReporter = ["text", "lcov"]
+coverageDir = "coverage/bun"
+coverageSkipTestFiles = true
+# This suite doesn't answer for the services' and packages' source. Some of its tests load
+# it (env schemas, say), which its own suites cover: reported here, it would show as a low
+# number for a file this suite never meant to test.
+coveragePathIgnorePatterns = ["apps/*/src/**", "apps/*/public/**", "apps/ai/**", "packages/*/src/**"]
+# Every file it answers for at 100%, or `bun test --coverage` fails (Bun measures lines
+# and functions; scripts/coverage.ts checks branches too, on the merged reports).
+coverageThreshold = { lines = 1.0, functions = 1.0 }

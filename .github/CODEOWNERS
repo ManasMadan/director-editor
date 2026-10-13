@@ -1,0 +1,18 @@
+# Every change needs a review from an owner (branch protection: "Require review from
+# Code Owners"). Split this by path as the team grows, e.g.
+#   /apps/mobile/   @org/mobile
+#   /infra/ /deploy/   @org/platform
+* @ManasMadan
+
+# The test gates: coverage settings, the exceptions tables and the scripts that enforce
+# them. Named on their own so they stay owned when the paths above are split up: loosening
+# any of these loosens every package at once.
+/packages/vitest-config/   @ManasMadan
+**/vitest.config.ts        @ManasMadan
+/apps/mobile/jest.config.js   @ManasMadan
+/apps/ai/pyproject.toml    @ManasMadan
+/bunfig.toml               @ManasMadan
+/docs/testing.md           @ManasMadan
+/scripts/coverage.ts       @ManasMadan
+/scripts/suppressions.ts   @ManasMadan
+/biome.jsonc               @ManasMadan

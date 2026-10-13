@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "alerts chart values",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "global": { "type": "object" },
+    "environment": { "type": "string" },
+    "domain": { "type": "string" },
+    "emailDomain": { "type": "string" },
+    "mailHost": { "type": "string" },
+    "email": { "type": "string", "pattern": "^$|^[^@\\s]+@[^@\\s]+$" },
+    "smtp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["account", "secretName"],
+      "properties": {
+        "account": { "type": "string", "minLength": 1 },
+        "secretName": { "type": "string", "minLength": 1 }
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "walArchiveStale",
+        "backupStale",
+        "certificateExpiresWithin",
+        "errorRatio",
+        "queueBacklog"
+      ],
+      "properties": {
+        "walArchiveStale": { "type": "string", "pattern": "^[0-9]+[smhd]$" },
+        "backupStale": { "type": "string", "pattern": "^[0-9]+[smhd]$" },
+        "certificateExpiresWithin": { "type": "string", "pattern": "^[0-9]+[smhd]$" },
+        "errorRatio": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "queueBacklog": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

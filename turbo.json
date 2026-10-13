@@ -1,0 +1,88 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "ui": "tui",
+  // Every package script loads the root .env itself (`bun --env-file` / `node
+  // --env-file-if-exists`), so turbo does not need to know individual variables at
+  // runtime. "loose" lets variables exported in the shell (CI, hosting platforms) reach
+  // tasks unchanged. Cache correctness is handled per task through `env` below.
+  "envMode": "loose",
+  // Turbo writes an AGENTS.md when it detects an AI agent. This repo uses CLAUDE.md
+  // only, which already points at the docs bundled with the installed version.
+  "agentGuidance": false,
+  "tasks": {
+    // Code generation (Prisma client, OpenAPI → TypeScript) runs before anything that
+    // type-checks, tests or bundles, so a fresh clone never sees missing types.
+    "gen": {
+      "dependsOn": ["^gen"],
+      "outputs": [
+        "src/generated/**",
+        "src/**/*.gen.ts",
+        "openapi.json",
+        "app/contracts/**",
+        "generated/**",
+        "uniwind-types.d.ts"
+      ]
+    },
+    // The web build fixes its rewrites' upstreams (API_URL, AI_URL) when it's built, so
+    // a build for other ports (the e2e run passes the checkout's .env, moved by
+    // `bun run setup --stack <n>`) is never a cache hit.
+    "build": {
+      "env": ["API_URL", "AI_URL"],
+      "dependsOn": ["^build", "gen", "^gen"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**", "storybook-static/**"]
+    },
+    "check-types": {
+      "dependsOn": ["gen", "^gen"]
+    },
+    // The component library's static Storybook, which the screenshot tests run against
+    // (packages/ui test:visual): rebuilt only when the library changed.
+    "build-storybook": {
+      "outputs": ["storybook-static/**"]
+    },
+    "lint": {},
+    // Unit tests are pure (no network, no services), so their results are cacheable.
+    "test": {
+      "dependsOn": ["gen", "^gen"]
+    },
+    // Integration tests talk to real Postgres/Valkey/Mailpit: never cached, since a
+    // cache hit would skip checking the live dependencies.
+    "test:integration": {
+      "dependsOn": ["gen", "^gen"],
+      "cache": false
+    },
+    // The integration tests that need the files profile (RustFS, ClamAV).
+    "test:integration:files": {
+      "dependsOn": ["gen", "^gen"],
+      "cache": false
+    },
+    // Unit and integration tests with coverage, as LCOV for scripts/coverage.ts (needs the
+    // services, like test:integration).
+    "coverage": {
+      "dependsOn": ["gen", "^gen"],
+      "cache": false
+    },
+    "dev": {
+      "dependsOn": ["gen", "^gen"],
+      "cache": false,
+      "persistent": true
+    },
+    "start": {
+      "dependsOn": ["build"],
+      "cache": false,
+      "persistent": true
+    },
+    // Demo data (apps/api src/seed.ts): runs the built service's own modules.
+    "seed": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "load:users": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "secrets:reencrypt": {
+      "dependsOn": ["build"],
+      "cache": false
+    }
+  }
+}

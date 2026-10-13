@@ -1,0 +1,54 @@
+/** The {{lowerCase (sentenceCase name)}} procedures. Add the other writes the way todo.ts does (input schema, scope, errors). */
+import * as z from "zod";
+import { page, pageInput } from "../pagination";
+import { base, errorsOf, WORKSPACE_ERRORS } from "./base";
+
+/**
+ * The codes these procedures throw, on top of the common ones: add each one a service
+ * throws here (the API refuses, outside production, to answer an undeclared code).
+ */
+const errors = errorsOf(...WORKSPACE_ERRORS);
+
+// Exported (with its z.infer type) once an app needs it: knip refuses an export nothing
+// imports.
+const {{camelCase item}}Schema = z.object({
+  id: z.uuid(),
+  createdAt: z.date(),
+});
+
+/**
+ * The workspace's allowance for changing {{lowerCase (sentenceCase name)}}: every write
+ * declares a limit (rate-limits.test.ts); everyday changes go on while Redis is down.
+ */
+const writes = {
+  name: "{{kebabCase name}}-writes",
+  points: 120,
+  windowSeconds: 60,
+  per: "org",
+  onRedisError: "allow",
+} as const;
+
+export const {{camelCase name}}Contract = {
+  list: base
+    .errors(errors)
+    .route({
+      method: "GET",
+      path: "/{{kebabCase name}}",
+      tags: ["{{titleCase (sentenceCase name)}}"],
+      summary: "List the organization's {{lowerCase (sentenceCase name)}}, newest first",
+    })
+    .input(pageInput)
+    .output(page({{camelCase item}}Schema)),
+  delete: base
+    .errors(errors)
+    .meta({ rateLimit: writes })
+    .route({
+      method: "DELETE",
+      path: "/{{kebabCase name}}/{id}",
+      tags: ["{{titleCase (sentenceCase name)}}"],
+      summary: "Delete a {{lowerCase (sentenceCase item)}}",
+      successStatus: 204,
+    })
+    .input(z.object({ id: z.uuid() }))
+    .output(z.void()),
+};

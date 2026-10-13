@@ -1,0 +1,6 @@
+{
+  // Tooling-only root config (dependency-cruiser, editors opened at the repo root).
+  // Each package type-checks with its own tsconfig; this one includes no files.
+  "extends": "./packages/typescript-config/base.json",
+  "files": []
+}

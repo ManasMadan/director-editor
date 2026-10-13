@@ -1,0 +1,9 @@
+apiVersion: v2
+name: alerts
+description: >-
+  Alerts for clusters that opt into observability: what Prometheus scrapes besides the
+  services (Postgres, cert-manager, the gateway's proxies, KEDA), the alert rules on it,
+  and where Alertmanager sends them (email, through the cluster's own mail server).
+type: application
+version: 0.1.0
+kubeVersion: ">=1.31.0-0"

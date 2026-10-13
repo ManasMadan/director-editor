@@ -1,0 +1,236 @@
+{{- /*
+Stalwart keeps its settings in its database and only takes them over its management
+API, as an administrator. The only administrator this chart knows is the recovery one,
+which works only while the server runs in recovery mode (no mail service, nothing but
+the management API on localhost:8080). So each start of the pod goes:
+
+  1. plan      writes the settings (plan.ndjson) with the submission password filled in;
+  2. recovery  starts the server in recovery mode (a sidecar, so the next step can reach
+               it) and stops it once the main container starts;
+  3. apply     applies the settings with stalwart-cli, as the recovery administrator;
+  4. stalwart  waits for the recovery server to be gone (one process at a time on the
+               database), then runs the server normally.
+
+A renewed certificate (cert-manager replaces the files in place) is read when the server
+starts, so the main container restarts the server when tls.crt changes.
+
+The image's server binary carries the file capability to bind ports below 1024, and the
+kernel won't start a file whose capabilities the container lacks. The server listens on
+unprivileged ports (mail.listeners) and every container drops all capabilities, so the
+plan step copies the binary (a copy has no file capabilities) and the server runs that.
+*/}}
+{{- $name := include "mail.name" . }}
+{{- $listeners := include "mail.listeners" . | fromYaml }}
+{{- $security := dict
+  "allowPrivilegeEscalation" false
+  "readOnlyRootFilesystem" true
+  "capabilities" (dict "drop" (list "ALL")) }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "mail.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ $name }}
+  # One server: its database is on the node's disk.
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "mail.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mail.selectorLabels" . | nindent 8 }}
+      annotations:
+        # New settings are applied by restarting.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 60
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: plan
+          image: {{ .Values.image }}
+          command: [sh, -c]
+          args:
+            - |
+              set -eu
+              case "$SMTP_PASSWORD" in
+                "" | *[!A-Za-z0-9._~-]*)
+                  echo "SMTP_PASSWORD must be letters, digits and ._~- only (it goes into SMTP_URL)" >&2
+                  exit 1 ;;
+              esac
+              sed "s/@SMTP_PASSWORD@/$SMTP_PASSWORD/g" /etc/stalwart/plan.ndjson > /run/provision/plan.ndjson
+              cp /usr/local/bin/stalwart /run/provision/stalwart
+          env:
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.secretName }}, key: SMTP_PASSWORD }
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { cpu: 100m, memory: 64Mi }
+          securityContext:
+            {{- toYaml $security | nindent 12 }}
+          volumeMounts:
+            - { name: config, mountPath: /etc/stalwart/plan.ndjson, subPath: plan.ndjson, readOnly: true }
+            - { name: provision, mountPath: /run/provision }
+        - name: recovery
+          image: {{ .Values.image }}
+          # A sidecar: it keeps running while the next init container talks to it.
+          restartPolicy: Always
+          command: [sh, -c]
+          args:
+            - |
+              set -eu
+              trap 'exit 0' TERM INT
+              if [ ! -e /run/provision/stopped ]; then
+                STALWART_RECOVERY_MODE=1 /run/provision/stalwart --config /etc/stalwart/config.json &
+                pid=$!
+                until [ -e /run/provision/applied ]; do sleep 1; done
+                kill -TERM "$pid"
+                wait "$pid" || true
+                touch /run/provision/stopped
+              fi
+              while :; do sleep 3600 & wait $!; done
+          env:
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.secretName }}, key: ADMIN_PASSWORD }
+            # Only ever honoured in recovery mode, and only in this container.
+            - name: STALWART_RECOVERY_ADMIN
+              value: admin:$(ADMIN_PASSWORD)
+            - name: STALWART_RECOVERY_MODE_PORT
+              value: "8080"
+          startupProbe:
+            tcpSocket: { port: 8080 }
+            periodSeconds: 2
+            failureThreshold: 90
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml $security | nindent 12 }}
+          volumeMounts:
+            {{- include "mail.serverMounts" . | nindent 12 }}
+        - name: apply
+          image: {{ .Values.cli.image }}
+          args: [apply, --file, /run/provision/plan.ndjson]
+          env:
+            - name: STALWART_URL
+              value: http://127.0.0.1:8080
+            - name: STALWART_USER
+              value: admin
+            - name: STALWART_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.secretName }}, key: ADMIN_PASSWORD }
+            # Its schema cache.
+            - name: HOME
+              value: /tmp
+            - name: XDG_CACHE_HOME
+              value: /tmp
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 200m, memory: 128Mi }
+          securityContext:
+            {{- toYaml $security | nindent 12 }}
+          volumeMounts:
+            - { name: provision, mountPath: /run/provision, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      containers:
+        - name: stalwart
+          image: {{ .Values.image }}
+          command: [sh, -c]
+          args:
+            - |
+              set -eu
+              touch /run/provision/applied
+              until [ -e /run/provision/stopped ]; do sleep 1; done
+              /run/provision/stalwart --config /etc/stalwart/config.json &
+              pid=$!
+              trap 'kill -TERM "$pid"; wait "$pid"; exit' TERM INT
+              certificate=$(sha256sum < /etc/stalwart/tls/tls.crt)
+              while kill -0 "$pid" 2> /dev/null; do
+                sleep 60 & wait $!
+                if [ "$(sha256sum < /etc/stalwart/tls/tls.crt)" != "$certificate" ]; then
+                  echo "The certificate was renewed; restarting to load it."
+                  kill -TERM "$pid"
+                  wait "$pid" || true
+                  exit 1
+                fi
+              done
+              wait "$pid"
+          env:
+            # The webhook's signing key (the WebHook setting reads it from here).
+            - name: STALWART_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.secretName }}, key: STALWART_WEBHOOK_SECRET }
+            {{- if and .Values.relay.host .Values.relay.username }}
+            # The smarthost's password (the relay route reads it from here).
+            - name: RELAY_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.secretName }}, key: RELAY_PASSWORD }
+            {{- end }}
+          ports:
+            {{- range $port, $l := $listeners }}
+            - { name: {{ $port }}, containerPort: {{ $l.containerPort }} }
+            {{- end }}
+            # Management and health, plain HTTP: not in the Service, never public.
+            - { name: http, containerPort: 8080 }
+          startupProbe:
+            httpGet: { path: /healthz/live, port: http }
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: { path: /healthz/ready, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz/live, port: http }
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml $security | nindent 12 }}
+          volumeMounts:
+            {{- include "mail.serverMounts" . | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $name }}
+        - name: tls
+          secret:
+            secretName: {{ $name }}-tls
+        - name: dkim
+          secret:
+            secretName: {{ .Values.secretName }}
+            items:
+              - { key: dkim.key, path: private.key }
+        - name: provision
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.storage.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.storage.size }}

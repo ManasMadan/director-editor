@@ -1,0 +1,5 @@
+import { coverage } from "@repo/vitest-config";
+import { defineConfig } from "vitest/config";
+
+// Every file at 100%, checked across all suites by scripts/coverage.ts (docs/testing.md).
+export default defineConfig({ test: { coverage: coverage() } });

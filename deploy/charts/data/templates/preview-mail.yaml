@@ -1,0 +1,151 @@
+{{- /*
+A preview's mail goes to a Mailpit of its own, never out: a pull request's code must
+not spend the domain's reputation or mail real people. It speaks SMTP over TLS with a
+login, as production settings require (Mailpit takes any login), with a certificate
+from a certificate authority made for this namespace by cert-manager; the preview's
+notifications service trusts that authority (deploy/environments/preview/stack.yaml).
+See what a preview sent with
+  kubectl -n pr-<number> port-forward svc/mailpit 8025   →   http://localhost:8025
+*/}}
+{{- if and .Values.preview.enabled .Values.preview.mailpit.enabled }}
+{{- $m := .Values.preview.mailpit }}
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: mailpit-selfsigned
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: mailpit-ca
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+spec:
+  isCA: true
+  commonName: mailpit-ca
+  secretName: mailpit-ca
+  privateKey: { algorithm: ECDSA, size: 256 }
+  issuerRef: { name: mailpit-selfsigned, kind: Issuer }
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: mailpit-ca
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+spec:
+  ca:
+    secretName: mailpit-ca
+---
+# Its Secret has ca.crt too: what the notifications service trusts.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: mailpit
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+spec:
+  secretName: {{ $m.tlsSecret }}
+  dnsNames: [mailpit]
+  privateKey: { algorithm: ECDSA, size: 256 }
+  issuerRef: { name: mailpit-ca, kind: Issuer }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailpit
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+    app.kubernetes.io/name: mailpit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mailpit
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mailpit
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "data.podSecurity" $ | nindent 8 }}
+      containers:
+        - name: mailpit
+          image: {{ $m.image }}
+          env:
+            - { name: MP_SMTP_TLS_CERT, value: /tls/tls.crt }
+            - { name: MP_SMTP_TLS_KEY, value: /tls/tls.key }
+            - { name: MP_SMTP_REQUIRE_TLS, value: "true" }
+            - { name: MP_SMTP_AUTH_ACCEPT_ANY, value: "true" }
+            - { name: MP_MAX_MESSAGES, value: "1000" }
+          ports:
+            - { name: smtp, containerPort: 1025 }
+            - { name: http, containerPort: 8025 }
+          readinessProbe:
+            tcpSocket: { port: smtp }
+            periodSeconds: 10
+          resources:
+            {{- toYaml $m.resources | nindent 12 }}
+          securityContext:
+            {{- include "data.containerSecurity" . | nindent 12 }}
+          volumeMounts:
+            - { name: tls, mountPath: /tls, readOnly: true }
+            # Its message database is a file in the temp directory: without a writable
+            # one under the read-only root it exits at once.
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tls
+          secret:
+            secretName: {{ $m.tlsSecret }}
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: mailpit
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - { name: smtp, port: 1025, targetPort: smtp }
+    - { name: http, port: 8025, targetPort: http }
+---
+# The namespace accepts nothing a policy doesn't allow: the services send mail to it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mailpit
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: mailpit
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 1025
+        - port: 8025
+{{- end }}

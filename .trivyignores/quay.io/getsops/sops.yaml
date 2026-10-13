@@ -1,0 +1,73 @@
+# Reviewed exceptions for quay.io/getsops/sops (scripts/image-scan.ts): fixable vulnerabilities in
+# the image as published, with no rebuild of it upstream that has the fix as of
+# 2026-10-06. Each expires in about a month; the scan then fails until the image moves
+# to a fixed release (Renovate proposes it) or the entry is reviewed again.
+vulnerabilities:
+  - id: CVE-2026-14456
+    statement: >-
+      libcrypto3 3.5.7-r0 (fixed in 3.5.8-r0); libssl3 3.5.7-r0 (fixed in 3.5.8-r0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-33818
+    statement: >-
+      stdlib v1.26.5 (fixed in 1.25.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-39821
+    statement: >-
+      stdlib v1.26.5 (fixed in 1.25.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-46600
+    statement: >-
+      stdlib v1.26.5 (fixed in 1.26.6): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56853
+    statement: >-
+      stdlib v1.26.5 (fixed in 1.25.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56854
+    statement: >-
+      golang.org/x/crypto v0.54.0 (fixed in 0.55.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56858
+    statement: >-
+      stdlib v1.26.5 (fixed in 1.25.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56859
+    statement: >-
+      stdlib v1.26.5 (fixed in 1.25.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56860
+    statement: >-
+      stdlib v1.26.5 (fixed in 1.25.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56862
+    statement: >-
+      stdlib v1.26.5 (fixed in 1.25.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-73072
+    statement: >-
+      vim 9.2.0747-r0 (fixed in 9.2.0854-r0); vim-common 9.2.0747-r0 (fixed in 9.2.0854-r0); xxd 9.2.0747-r0 (fixed in 9.2.0854-r0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-73073
+    statement: >-
+      vim 9.2.0747-r0 (fixed in 9.2.0854-r0); vim-common 9.2.0747-r0 (fixed in 9.2.0854-r0); xxd 9.2.0747-r0 (fixed in 9.2.0854-r0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-73076
+    statement: >-
+      vim 9.2.0747-r0 (fixed in 9.2.0854-r0); vim-common 9.2.0747-r0 (fixed in 9.2.0854-r0); xxd 9.2.0747-r0 (fixed in 9.2.0854-r0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-73077
+    statement: >-
+      vim 9.2.0747-r0 (fixed in 9.2.0843-r0); vim-common 9.2.0747-r0 (fixed in 9.2.0843-r0); xxd 9.2.0747-r0 (fixed in 9.2.0843-r0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-73078
+    statement: >-
+      vim 9.2.0747-r0 (fixed in 9.2.0843-r0); vim-common 9.2.0747-r0 (fixed in 9.2.0843-r0); xxd 9.2.0747-r0 (fixed in 9.2.0843-r0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-84304
+    statement: >-
+      google.golang.org/grpc v1.82.1 (fixed in 1.83.1): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-84445
+    statement: >-
+      google.golang.org/grpc v1.82.1 (fixed in 1.82.2): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05

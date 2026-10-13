@@ -1,0 +1,45 @@
+// Owner: apps/api (uploads are requested, completed and removed through it), with one
+// shared job: apps/worker checks each upload (type, virus scan, image re-encode) and
+// records the result in the processing columns (column-level grant). Rows are private
+// to their uploader by row-level security; ready avatars are readable by anyone signed in.
+
+/// An uploaded file. Its bytes live in object storage: first under `quarantine/<id>`
+/// while unchecked, then under `files/<id>` once accepted.
+model File {
+  id           String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  /// What it's for (packages/contracts files `uploadPurposes`): decides the allowed
+  /// types, the size limit, what processing it gets and who may read it.
+  purpose      String
+  /// pending (waiting for the upload) | processing | ready | rejected
+  status       String    @default("pending")
+  filename     String
+  /// What the client said it would upload (the presigned URL is signed for exactly this).
+  declaredType String    @map("declared_type")
+  declaredSize Int       @map("declared_size")
+  /// What the worker found and stored.
+  contentType  String?   @map("content_type")
+  size         Int?
+  sha256       String?
+  /// Why it was rejected (a FILE_* error code).
+  rejectReason String?   @map("reject_reason")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  readyAt      DateTime? @map("ready_at") @db.Timestamptz(3)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@map("file")
+  @@schema("files")
+}
+
+/// Objects whose file row was deleted (directly, or with its user), waiting for the
+/// worker to remove them from storage. Filled by a trigger, so no path forgets it.
+model FileObjectDeletion {
+  key       String   @id
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("object_deletion")
+  @@schema("files")
+}

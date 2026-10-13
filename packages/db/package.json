@@ -1,0 +1,35 @@
+{
+  "name": "@repo/db",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/index.ts"
+  },
+  "scripts": {
+    "gen": "prisma generate",
+    "migrate": "bun --env-file=../../.env run prisma migrate dev",
+    "deploy": "bun --env-file=../../.env run prisma migrate deploy",
+    "reset": "bun --env-file=../../.env run prisma migrate reset --force",
+    "studio": "bun --env-file=../../.env run prisma studio",
+    "check-types": "tsc",
+    "test:integration": "vitest run",
+    "drift": "bun --env-file=../../.env scripts/drift.ts",
+    "coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "catalog:",
+    "@prisma/client": "catalog:",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@repo/contracts": "workspace:*",
+    "@repo/testing": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/pg": "^8.23.1",
+    "prisma": "catalog:",
+    "vitest": "catalog:"
+  }
+}

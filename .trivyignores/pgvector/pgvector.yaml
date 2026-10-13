@@ -1,0 +1,97 @@
+# Reviewed exceptions for pgvector/pgvector (scripts/image-scan.ts): fixable vulnerabilities in
+# the image as published, with no rebuild of it upstream that has the fix as of
+# 2026-10-06. Each expires in about a month; the scan then fails until the image moves
+# to a fixed release (Renovate proposes it) or the entry is reviewed again.
+vulnerabilities:
+  - id: CVE-2025-61726
+    statement: >-
+      stdlib v1.24.6 (fixed in 1.24.12): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2025-61729
+    statement: >-
+      stdlib v1.24.6 (fixed in 1.24.11): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2025-68121
+    statement: >-
+      stdlib v1.24.6 (fixed in 1.24.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-103111
+    statement: >-
+      libpcre2-8-0 10.46-1~deb13u2 (fixed in 10.46-1~deb13u3): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-25679
+    statement: >-
+      stdlib v1.24.6 (fixed in 1.25.8): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-27145
+    statement: >-
+      stdlib v1.24.6 (fixed in 1.25.11): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-32280
+    statement: >-
+      stdlib v1.24.6 (fixed in 1.25.9): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-32281
+    statement: >-
+      stdlib v1.24.6 (fixed in 1.25.9): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-32283
+    statement: >-
+      stdlib v1.24.6 (fixed in 1.25.9): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-33811
+    statement: >-
+      stdlib v1.24.6 (fixed in 1.25.10): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-33814
+    statement: >-
+      stdlib v1.24.6 (fixed in 1.25.10): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-33818
+    statement: >-
+      stdlib v1.24.6 (fixed in 1.25.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-39820
+    statement: >-
+      stdlib v1.24.6 (fixed in 1.25.10): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-39821
+    statement: >-
+      stdlib v1.24.6 (fixed in 1.25.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-39822
+    statement: >-
+      stdlib v1.24.6 (fixed in 1.25.12): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-39836
+    statement: >-
+      stdlib v1.24.6 (fixed in 1.25.10): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-42499
+    statement: >-
+      stdlib v1.24.6 (fixed in 1.25.10): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-42504
+    statement: >-
+      stdlib v1.24.6 (fixed in 1.25.11): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56853
+    statement: >-
+      stdlib v1.24.6 (fixed in 1.25.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56858
+    statement: >-
+      stdlib v1.24.6 (fixed in 1.25.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56859
+    statement: >-
+      stdlib v1.24.6 (fixed in 1.25.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56860
+    statement: >-
+      stdlib v1.24.6 (fixed in 1.25.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56862
+    statement: >-
+      stdlib v1.24.6 (fixed in 1.25.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05

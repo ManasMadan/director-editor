@@ -1,0 +1,19 @@
+{
+  "ai-ingest": {
+    "prefix": "{ai-ingest}",
+    "options": {
+      "attempts": 5,
+      "backoff": {
+        "type": "exponential",
+        "delay": 2000,
+        "jitter": 0.5
+      },
+      "removeOnComplete": {
+        "age": 86400
+      },
+      "removeOnFail": {
+        "age": 604800
+      }
+    }
+  }
+}

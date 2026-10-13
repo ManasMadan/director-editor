@@ -1,0 +1,14 @@
+name: Feature
+description: Something new, or a change to how something works.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem it solves
+      description: Who needs it and what they do today instead.
+    validations: { required: true }
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you have in mind

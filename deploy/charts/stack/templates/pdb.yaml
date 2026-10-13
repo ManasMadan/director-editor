@@ -1,0 +1,20 @@
+{{- range $name := keys .Values.services | sortAlpha }}
+{{- $svc := include "stack.service" (list $ $name) | fromYaml }}
+{{- if and $svc.enabled $svc.pdb.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "stack.fullname" (list $ $name) }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "stack.labels" (list $ $name) | nindent 4 }}
+spec:
+  maxUnavailable: {{ $svc.pdb.maxUnavailable }}
+  # A crash-looping pod shouldn't block node drains.
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      {{- include "stack.selectorLabels" (list $ $name) | nindent 6 }}
+{{- end }}
+{{- end }}

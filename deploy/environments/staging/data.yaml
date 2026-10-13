@@ -1,0 +1,14 @@
+# Staging: production's shape at a smaller size, with backups (so restores can be tried
+# here first).
+postgres:
+  backups:
+    enabled: true
+    retention: 7d
+  # Every week, the latest backup restored into a scratch cluster and checked.
+  drill:
+    enabled: true
+storage:
+  uploads:
+    # Your staging hosts: one of the gateway's (<domain> or *.<domain>).
+    host: staging-files.example.com
+    corsOrigins: [https://staging.example.com]

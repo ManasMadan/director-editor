@@ -1,0 +1,190 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "**",
+      "!**/generated",
+      "!**/*.gen.ts",
+      "!**/*.d.json.ts",
+      "!**/openapi.json",
+      "!apps/ai/.venv",
+      "!**/.next",
+      "!**/dist",
+      "!**/storybook-static"
+    ]
+  },
+  "formatter": {
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "linter": {
+    "rules": {
+      "preset": "recommended",
+      "correctness": {
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error",
+        "useExhaustiveDependencies": "error"
+      },
+      "suspicious": {
+        "noExplicitAny": "error",
+        "noConsole": "error",
+        // An error, not the preset's warning: its safe fix quietly turns @ts-ignore into
+        // @ts-expect-error, which then passes.
+        "noTsIgnore": "error",
+        // An empty block is a failure swallowed or code left unfinished; say why instead.
+        "noEmptyBlockStatements": "error",
+        // A skipped test is a test that silently stopped running. The few that need a
+        // credential use skipIf with the reason, listed in docs/testing.md.
+        "noSkippedTests": "error",
+        "noFocusedTests": "error"
+      },
+      "complexity": {
+        "noUselessCatch": "error",
+        // A function a reader can't hold in their head: split it into named steps (a
+        // lookup table, an early return, a helper per case) rather than raising this.
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": { "maxAllowedComplexity": 15 }
+        },
+        // Sixty lines is a screen: past that a function does more than one thing. Tests are
+        // exempt (overrides below): a describe block is as long as its list of cases.
+        "noExcessiveLinesPerFunction": {
+          "level": "error",
+          "options": { "maxLines": 60 }
+        }
+      },
+      "style": {
+        "noNonNullAssertion": "error",
+        // Every if, else and loop body in braces: a second line added to an unbraced body
+        // silently runs outside the condition.
+        "useBlockStatements": "error",
+        "useImportType": "error",
+        // Reassigning a parameter hides what the caller passed; name the new value.
+        "noParameterAssign": "error",
+        // A ternary inside a ternary reads as a puzzle: early returns, a lookup table, or
+        // one condition per JSX branch instead.
+        "noNestedTernary": "error",
+        // One way to import zod everywhere, `import * as z from "zod"`: in code that reaches
+        // the browser the bundler keeps only the members used, while `import { z }` binds
+        // zod's prebuilt namespace object and ships all of zod, every language's messages
+        // included (~57 kB gzipped). Server code follows the same style so a file can move
+        // between the two without a rewrite.
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "paths": {
+              "zod": {
+                "importNames": ["z", "default"],
+                "message": "Use `import * as z from \"zod\"`, which the bundler can prune (see biome.jsonc)."
+              }
+            }
+          }
+        }
+      },
+      "nursery": {
+        "noFloatingPromises": "error",
+        "noMisusedPromises": "error"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/test/**",
+        "**/e2e/**",
+        "**/*.stories.tsx"
+      ],
+      "linter": { "rules": { "complexity": { "noExcessiveLinesPerFunction": "off" } } }
+    },
+    {
+      // Playwright's conditional skip, for the two browser tests that need real
+      // credentials: both are in docs/testing.md's "Skipped tests" table.
+      "includes": ["apps/web/e2e/captcha.spec.ts", "apps/web/e2e/google.spec.ts"],
+      "linter": { "rules": { "suspicious": { "noSkippedTests": "off" } } }
+    },
+    {
+      // Theme tokens set each variable once per @variant (light, dark); Biome reads the
+      // blocks as one rule and reports the second value as a duplicate.
+      "includes": ["packages/ui/src/styles/theme.css"],
+      "linter": { "rules": { "suspicious": { "noDuplicateCustomProperties": "off" } } }
+    },
+    {
+      // Nest code. Nest's dependency injection reads each constructor parameter's type from
+      // the decorator metadata TypeScript emits, which needs the imported class at runtime;
+      // `import type` erases it, and injection then fails at boot. Modules are classes with
+      // only a decorator and static members (`forRoot()`), which is Nest's shape, not a
+      // mistake.
+      "includes": [
+        "apps/api/**",
+        "apps/webhooks/**",
+        "apps/notifications/**",
+        "apps/worker/**",
+        "packages/nest-common/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "useImportType": "off"
+          },
+          "complexity": {
+            "noStaticOnlyClass": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "**/scripts/**",
+        "**/*.config.ts",
+        "**/*.config.mjs",
+        "apps/api/src/seed.ts",
+        "apps/api/src/load-users.ts",
+        "apps/api/src/reencrypt.ts",
+        "deploy/docker/*.mjs",
+        ".claude/hooks/**"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/typescript-config/*.json", "turbo.json", "**/tsconfig*.json"],
+      "json": {
+        "parser": {
+          "allowComments": true,
+          "allowTrailingCommas": false
+        }
+      }
+    }
+  ],
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
+  "javascript": {
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": true
+    }
+  }
+}

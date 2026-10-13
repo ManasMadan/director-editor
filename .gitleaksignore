@@ -1,0 +1,13 @@
+# Findings reviewed and known to be safe (not secrets), by fingerprint
+# (commit:file:rule:line). Anything else gitleaks finds fails the Security workflow.
+
+# The RFC 6238 appendix B test secret (the standard's published TOTP test vector).
+52b33cb87fc5981ee6acea1826de3ddcbb4407db:packages/testing/src/totp.test.ts:generic-api-key:6
+# A made-up browser push subscription (keys a real push service never issued).
+3c701b3dfa83cb203a0c69810758d9d341b831fb:apps/web/e2e/push.spec.ts:generic-api-key:24
+# A fake EC key in the k3s module's test mocks, never a real key; the mock is no longer
+# PEM-shaped, but full-history scans still see this commit.
+b76d414661e92dd8eb2665d3ec8cbdaf49fd6c4c:infra/tofu/modules/k3s/tests/k3s.tftest.hcl:private-key:12
+# A made-up encrypted webhook secret under a key id no service has (the webhooks suite's
+# botched-rotation case), never a real secret.
+2dcb141b8aaa82522727d08df36b645f632bcd43:apps/webhooks/test/webhooks.integration.test.ts:generic-api-key:321

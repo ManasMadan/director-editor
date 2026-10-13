@@ -1,0 +1,52 @@
+# How `trivy config` checks the infrastructure code (Dockerfiles, Kubernetes manifests,
+# Helm charts, OpenTofu). The Security workflow's "Infrastructure misconfigurations" job
+# and the pre-commit hook (scripts/misconfig.ts) both read this file, so a change the
+# hook passes passes CI. Any finding fails, whatever its severity: fix it, or record why
+# it doesn't apply in .trivyignore.yaml.
+exit-code: 1
+ignorefile: .trivyignore.yaml
+scan:
+  # deploy/.rendered/isolated has passes of its own (scripts/misconfig.ts, ISOLATED_KINDS).
+  # Every folder .gitignore lists is build or test output: other checks write and delete
+  # files there while this one walks the tree (scripts/misconfig.test.ts keeps the two in
+  # step).
+  skip-dirs:
+    - apps/mobile
+    - deploy/.rendered/isolated
+    - "**/node_modules"
+    - "**/.venv"
+    - "**/.next"
+    - "**/out"
+    - "**/dist"
+    - "**/.turbo"
+    - "**/coverage"
+    - "**/playwright-report"
+    - "**/storybook-static"
+    - "**/test-results"
+    - "**/.vitest"
+    - "**/logs"
+    - "**/__pycache__"
+    - "**/.pytest_cache"
+    - "**/.ruff_cache"
+    - "**/.schemathesis"
+    - "**/.terraform"
+    - "**/.playwright-cli"
+  # No calls home: it asks GitHub for a newer release and sends usage counts otherwise.
+  skip-version-check: true
+  disable-telemetry: true
+misconfiguration:
+  # Every scanner but Helm's: our charts are scanned as scripts/misconfig.ts renders them
+  # (deploy/.rendered), with the values each environment and cluster sets, which Trivy's
+  # own Helm rendering doesn't have (it skipped every chart that requires a value).
+  scanners: [azure-arm, cloudformation, dockerfile, kubernetes, terraform, ansible]
+  # OpenTofu evaluated as production plans it (its one secret variable, the state
+  # passphrase, comes from TF_VAR_state_passphrase: scripts/misconfig.ts sets a stand-in).
+  terraform:
+    vars: [infra/tofu/envs/k3s/production.tfvars.example]
+rego:
+  # The checks built into this Trivy version, not the latest bundle from the registry:
+  # the same Trivy finds the same things locally and in CI, and a check published
+  # upstream reaches us with a reviewed Trivy upgrade. (Trivy logs this as "Falling back
+  # to embedded checks", an error line that's expected.)
+  skip-check-update: true
+  data: [deploy/trivy]

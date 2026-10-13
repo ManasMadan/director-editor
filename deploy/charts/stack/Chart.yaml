@@ -1,0 +1,12 @@
+apiVersion: v2
+name: stack
+description: >-
+  The application: every service of the monorepo from one values file. Each entry under
+  `services` becomes a Deployment with its Service, service account, gateway routes,
+  autoscaling, disruption budget and network policy; the database migration runs as a
+  Job before each install or upgrade. Postgres, Valkey and object storage come from the
+  `data` chart, as Secrets this chart reads; the services' own Secrets from SOPS.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.31.0-0"

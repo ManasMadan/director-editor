@@ -1,0 +1,103 @@
+{{- /*
+The offsite copy (values.yaml, `offsite`): a CronJob per bucket (the backups with
+postgres.backups, the uploads with storage.uploads) that copies what's new to the
+S3-compatible storage at offsite.endpoint. `rclone copy` never deletes there, so
+whatever happens to the cluster's buckets, the copy keeps what it had.
+*/}}
+{{- $o := .Values.offsite }}
+{{- $s := .Values.storage }}
+{{- if and $o.required (not $o.endpoint) }}
+{{- fail "offsite.endpoint is required here: backups and uploads need a copy outside the cluster (deploy/README.md, Backups)" }}
+{{- end }}
+{{- if $o.endpoint }}
+{{- $bucket := required "offsite.bucket is required with offsite.endpoint" $o.bucket }}
+{{- $prefix := required "offsite.prefix is required with offsite.endpoint: this environment's folder of the bucket" $o.prefix }}
+{{- $sources := list }}
+{{- if .Values.postgres.backups.enabled }}
+{{- $sources = append $sources (dict "role" "backups" "bucket" $s.backups.bucket "secret" (include "data.backupsSecret" .)) }}
+{{- end }}
+{{- if $s.uploads.enabled }}
+{{- $sources = append $sources (dict "role" "uploads" "bucket" $s.uploads.bucket "secret" $s.uploads.secretName) }}
+{{- end }}
+{{- range $source := $sources }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "data.name" $ }}-offsite-{{ $source.role }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" $ | nindent 4 }}
+spec:
+  schedule: {{ $o.schedule | quote }}
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
+  successfulJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: offsite
+            app.kubernetes.io/component: {{ $source.role }}
+            app.kubernetes.io/instance: {{ $.Release.Name }}
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            {{- include "data.podSecurity" $ | nindent 12 }}
+          containers:
+            - name: copy
+              image: {{ $o.image }}
+              args:
+                - copy
+                - {{ printf "cluster:%s" $source.bucket | quote }}
+                - {{ printf "offsite:%s/%s/%s" $bucket $prefix $source.role | quote }}
+                - --s3-no-check-bucket
+                - --stats-one-line
+                - --stats=0
+                - -v
+              env:
+                - name: HOME
+                  value: /tmp
+                - name: RCLONE_CONFIG_CLUSTER_TYPE
+                  value: s3
+                - name: RCLONE_CONFIG_CLUSTER_PROVIDER
+                  value: Other
+                - name: RCLONE_CONFIG_CLUSTER_ENDPOINT
+                  value: {{ include "data.rustfsEndpoint" (list $ $source.role) }}
+                - name: RCLONE_CONFIG_CLUSTER_REGION
+                  value: {{ $s.region }}
+                - name: RCLONE_CONFIG_CLUSTER_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef: { name: {{ $source.secret }}, key: accessKeyId }
+                - name: RCLONE_CONFIG_CLUSTER_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef: { name: {{ $source.secret }}, key: secretAccessKey }
+                - name: RCLONE_CONFIG_OFFSITE_TYPE
+                  value: s3
+                - name: RCLONE_CONFIG_OFFSITE_PROVIDER
+                  value: Other
+                - name: RCLONE_CONFIG_OFFSITE_ENDPOINT
+                  value: {{ $o.endpoint }}
+                - name: RCLONE_CONFIG_OFFSITE_REGION
+                  value: {{ $o.region }}
+                - name: RCLONE_CONFIG_OFFSITE_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef: { name: {{ $o.secretName }}, key: accessKeyId }
+                - name: RCLONE_CONFIG_OFFSITE_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef: { name: {{ $o.secretName }}, key: secretAccessKey }
+              resources:
+                {{- toYaml $o.resources | nindent 16 }}
+              securityContext:
+                {{- include "data.containerSecurity" $ | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}
+{{- end }}
+{{- end }}

@@ -1,0 +1,166 @@
+suite: platform config
+release: { name: platform-config, namespace: gateway-system }
+set:
+  domain: example.com
+  tls.email: ops@example.com
+tests:
+  - it: serves HTTPS for the zone and its subdomains, with previews' when it hosts them
+    template: gateway.yaml
+    documentSelector: { path: kind, value: Gateway }
+    set:
+      previews: true
+    asserts:
+      - equal: { path: "spec.listeners[1].hostname", value: example.com }
+      - equal: { path: "spec.listeners[2].hostname", value: "*.example.com" }
+      - equal: { path: "spec.listeners[3].hostname", value: "*.preview.example.com" }
+      - equal: { path: "spec.listeners[3].tls.certificateRefs", value: [{ name: tls-wildcard-preview-example-com }] }
+      - equal: { path: 'metadata.annotations["cert-manager.io/cluster-issuer"]', value: letsencrypt }
+
+  - it: has no preview listener elsewhere
+    template: gateway.yaml
+    documentSelector: { path: kind, value: Gateway }
+    asserts:
+      - lengthEqual: { path: spec.listeners, count: 3 }
+
+  - it: forwards on every node, since Cloudflare may reach any of them
+    template: gateway.yaml
+    documentSelector: { path: kind, value: EnvoyProxy }
+    asserts:
+      - equal: { path: spec.provider.kubernetes.envoyService.externalTrafficPolicy, value: Cluster }
+
+  - it: runs the proxies from the image it names, by digest, with CPU and memory limits
+    template: gateway.yaml
+    documentSelector: { path: kind, value: EnvoyProxy }
+    asserts:
+      - matchRegex:
+          path: spec.provider.kubernetes.envoyDeployment.container.image
+          pattern: '^docker\.io/envoyproxy/envoy:distroless-v[0-9.]+@sha256:[0-9a-f]{64}$'
+      - exists: { path: spec.provider.kubernetes.envoyDeployment.container.resources.limits.cpu }
+      - exists: { path: spec.provider.kubernetes.envoyDeployment.container.resources.limits.memory }
+
+  - it: trusts one proxy hop (Cloudflare) for the client's address on the site's hosts
+    template: gateway.yaml
+    documentSelector: { path: metadata.name, value: public, matchMany: true }
+    asserts:
+      - equal: { path: spec.clientIPDetection.xForwardedFor.numTrustedHops, value: 1 }
+        documentSelector: { path: kind, value: ClientTrafficPolicy }
+
+  - it: lets only Cloudflare connect to the site's hosts, so X-Forwarded-For can't be forged
+    template: gateway.yaml
+    set:
+      previews: true
+    asserts:
+      - equal:
+          path: spec.targetRefs
+          value:
+            - { group: gateway.networking.k8s.io, kind: Gateway, name: public, sectionName: https-0 }
+            - { group: gateway.networking.k8s.io, kind: Gateway, name: public, sectionName: https-1 }
+        documentSelector: { path: "spec.targetRefs[0].sectionName", value: https-0 }
+      - equal:
+          path: spec.tls.clientValidation.caCertificateRefs
+          value: [{ kind: ConfigMap, name: cloudflare-origin-pull-ca }]
+        documentSelector: { path: "spec.targetRefs[0].sectionName", value: https-0 }
+      - matchRegex:
+          path: data["ca.crt"]
+          pattern: "^-----BEGIN CERTIFICATE-----"
+        documentSelector: { path: kind, value: ConfigMap }
+
+  - it: drops the X-Forwarded-For a preview's visitor sends, since previews skip Cloudflare
+    template: gateway.yaml
+    set:
+      previews: true
+    documentSelector: { path: metadata.name, value: previews }
+    asserts:
+      - equal: { path: "spec.targetRefs[0].sectionName", value: https-2 }
+      - equal: { path: spec.headers.earlyRequestHeaders.remove, value: [X-Forwarded-For] }
+      - notExists: { path: spec.tls }
+
+  - it: requires no client certificate when there's no Cloudflare in front
+    template: gateway.yaml
+    set:
+      gateway.originPulls: false
+    asserts:
+      - notExists: { path: spec.tls }
+        documentSelector: { path: kind, value: ClientTrafficPolicy }
+      - hasDocuments: { count: 5 }
+
+  - it: issues certificates through Cloudflare DNS with the SOPS-provided token
+    template: issuer.yaml
+    asserts:
+      - equal:
+          path: "spec.acme.solvers[0].dns01.cloudflare.apiTokenSecretRef"
+          value: { name: cloudflare-api-token, key: token }
+      - equal: { path: spec.acme.server, value: https://acme-v02.api.letsencrypt.org/directory }
+
+  - it: issues certificates through a name server of our own, signed with its TSIG key
+    template: issuer.yaml
+    set:
+      tls.dns01.provider: rfc2136
+      tls.dns01.rfc2136.nameserver: 192.0.2.53:53
+      tls.dns01.rfc2136.tsigKeyName: cluster
+      tls.dns01.rfc2136.tsigAlgorithm: hmac-sha512
+    asserts:
+      - equal:
+          path: "spec.acme.solvers[0].dns01"
+          value:
+            rfc2136:
+              nameserver: 192.0.2.53:53
+              tsigKeyName: cluster
+              tsigAlgorithm: HMACSHA512
+              tsigSecretSecretRef: { name: rfc2136-tsig, key: secret }
+
+  - it: needs the name server for RFC 2136
+    template: issuer.yaml
+    set:
+      tls.dns01.provider: rfc2136
+    asserts:
+      - failedTemplate: { errorMessage: "tls.dns01.rfc2136.nameserver is required (host:port)" }
+
+  - it: refuses a DNS provider it doesn't know
+    template: issuer.yaml
+    set:
+      tls.dns01.provider: route53
+    asserts:
+      - failedTemplate: { errorMessage: 'tls.dns01.provider is cloudflare or rfc2136, not "route53"' }
+
+  - it: needs an email for Let's Encrypt
+    template: issuer.yaml
+    set:
+      tls.email: ""
+    asserts:
+      - failedTemplate: { errorMessage: "tls.email is required (Let's Encrypt expiry notices)" }
+
+  - it: admits only signed images when the policy is on
+    template: image-policy.yaml
+    set:
+      imagePolicy.enabled: true
+    asserts:
+      - equal: { path: "spec.rules[0].verifyImages[0].imageReferences", value: ["ghcr.io/manasmadan/boilerplate/*"] }
+
+  - it: checks signatures keylessly, against the CI workflow's identity, by default
+    template: image-policy.yaml
+    set:
+      imagePolicy.enabled: true
+    asserts:
+      - equal:
+          path: "spec.rules[0].verifyImages[0].attestors[0].entries[0].keyless.issuer"
+          value: https://token.actions.githubusercontent.com
+
+  - it: checks signatures against a key alone, without Sigstore's transparency log
+    template: image-policy.yaml
+    set:
+      imagePolicy.enabled: true
+      imagePolicy.publicKey: "-----BEGIN PUBLIC KEY-----\nMFkw\n-----END PUBLIC KEY-----"
+    asserts:
+      - equal:
+          path: "spec.rules[0].verifyImages[0].attestors[0].entries[0]"
+          value:
+            keys:
+              publicKeys: "-----BEGIN PUBLIC KEY-----\nMFkw\n-----END PUBLIC KEY-----"
+              rekor: { ignoreTlog: true }
+              ctlog: { ignoreSCT: true }
+
+  - it: has no image policy by default
+    template: image-policy.yaml
+    asserts:
+      - hasDocuments: { count: 0 }

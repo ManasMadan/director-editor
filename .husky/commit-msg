@@ -1,0 +1,2 @@
+# Rejects commit messages that are not Conventional Commits (see commitlint.config.ts).
+bunx --no -- commitlint --edit "$1"

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // Shared compiler settings for every TypeScript package in the repo.
+  //
+  // The goal is "if it compiles, it works": the flags below turn classes of runtime
+  // bugs into compile errors. Loosen one only if you understand what it catches.
+  //
+  // The repo stays on TypeScript 6 (the root catalog, and a Renovate rule): TypeScript 7,
+  // the native compiler, has no JavaScript compiler API yet, and openapi-typescript,
+  // Next's build-time type check and Storybook's docgen all call that API.
+  "compilerOptions": {
+    // --- Strictness -----------------------------------------------------------
+    "strict": true,
+    // `arr[i]` and `record[key]` are typed `T | undefined`, because at runtime they are.
+    "noUncheckedIndexedAccess": true,
+    // Deliberately NOT enabled: `exactOptionalPropertyTypes`. It rejects passing
+    // `undefined` to optional props, which most React libraries (and shadcn's generated
+    // components) do routinely, so every new component would need hand-patching.
+    // Every code path of a function that returns a value must return one.
+    "noImplicitReturns": true,
+    // Overriding a base-class member requires the `override` keyword.
+    "noImplicitOverride": true,
+    // Switch cases must `break`/`return` explicitly.
+    "noFallthroughCasesInSwitch": true,
+
+    // --- Modules --------------------------------------------------------------
+    // Every package is executed by a bundler-aware runtime (Bun, Next/Turbopack), so
+    // we use the resolution rules those tools implement and never emit JS with tsc.
+    // Workspace packages are consumed as TypeScript source ("just-in-time" packages):
+    // no build step, no stale `dist/` types, go-to-definition lands in real source.
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "moduleDetection": "force",
+    "resolveJsonModule": true,
+    // Lets a generated `x.d.json.ts` type `x.json`: the English catalog is typed with each
+    // message's literal text, so translations' ICU arguments are checked (packages/i18n).
+    "allowArbitraryExtensions": true,
+    "noEmit": true,
+    // Required by every single-file transpiler (Bun, SWC, esbuild): each file must be
+    // compilable on its own, so type-only imports must be marked `import type`.
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "esModuleInterop": true,
+
+    // --- Environment ----------------------------------------------------------
+    "target": "ES2024",
+    "lib": ["ES2024"],
+    // Skip type-checking third-party .d.ts files. Our own code is still fully checked.
+    "skipLibCheck": true,
+
+    // --- Speed ----------------------------------------------------------------
+    // What the last check found, per package: the next one re-checks only the files a
+    // change can affect. In each package's own node_modules (`${configDir}`), which CI
+    // caches between runs (the types job).
+    "incremental": true,
+    "tsBuildInfoFile": "${configDir}/node_modules/.cache/tsc/tsconfig.tsbuildinfo"
+  },
+  // Relative to this file, so every package that extends it gets the stricter built-ins.
+  "files": ["./reset.d.ts"]
+}

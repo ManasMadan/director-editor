@@ -1,0 +1,315 @@
+suite: deployments
+templates: [deployment.yaml]
+release: { name: demo, namespace: apps }
+set:
+  image.tag: sha-abc123
+  site.host: app.example.com
+tests:
+  - it: renders one Deployment per enabled service
+    asserts:
+      - hasDocuments: { count: 7 }
+
+  - it: runs every service locked down
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - equal: { path: spec.template.spec.automountServiceAccountToken, value: false }
+      - equal: { path: spec.template.spec.securityContext.runAsNonRoot, value: true }
+      - equal: { path: spec.template.spec.securityContext.runAsUser, value: 10001 }
+      - equal: { path: spec.template.spec.securityContext.seccompProfile.type, value: RuntimeDefault }
+      - equal: { path: "spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem", value: true }
+      - equal: { path: "spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation", value: false }
+      - equal: { path: "spec.template.spec.containers[0].securityContext.capabilities.drop", value: [ALL] }
+      - equal: { path: spec.strategy.rollingUpdate.maxUnavailable, value: 0 }
+
+  - it: runs the build's image and reports it as RELEASE
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - equal: { path: "spec.template.spec.containers[0].image", value: ghcr.io/manasmadan/boilerplate/api:sha-abc123 }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: RELEASE, value: sha-abc123 }
+
+  - it: gives each service its database role over verified TLS, and Valkey
+    documentSelector: { path: metadata.name, value: demo-worker }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: DATABASE_SECRET_URL
+            valueFrom: { secretKeyRef: { name: db-app-worker, key: url } }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: WORKER_DATABASE_URL
+            value: "$(DATABASE_SECRET_URL)?sslmode=verify-full&sslrootcert=/etc/postgres-ca/ca.crt"
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: WORKER_DATABASE_DIRECT_URL
+            value: "$(DATABASE_SECRET_DIRECT_URL)?sslmode=verify-full&sslrootcert=/etc/postgres-ca/ca.crt"
+      - contains:
+          path: "spec.template.spec.containers[0].volumeMounts"
+          content: { name: postgres-ca, mountPath: /etc/postgres-ca, readOnly: true }
+      - contains:
+          path: spec.template.spec.volumes
+          content: { name: postgres-ca, secret: { secretName: boilerplate-postgres-ca, items: [{ key: ca.crt, path: ca.crt }] } }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: REDIS_URL
+            valueFrom: { secretKeyRef: { name: valkey, key: url } }
+
+  - it: passes the Secret's URL through as it is without a certificate authority
+    documentSelector: { path: metadata.name, value: demo-worker }
+    set:
+      database.caSecret: ""
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: WORKER_DATABASE_URL
+            valueFrom: { secretKeyRef: { name: db-app-worker, key: url } }
+      - notContains:
+          path: "spec.template.spec.containers[0].volumeMounts"
+          content: { name: postgres-ca, mountPath: /etc/postgres-ca, readOnly: true }
+
+  - it: loads a service's own Secret, and none for services without secrets
+    documentSelector: { path: metadata.name, value: demo-notifications }
+    asserts:
+      - equal:
+          path: "spec.template.spec.containers[0].envFrom"
+          value: [{ secretRef: { name: demo-notifications } }]
+
+  - it: points services at each other and the public site
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: AI_URL, value: "http://demo-ai.apps.svc.cluster.local:8000" }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: BETTER_AUTH_URL, value: "https://app.example.com" }
+
+  - it: leaves variables with an empty value unset
+    set:
+      env.SENTRY_DSN: ""
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - notContains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: SENTRY_DSN, value: "" }
+
+  - it: signs uploads for the public files host in the api
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: S3_ENDPOINT
+            valueFrom: { secretKeyRef: { name: storage, key: publicEndpoint } }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: S3_SECRET_ACCESS_KEY
+            valueFrom: { secretKeyRef: { name: storage, key: secretAccessKey } }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: S3_FORCE_PATH_STYLE, value: "true" }
+
+  - it: reads and writes objects in-cluster from the worker
+    documentSelector: { path: metadata.name, value: demo-worker }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: S3_ENDPOINT
+            valueFrom: { secretKeyRef: { name: storage, key: endpoint } }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: S3_BUCKET
+            valueFrom: { secretKeyRef: { name: storage, key: bucket } }
+
+  - it: gives the web app only the files origin, for its content security policy
+    documentSelector: { path: metadata.name, value: demo-web }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: STORAGE_ORIGIN
+            valueFrom: { secretKeyRef: { name: storage, key: publicEndpoint } }
+      - notContains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: S3_BUCKET
+            valueFrom: { secretKeyRef: { name: storage, key: bucket } }
+
+  - it: turns files off in a service without storage
+    set:
+      services.api.storage: none
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - notContains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: S3_BUCKET
+            valueFrom: { secretKeyRef: { name: storage, key: bucket } }
+
+  - it: exports nothing without observability
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - notContains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://jaeger.observability.svc.cluster.local:4318" }
+
+  - it: sends traces to Jaeger and metrics to Prometheus with observability on
+    set:
+      observability.enabled: true
+    documentSelector: { path: metadata.name, value: demo-ai-worker }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://jaeger.observability.svc.cluster.local:4318" }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+            value: "http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090/api/v1/otlp/v1/metrics"
+
+  - it: points the api at Alertmanager with observability on, for system.alerting
+    set:
+      observability.enabled: true
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: ALERTMANAGER_URL
+            value: "http://kube-prometheus-stack-alertmanager.observability.svc.cluster.local:9093"
+
+  - it: leaves Alertmanager unset without observability, so system.alerting answers off
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - notContains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: ALERTMANAGER_URL
+            value: "http://kube-prometheus-stack-alertmanager.observability.svc.cluster.local:9093"
+
+  - it: lets an environment's own collector override the observability endpoints
+    set:
+      observability.enabled: true
+      env.OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4318
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://collector:4318" }
+
+  - it: shares the AI service's secrets with its worker, which runs the same image
+    documentSelector: { path: metadata.name, value: demo-ai-worker }
+    asserts:
+      - equal: { path: "spec.template.spec.containers[0].image", value: ghcr.io/manasmadan/boilerplate/ai:sha-abc123 }
+      - equal: { path: "spec.template.spec.containers[0].command", value: [python, -m, app.worker] }
+      - equal:
+          path: "spec.template.spec.containers[0].envFrom"
+          value: [{ secretRef: { name: demo-ai } }]
+      - notExists: { path: "spec.template.spec.containers[0].ports" }
+      - notExists: { path: "spec.template.spec.containers[0].readinessProbe" }
+
+  - it: leaves the replica count to the autoscaler when there is one
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - notExists: { path: spec.replicas }
+
+  - it: sets the replica count otherwise
+    set:
+      services.worker.keda.enabled: false
+      services.worker.replicas: 3
+    documentSelector: { path: metadata.name, value: demo-worker }
+    asserts:
+      - equal: { path: spec.replicas, value: 3 }
+
+  - it: mounts writable paths and /tmp as empty volumes
+    documentSelector: { path: metadata.name, value: demo-web }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].volumeMounts"
+          content: { name: writable-0, mountPath: /app/apps/web/.next/cache }
+      - contains:
+          path: "spec.template.spec.containers[0].volumeMounts"
+          content: { name: tmp, mountPath: /tmp }
+
+  - it: drains routed pods before stopping them
+    documentSelector: { path: metadata.name, value: demo-web }
+    asserts:
+      - equal: { path: "spec.template.spec.containers[0].lifecycle.preStop.sleep.seconds", value: 5 }
+
+  - it: limits every service's CPU as well as its memory
+    set:
+      services.clamav.enabled: true
+    asserts:
+      - exists: { path: "spec.template.spec.containers[0].resources.limits.cpu" }
+      - exists: { path: "spec.template.spec.containers[0].resources.limits.memory" }
+
+  - it: runs ClamAV from its own image as our user, on a read-only root, with a TCP probe
+    set:
+      services.clamav.enabled: true
+    documentSelector: { path: metadata.name, value: demo-clamav }
+    asserts:
+      - equal: { path: "spec.template.spec.containers[0].image", value: docker.io/clamav/clamav-debian:1.5.4@sha256:9bb8712a50f0e75166e936c452cd82dd5e5be0b85586598930b5bbb84a99a578 }
+      - equal: { path: "spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem", value: true }
+      - equal: { path: spec.template.spec.securityContext.runAsUser, value: 10001 }
+      - equal: { path: spec.template.spec.securityContext.runAsGroup, value: 10001 }
+      - equal: { path: "spec.template.spec.containers[0].resources.limits.cpu", value: "2" }
+      # It starts ClamAV itself (the image's entrypoint needs root's rights over its
+      # files), with the signatures fetched into a directory of the pod's.
+      - equal: { path: "spec.template.spec.containers[0].command", value: [sh, -c] }
+      - matchRegex: { path: "spec.template.spec.containers[0].args[0]", pattern: "exec clamd --config-file=/tmp/clamd.conf" }
+      - contains:
+          path: "spec.template.spec.containers[0].volumeMounts"
+          content: { name: writable-0, mountPath: /var/lib/clamav }
+      - exists: { path: "spec.template.spec.containers[0].readinessProbe.tcpSocket" }
+      - notExists: { path: "spec.template.spec.containers[0].envFrom" }
+
+  - it: renders nothing for a disabled service
+    set:
+      services.webhooks.enabled: false
+    asserts:
+      - hasDocuments: { count: 6 }
+
+  - it: requires the image tag and the site's host
+    set:
+      image.tag: ""
+    asserts:
+      - failedTemplate: { errorMessage: image.tag is required }
+
+  - it: trusts a private certificate authority when a service has one
+    set:
+      services.notifications.caBundle: local-ca
+    documentSelector: { path: metadata.name, value: demo-notifications }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: NODE_EXTRA_CA_CERTS, value: /etc/ssl/extra/ca.crt }
+      - contains:
+          path: "spec.template.spec.containers[0].volumeMounts"
+          content: { name: ca-bundle, mountPath: /etc/ssl/extra, readOnly: true }
+      - contains:
+          path: spec.template.spec.volumes
+          content: { name: ca-bundle, secret: { secretName: local-ca, items: [{ key: ca.crt, path: ca.crt }] } }
+
+  - it: restarts the AI worker when its heartbeat goes stale
+    documentSelector: { path: metadata.name, value: demo-ai-worker }
+    asserts:
+      - equal:
+          path: "spec.template.spec.containers[0].livenessProbe.exec.command"
+          value: [python, -m, app.heartbeat]
+      - equal:
+          path: "spec.template.spec.containers[0].startupProbe.exec.command"
+          value: [python, -m, app.heartbeat]
+
+  - it: loads no Secret into services with nothing secret
+    documentSelector: { path: metadata.name, value: demo-worker }
+    asserts:
+      - notExists: { path: "spec.template.spec.containers[0].envFrom" }

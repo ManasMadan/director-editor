@@ -1,0 +1,66 @@
+{{- /*
+Migrations run before the new release's pods: a Helm pre-install/pre-upgrade hook, which
+Argo CD runs as a PreSync hook. The previous release keeps serving while they run, so
+every migration must be backwards compatible (expand now, contract in a later release).
+The Job's name includes the image tag, so each release runs its own.
+*/}}
+{{- if .Values.migrate.enabled }}
+{{- $name := printf "%s-migrate-%s" (include "stack.name" .) (.Values.image.tag | sha256sum | trunc 10) }}
+{{- $uid := 10001 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "stack.labels" (list . "migrate") | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: {{ .Values.migrate.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migrate.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        {{- include "stack.selectorLabels" (list . "migrate") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $uid }}
+        runAsGroup: {{ $uid }}
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          image: {{ include "stack.image" (list . (dict "image" .Values.migrate.image)) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: MIGRATOR_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "stack.dbSecret" (list . "migrator") }}
+                  key: directUrl
+          resources:
+            {{- toYaml .Values.migrate.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

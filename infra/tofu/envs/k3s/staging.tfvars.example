@@ -1,0 +1,26 @@
+# Copy to staging.tfvars (kept out of git). Secrets don't go here: they come from
+# TF_VAR_ssh_private_key, TF_VAR_sops_age_key and TF_VAR_state_passphrase.
+environment           = "staging"
+domain                = "example.com"
+site_host             = "staging.example.com"
+cloudflare_account_id = "0123456789abcdef0123456789abcdef"
+tls_email             = "ops@example.com"
+previews              = true
+
+# DNS of your own instead of Cloudflare (then no cloudflare_account_id), with the TSIG
+# key's secret in TF_VAR_dns_tsig_secret:
+# dns = {
+#   provider = "rfc2136"
+#   rfc2136  = { server = "ns1.example.com", key_name = "staging" }
+# }
+
+# One machine is enough for staging: it's the server and runs everything.
+nodes = {
+  staging-1 = { address = "203.0.113.10" }
+}
+
+mail = {
+  node               = "staging-1"
+  dkim_public_key    = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA…"
+  dmarc_report_email = "dmarc@example.com"
+}

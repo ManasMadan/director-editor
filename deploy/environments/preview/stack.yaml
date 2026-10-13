@@ -1,0 +1,48 @@
+# A pull request's preview (deploy/argocd/appsets/previews.yaml sets image.tag to the
+# PR's commit and site.host to pr-<number>.preview.<domain>). Small, one replica, and
+# queue workers idle at zero. Its Secrets are shared by every preview, non-production
+# credentials (test-mode Stripe, …): deploy/environments/preview/secrets/.
+defaults:
+  replicas: 1
+  topologySpread: false
+  pdb:
+    enabled: false
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 512Mi }
+  keda:
+    minReplicas: 0
+    maxReplicas: 2
+services:
+  web:
+    autoscaling: { enabled: false }
+    storage: none
+    # Optional: the mobile app's https links and passkeys (docs/web-and-mobile.md,
+    # "Universal links and App Links"), for the build that talks to this site
+    # (the preview variant). Off while unset; set all four or none (a partial set stops the
+    # web app), and give the api the same fingerprints.
+    # env:
+    #   APPLE_TEAM_ID: ABCDE12345
+    #   IOS_BUNDLE_ID: com.boilerplate.app.preview
+    #   ANDROID_PACKAGE: com.boilerplate.app.preview
+    #   ANDROID_CERT_FINGERPRINTS: AB:CD:...
+  api:
+    autoscaling: { enabled: false }
+    # With the mobile app's links on (web, above): passkeys made in the Android app come
+    # from its certificates (apps/api/src/auth/auth.ts).
+    # env:
+    #   ANDROID_CERT_FINGERPRINTS: AB:CD:...
+    # No file uploads (no ClamAV, no uploads bucket: see data.yaml).
+    storage: none
+  worker:
+    storage: none
+    env:
+      FILE_SCANNER: none
+  notifications:
+    # Mail stays in the preview: its own Mailpit (the data chart's), over TLS with a
+    # certificate from the namespace's own authority, which this trusts. Mailpit takes
+    # any login, and nothing leaves.
+    caBundle: mailpit-tls
+    env:
+      SMTP_URL: smtps://no-reply%40preview.invalid:preview@mailpit:1025
+      EMAIL_FROM: Boilerplate Preview <no-reply@example.com>

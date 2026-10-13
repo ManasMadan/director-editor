@@ -1,0 +1,45 @@
+{
+  "name": "@repo/worker",
+  "private": true,
+  "type": "module",
+  "description": "Background worker: relays every service's outbox to the event queues, writes the audit log, and runs scheduled housekeeping.",
+  "scripts": {
+    "dev": "tsdown --watch --on-success \"node --env-file-if-exists=../../.env --enable-source-maps --import ./dist/telemetry.mjs dist/main.mjs\"",
+    "build": "tsdown",
+    "start": "node --env-file-if-exists=../../.env --enable-source-maps --import ./dist/telemetry.mjs dist/main.mjs",
+    "check-types": "tsc",
+    "test": "vitest run --project unit",
+    "test:integration": "vitest run --project integration --tags-filter=!files",
+    "test:integration:files": "vitest run --project integration --tags-filter=files",
+    "coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@nestjs/bullmq": "catalog:",
+    "@nestjs/common": "catalog:",
+    "@nestjs/core": "catalog:",
+    "@repo/contracts": "workspace:*",
+    "@repo/db": "workspace:*",
+    "@repo/jobs": "workspace:*",
+    "@repo/nest-common": "workspace:*",
+    "@t3-oss/env-core": "catalog:",
+    "bullmq": "catalog:",
+    "file-type": "^22.1.1",
+    "ioredis": "catalog:",
+    "pg": "^8.23.0",
+    "reflect-metadata": "catalog:",
+    "rxjs": "catalog:",
+    "sharp": "^0.35.5",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@repo/testing": "workspace:*",
+    "@repo/tsdown-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/pg": "^8.23.1",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

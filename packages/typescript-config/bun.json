@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // For code that runs on the Bun runtime (apps/api).
+  "extends": "./base.json",
+  "compilerOptions": {
+    "lib": ["ES2024"],
+    // Pulls in the `Bun.*` globals from @types/bun (which also includes Node's types).
+    "types": ["bun"]
+  }
+}

@@ -1,0 +1,941 @@
+# Every check a change must pass before it can merge. Branch protection requires the
+# `ci-ok` job, which only succeeds when all others do, so adding a job here never
+# needs a settings change.
+#
+# Nightly, the same checks run on master with more weight: the load test ramps to a real
+# load instead of the smoke run, and the evals measure the configured model (evals job).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  merge_group:
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+
+# One run per PR/branch: a new push cancels the outdated run (never the nightly one).
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: jobs get read access to the code and nothing else.
+permissions: {}
+
+# Egress: every job starts with harden-runner. A job whose traffic is known (here GitHub,
+# the Actions cache, and Node, Bun and npm for the setup action) blocks everything else;
+# the others audit until theirs is known too (.claude/rules/ci.md says how to move one).
+
+env:
+  TURBO_TELEMETRY_DISABLED: "1"
+  DO_NOT_TRACK: "1"
+  NODE_ENV: test
+
+jobs:
+  # Which areas a pull request touches (scripts/changes.ts): the heavy jobs skip the
+  # areas it doesn't, so a docs-only change doesn't spend an hour of runners. Outside
+  # pull requests everything runs.
+  changes:
+    name: What changed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: { contents: read }
+    outputs:
+      app: ${{ steps.areas.outputs.app }}
+      charts: ${{ steps.areas.outputs.charts }}
+      infra: ${{ steps.areas.outputs.infra }}
+      images: ${{ steps.areas.outputs.images }}
+      scripts: ${{ steps.areas.outputs.scripts }}
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >-
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            raw.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+            nodejs.org:443
+            registry.npmjs.org:443
+      # The pull request's merge commit and its first parent, the base branch.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false, fetch-depth: 2 }
+      - uses: ./.github/actions/setup
+      - id: areas
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT" == "pull_request" ]]; then
+            bun scripts/changes.ts HEAD^1 | tee -a "$GITHUB_OUTPUT"
+          else
+            bun scripts/changes.ts | tee -a "$GITHUB_OUTPUT"
+          fi
+
+  lint:
+    name: Lint and boundaries
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      # With uv: the Python service's own lint (ruff, deptry) is one of the steps.
+      - uses: ./.github/actions/setup
+        with: { python: "true" }
+      # Biome, boundaries, unused code (knip.jsonc), shortcut markers, suppressions, the
+      # linters pinned in scripts/linters.ts (their images, from Docker Hub and GHCR) and
+      # each package's lint, all of them even when one fails (scripts/lint.ts).
+      - run: bun run lint
+
+  types:
+    name: Type-check
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+        with: { python: "true" }
+      # What the last type-check found in each package (tsBuildInfoFile in
+      # packages/typescript-config/base.json): a package turbo has to check again only
+      # re-checks the files the change can affect.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            apps/*/node_modules/.cache/tsc
+            packages/*/node_modules/.cache/tsc
+            load/node_modules/.cache/tsc
+            scripts/node_modules/.cache/tsc
+            .claude/hooks/node_modules/.cache/tsc
+            turbo/generators/node_modules/.cache/tsc
+          key: tsc-${{ runner.os }}-${{ hashFiles('bun.lock') }}-${{ github.sha }}
+          restore-keys: tsc-${{ runner.os }}-${{ hashFiles('bun.lock') }}-
+      - run: bun run check-types
+      # No `any` and no casts in the source, every workspace (scripts/type-coverage.ts, strict).
+      - run: bun run type-coverage
+
+  unit:
+    name: Unit tests
+    needs: changes
+    if: needs.changes.outputs.app == 'true' || needs.changes.outputs.scripts == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+        with: { python: "true" }
+      # The packages' unit tests only when the app changed: a docs-only change runs the
+      # scripts' tests below, which read the docs, and nothing else.
+      - if: needs.changes.outputs.app == 'true'
+        run: bun run test
+      # The repo's tooling, outside the workspaces turbo runs (the scripts, the Claude Code
+      # hooks, and the build scripts, presets, generators, load test and image checks Bun's
+      # runner owns), each file at 100%: a change to them alone skips the coverage job below.
+      - run: bun test --coverage ./scripts/ ./.claude/hooks/ && bun scripts/coverage.ts --bun
+
+  components:
+    name: Components (stories, a11y, screenshots)
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+      # The browser itself, by Playwright's version; its system libraries still come from apt.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: playwright-${{ runner.os }}-
+      - name: Install the browser
+        run: bunx playwright install --with-deps chromium
+      - name: Every story renders, passes its play function and axe, in both themes
+        run: bun run --cwd packages/ui coverage
+      - name: Keep the coverage report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-components
+          path: packages/ui/coverage/lcov.info
+          retention-days: 3
+      - name: Screenshots match the baselines
+        run: bun run --cwd packages/ui test:visual
+      - name: Keep the screenshot diffs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: visual-diffs
+          path: packages/ui/test-results
+          retention-days: 7
+
+  integration:
+    name: Integration tests
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions: { contents: read }
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg18-trixie
+        env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: app }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U postgres -d app" --health-interval 2s --health-retries 30
+      mailpit:
+        image: axllent/mailpit:v1.31.3
+        ports: ["1025:1025", "8025:8025"]
+        env: { MP_MAX_MESSAGES: "5000" }
+    # Services connect as their own least-privileged roles, exactly as in production.
+    env:
+      MIGRATOR_DATABASE_URL: postgresql://migrator:migrator@localhost:5432/app
+      SHADOW_DATABASE_URL: postgresql://migrator:migrator@localhost:5432/app_shadow
+      API_DATABASE_URL: postgresql://app_api:app_api@localhost:5432/app
+      WORKER_DATABASE_URL: postgresql://app_worker:app_worker@localhost:5432/app
+      WORKER_DATABASE_DIRECT_URL: postgresql://app_worker:app_worker@localhost:5432/app
+      NOTIFICATIONS_DATABASE_URL: postgresql://app_notifications:app_notifications@localhost:5432/app
+      WEBHOOKS_DATABASE_URL: postgresql://app_webhooks:app_webhooks@localhost:5432/app
+      AI_DATABASE_URL: postgresql://app_ai:app_ai@localhost:5432/app
+      REDIS_URL: redis://localhost:6379
+      SMTP_URL: smtp://localhost:1025
+      MAILPIT_URL: http://localhost:8025
+      # The real mail path: submission to Stalwart (compose's `mail` profile), delivery to
+      # compose's Mailpit, and bounces back as signed webhooks.
+      STALWART_URL: http://localhost:58080
+      STALWART_SMTP_URL: smtps://no-reply:no-reply-password@localhost:51465?tls.rejectUnauthorized=false
+      STALWART_MAILPIT_URL: http://localhost:58025
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      # ClamAV's signatures (hundreds of MB from a rate-limited CDN), kept for a day: with
+      # them in place clamd starts at once, and its updater fetches only what's newer.
+      - name: The day, for the signatures' cache key
+        id: day
+        run: |
+          echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+          echo "CLAMAV_DATA=$HOME/.cache/clamav" >> "$GITHUB_ENV"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/clamav
+          key: clamav-db-${{ steps.day.outputs.day }}
+          restore-keys: clamav-db-
+      # Started first: ClamAV downloads its signatures (a few minutes) while the rest sets up.
+      # Its own user writes them, so the directory is open to it.
+      - name: Start object storage and virus scanning
+        run: |
+          mkdir -p "$CLAMAV_DATA" && chmod 777 "$CLAMAV_DATA"
+          docker compose --profile files up -d rustfs clamav
+      # Compose's Valkey, not a service container: the suites need more logical databases
+      # than the default 16 (docs/testing.md), which only its command line can set.
+      - name: Start Valkey
+        env: { VALKEY_PORT: "6379" }
+        run: docker compose up -d --wait valkey
+      # With uv: the api's AI client is generated from the Python service's OpenAPI.
+      - uses: ./.github/actions/setup
+        with: { python: "true" }
+      # The same roles and databases local Docker gets from infra/postgres/init.
+      - name: Bootstrap database roles
+        env: { PGPASSWORD: postgres }
+        run: psql -h localhost -U postgres -d app -v ON_ERROR_STOP=1 -f infra/postgres/init/01-roles-and-databases.sql
+      # The tests' secrets come from .env.example's placeholders (@repo/testing/environment).
+      - name: Apply migrations
+        run: bun run db:deploy
+      # `migrate diff` exits 0 silently without a datasource, so the URLs above are required.
+      - name: Migrations match the Prisma schema
+        working-directory: packages/db
+        run: bun run drift
+      - name: Wait for storage and clamd, and create the bucket
+        run: |
+          docker compose --profile files up -d --wait rustfs clamav
+          docker compose --profile files run --rm s3-init
+      - name: Start the mail server
+        run: |
+          docker compose --profile mail up -d --wait stalwart mailpit
+          docker compose --profile mail run --rm stalwart-init
+      # The web app's pages are tested in Chromium (vitest's browser mode).
+      - name: Install Chromium
+        run: bunx playwright install --with-deps chromium
+      # Unit and integration tests together, with coverage: the coverage job merges these
+      # reports with the stories' and the Python service's and checks every file.
+      - name: Tests with coverage
+        run: bunx turbo run coverage --filter=!@repo/ai --filter=!@repo/ui
+      - name: The repo's tooling (scripts, hooks and the rest Bun's runner owns), with coverage
+        run: bun test --coverage ./scripts/ ./.claude/hooks/
+      - name: Keep the coverage reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-integration
+          path: |
+            apps/*/coverage/lcov.info
+            packages/*/coverage/lcov.info
+            coverage/bun/lcov.info
+          retention-days: 3
+
+  # Split across four runners, each with the whole stack and a quarter of the browser
+  # tests: on one runner the suite alone took over ten minutes, the slowest job by far.
+  e2e:
+    name: End-to-end tests (${{ matrix.shard }}/4)
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-24.04
+    # The nightly load test holds its load for five minutes on top.
+    timeout-minutes: ${{ github.event_name == 'schedule' && 40 || 25 }}
+    permissions: { contents: read }
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg18-trixie
+        env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: app }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U postgres -d app" --health-interval 2s --health-retries 30
+      valkey:
+        image: valkey/valkey:9.1.2-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "valkey-cli ping" --health-interval 2s --health-retries 30
+      mailpit:
+        image: axllent/mailpit:v1.31.3
+        ports: ["1025:1025", "8025:8025"]
+        env: { MP_MAX_MESSAGES: "5000" }
+    # The same configuration as local development (.env.example), minus secrets. The
+    # services run as "test": production refuses the local stand-ins the suite relies on
+    # (loopback webhook receivers, texts delivered to Mailpit). What's built is still the
+    # production build.
+    env:
+      NODE_ENV: test
+      MIGRATOR_DATABASE_URL: postgresql://migrator:migrator@localhost:5432/app
+      API_DATABASE_URL: postgresql://app_api:app_api@localhost:5432/app
+      NOTIFICATIONS_DATABASE_URL: postgresql://app_notifications:app_notifications@localhost:5432/app
+      WORKER_DATABASE_URL: postgresql://app_worker:app_worker@localhost:5432/app
+      WORKER_DATABASE_DIRECT_URL: postgresql://app_worker:app_worker@localhost:5432/app
+      WEBHOOKS_DATABASE_URL: postgresql://app_webhooks:app_webhooks@localhost:5432/app
+      AI_DATABASE_URL: postgresql://app_ai:app_ai@localhost:5432/app
+      REDIS_URL: redis://localhost:6379
+      WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: 127.0.0.1
+      SMTP_URL: smtp://localhost:1025
+      EMAIL_FROM: Boilerplate <no-reply@example.com>
+      MAILPIT_URL: http://localhost:8025
+      BETTER_AUTH_URL: http://localhost:3000
+      WEB_URL: http://localhost:3000
+      API_URL: http://localhost:3001
+      AI_URL: http://localhost:8000
+      # Uploads on, against the local RustFS and ClamAV started below.
+      S3_BUCKET: uploads
+      S3_ENDPOINT: http://localhost:59000
+      S3_ACCESS_KEY_ID: rustfs
+      S3_SECRET_ACCESS_KEY: rustfs-secret
+      S3_FORCE_PATH_STYLE: "true"
+      STORAGE_ORIGIN: http://localhost:59000
+      # The assistant without a model provider: quotes the best passage (local:extractive).
+      AI_MODEL: local:extractive
+      AI_EMBEDDINGS: hashing
+      # Billing on, against the local fake Stripe started with the stack (test-only keys).
+      STRIPE_SECRET_KEY: sk_test_ci
+      STRIPE_WEBHOOK_SECRET: whsec_ci
+      STRIPE_PRICE_PRO_MONTHLY: price_pro_monthly
+      STRIPE_PRICE_PRO_YEARLY: price_pro_yearly
+      STRIPE_API_URL: http://127.0.0.1:12111
+      # The captcha on, with Cloudflare's published always-pass test keys: the widget and
+      # the token check run for real (apps/web/e2e/captcha.spec.ts) without a challenge.
+      TURNSTILE_SITE_KEY: 1x00000000000000000000AA
+      TURNSTILE_SECRET_KEY: 1x0000000000000000000000000000000AA
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      # ClamAV's signatures (hundreds of MB from a rate-limited CDN), kept for a day: with
+      # them in place clamd starts at once, and its updater fetches only what's newer.
+      - name: The day, for the signatures' cache key
+        id: day
+        run: |
+          echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+          echo "CLAMAV_DATA=$HOME/.cache/clamav" >> "$GITHUB_ENV"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/clamav
+          key: clamav-db-${{ steps.day.outputs.day }}
+          restore-keys: clamav-db-
+      # Started first: ClamAV downloads its signatures (a few minutes) while the rest sets up.
+      # Its own user writes them, so the directory is open to it.
+      - name: Start object storage and virus scanning
+        run: |
+          mkdir -p "$CLAMAV_DATA" && chmod 777 "$CLAMAV_DATA"
+          docker compose --profile files up -d rustfs clamav
+      - uses: ./.github/actions/setup
+        with: { python: "true" }
+      - name: Bootstrap database roles
+        env: { PGPASSWORD: postgres }
+        run: psql -h localhost -U postgres -d app -v ON_ERROR_STOP=1 -f infra/postgres/init/01-roles-and-databases.sql
+      - run: bun run db:deploy
+      - name: Generate throwaway secrets
+        run: |
+          {
+            echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)"
+            echo "ENCRYPTION_KEYS=ci:$(openssl rand -base64 32)"
+            echo "UNSUBSCRIBE_SECRET=$(openssl rand -base64 32)"
+            echo "AI_SERVICE_SECRET=$(openssl rand -base64 32)"
+            # Browser push (VAPID key pair) and its contact.
+            node -e 'const e = require("node:crypto").createECDH("prime256v1"); e.generateKeys();
+              console.log("VAPID_PUBLIC_KEY=" + e.getPublicKey("base64url"));
+              console.log("VAPID_PRIVATE_KEY=" + Buffer.from(e.getPrivateKey("hex").padStart(64, "0"), "hex").toString("base64url"));'
+            echo "VAPID_SUBJECT=mailto:ci@example.com"
+          } >> "$GITHUB_ENV"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: playwright-${{ runner.os }}-
+      # Next's build cache: an unchanged page isn't compiled again.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps/web/.next/cache
+          key: next-${{ runner.os }}-${{ hashFiles('bun.lock') }}-${{ github.sha }}
+          restore-keys: next-${{ runner.os }}-${{ hashFiles('bun.lock') }}-
+      - name: Install the browser
+        working-directory: apps/web
+        run: bunx playwright install --with-deps chromium
+      - name: Wait for storage and clamd, and create the bucket
+        run: |
+          docker compose --profile files up -d --wait rustfs clamav
+          docker compose --profile files run --rm s3-init
+      # Builds the services, starts them fresh, runs this shard of Playwright's tests (and, on
+      # the first, the k6 smoke; on the second, the API's fuzzing, with uvx), and stops them
+      # (scripts/e2e.ts), the same way as locally.
+      - name: Run the end-to-end suite
+        env:
+          PROFILE: ${{ github.event_name == 'schedule' && 'load' || 'smoke' }}
+          TARGET_RPS: ${{ vars.LOAD_TARGET_RPS || '50' }}
+        run: bun run test:e2e --shard=${{ matrix.shard }}/4
+      # The web app's first-load JavaScript per route, from the build the suite just ran
+      # (scripts/bundle-budget.ts).
+      - name: Bundle budget
+        if: matrix.shard == 1
+        run: bun run --cwd apps/web budget
+      # Backs up the database the suite just filled, restores it and requires an identical
+      # copy: rows, row-level security, grants and functions (scripts/restore-drill.ts).
+      - name: Restore drill
+        if: matrix.shard == 1
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: bun run db:restore-drill
+      - name: Keep the report and service logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-report-${{ matrix.shard }}
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+            logs
+          retention-days: 7
+
+  python:
+    name: Python service
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions: { contents: read }
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg18-trixie
+        env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: app }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U postgres -d app" --health-interval 2s --health-retries 30
+      valkey:
+        image: valkey/valkey:9.1.2-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "valkey-cli ping" --health-interval 2s --health-retries 30
+    env:
+      MIGRATOR_DATABASE_URL: postgresql://migrator:migrator@localhost:5432/app
+      AI_DATABASE_URL: postgresql://app_ai:app_ai@localhost:5432/app
+      REDIS_URL: redis://localhost:6379
+    defaults:
+      run: { working-directory: apps/ai }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+        with: { python: "true" }
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run basedpyright
+      - run: uv run pytest
+      # The assistant and summarizer on a fixed handbook, with the local stand-ins (no
+      # model or key): retrieval, the relevance floor, refusals and summaries must hold.
+      - name: Evals
+        run: uv run python -m evals
+      # The same database the TypeScript services use, migrated by Prisma (which owns the DDL).
+      - name: Bootstrap database roles and migrate
+        working-directory: .
+        env: { PGPASSWORD: postgres }
+        run: |
+          psql -h localhost -U postgres -d app -v ON_ERROR_STOP=1 -f infra/postgres/init/01-roles-and-databases.sql
+          bun run db:deploy
+      # Routes, tenancy, indexing, the assistant, the worker, and models vs database, with
+      # every line and branch covered (pyproject.toml, tool.coverage).
+      - name: All tests with coverage
+        run: bun run coverage
+      - name: Keep the coverage report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-python
+          path: apps/ai/coverage/lcov.info
+          retention-days: 3
+
+  # The evals against a real model, nightly: set the EVAL_MODEL variable (and optionally
+  # EVAL_EMBEDDINGS, EVAL_JUDGE_MODEL, EVAL_MIN_PASS_RATE, EVAL_MIN_RELEVANCE) and the
+  # provider keys as secrets. Every change already runs them with the local stand-ins.
+  evals:
+    name: Evals (${{ vars.EVAL_MODEL }})
+    if: github.event_name == 'schedule' && vars.EVAL_MODEL != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions: { contents: read }
+    defaults:
+      run: { working-directory: apps/ai }
+    env:
+      AI_MODEL: ${{ vars.EVAL_MODEL }}
+      AI_EMBEDDINGS: ${{ vars.EVAL_EMBEDDINGS || 'hashing' }}
+      AI_MIN_RELEVANCE: ${{ vars.EVAL_MIN_RELEVANCE || '0' }}
+      EVAL_JUDGE_MODEL: ${{ vars.EVAL_JUDGE_MODEL }}
+      EVAL_MIN_PASS_RATE: ${{ vars.EVAL_MIN_PASS_RATE || '0.9' }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+        with: { python: "true" }
+      - run: uv run python -m evals
+
+  codegen:
+    name: Generated code is committed
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+        with: { python: "true" }
+      - run: bun run gen
+      # Changed files and new ones alike: a generator that starts writing a file nobody
+      # committed is drift too, and git diff doesn't see untracked files.
+      - name: Fail if generation changed or added files
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git status --short
+            git diff
+            echo "::error::Generated files are out of date. Run \`bun run gen\` and commit the result."
+            exit 1
+          fi
+
+  # The public REST API (/api/v1) and the domain events against the base branch's:
+  # removing or narrowing anything third parties call fails, unless the title declares
+  # the breaking change (`feat(api)!: …`), which the release notes then list first, for a
+  # new major version. The codegen job keeps the documents current (apps/api/openapi.json,
+  # packages/jobs/generated/events.json).
+  api-compat:
+    name: API compatibility
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: { contents: read }
+    env:
+      BASE: ${{ github.event.pull_request.base.sha }}
+      TITLE: ${{ github.event.pull_request.title }}
+      # renovate: datasource=docker depName=tufin/oasdiff
+      OASDIFF: tufin/oasdiff:v1.32.1
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      # The public API, and the AI service's, which the api calls and which rolls out on
+      # its own: a newer api must still work with the running AI service and back.
+      - name: Breaking changes
+        run: |
+          git fetch --quiet --depth=1 origin "$BASE"
+          fail=(--fail-on ERR)
+          if [[ "$TITLE" =~ ^[a-z]+(\([a-z-]+\))?!: ]]; then
+            echo "The title declares a breaking change: reporting only."
+            fail=()
+          fi
+          status=0
+          for app in api ai; do
+            if ! git cat-file -e "$BASE:apps/$app/openapi.json" 2>/dev/null; then
+              echo "The base branch has no apps/$app/openapi.json yet."
+              continue
+            fi
+            git show "$BASE:apps/$app/openapi.json" > "$RUNNER_TEMP/$app.json"
+            docker run --rm -v "$RUNNER_TEMP:/base:ro" -v "$PWD/apps/$app:/head:ro" "$OASDIFF" \
+              breaking "/base/$app.json" /head/openapi.json --format githubactions "${fail[@]}" ||
+              status=1
+          done
+          exit "$status"
+      - uses: ./.github/actions/setup
+      # Domain events (the audit log, notifications, customers' webhooks) may only gain
+      # optional fields; a breaking title reports without failing, as above.
+      - name: Event compatibility
+        run: |
+          if [[ "$TITLE" =~ ^[a-z]+(\([a-z-]+\))?!: ]]; then
+            bun scripts/events-compat.ts "$BASE" || true
+          else
+            bun scripts/events-compat.ts "$BASE"
+          fi
+
+  # Conventional pull-request titles: squash merges make them the commit on master, and
+  # the release notes are built from them (scripts/release.ts).
+  pr-title:
+    name: Pull request title
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >-
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            raw.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+            nodejs.org:443
+            registry.npmjs.org:443
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+      # The same check as each commit's (commitlint.config.ts, whose scopes are the
+      # workspaces): squash merges make the title the commit on master.
+      - name: Conventional Commits title
+        env: { TITLE: "${{ github.event.pull_request.title }}" }
+        run: printf '%s\n' "$TITLE" | bunx commitlint
+
+  # New migrations must be safe to run while the previous release is still serving.
+  migrations:
+    name: Migration safety
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: ./.github/actions/setup
+      - run: bun run db:lint
+
+  charts:
+    name: Helm charts and GitOps
+    needs: changes
+    if: needs.changes.outputs.charts == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with: { version: v4.3.0 }
+      # The release's Linux build, checked against its pinned checksum and unpacked into
+      # Helm's plugin folder: no install hook, which would download the binary again.
+      - name: Install helm-unittest
+        env:
+          # renovate: datasource=github-releases depName=helm-unittest/helm-unittest
+          VERSION: v1.1.2
+          # helm-unittest-linux-amd64-<version>.tgz in that release's
+          # helm-unittest-checksum.sha: update both together.
+          SHA256: de03d6b7ba7683282064702d0b36fbbe812ab2a22691fa3a8b2ce57c2682609c
+        run: |
+          curl -fsSLo unittest.tgz "https://github.com/helm-unittest/helm-unittest/releases/download/$VERSION/helm-unittest-linux-amd64-${VERSION#v}.tgz"
+          echo "$SHA256  unittest.tgz" | sha256sum -c -
+          plugin="$(helm env HELM_PLUGINS)/unittest"
+          mkdir -p "$plugin" && tar -xzf unittest.tgz -C "$plugin"
+          helm unittest --help > /dev/null
+      # The schemas kubeconform downloads (scripts/charts.ts): the same ones every run, so
+      # a run only fetches those a pin change moved.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.cache/kubeconform
+          key: kubeconform-${{ hashFiles('scripts/charts.ts') }}
+          restore-keys: kubeconform-
+      # Lint, unit tests, every environment rendered and validated against the Kubernetes
+      # and CRD schemas, the platform add-ons at their pinned versions, the Argo CD manifests.
+      - run: bun run charts:check
+
+  infra:
+    name: OpenTofu
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with: { tofu_version: 1.11.10, tofu_wrapper: false }
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.cache/tofu-plugins
+          key: tofu-plugins-${{ hashFiles('infra/tofu/**/.terraform.lock.hcl', 'infra/tofu/**/versions.tf') }}
+      # fmt, validate and every module's tests, against mocked providers (no credentials).
+      - run: bun run infra:check
+
+  # Every image builds, none ships a known critical or high vulnerability that has a
+  # fix, and each one starts and answers (scripts/image-smoke.ts). Publishing happens in
+  # the deploy workflow, from master.
+  # One job per image: loading all seven into one runner's Docker runs it out of disk.
+  images:
+    name: Container images (${{ matrix.image }})
+    needs: changes
+    if: needs.changes.outputs.app == 'true' || needs.changes.outputs.images == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions: { contents: read }
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [api, worker, notifications, webhooks, web, ai, migrate]
+    # What the smoke test's services connect to.
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg18-trixie
+        env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: app }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U postgres -d app" --health-interval 2s --health-retries 30
+      valkey:
+        image: valkey/valkey:9.1.2-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "valkey-cli ping" --health-interval 2s --health-retries 30
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/free-disk
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # Reads the layers deploy.yml caches on master for this image (amd64, like this
+      # runner). Pull requests write none, so they don't crowd the repository's cache; a
+      # push to master writes this build's, the same scope and build arguments deploy.yml
+      # uses, so its amd64 build of the commit that just passed is all cache hits instead
+      # of a second build.
+      - uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
+        with:
+          source: .
+          targets: ${{ matrix.image }}
+          load: true
+          set: |
+            *.cache-from=type=gha,scope=${{ matrix.image }}-amd64
+            *.args.RELEASE=${{ github.sha }}
+            ${{ github.event_name == 'push' && format('*.cache-to=type=gha,mode=max,scope={0}-amd64', matrix.image) || '' }}
+      # Trivy's vulnerability database (hundreds of MB), fetched once a day rather than by
+      # each of the seven jobs, from a mirror without GHCR's rate limit.
+      - name: The day, for the database's cache key
+        id: day
+        run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ steps.day.outputs.day }}
+          restore-keys: trivy-db-
+      - name: Scan the image
+        env:
+          # renovate: datasource=docker depName=aquasec/trivy
+          TRIVY: aquasec/trivy:0.74.0
+          IMAGE: boilerplate/${{ matrix.image }}:dev
+        run: |
+          mkdir -p ~/.cache/trivy
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$HOME/.cache/trivy:/root/.cache/trivy" \
+            -v "$PWD/.trivyignore.yaml:/trivyignore.yaml:ro" \
+            "$TRIVY" image --quiet --exit-code 1 --ignore-unfixed --ignorefile /trivyignore.yaml \
+            --db-repository mirror.gcr.io/aquasec/trivy-db \
+            --severity CRITICAL,HIGH "$IMAGE"
+      # The image started the way a cluster starts it: the services must reach Postgres
+      # and Valkey, the api answer an RPC and the web app render a page. The migrate
+      # image migrates the empty database itself; the others get it migrated first.
+      - uses: ./.github/actions/setup
+      - name: Bootstrap database roles
+        env: { PGPASSWORD: postgres }
+        run: psql -h localhost -U postgres -d app -v ON_ERROR_STOP=1 -f infra/postgres/init/01-roles-and-databases.sql
+      - name: Apply migrations
+        if: matrix.image != 'migrate'
+        env: { MIGRATOR_DATABASE_URL: "postgresql://migrator:migrator@localhost:5432/app" }
+        run: bun run db:deploy
+      - name: Smoke-test the image
+        run: bun scripts/image-smoke.ts ${{ matrix.image }}
+
+  # The code generators (turbo/generators): each one's output must pass lint, types and
+  # its own tests, or the next feature starts from broken code (scripts/generators.ts).
+  generators:
+    name: Code generators
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions: { contents: read }
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg18-trixie
+        env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: app }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U postgres -d app" --health-interval 2s --health-retries 30
+      valkey:
+        image: valkey/valkey:9.1.2-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "valkey-cli ping" --health-interval 2s --health-retries 30
+      mailpit:
+        image: axllent/mailpit:v1.31.3
+        ports: ["1025:1025", "8025:8025"]
+    env:
+      MIGRATOR_DATABASE_URL: postgresql://migrator:migrator@localhost:5432/app
+      API_DATABASE_URL: postgresql://app_api:app_api@localhost:5432/app
+      REDIS_URL: redis://localhost:6379
+      SMTP_URL: smtp://localhost:1025
+      MAILPIT_URL: http://localhost:8025
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+        with: { python: "true" }
+      - name: Bootstrap database roles
+        env: { PGPASSWORD: postgres }
+        run: psql -h localhost -U postgres -d app -v ON_ERROR_STOP=1 -f infra/postgres/init/01-roles-and-databases.sql
+      - run: bun run db:deploy
+      # In place: this checkout is thrown away afterwards.
+      - run: bun scripts/generators.ts --in-place
+
+  # Every suite's report merged: each source file must be at 100% (scripts/coverage.ts,
+  # with the exceptions docs/testing.md lists), and a pull request's changed lines too.
+  coverage:
+    name: Coverage
+    needs: [changes, components, integration, python]
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: ./.github/actions/setup
+        with: { python: "true" }
+      # A single file uploads without its directories, so each report goes back to its own.
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with: { name: coverage-integration }
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with: { name: coverage-components, path: packages/ui/coverage }
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with: { name: coverage-python, path: apps/ai/coverage }
+      - name: Every file at 100%
+        run: bun scripts/coverage.ts
+      - name: Every changed line covered
+        if: github.event_name == 'pull_request'
+        env: { BASE: "${{ github.base_ref }}" }
+        # renovate: datasource=pypi depName=diff-cover
+        run: uvx diff-cover@10.6.0 coverage/merged.lcov --compare-branch "origin/$BASE" --fail-under 100
+
+  ci-ok:
+    name: CI passed
+    if: always()
+    needs: [changes, pr-title, api-compat, lint, types, unit, components, integration, e2e, python, codegen, migrations, charts, infra, images, generators, coverage]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >-
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            raw.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+            nodejs.org:443
+            registry.npmjs.org:443
+      - name: Require every job to succeed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          EVENT: ${{ github.event_name }}
+        # Every job must have succeeded. The ones allowed to skip: the checks of a pull
+        # request itself (title, API compatibility) outside pull requests, and a job whose
+        # areas the pull request doesn't touch (the changes job's outputs; the job's `if`).
+        run: |
+          echo "$NEEDS" | jq -e --arg event "$EVENT" '
+            .changes.outputs as $areas
+            | {
+                types: ["app"], unit: ["app", "scripts"], components: ["app"],
+                integration: ["app"], e2e: ["app"], python: ["app"], codegen: ["app"],
+                migrations: ["app"], charts: ["charts"], infra: ["infra"],
+                images: ["app", "images"], generators: ["app"], "api-compat": ["app"],
+                coverage: ["app"]
+              } as $gates
+            | .changes.result == "success"
+            and (to_entries | all(
+              .value.result == "success"
+              or (.value.result == "skipped" and (
+                ((.key == "pr-title" or .key == "api-compat") and $event != "pull_request")
+                or ((.key | in($gates)) and ($gates[.key] | all($areas[.] == "false")))
+              ))
+            ))' > /dev/null

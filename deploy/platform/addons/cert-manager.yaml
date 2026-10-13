@@ -1,0 +1,7 @@
+# TLS certificates for the gateway (Let's Encrypt, DNS-01).
+addon: cert-manager
+namespace: cert-manager
+repoURL: https://charts.jetstack.io
+chart: cert-manager
+version: v1.21.2
+wave: "-20"

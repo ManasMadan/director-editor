@@ -1,0 +1,8 @@
+apiVersion: v2
+name: platform-config
+description: >-
+  A cluster's own platform settings on top of the add-ons: the public Gateway and its
+  certificates, and the image policy. The platform ApplicationSet fills the values from
+  the cluster's Argo CD Secret (domain, certificate email, previews).
+type: application
+version: 0.2.0

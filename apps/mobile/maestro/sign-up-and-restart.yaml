@@ -1,0 +1,29 @@
+# Sign up, verify the email, then restart the app: the session survives (secure storage).
+appId: com.boilerplate.app.development
+env:
+  EMAIL: maestro-${Date.now()}@example.com
+---
+- launchApp:
+    clearState: true
+- tapOn: "Create account"
+- tapOn: "Full name"
+- inputText: "Maestro User"
+- tapOn: "Email"
+- inputText: ${EMAIL}
+- tapOn: "Password"
+- inputText: "pw-maestro-${Date.now()}"
+- tapOn:
+    text: "Create account"
+    index: 1
+- assertVisible: "Check your email"
+- runScript:
+    file: scripts/code.js
+    env:
+      TO: ${EMAIL}
+- tapOn: "Verification code"
+- inputText: ${output.code}
+- tapOn: "Continue"
+- assertVisible: "What needs doing?"
+- stopApp
+- launchApp
+- assertVisible: "What needs doing?"

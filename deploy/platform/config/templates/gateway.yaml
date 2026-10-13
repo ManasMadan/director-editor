@@ -1,0 +1,156 @@
+{{- $domain := required "domain is required" .Values.domain }}
+{{- $hosts := list $domain (printf "*.%s" $domain) }}
+{{- if .Values.previews }}
+{{- $hosts = append $hosts (printf "*.preview.%s" $domain) }}
+{{- end }}
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: public
+  namespace: gateway-system
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        # Every node forwards to the proxies wherever they run: Cloudflare may send a
+        # request to any node's address. Clients' addresses come from X-Forwarded-For
+        # (below), not from the connection.
+        externalTrafficPolicy: Cluster
+        {{- with .Values.gateway.serviceAnnotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      envoyDeployment:
+        replicas: 2
+        # The proxy image named, not left to Envoy Gateway's built-in default: the image
+        # scan (scripts/image-scan.ts) reads it here, and the clusters run what it scanned.
+        container:
+          image: {{ .Values.gateway.proxy.image }}
+          resources:
+            {{- toYaml .Values.gateway.proxy.resources | nindent 12 }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: envoy
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: public
+    namespace: gateway-system
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: public
+  namespace: gateway-system
+  annotations:
+    # A certificate per HTTPS listener, from its hostname.
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  gatewayClassName: envoy
+  listeners:
+    # Plain HTTP only redirects (the route below); applications can't attach to it.
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- range $i, $host := $hosts }}
+    - name: https-{{ $i }}
+      protocol: HTTPS
+      port: 443
+      hostname: {{ $host | quote }}
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: {{ printf "tls-%s" ($host | replace "*." "wildcard-" | replace "." "-") }}
+      allowedRoutes:
+        namespaces:
+          from: All
+    {{- end }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: https-redirect
+  namespace: gateway-system
+spec:
+  parentRefs:
+    - name: public
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+{{- $site := sub (len $hosts) (ternary 1 0 .Values.previews) | int }}
+{{- if .Values.gateway.originPulls }}
+---
+# Cloudflare's origin-pull CA (files/, from developers.cloudflare.com; valid to 2029-11).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflare-origin-pull-ca
+  namespace: gateway-system
+data:
+  ca.crt: |
+    {{- .Files.Get "files/cloudflare-origin-pull-ca.crt" | nindent 4 }}
+{{- end }}
+---
+# The site's hosts: the client's address from X-Forwarded-For, past the proxies in front
+# (Cloudflare); the services then trust the gateway's (TRUSTED_PROXIES) for rate limits
+# and audit. That header is only worth trusting if nothing can skip Cloudflare, so the
+# TLS handshake requires Cloudflare's origin-pull certificate (the zone turns it on:
+# infra/tofu/modules/cloudflare). Someone who reaches a node directly gets no further
+# than the handshake.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: public
+  namespace: gateway-system
+spec:
+  targetRefs:
+    {{- range $i := until $site }}
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: public
+      sectionName: https-{{ $i }}
+    {{- end }}
+  clientIPDetection:
+    xForwardedFor:
+      numTrustedHops: {{ .Values.gateway.trustedHops }}
+  {{- if .Values.gateway.originPulls }}
+  tls:
+    clientValidation:
+      caCertificateRefs:
+        - kind: ConfigMap
+          name: cloudflare-origin-pull-ca
+  {{- end }}
+{{- if .Values.previews }}
+---
+# Previews are reached directly (their DNS isn't proxied), so whatever X-Forwarded-For a
+# client sends is dropped before Envoy adds the connection's address. ServiceLB hides the
+# real one behind a cluster address, so a preview's visitors share one address for rate limits.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: previews
+  namespace: gateway-system
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: public
+      sectionName: https-{{ $site }}
+  headers:
+    earlyRequestHeaders:
+      remove: [X-Forwarded-For]
+{{- end }}

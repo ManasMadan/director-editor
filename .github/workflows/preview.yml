@@ -1,0 +1,116 @@
+# Pull-request previews. Adding the `preview` label (maintainers only) builds the
+# pull request's images as sha-<head commit> and pushes them; Argo CD's previews
+# ApplicationSet then deploys that commit to its own namespace, at
+# https://pr-<number>.preview.<domain>, and posts the address on the pull request once
+# it runs (deploy/argocd/argo-cd-values.yaml, notifications). New pushes rebuild;
+# removing the label or closing the pull request deletes the preview, and closing it
+# also deletes its images from GHCR.
+#
+# Only branches of this repository get previews: a fork's code never runs with the
+# token that pushes images. Argo CD deploys the images with the target branch's charts
+# and Secrets, never the pull request's, so labelling a fork's pull request runs nothing
+# of the fork's.
+name: Preview
+
+on:
+  pull_request:
+    types: [labeled, synchronize, reopened, closed]
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+env:
+  REGISTRY: ghcr.io/manasmadan/boilerplate
+
+jobs:
+  # One job per image: all seven on one runner ran it out of disk.
+  images:
+    name: Preview image ${{ matrix.image }}
+    if: >-
+      github.event.action != 'closed'
+      && contains(github.event.pull_request.labels.*.name, 'preview')
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions: { contents: read, packages: write }
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [api, worker, notifications, webhooks, web, ai, migrate]
+    env:
+      SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false, ref: "${{ env.SHA }}" }
+      - uses: ./.github/actions/free-disk
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # amd64 only: previews run on the staging cluster's default nodes.
+      - uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          TAG: sha-${{ env.SHA }}
+          RELEASE: ${{ env.SHA }}
+        with:
+          source: .
+          targets: ${{ matrix.image }}
+          push: true
+          set: |
+            *.platform=linux/amd64
+            *.cache-from=type=gha,scope=${{ matrix.image }}-amd64
+
+  # A closed pull request's preview images (sha-<each of its commits>) are never deployed
+  # again: master's commits are new ones (squash merges), with images of their own.
+  cleanup:
+    name: Delete the preview's images
+    if: >-
+      github.event.action == 'closed'
+      && contains(github.event.pull_request.labels.*.name, 'preview')
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: { contents: read, packages: write }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - name: Delete every image version tagged with one of the pull request's commits
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          IMAGES: api worker notifications webhooks web ai migrate
+        with:
+          script: |
+            const commits = await github.paginate(github.rest.pulls.listCommits, {
+              ...context.repo,
+              pull_number: context.payload.pull_request.number,
+            });
+            const tags = new Set(commits.map((commit) => `sha-${commit.sha}`));
+            const owner = context.payload.repository.owner;
+            const org = owner.type === "Organization";
+            const scope = org ? { org: owner.login } : { username: owner.login };
+            for (const image of process.env.IMAGES.split(" ")) {
+              const package_name = `${context.repo.repo}/${image}`;
+              const request = { package_type: "container", package_name, ...scope };
+              const list = org
+                ? github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg
+                : github.rest.packages.getAllPackageVersionsForPackageOwnedByUser;
+              const versions = await github.paginate(list, request).catch(() => []);
+              for (const version of versions) {
+                const versionTags = version.metadata?.container?.tags ?? [];
+                // Only versions every tag of which is one of this pull request's.
+                if (versionTags.length === 0 || !versionTags.every((tag) => tags.has(tag))) continue;
+                const remove = org
+                  ? github.rest.packages.deletePackageVersionForOrg
+                  : github.rest.packages.deletePackageVersionForUser;
+                await remove({ ...request, package_version_id: version.id });
+                core.info(`deleted ${package_name}:${versionTags.join(",")}`);
+              }
+            }

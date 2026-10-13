@@ -1,0 +1,64 @@
+# kind (`bun run k8s:up`): images built and loaded locally, one replica each, no
+# autoscalers, plain HTTP on http://localhost (the api's MCP server allows plain HTTP only
+# for localhost itself, not *.localhost).
+image:
+  registry: boilerplate
+  tag: dev
+  pullPolicy: IfNotPresent
+site:
+  host: localhost
+  scheme: http
+gateway:
+  parentRefs:
+    - name: public
+      namespace: gateway-system
+      sectionName: http
+# The data release is boilerplate-data here (scripts/k8s.ts), so its Postgres is too.
+database:
+  caSecret: boilerplate-data-postgres-ca
+env:
+  LOG_LEVEL: debug
+defaults:
+  replicas: 1
+  topologySpread: false
+  pdb:
+    enabled: false
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 512Mi }
+services:
+  web:
+    autoscaling: { enabled: false }
+  api:
+    autoscaling: { enabled: false }
+    # No ClamAV locally, so no file uploads (the data chart's RustFS still runs).
+    storage: none
+    env:
+      # Local stand-ins, as in development.
+      MINIMUM_CLIENT_VERSION: "0.0.0"
+  # KEDA scales the worker on its queues, as in the clusters: its operator reaching Valkey
+  # through the data chart's network policy is checked here (scripts/k8s.ts). At most
+  # two, to fit the machine.
+  worker:
+    keda: { enabled: true, maxReplicas: 2 }
+    storage: none
+    env:
+      FILE_SCANNER: none
+  notifications:
+    keda: { enabled: false }
+    # Mailpit (deploy/local/mailpit.yaml) over TLS, with a certificate from the kind
+    # cluster's own authority; SMTP_URL is in the Secret `bun run k8s:up` creates.
+    caBundle: local-ca
+    env:
+      EMAIL_FROM: Boilerplate <no-reply@boilerplate.localhost>
+  webhooks:
+    keda: { enabled: false }
+  # kind has no model provider, so the AI service runs its development stand-ins
+  # (extractive answers, hashing embeddings), which it refuses under NODE_ENV=production.
+  ai:
+    env:
+      NODE_ENV: test
+  ai-worker:
+    keda: { enabled: false }
+    env:
+      NODE_ENV: test

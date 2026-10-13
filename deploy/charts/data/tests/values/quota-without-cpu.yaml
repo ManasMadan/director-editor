@@ -1,0 +1,6 @@
+# A preview quota without its CPU limit (null removes the default's key).
+preview:
+  enabled: true
+  namespace: pr-42
+  quota:
+    limits.cpu: null

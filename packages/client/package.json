@@ -1,0 +1,46 @@
+{
+  "name": "@repo/client",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Everything web and mobile use to talk to the API: the typed client, auth client, and one hook per API operation.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./auth": "./src/auth/client.ts",
+    "./api/*": "./src/api/*.ts",
+    "./auth/*": "./src/auth/*.ts"
+  },
+  "scripts": {
+    "check-types": "tsc",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@better-auth/api-key": "catalog:",
+    "@better-auth/oauth-provider": "catalog:",
+    "@better-auth/passkey": "catalog:",
+    "@orpc/client": "catalog:",
+    "@orpc/contract": "catalog:",
+    "@orpc/tanstack-query": "catalog:",
+    "@repo/contracts": "workspace:*",
+    "@repo/i18n": "workspace:*",
+    "better-auth": "catalog:",
+    "use-intl": "catalog:",
+    "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "catalog:",
+    "react": "catalog:"
+  },
+  "devDependencies": {
+    "@orpc/server": "catalog:",
+    "@repo/typescript-config": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-test-renderer": "19.3.0",
+    "react-test-renderer": "19.2.3",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

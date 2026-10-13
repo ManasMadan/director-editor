@@ -1,0 +1,6 @@
+/*
+ * The web's theme variants: dark when <html> (or an ancestor) has the `dark` class, which
+ * next-themes toggles; light otherwise. Uniwind defines its own on mobile.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant light (&:not(:where(.dark, .dark *)));

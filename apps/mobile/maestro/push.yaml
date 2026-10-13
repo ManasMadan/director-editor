@@ -1,0 +1,17 @@
+# Allow notifications: the system prompt appears, and the device is registered.
+appId: com.boilerplate.app.development
+---
+- runFlow: sign-up-and-restart.yaml
+- tapOn: "Settings"
+- tapOn: "Get notifications on this device"
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn: "Allow"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - tapOn: "Allow"
+- assertVisible: "Notifications are on for this device."

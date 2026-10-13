@@ -1,0 +1,173 @@
+{{- range $name := keys .Values.services | sortAlpha }}
+{{- $svc := include "stack.service" (list $ $name) | fromYaml }}
+{{- if $svc.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "stack.fullname" (list $ $name) }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "stack.labels" (list $ $name) | nindent 4 }}
+spec:
+  {{- if not (or $svc.autoscaling.enabled $svc.keda.enabled) }}
+  replicas: {{ $svc.replicas }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      {{- include "stack.selectorLabels" (list $ $name) | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # New pods become ready before old ones go: no capacity dip during a rollout.
+      maxUnavailable: 0
+      maxSurge: 25%
+  template:
+    metadata:
+      labels:
+        {{- include "stack.labels" (list $ $name) | nindent 8 }}
+      {{- with $svc.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "stack.fullname" (list $ $name) }}
+      # No service talks to the Kubernetes API.
+      automountServiceAccountToken: false
+      {{- with $.Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: {{ $svc.terminationGracePeriodSeconds }}
+      {{- if $svc.topologySpread }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "stack.selectorLabels" (list $ $name) | nindent 14 }}
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "stack.selectorLabels" (list $ $name) | nindent 14 }}
+      {{- end }}
+      {{- with $svc.nodeSelector }}
+      nodeSelector:
+        {{- range $key, $value := . }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
+      {{- end }}
+      {{- with $svc.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ $name }}
+          image: {{ include "stack.image" (list $ $svc) }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          {{- with $svc.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $svc.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if $svc.port }}
+          ports:
+            - name: {{ if $svc.tcpProbe }}tcp{{ else }}http{{ end }}
+              containerPort: {{ $svc.port }}
+          {{- end }}
+          {{- include "stack.containerEnv" (list $ $name $svc) | nindent 10 }}
+          resources:
+            {{- toYaml $svc.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          {{- if $svc.port }}
+          {{- if $svc.tcpProbe }}
+          startupProbe:
+            tcpSocket: { port: tcp }
+            periodSeconds: 10
+            failureThreshold: 60
+          livenessProbe:
+            tcpSocket: { port: tcp }
+            periodSeconds: 20
+          readinessProbe:
+            tcpSocket: { port: tcp }
+            periodSeconds: 10
+          {{- else if $svc.probes }}
+          startupProbe:
+            httpGet: { path: {{ $svc.probes.liveness }}, port: http }
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: {{ $svc.probes.liveness }}, port: http }
+            periodSeconds: 20
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet: { path: {{ $svc.probes.readiness }}, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          {{- end }}
+          {{- else if $svc.livenessCommand }}
+          {{- /* A worker without a port proves it's alive with a command. */}}
+          startupProbe:
+            exec: { command: {{ toJson $svc.livenessCommand }} }
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            exec: { command: {{ toJson $svc.livenessCommand }} }
+            periodSeconds: 30
+            timeoutSeconds: 10
+          {{- end }}
+          {{- if $svc.routes }}
+          lifecycle:
+            # Keep serving while the gateway drops this pod from its endpoints.
+            preStop:
+              sleep:
+                seconds: 5
+          {{- end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- range $i, $path := $svc.writablePaths }}
+            - name: writable-{{ $i }}
+              mountPath: {{ $path }}
+            {{- end }}
+            {{- with $svc.caBundle }}
+            - name: ca-bundle
+              mountPath: /etc/ssl/extra
+              readOnly: true
+            {{- end }}
+            {{- include "stack.dbCaMount" (list $ $svc) | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- include "stack.dbCaVolume" (list $ $svc) | nindent 8 }}
+        {{- with $svc.caBundle }}
+        - name: ca-bundle
+          secret:
+            secretName: {{ . }}
+            items:
+              - { key: ca.crt, path: ca.crt }
+        {{- end }}
+        {{- range $i, $path := $svc.writablePaths }}
+        - name: writable-{{ $i }}
+          emptyDir: {}
+        {{- end }}
+{{- end }}
+{{- end }}

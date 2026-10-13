@@ -1,0 +1,11 @@
+apiVersion: v2
+name: mail
+description: >-
+  The cluster's mail server, Stalwart: SMTP submission for the application (587, 465),
+  delivery with DKIM signing, inbound mail for bounces (25), IMAP for reading them
+  (993). Its settings are applied from this chart on every start (Stalwart keeps them in
+  its database), and delivery failures are posted to the webhooks service.
+type: application
+version: 0.1.0
+appVersion: "v0.16.24"
+kubeVersion: ">=1.31.0-0"

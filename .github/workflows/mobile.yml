@@ -1,0 +1,96 @@
+# The mobile app on EAS (expo.dev), the same way the other services move:
+#
+#   master   once CI has passed on it, JavaScript changes reach the preview builds (staging)
+#            as an over-the-air update
+#   release  once release.yml has passed on a v* tag, store builds of that version,
+#            submitted to the App Store and Google Play
+#   manual   an over-the-air update to any channel, e.g. a production hotfix
+#
+# Over-the-air updates only reach builds of the same app version (runtimeVersion
+# "appVersion"), so native changes always ship through a release. Setup: variable
+# EAS_PROJECT_ID (`bunx eas-cli init` in apps/mobile), secret EXPO_TOKEN (an expo.dev
+# robot token), EXPO_PUBLIC_API_URL per EAS environment, and store credentials in EAS
+# (`bunx eas-cli credentials`). Skipped until EAS_PROJECT_ID is set.
+name: Mobile
+
+# workflow_run runs with secrets whatever triggered the run it follows; the job checks
+# out that run's commit only when it was this repository's own push.
+on: # zizmor: ignore[dangerous-triggers]
+  # Nothing ships before its checks pass: updates follow CI on master, store builds follow
+  # a release that passed its checks (a version, with images, matching app.config.ts).
+  workflow_run:
+    workflows: [CI, Release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: The channel to publish an over-the-air update to
+        type: choice
+        options: [preview, production]
+
+concurrency:
+  group: mobile-${{ github.event.workflow_run.name || 'manual' }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  eas:
+    name: ${{ github.event.workflow_run.name == 'Release' && 'Store builds' || 'Over-the-air update' }}
+    # Only a run of this repository's own pushes (master, or a release tag), never a fork's:
+    # this job checks that commit out and builds it with the Expo token.
+    if: >-
+      vars.EAS_PROJECT_ID != ''
+      && (github.event_name == 'workflow_dispatch'
+        || (github.event.workflow_run.conclusion == 'success'
+          && github.event.workflow_run.event == 'push'
+          && github.event.workflow_run.head_repository.full_name == github.repository
+          && (github.event.workflow_run.name == 'Release'
+            || github.event.workflow_run.head_branch == 'master')))
+    runs-on: ubuntu-24.04
+    # Store builds wait for EAS to build and submit both apps, queue included.
+    timeout-minutes: ${{ github.event.workflow_run.name == 'Release' && 150 || 30 }}
+    permissions: { contents: read }
+    env:
+      EAS_PROJECT_ID: ${{ vars.EAS_PROJECT_ID }}
+      CHANNEL: ${{ inputs.channel || 'preview' }}
+      STORE: ${{ github.event.workflow_run.name == 'Release' }}
+    defaults:
+      run: { working-directory: apps/mobile }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      # The commit CI or the release checked, not whatever master is by now.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 2
+      # An update only when the merge touched the app or a package it bundles.
+      - name: Did the app change
+        id: changed
+        if: github.event.workflow_run.name == 'CI'
+        working-directory: .
+        run: |
+          if git diff --quiet HEAD^ HEAD -- apps/mobile packages/client packages/contracts packages/i18n packages/ui; then
+            echo "app=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "app=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: ./.github/actions/setup
+        if: steps.changed.outputs.app != 'false'
+      - uses: expo/expo-github-action@eab7a230208c952974db8c3245cfd78402c7b385 # 9.0.0
+        if: steps.changed.outputs.app != 'false'
+        with:
+          eas-version: 24.8.0
+          packager: bun
+          token: ${{ secrets.EXPO_TOKEN }}
+      # Waits for both builds and their submissions, so a failed one fails this run.
+      - name: Store builds, submitted for review
+        if: env.STORE == 'true'
+        run: eas build --platform all --profile production --auto-submit --non-interactive --wait
+      - name: Over-the-air update
+        if: env.STORE != 'true' && steps.changed.outputs.app != 'false'
+        env:
+          MESSAGE: ${{ github.event.workflow_run.display_title || format('Manual update from {0}', github.sha) }}
+        run: eas update --channel "$CHANNEL" --environment "$CHANNEL" --message "$MESSAGE" --non-interactive

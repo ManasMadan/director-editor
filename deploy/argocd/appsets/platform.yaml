@@ -1,0 +1,151 @@
+# Every add-on in deploy/platform/addons on every cluster Argo CD manages for an
+# environment (its Argo CD Secret, written by OpenTofu, has the label
+# boilerplate.dev/environment). The Secret's labels and annotations configure them.
+#
+# An add-on file is one of:
+#   repoURL + chart + version   a chart from a Helm repository or OCI registry, with our
+#                               values from deploy/platform/values/<addon>.yaml;
+#   path                        a chart in this repository;
+#   secretsPath                 SOPS-encrypted manifests in <secretsPath>/<environment>/,
+#                               decrypted by Argo CD's sops plugin (argo-cd-values.yaml).
+# `clusterParameters` sets chart values from the cluster: "name" is the cluster's name,
+# "label:<key>" its boilerplate.dev/<key> label, anything else its boilerplate.dev/<key>
+# annotation; "<field>|<value>" gives the value for a cluster without one (else "").
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          - matrix:
+              generators:
+                - clusters:
+                    selector:
+                      matchExpressions:
+                        - key: boilerplate.dev/environment
+                          operator: Exists
+                # The revision the environment deploys from, and production's images:
+                # deploy/environments/<env>/release.yaml, read at HEAD.
+                - git:
+                    repoURL: https://github.com/ManasMadan/boilerplate.git
+                    revision: HEAD
+                    pathParamPrefix: release
+                    files:
+                      - path: 'deploy/environments/{{ index .metadata.labels "boilerplate.dev/environment" }}/release.yaml'
+          - git:
+              repoURL: https://github.com/ManasMadan/boilerplate.git
+              revision: "{{ .revision }}"
+              # The generator's own `path` parameter (the file's location) would replace
+              # an add-on's `path` key; this moves it to `.file.path`.
+              pathParamPrefix: file
+              files:
+                - path: deploy/platform/addons/*.yaml
+  # Add-ons roll out in the order of their waves, each once the one before is healthy
+  # (the CRDs an add-on needs are installed by one of an earlier wave). A sync-wave
+  # annotation on generated Applications orders nothing; progressive syncs do (OpenTofu's
+  # bootstrap turns them on). A new wave needs a step here.
+  strategy:
+    type: RollingSync
+    rollingSync:
+      steps:
+        - matchExpressions:
+            - key: wave
+              operator: In
+              values: ["wave-30"]
+        - matchExpressions:
+            - key: wave
+              operator: In
+              values: ["wave-20"]
+        - matchExpressions:
+            - key: wave
+              operator: In
+              values: ["wave-10"]
+        - matchExpressions:
+            - key: wave
+              operator: In
+              values: ["wave0"]
+        - matchExpressions:
+            - key: wave
+              operator: In
+              values: ["wave10"]
+  template:
+    metadata:
+      name: "{{ .name }}-{{ .addon }}"
+      labels:
+        wave: "wave{{ .wave }}"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: platform
+      destination:
+        server: "{{ .server }}"
+        namespace: "{{ .namespace }}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          # CRDs larger than the client-side apply annotation limit (cert-manager, KEDA).
+          - ServerSideApply=true
+        retry:
+          limit: 10
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 5m
+  templatePatch: |
+    {{- $cluster := . }}
+    spec:
+      sources:
+        {{- if hasKey . "secretsPath" }}
+        - repoURL: https://github.com/ManasMadan/boilerplate.git
+          targetRevision: "{{ .revision }}"
+          path: {{ .secretsPath }}/{{ index .metadata.labels "boilerplate.dev/environment" }}
+          plugin:
+            name: sops
+        {{- else }}
+        {{- if hasKey . "path" }}
+        - repoURL: https://github.com/ManasMadan/boilerplate.git
+          targetRevision: "{{ .revision }}"
+          path: {{ .path }}
+          helm:
+            releaseName: {{ .addon }}
+        {{- else }}
+        - repoURL: {{ .repoURL }}
+          chart: {{ .chart }}
+          targetRevision: {{ .version }}
+          helm:
+            releaseName: {{ .addon }}
+            valueFiles:
+              - $repo/deploy/platform/values/{{ .addon }}.yaml
+        {{- end }}
+            {{- if hasKey . "clusterParameters" }}
+            parameters:
+              {{- range $key, $given := .clusterParameters }}
+              {{- $field := splitList "|" $given | first }}
+              {{- $fallback := splitList "|" $given | rest | join "|" }}
+              {{- $value := "" }}
+              {{- if eq $field "name" }}
+              {{- $value = $cluster.name }}
+              {{- else if hasPrefix "label:" $field }}
+              {{- $value = index $cluster.metadata.labels (printf "boilerplate.dev/%s" (trimPrefix "label:" $field)) | default "" }}
+              {{- else }}
+              {{- $value = index $cluster.metadata.annotations (printf "boilerplate.dev/%s" $field) | default "" }}
+              {{- end }}
+              {{- $value = $value | default $fallback }}
+              - name: {{ $key | quote }}
+                value: {{ $value | quote }}
+              {{- end }}
+            {{- end }}
+        {{- if not (hasKey . "path") }}
+        - repoURL: https://github.com/ManasMadan/boilerplate.git
+          targetRevision: "{{ .revision }}"
+          ref: repo
+        {{- end }}
+        {{- end }}

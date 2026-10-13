@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // For shared React component packages (packages/ui). They are compiled by the app
+  // that imports them (Next's `transpilePackages`), never on their own.
+  "extends": "./base.json",
+  "compilerOptions": {
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx"
+  }
+}

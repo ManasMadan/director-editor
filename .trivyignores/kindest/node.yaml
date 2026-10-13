@@ -1,0 +1,197 @@
+# Reviewed exceptions for kindest/node (scripts/image-scan.ts): fixable vulnerabilities in
+# the image as published, with no rebuild of it upstream that has the fix as of
+# 2026-10-06. Each expires in about a month; the scan then fails until the image moves
+# to a fixed release (Renovate proposes it) or the entry is reviewed again.
+vulnerabilities:
+  - id: CVE-2026-103111
+    statement: >-
+      libpcre2-8-0 10.46-1~deb13u1 (fixed in 10.46-1~deb13u3): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-11822
+    statement: >-
+      libsqlite3-0 3.46.1-7+deb13u1 (fixed in 3.46.1-7+deb13u2): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-11824
+    statement: >-
+      libsqlite3-0 3.46.1-7+deb13u1 (fixed in 3.46.1-7+deb13u2): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-13221
+    statement: >-
+      perl-base 5.40.1-6 (fixed in 5.40.1-6+deb13u1): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-14456
+    statement: >-
+      libssl3t64 3.5.6-1~deb13u2 (fixed in 3.5.7-1~deb13u2); openssl 3.5.6-1~deb13u2 (fixed in 3.5.7-1~deb13u2); openssl-provider-legacy 3.5.6-1~deb13u2 (fixed in 3.5.7-1~deb13u2): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-25681
+    statement: >-
+      golang.org/x/net v0.43.0 (fixed in 0.55.0); golang.org/x/net v0.51.0 (fixed in 0.55.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-27136
+    statement: >-
+      golang.org/x/net v0.43.0 (fixed in 0.55.0); golang.org/x/net v0.51.0 (fixed in 0.55.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-33186
+    statement: >-
+      google.golang.org/grpc v1.76.0 (fixed in 1.79.3): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-33814
+    statement: >-
+      golang.org/x/net v0.43.0 (fixed in 0.53.0); golang.org/x/net v0.51.0 (fixed in 0.53.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-33818
+    statement: >-
+      stdlib v1.26.5 (fixed in 1.25.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-39821
+    statement: >-
+      golang.org/x/net v0.43.0 (fixed in 0.55.0); golang.org/x/net v0.51.0 (fixed in 0.55.0); stdlib v1.26.5 (fixed in 1.25.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-39883
+    statement: >-
+      go.opentelemetry.io/otel/sdk v1.40.0 (fixed in 1.43.0); go.opentelemetry.io/otel/sdk v1.42.0 (fixed in 1.43.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-41992
+    statement: >-
+      gzip 1.13-1 (fixed in 1.13-1+deb13u1): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-42496
+    statement: >-
+      perl-base 5.40.1-6 (fixed in 5.40.1-6+deb13u1): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-42497
+    statement: >-
+      perl-base 5.40.1-6 (fixed in 5.40.1-6+deb13u1): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-46600
+    statement: >-
+      golang.org/x/net v0.43.0 (fixed in 0.56.0); golang.org/x/net v0.51.0 (fixed in 0.56.0); golang.org/x/net v0.55.0 (fixed in 0.56.0) and 1 more: no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-46680
+    statement: >-
+      github.com/containerd/containerd/v2 v2.2.0 (fixed in 2.0.9): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-48962
+    statement: >-
+      perl-base 5.40.1-6 (fixed in 5.40.1-6+deb13u1): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-53488
+    statement: >-
+      github.com/containerd/containerd/v2 v2.2.0 (fixed in 2.0.10): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-53489
+    statement: >-
+      github.com/containerd/containerd/v2 v2.2.0 (fixed in 2.1.9): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-53492
+    statement: >-
+      github.com/containerd/containerd/v2 v2.2.0 (fixed in 2.1.9): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56852
+    statement: >-
+      golang.org/x/text v0.28.0 (fixed in 0.39.0); golang.org/x/text v0.35.0 (fixed in 0.39.0); golang.org/x/text v0.38.0 (fixed in 0.39.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56853
+    statement: >-
+      stdlib v1.26.5 (fixed in 1.25.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56854
+    statement: >-
+      golang.org/x/crypto v0.53.0 (fixed in 0.55.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56858
+    statement: >-
+      stdlib v1.26.5 (fixed in 1.25.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56859
+    statement: >-
+      stdlib v1.26.5 (fixed in 1.25.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56860
+    statement: >-
+      stdlib v1.26.5 (fixed in 1.25.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56862
+    statement: >-
+      stdlib v1.26.5 (fixed in 1.25.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56864
+    statement: >-
+      golang.org/x/mod v0.33.0 (fixed in 0.40.0); golang.org/x/mod v0.36.0 (fixed in 0.40.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56865
+    statement: >-
+      golang.org/x/mod v0.33.0 (fixed in 0.40.0); golang.org/x/mod v0.36.0 (fixed in 0.40.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-57432
+    statement: >-
+      perl-base 5.40.1-6 (fixed in 5.40.1-6+deb13u1): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-57433
+    statement: >-
+      perl-base 5.40.1-6 (fixed in 5.40.1-6+deb13u1): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-58050
+    statement: >-
+      libssh2-1t64 1.11.1-1+deb13u1 (fixed in 1.11.1-1+deb13u2): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-63382
+    statement: >-
+      libevent-core-2.1-7t64 2.1.12-stable-10+b1 (fixed in 2.1.13-stable-1~deb13u1): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-63383
+    statement: >-
+      libevent-core-2.1-7t64 2.1.12-stable-10+b1 (fixed in 2.1.13-stable-1~deb13u1): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-63384
+    statement: >-
+      libevent-core-2.1-7t64 2.1.12-stable-10+b1 (fixed in 2.1.13-stable-1~deb13u1): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-63385
+    statement: >-
+      libevent-core-2.1-7t64 2.1.12-stable-10+b1 (fixed in 2.1.13-stable-1~deb13u1): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-63387
+    statement: >-
+      libevent-core-2.1-7t64 2.1.12-stable-10+b1 (fixed in 2.1.13-stable-1~deb13u1): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-63388
+    statement: >-
+      libevent-core-2.1-7t64 2.1.12-stable-10+b1 (fixed in 2.1.13-stable-1~deb13u1): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-75804
+    statement: >-
+      libssl3t64 3.5.6-1~deb13u2 (fixed in 3.5.7-1~deb13u3); openssl 3.5.6-1~deb13u2 (fixed in 3.5.7-1~deb13u3); openssl-provider-legacy 3.5.6-1~deb13u2 (fixed in 3.5.7-1~deb13u3): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-8376
+    statement: >-
+      perl-base 5.40.1-6 (fixed in 5.40.1-6+deb13u1): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-84304
+    statement: >-
+      google.golang.org/grpc v1.76.0 (fixed in 1.83.1); google.golang.org/grpc v1.79.3 (fixed in 1.83.1); google.golang.org/grpc v1.80.0 (fixed in 1.83.1): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-84445
+    statement: >-
+      google.golang.org/grpc v1.76.0 (fixed in 1.82.2); google.golang.org/grpc v1.79.3 (fixed in 1.82.2); google.golang.org/grpc v1.80.0 (fixed in 1.82.2): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-84782
+    statement: >-
+      libssl3t64 3.5.6-1~deb13u2 (fixed in 3.5.7-1~deb13u3); openssl 3.5.6-1~deb13u2 (fixed in 3.5.7-1~deb13u3); openssl-provider-legacy 3.5.6-1~deb13u2 (fixed in 3.5.7-1~deb13u3): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-86145
+    statement: >-
+      libpcre2-8-0 10.46-1~deb13u1 (fixed in 10.46-1~deb13u2): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-89157
+    statement: >-
+      libpcre2-8-0 10.46-1~deb13u1 (fixed in 10.46-1~deb13u2): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-89161
+    statement: >-
+      libpcre2-8-0 10.46-1~deb13u1 (fixed in 10.46-1~deb13u2): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: GHSA-hrxh-6v49-42gf
+    statement: >-
+      google.golang.org/grpc v1.76.0 (fixed in 1.82.1); google.golang.org/grpc v1.79.3 (fixed in 1.82.1); google.golang.org/grpc v1.80.0 (fixed in 1.82.1): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05

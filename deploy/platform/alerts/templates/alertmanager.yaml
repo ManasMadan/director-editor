@@ -1,0 +1,43 @@
+{{- /*
+Where alerts go: email to `email`, sent through the cluster's mail server as its
+submission account. Matched to every alert (the Alertmanager's matcher strategy is
+None, deploy/platform/values/kube-prometheus-stack.yaml) except kube-prometheus-stack's
+always-firing Watchdog and its informational ones. Watchdog needs no receiver: the api
+reads it from Alertmanager (system.alerting), and the uptime check outside the cluster
+fails when it stops arriving (deploy/README.md, Observability).
+*/}}
+{{- if and (eq .Values.environment "production") (not .Values.email) }}
+{{- fail "email is required in production: set alert_email in OpenTofu (the cluster's boilerplate.dev/alert-email annotation)" }}
+{{- end }}
+{{- with .Values.email }}
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: email
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "alerts.labels" $ | nindent 4 }}
+spec:
+  route:
+    receiver: email
+    groupBy: [alertname, namespace]
+    groupWait: 1m
+    groupInterval: 10m
+    repeatInterval: 12h
+    matchers:
+      - { name: alertname, matchType: "!~", value: "Watchdog|InfoInhibitor" }
+      - { name: severity, matchType: "=~", value: "warning|critical" }
+  receivers:
+    - name: email
+      emailConfigs:
+        - to: {{ . | quote }}
+          from: {{ printf "%s@%s" $.Values.smtp.account (include "alerts.emailDomain" $) | quote }}
+          # Submission with STARTTLS, which requireTLS insists on.
+          smarthost: {{ printf "%s:587" (include "alerts.mailHost" $) | quote }}
+          authUsername: {{ printf "%s@%s" $.Values.smtp.account (include "alerts.emailDomain" $) | quote }}
+          authPassword:
+            name: {{ $.Values.smtp.secretName }}
+            key: password
+          requireTLS: true
+          sendResolved: true
+{{- end }}

@@ -1,0 +1,6 @@
+/* Tailwind (through Uniwind) and the design tokens shared with the web app. */
+@import "tailwindcss";
+@import "uniwind";
+@import "@repo/ui/theme.css";
+
+@source "./src";

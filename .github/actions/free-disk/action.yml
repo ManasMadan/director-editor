@@ -1,0 +1,16 @@
+# Room for image builds on a GitHub-hosted runner, which starts with about 14 GB free:
+# a build that loads or pushes a Node image with its dependencies ran one out of disk.
+# Removes preinstalled toolchains nothing here uses (Android, GHC, .NET, CodeQL's
+# bundle), which frees about 25 GB in a few seconds.
+name: Free disk space
+description: Delete preinstalled toolchains the image builds don't use
+runs:
+  using: composite
+  steps:
+    - name: Free disk space
+      shell: bash
+      run: |
+        df -h / | tail -1
+        sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /usr/share/dotnet \
+          /opt/hostedtoolcache/CodeQL
+        df -h / | tail -1

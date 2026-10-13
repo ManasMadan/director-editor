@@ -1,0 +1,40 @@
+# Records (proxied on Cloudflare: its WAF and CDN sit in front of the gateway) for the
+# HTTPRoutes annotated boilerplate.dev/external-dns: "true" only: the files host. The
+# site, the preview wildcard and the mail records are OpenTofu's (modules/cloudflare),
+# and external-dns leaves records it doesn't own alone. The cluster's own domain and
+# owner id are set per cluster by the platform ApplicationSet.
+# The provider is the cluster's (dns-provider): each one's credentials are optional, so
+# only the one in use needs its Secret. RFC 2136's settings come from the
+# `external-dns-rfc2136` Secret (host, zone, tsig-keyname, tsig-secret, tsig-secret-alg),
+# as the EXTERNAL_DNS_<flag> variables external-dns reads its flags from.
+provider:
+  name: cloudflare
+sources:
+  - gateway-httproute
+policy: sync
+env:
+  - name: CF_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: cloudflare-api-token
+        key: token
+        optional: true
+  - name: EXTERNAL_DNS_RFC2136_HOST
+    valueFrom: { secretKeyRef: { name: external-dns-rfc2136, key: host, optional: true } }
+  - name: EXTERNAL_DNS_RFC2136_ZONE
+    valueFrom: { secretKeyRef: { name: external-dns-rfc2136, key: zone, optional: true } }
+  - name: EXTERNAL_DNS_RFC2136_TSIG_KEYNAME
+    valueFrom: { secretKeyRef: { name: external-dns-rfc2136, key: tsig-keyname, optional: true } }
+  - name: EXTERNAL_DNS_RFC2136_TSIG_SECRET
+    valueFrom: { secretKeyRef: { name: external-dns-rfc2136, key: tsig-secret, optional: true } }
+  - name: EXTERNAL_DNS_RFC2136_TSIG_SECRET_ALG
+    valueFrom: { secretKeyRef: { name: external-dns-rfc2136, key: tsig-secret-alg, optional: true } }
+extraArgs:
+  - --annotation-filter=boilerplate.dev/external-dns=true
+  - --cloudflare-proxied
+  - --cloudflare-dns-records-per-page=5000
+# CPU and memory requested and limited, as for every container here (the
+# misconfiguration scan, scripts/misconfig.ts, fails without).
+resources:
+  requests: { cpu: 10m, memory: 64Mi }
+  limits: { cpu: 100m, memory: 128Mi }

@@ -1,0 +1,26 @@
+{
+  "name": "@repo/contracts",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "The API contract, input schemas, limits, error codes and domain events shared by the API and every client.",
+  "exports": {
+    "./api": "./src/api/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check-types": "tsc",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@orpc/contract": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

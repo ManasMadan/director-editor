@@ -1,0 +1,3 @@
+# What `wt step copy-ignored` (Worktrunk, .config/wt.toml) and Claude Code copy into a
+# new worktree: gitignored files it needs to run, nothing else.
+.env

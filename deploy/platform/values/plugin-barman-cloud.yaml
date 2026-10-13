@@ -1,0 +1,5 @@
+# CPU and memory requested and limited, as for every container here (the
+# misconfiguration scan, scripts/misconfig.ts, fails without).
+resources:
+  requests: { cpu: 10m, memory: 64Mi }
+  limits: { cpu: 200m, memory: 256Mi }

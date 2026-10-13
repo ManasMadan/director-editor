@@ -1,0 +1,9 @@
+{{ include "stack.name" . }} {{ .Values.image.tag }} is deployed at {{ include "stack.siteUrl" . }}.
+
+Services:
+{{- range $name := keys .Values.services | sortAlpha }}
+{{- $svc := include "stack.service" (list $ $name) | fromYaml }}
+{{- if $svc.enabled }}
+  {{ $name }}{{ if $svc.routes }} ({{ range $i, $r := $svc.routes }}{{ if $i }}, {{ end }}{{ $r.path }}{{ end }}){{ end }}
+{{- end }}
+{{- end }}

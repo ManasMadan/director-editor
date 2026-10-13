@@ -1,0 +1,61 @@
+# The DNS zone the cluster serves: hosts are <domain> and *.<domain> (and
+# *.preview.<domain> when the cluster hosts previews).
+domain: ""
+# Pull-request previews run here (normally on staging).
+previews: false
+
+gateway:
+  # Annotations for the gateway's LoadBalancer Service. k3s's ServiceLB needs none: it
+  # publishes the ports on every node.
+  serviceAnnotations: {}
+  # Proxies in front of the gateway that add to X-Forwarded-For: 1 behind Cloudflare,
+  # 0 when clients connect directly (the cluster's trusted-hops annotation).
+  trustedHops: 1
+  # Refuse the site's hosts to connections without Cloudflare's origin-pull client
+  # certificate, so nothing reaches them except through Cloudflare. Off only for a
+  # cluster with no Cloudflare in front (and then trustedHops: 0); the cluster's
+  # origin-pulls annotation.
+  originPulls: true
+  # The gateway's proxies (Envoy). The image is Envoy Gateway's own default for its
+  # version (Renovate moves the two together); CPU and memory requested and limited, as
+  # for every container here.
+  proxy:
+    image: docker.io/envoyproxy/envoy:distroless-v1.39.1@sha256:eb2c01c13125d1629637cb4e4cce7207009fb7cc2c8027f9742758549d15b6f4
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { cpu: "1", memory: 1Gi }
+
+# Let's Encrypt certificates, validated through DNS (works for wildcards and before the
+# gateway is reachable): Cloudflare's, or a name server of your own (RFC 2136). The
+# cluster's dns-* annotations (OpenTofu's `dns`) choose.
+tls:
+  email: ""
+  # Let's Encrypt's staging endpoint for trying things out (untrusted certificates).
+  staging: false
+  # Secret in cert-manager's namespace with key `token` (Zone:DNS:Edit on the zone),
+  # from deploy/platform/secrets/<environment>/.
+  cloudflareTokenSecret: cloudflare-api-token
+  dns01:
+    # cloudflare or rfc2136.
+    provider: cloudflare
+    rfc2136:
+      # The name server's host:port, the TSIG key's name and algorithm (hmac-sha256, ...).
+      nameserver: ""
+      tsigKeyName: ""
+      tsigAlgorithm: ""
+      # Secret in cert-manager's namespace with key `secret` (the TSIG key, base64), from
+      # deploy/platform/secrets/<environment>/.
+      tsigSecretName: rfc2136-tsig
+
+# Only images built and signed by this repo's CI (keyless, GitHub OIDC) may run in the
+# application namespaces. On for production.
+imagePolicy:
+  enabled: false
+  images: ["ghcr.io/manasmadan/boilerplate/*"]
+  namespaces: [boilerplate]
+  # The workflow that signs releases, on the default branch.
+  subject: "https://github.com/ManasMadan/boilerplate/.github/workflows/*@refs/heads/master"
+  # A cosign public key (PEM) to check signatures against instead: no dependency on
+  # Sigstore's public services, and any CI can sign. Its private key is deploy.yml's
+  # COSIGN_PRIVATE_KEY secret (deploy/README.md, "Image signatures").
+  publicKey: ""

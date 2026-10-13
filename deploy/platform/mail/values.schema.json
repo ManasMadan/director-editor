@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "mail chart values",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "global": { "type": "object" },
+    "domain": { "$ref": "#/$defs/hostOrEmpty" },
+    "emailDomain": { "$ref": "#/$defs/hostOrEmpty" },
+    "hostname": { "$ref": "#/$defs/hostOrEmpty" },
+    "nodeSelector": { "type": "object", "additionalProperties": { "type": "string" } },
+    "tolerations": { "type": "array", "items": { "type": "object" } },
+    "image": { "type": "string", "minLength": 1 },
+    "cli": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image"],
+      "properties": { "image": { "type": "string", "minLength": 1 } }
+    },
+    "secretName": { "type": "string", "minLength": 1 },
+    "submission": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "account": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" } }
+    },
+    "dkim": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "selector": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" } }
+    },
+    "relay": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "host": { "type": "string" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "implicitTls": { "type": "boolean" },
+        "username": { "type": "string" }
+      }
+    },
+    "webhook": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "url": { "type": "string", "pattern": "^$|^https?://" },
+        "events": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^[a-z]+\\.[a-z-]+$" }
+        }
+      }
+    },
+    "tls": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "issuer": { "type": "string", "minLength": 1 } }
+    },
+    "extraPlan": {
+      "type": "array",
+      "items": { "type": "object", "required": ["@type", "object"] }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "enum": ["LoadBalancer", "NodePort", "ClusterIP"] },
+        "annotations": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["size"],
+      "properties": {
+        "size": { "type": "string", "pattern": "^[0-9]+(Mi|Gi|Ti)$" },
+        "storageClass": { "type": "string" }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requests": { "type": "object", "additionalProperties": { "type": "string" } },
+        "limits": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    }
+  },
+  "$defs": {
+    "hostOrEmpty": { "type": "string", "pattern": "^$|^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$" }
+  }
+}

@@ -1,0 +1,18 @@
+# This cluster's Gateway, certificate issuer and image policy (deploy/platform/config),
+# from the cluster's Argo CD Secret.
+addon: platform-config
+namespace: gateway-system
+path: deploy/platform/config
+wave: "0"
+clusterParameters:
+  domain: domain
+  previews: label:previews
+  tls.email: tls-email
+  imagePolicy.enabled: image-policy
+  # The DNS (OpenTofu's `dns`); the defaults are for a cluster written before these were.
+  tls.dns01.provider: dns-provider|cloudflare
+  tls.dns01.rfc2136.nameserver: dns-nameserver
+  tls.dns01.rfc2136.tsigKeyName: dns-tsig-key-name
+  tls.dns01.rfc2136.tsigAlgorithm: dns-tsig-algorithm
+  gateway.trustedHops: trusted-hops|1
+  gateway.originPulls: origin-pulls|true

@@ -1,0 +1,28 @@
+suite: the release's namespace
+templates:
+  - credentials.yaml
+  - networkpolicy.yaml
+  - offsite.yaml
+  - postgres.yaml
+  - preview-mail.yaml
+  - restore-drill.yaml
+  - storage.yaml
+  - valkey.yaml
+release: { name: demo, namespace: apps }
+set:
+  storage.uploads.host: files.example.com
+  storage.uploads.corsOrigins: [https://app.example.com]
+  postgres.backups.enabled: true
+  postgres.drill.enabled: true
+  valkey.replication.enabled: true
+  offsite.endpoint: https://s3.elsewhere.example
+  offsite.bucket: copies
+  offsite.prefix: production
+  preview.enabled: true
+  preview.namespace: apps
+tests:
+  # Named on each object, not left to whoever applies the manifests: nothing lands in
+  # the default namespace by accident. (A preview's namespace objects are preview.yaml's.)
+  - it: puts every object in the release's namespace
+    asserts:
+      - equal: { path: metadata.namespace, value: apps }

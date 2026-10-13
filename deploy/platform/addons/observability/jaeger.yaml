@@ -1,0 +1,5 @@
+# Traces (deploy/platform/jaeger), on clusters labelled boilerplate.dev/observability.
+addon: jaeger
+namespace: observability
+path: deploy/platform/jaeger
+wave: "0"

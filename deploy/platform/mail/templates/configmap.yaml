@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mail.name" . }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "mail.labels" . | nindent 4 }}
+data:
+  # Where the database is: everything else Stalwart keeps in it (plan.ndjson).
+  config.json: {{ dict "@type" "RocksDb" "path" "/var/lib/stalwart" | toJson | quote }}
+  plan.ndjson: |
+    {{- include "mail.plan" . | nindent 4 }}

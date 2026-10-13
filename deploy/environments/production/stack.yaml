@@ -1,0 +1,42 @@
+# Production. Its image tag and the revision these values are read at are in
+# release.yaml, which only a promotion pull request changes (merge = deploy).
+site:
+  # Your production host.
+  host: app.example.com
+env:
+  LOG_LEVEL: info
+defaults:
+  replicas: 3
+  resources:
+    requests: { cpu: 250m, memory: 384Mi }
+    limits: { memory: 768Mi }
+  keda:
+    minReplicas: 2
+    maxReplicas: 20
+services:
+  notifications:
+    env:
+      # Mail goes through the cluster's mail server (deploy/platform/mail): SMTP_URL,
+      # with the submission password, is in secrets/notifications.sops.yaml.
+      # Your sender: the mail server's submission account on its email domain.
+      EMAIL_FROM: Boilerplate <no-reply@example.com>
+  web:
+    autoscaling: { minReplicas: 3, maxReplicas: 20 }
+    # Optional: the mobile app's https links and passkeys (docs/web-and-mobile.md,
+    # "Universal links and App Links"), for the build that talks to this site
+    # (the production variant). Off while unset; set all four or none (a partial set stops the
+    # web app), and give the api the same fingerprints.
+    # env:
+    #   APPLE_TEAM_ID: ABCDE12345
+    #   IOS_BUNDLE_ID: com.boilerplate.app
+    #   ANDROID_PACKAGE: com.boilerplate.app
+    #   ANDROID_CERT_FINGERPRINTS: AB:CD:...
+  api:
+    autoscaling: { minReplicas: 3, maxReplicas: 30 }
+    # With the mobile app's links on (web, above): passkeys made in the Android app come
+    # from its certificates (apps/api/src/auth/auth.ts).
+    # env:
+    #   ANDROID_CERT_FINGERPRINTS: AB:CD:...
+  clamav:
+    enabled: true
+    replicas: 2

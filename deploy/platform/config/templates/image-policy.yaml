@@ -1,0 +1,45 @@
+{{- if .Values.imagePolicy.enabled }}
+{{- $p := .Values.imagePolicy }}
+---
+# Pods in the application namespaces run only images that this repo's release workflow
+# signed. Keyless by default: the signature names the GitHub workflow and branch, and
+# checking it needs Sigstore's public transparency log (rekor.sigstore.dev), so an outage
+# there blocks new pods. With imagePolicy.publicKey, images are signed with the key pair
+# instead (deploy.yml, COSIGN_PRIVATE_KEY) and checked against the key alone.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-signatures
+spec:
+  webhookTimeoutSeconds: 30
+  background: false
+  rules:
+    - name: signed-by-ci
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces:
+                {{- toYaml $p.namespaces | nindent 16 }}
+      verifyImages:
+        - imageReferences:
+            {{- toYaml $p.images | nindent 12 }}
+          failureAction: Enforce
+          mutateDigest: true
+          attestors:
+            - entries:
+                {{- if $p.publicKey }}
+                - keys:
+                    publicKeys: {{ $p.publicKey | quote }}
+                    rekor:
+                      ignoreTlog: true
+                    ctlog:
+                      ignoreSCT: true
+                {{- else }}
+                - keyless:
+                    subject: {{ $p.subject | quote }}
+                    issuer: https://token.actions.githubusercontent.com
+                    rekor:
+                      url: https://rekor.sigstore.dev
+                {{- end }}
+{{- end }}

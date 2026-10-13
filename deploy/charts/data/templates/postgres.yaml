@@ -1,0 +1,164 @@
+{{- /*
+The application's Postgres (CloudNativePG): the same roles and privileges as local
+development (infra/postgres/init).
+
+The migrator owns the database. Service roles are created during bootstrap without a
+login, so the database can grant them CONNECT; CloudNativePG then manages them (login,
+password from their Secret, no RLS bypass). Table privileges come from migrations.
+
+With backups on, WAL is archived continuously and a base backup taken on schedule to
+the backups RustFS server (storage.yaml), through the Barman Cloud plugin. A restored
+cluster starts from those instead of an empty database: its roles and grants come with
+it, and CloudNativePG sets their passwords from this namespace's Secrets.
+*/}}
+{{- $pg := .Values.postgres }}
+{{- $db := .Values.database.name }}
+{{- $appRoles := include "data.appRoles" . | fromJsonArray }}
+{{- $cluster := include "data.postgres" . }}
+{{- $serverName := $pg.backups.serverName | default $cluster }}
+{{- if $pg.restore.enabled }}
+{{- if not $pg.backups.enabled }}
+{{- fail "postgres.restore needs postgres.backups.enabled: the backups are what it restores from" }}
+{{- end }}
+{{- $from := required "postgres.restore.serverName is required: the folder the backup is in (the old cluster's backups.serverName)" $pg.restore.serverName }}
+{{- if eq $from $serverName }}
+{{- fail "postgres.backups.serverName must differ from postgres.restore.serverName: the restored cluster archives to a new folder, never over the backup it came from" }}
+{{- end }}
+{{- end }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ $cluster }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+spec:
+  instances: {{ $pg.instances }}
+  imageName: {{ $pg.imageName }}
+  enableSuperuserAccess: false
+  postgresql:
+    # TLS only: CloudNativePG serves it with its own certificate authority (the
+    # <cluster>-ca Secret, which the services verify against), and a connection without
+    # it is refused.
+    pg_hba:
+      - hostnossl all all all reject
+    parameters:
+      {{- range $key, $value := $pg.parameters }}
+      {{ $key }}: {{ $value | quote }}
+      {{- end }}
+  bootstrap:
+    {{- if $pg.restore.enabled }}
+    recovery:
+      source: origin
+      database: {{ $db }}
+      owner: migrator
+      # The backup's migrator password is replaced with this namespace's.
+      secret:
+        name: {{ include "data.roleSecret" (list . "migrator") }}
+      {{- with $pg.restore.targetTime }}
+      recoveryTarget:
+        targetTime: {{ . | quote }}
+      {{- end }}
+    {{- else }}
+    initdb:
+      database: {{ $db }}
+      owner: migrator
+      secret:
+        name: {{ include "data.roleSecret" (list . "migrator") }}
+      postInitApplicationSQL:
+        # Extensions need a superuser, so they're created here rather than in migrations.
+        - CREATE EXTENSION IF NOT EXISTS vector
+        - CREATE EXTENSION IF NOT EXISTS pg_trgm
+        - REVOKE CREATE ON SCHEMA public FROM PUBLIC
+        - REVOKE ALL ON DATABASE {{ $db }} FROM PUBLIC
+        {{- range $role := $appRoles }}
+        - CREATE ROLE {{ $role }} NOLOGIN NOBYPASSRLS NOINHERIT
+        - GRANT CONNECT ON DATABASE {{ $db }} TO {{ $role }}
+        {{- end }}
+    {{- end }}
+  {{- if $pg.restore.enabled }}
+  externalClusters:
+    - name: origin
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: {{ include "data.objectStore" . }}
+          serverName: {{ $pg.restore.serverName }}
+  {{- end }}
+  managed:
+    roles:
+      {{- range $role := $appRoles }}
+      - name: {{ $role }}
+        ensure: present
+        login: true
+        bypassrls: false
+        inherit: false
+        passwordSecret:
+          name: {{ include "data.roleSecret" (list $ $role) }}
+      {{- end }}
+  storage:
+    size: {{ $pg.storage.size }}
+    {{- with $pg.storage.storageClass }}
+    storageClass: {{ . }}
+    {{- end }}
+  resources:
+    {{- toYaml $pg.resources | nindent 4 }}
+  affinity:
+    # Instances on different nodes where there are several.
+    podAntiAffinityType: preferred
+  {{- if $pg.backups.enabled }}
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: {{ include "data.objectStore" . }}
+        serverName: {{ $serverName }}
+  {{- end }}
+{{- if $pg.backups.enabled }}
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: {{ include "data.objectStore" . }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+spec:
+  # Base backups older than this are deleted, with the WAL only they needed.
+  retentionPolicy: {{ $pg.backups.retention | quote }}
+  configuration:
+    destinationPath: {{ printf "s3://%s/" .Values.storage.backups.bucket }}
+    endpointURL: {{ include "data.rustfsEndpoint" (list . "backups") }}
+    s3Credentials:
+      accessKeyId:
+        name: {{ include "data.backupsSecret" . }}
+        key: accessKeyId
+      secretAccessKey:
+        name: {{ include "data.backupsSecret" . }}
+        key: secretAccessKey
+    wal:
+      compression: gzip
+      maxParallel: 2
+    data:
+      compression: gzip
+      jobs: 2
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: {{ $cluster }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+spec:
+  schedule: {{ $pg.backups.schedule | quote }}
+  # A first base backup right away: point-in-time recovery starts from one.
+  immediate: true
+  backupOwnerReference: self
+  cluster:
+    name: {{ $cluster }}
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+{{- end }}

@@ -1,0 +1,22 @@
+{
+  "name": "@repo/ai",
+  "private": true,
+  "description": "Thin wrapper so turbo can run the Python service's tasks alongside the TypeScript ones.",
+  "scripts": {
+    "dev": "sh -c 'trap \"kill 0\" EXIT INT TERM; bun run dev:api & bun run dev:worker & wait'",
+    "dev:api": "bun --env-file=../../.env run sh -c 'exec uv run fastapi dev app/main.py --port \"$AI_PORT\"'",
+    "dev:worker": "bun --env-file=../../.env run uv run watchfiles --filter python 'python -m app.worker' app",
+    "start": "bun --env-file=../../.env run sh -c 'exec uv run fastapi run app/main.py --port \"$AI_PORT\"'",
+    "gen": "rm -rf app/contracts && uv run datamodel-codegen --input ../../packages/jobs/generated/schemas --input-file-type jsonschema --output app/contracts --output-model-type pydantic_v2.BaseModel --target-python-version 3.14 --use-standard-collections --use-union-operator --field-constraints --disable-timestamp --use-double-quotes --use-title-as-name --enum-field-as-literal all --use-type-alias --formatters ruff-format && uv run ruff format app/contracts && uv run ruff check --fix --quiet app/contracts && cp ../../packages/jobs/generated/queue-settings.json app/contracts/queue_settings.json && cp ../../packages/jobs/generated/error-codes.json app/contracts/error_codes.json && cp ../../packages/jobs/generated/realtime-channels.json app/contracts/realtime_channels.json && uv run python -m app.export_openapi openapi.json",
+    "check-types": "uv run basedpyright",
+    "lint": "uv run ruff check . && uv run ruff format --check . && uv run deptry .",
+    "test": "uv run pytest",
+    "test:integration": "uv run pytest -m integration",
+    "worker": "bun --env-file=../../.env run uv run python -m app.worker",
+    "evals": "bun --env-file=../../.env run uv run python -m evals",
+    "coverage": "uv run pytest -m 'integration or not integration' --cov --cov-report=term --cov-report=lcov:coverage/lcov.info"
+  },
+  "devDependencies": {
+    "@repo/jobs": "workspace:*"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "extends": "@repo/typescript-config/react-library.json",
+  "compilerOptions": {
+    // Lets the package import itself by its public name (`@repo/ui/lib/utils`), the
+    // same specifier apps use. shadcn's CLI generates imports in this form.
+    "paths": { "@repo/ui/*": ["./src/*"] }
+  },
+  "include": ["src", "test", ".storybook", "vitest.config.ts"]
+}

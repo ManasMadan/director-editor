@@ -1,0 +1,89 @@
+# The cluster's DNS zone (the platform ApplicationSet sets it from the cluster).
+domain: ""
+# The email domain, the part after @. Empty: the cluster's domain. Set it when two
+# clusters share a zone (staging.example.com next to production's example.com).
+emailDomain: ""
+# The server's name: the MX target, its certificate and what it greets others with.
+# Empty: mail.<email domain>. OpenTofu's Cloudflare module publishes it (unproxied), with
+# the MX, SPF, DKIM and DMARC records, pointing at the mail node.
+hostname: ""
+
+# The node the server runs on: the one OpenTofu labels for mail, whose address the DNS
+# records and SPF name (mail must leave from it). OpenTofu doesn't taint it (on a
+# one-node cluster that would keep everything else off); the toleration lets you taint
+# a node you dedicate to mail with `dedicated=mail:NoSchedule`.
+nodeSelector:
+  boilerplate.dev/mail: "true"
+tolerations:
+  - { key: dedicated, operator: Equal, value: mail, effect: NoSchedule }
+
+image: docker.io/stalwartlabs/stalwart:v0.16.24@sha256:ec011be228596e37e65f41aab17deed573859614430472f7eeb42178c50d87b7
+# stalwart-cli, which applies the settings below.
+cli:
+  image: docker.io/stalwartlabs/cli:1.0.13@sha256:9a1e07307d6f890a193322c4b737fc0868405f0f8486a19922cbf362f43884fd
+
+# The Secret with the server's credentials, from deploy/platform/secrets/<environment>/
+# (SOPS). Keys:
+#   ADMIN_PASSWORD           the administrator that applies the settings (only ever
+#                            valid while the server starts in recovery mode, never on
+#                            the open ports)
+#   SMTP_PASSWORD            the application's submission account; letters, digits
+#                            and ._~- only (it goes into SMTP_URL unescaped)
+#   STALWART_WEBHOOK_SECRET  signs the delivery-failure webhooks, 32 characters or more
+#                            (the webhooks service's Secret has the same value)
+#   dkim.key                 the DKIM private key, PEM (see infra/tofu/README.md, DNS)
+secretName: stalwart
+
+# The account the application sends as (<account>@<email domain>, also EMAIL_FROM).
+# The notifications service logs in to submission with that address and SMTP_PASSWORD:
+# SMTP_URL=smtps://<account>%40<email domain>:<SMTP_PASSWORD>@<hostname>:465
+submission:
+  account: no-reply
+
+# DKIM: the DNS record is <selector>._domainkey.<email domain> (OpenTofu's, from the
+# public half of dkim.key), so the selector here matches its mail.dkim_selector.
+dkim:
+  selector: default
+
+# Delivery failures (bounces Stalwart generates) are posted here, signed with
+# STALWART_WEBHOOK_SECRET. The default is the webhooks service in the application's
+# namespace, in-cluster; its network policy lets this namespace in.
+webhook:
+  enabled: true
+  url: http://boilerplate-webhooks.boilerplate.svc.cluster.local:3004/webhooks/stalwart
+  events: [delivery.dsn-perm-fail, delivery.dsn-temp-fail]
+
+# A smarthost: send every outgoing message through another SMTP server instead of
+# straight to the recipients' MX hosts. For a node whose provider blocks port 25, or
+# whose address is on blocklists (docs/new-project.md, Mail): any relay you run, or a
+# provider's. Empty host: direct delivery. With a username, the password is the
+# Secret's RELAY_PASSWORD. DKIM signing stays here, so SPF must allow the relay too.
+relay:
+  host: ""
+  port: 587
+  # true for SMTPS (465); otherwise STARTTLS, which the relay must offer.
+  implicitTls: false
+  username: ""
+
+# The certificate for the server's name, from cert-manager.
+tls:
+  issuer: letsencrypt
+
+# Settings this chart doesn't cover, as stalwart-cli apply operations (one object each,
+# https://stalw.art/docs/management/cli/apply/). Applied after the chart's own, on every
+# start.
+extraPlan: []
+
+# The mail ports on a LoadBalancer Service (k3s's ServiceLB), answered only on the node
+# the server runs on: that's where DNS points, and senders' addresses are kept (spam
+# checks on incoming mail need them).
+service:
+  type: LoadBalancer
+  annotations: {}
+
+storage:
+  size: 10Gi
+  storageClass: local-path
+resources:
+  requests: { cpu: 100m, memory: 256Mi }
+  limits: { cpu: "1", memory: 1Gi }

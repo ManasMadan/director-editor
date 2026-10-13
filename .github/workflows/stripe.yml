@@ -1,0 +1,66 @@
+# The fake Stripe's contract with Stripe itself, weekly: the calls the api makes, against
+# Stripe's test mode, must answer in the shape the fake does (packages/fake-stripe,
+# src/contract.test.ts), so an API change on Stripe's side shows here instead of in
+# production. Every pull request runs the same suite against the fake alone.
+#
+# Needs the STRIPE_CONTRACT_SECRET_KEY secret (a test-mode key, sk_test_…, of an account
+# whose test-mode billing portal settings are saved; docs/repository-settings.md).
+# Without it the run says so and passes.
+name: Stripe contract
+
+on:
+  schedule:
+    - cron: "41 5 * * 3"
+  workflow_dispatch:
+
+concurrency:
+  group: stripe-contract
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  contract:
+    name: Fake Stripe against Stripe's test mode
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions: { contents: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >-
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            raw.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+            nodejs.org:443
+            registry.npmjs.org:443
+            api.stripe.com:443
+      - name: Is there a key?
+        id: key
+        env:
+          KEY: ${{ secrets.STRIPE_CONTRACT_SECRET_KEY }}
+        run: |
+          if [[ -n "$KEY" ]]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::STRIPE_CONTRACT_SECRET_KEY isn't set: nothing to check against Stripe (docs/repository-settings.md)."
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.key.outputs.present == 'true'
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+        if: steps.key.outputs.present == 'true'
+      - name: The contract, against the fake and against Stripe
+        if: steps.key.outputs.present == 'true'
+        working-directory: packages/fake-stripe
+        env:
+          STRIPE_CONTRACT_SECRET_KEY: ${{ secrets.STRIPE_CONTRACT_SECRET_KEY }}
+        run: bunx vitest run src/contract.test.ts

@@ -1,0 +1,12 @@
+{
+  "extends": ["expo/tsconfig.base", "@repo/typescript-config/base.json"],
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    // The app also runs on the web (react-native-web), and the shared client reads
+    // `window` there.
+    "lib": ["ESNext", "DOM"],
+    "types": ["jest"],
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": ["src", "test", "*.ts", "expo-env.d.ts", "uniwind-types.d.ts", ".expo/types/**/*.ts"]
+}

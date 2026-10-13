@@ -1,0 +1,38 @@
+# Schemathesis's settings for `bun run test:fuzz` (scripts/fuzz.ts), which fuzzes the API
+# and the AI service from their OpenAPI documents. docs/testing.md, "Fuzzing".
+
+# The same requests every run, and a bounded number of them.
+seed = 1
+
+[checks]
+enabled = false
+# A 5xx is a bug: the API answers every request it can't serve with a declared 4xx.
+not_a_server_error.enabled = true
+# Every status, content type and body the API sends is one its document declares.
+status_code_conformance.enabled = true
+content_type_conformance.enabled = true
+response_schema_conformance.enabled = true
+
+[generation]
+max-examples = 50
+# Without a database of past examples, a run never depends on the one before it.
+database = "none"
+# The session below is how requests get in. Otherwise Schemathesis also makes up values
+# for the other security scheme (API keys), and those requests only ever answer 401.
+with-security-parameters = false
+
+[[project]]
+title = "Boilerplate API"
+auth.openapi.session.api_key = "${FUZZ_SESSION}"
+
+# The answer streams as server-sent events. oRPC documents each event's data as the
+# object it decodes to; Schemathesis reads it as the text on the wire, which is that
+# object as JSON, so its check of the event's schema can't pass.
+[[project.operations]]
+include-operation-id = "ai.ask"
+checks.response_schema_conformance.enabled = false
+
+[[project]]
+title = "ai"
+# The token the API would send (scripts/fuzz.ts signs it).
+parameters = { authorization = "Bearer ${AI_TOKEN}" }

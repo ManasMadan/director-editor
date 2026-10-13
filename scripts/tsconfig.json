@@ -1,0 +1,6 @@
+{
+  // The repo's own scripts (bun run doctor, test:e2e, charts:check, k8s:up, …).
+  "extends": "../packages/typescript-config/bun.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["*.ts"]
+}

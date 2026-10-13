@@ -1,0 +1,40 @@
+{{- /*
+One HTTPRoute per routed service, all on the site's host. Gateway API picks the most
+specific match, so /api goes to the api and everything else to the web app regardless
+of order.
+*/}}
+{{- if .Values.gateway.enabled }}
+{{- range $name := keys .Values.services | sortAlpha }}
+{{- $svc := include "stack.service" (list $ $name) | fromYaml }}
+{{- if and $svc.enabled $svc.routes }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "stack.fullname" (list $ $name) }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "stack.labels" (list $ $name) | nindent 4 }}
+spec:
+  parentRefs:
+    {{- toYaml $.Values.gateway.parentRefs | nindent 4 }}
+  hostnames:
+    - {{ required "site.host is required" $.Values.site.host | quote }}
+  rules:
+    {{- range $svc.routes }}
+    - matches:
+        - path:
+            type: {{ .match | default "PathPrefix" }}
+            value: {{ .path }}
+      backendRefs:
+        - name: {{ include "stack.fullname" (list $ $name) }}
+          port: {{ $svc.port }}
+      {{- if .timeout }}
+      timeouts:
+        request: {{ .timeout }}
+        backendRequest: {{ .timeout }}
+      {{- end }}
+    {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

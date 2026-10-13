@@ -1,0 +1,48 @@
+{
+  "name": "@repo/webhooks",
+  "private": true,
+  "type": "module",
+  "description": "Webhooks service: verifies and records inbound provider webhooks (Stripe, our Stalwart mail server), and delivers signed events to customers' endpoints.",
+  "scripts": {
+    "dev": "tsdown --watch --on-success \"node --env-file-if-exists=../../.env --enable-source-maps --import ./dist/telemetry.mjs dist/main.mjs\"",
+    "build": "tsdown",
+    "start": "node --env-file-if-exists=../../.env --enable-source-maps --import ./dist/telemetry.mjs dist/main.mjs",
+    "check-types": "tsc",
+    "test": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@nestjs/bullmq": "catalog:",
+    "@nestjs/common": "catalog:",
+    "@nestjs/core": "catalog:",
+    "@repo/contracts": "workspace:*",
+    "@repo/db": "workspace:*",
+    "@repo/jobs": "workspace:*",
+    "@repo/nest-common": "workspace:*",
+    "@t3-oss/env-core": "catalog:",
+    "bullmq": "catalog:",
+    "fastify": "catalog:",
+    "ioredis": "catalog:",
+    "reflect-metadata": "catalog:",
+    "rxjs": "catalog:",
+    "standardwebhooks": "^1.1.1",
+    "stripe": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@nestjs/platform-fastify": "catalog:",
+    "@repo/testing": "workspace:*",
+    "@repo/tsdown-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/nodemailer": "^8.0.2",
+    "@types/pg": "^8.23.1",
+    "nodemailer": "^10.0.12",
+    "pg": "^8.23.0",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

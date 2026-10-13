@@ -1,0 +1,25 @@
+# Everything an image build doesn't need: installs, build output, local state, secrets.
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/coverage
+**/.coverage
+**/storybook-static
+**/test-results
+**/playwright-report
+**/__pycache__
+**/.venv
+**/.pytest_cache
+**/.ruff_cache
+**/.expo
+**/*.log
+.git
+.env
+.env.*
+!.env.example
+logs
+load/.sessions.json
+docker-data
+# Markdown at the root: the docs, and any notes kept next to them. No image needs them.
+*.md

@@ -1,0 +1,9 @@
+# Reviewed exceptions for jaegertracing/jaeger (scripts/image-scan.ts): fixable vulnerabilities in
+# the image as published, with no rebuild of it upstream that has the fix as of
+# 2026-10-06. Each expires in about a month; the scan then fails until the image moves
+# to a fixed release (Renovate proposes it) or the entry is reviewed again.
+vulnerabilities:
+  - id: CVE-2026-14456
+    statement: >-
+      libcrypto3 3.5.7-r0 (fixed in 3.5.8-r0); libssl3 3.5.7-r0 (fixed in 3.5.8-r0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05

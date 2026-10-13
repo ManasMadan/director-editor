@@ -1,0 +1,84 @@
+# Catches the cluster's email, as docker compose does locally:
+#   kubectl -n boilerplate port-forward svc/mailpit 8025   →   http://localhost:8025
+# SMTP is implicit TLS with a login, what production settings require of SMTP_URL; the
+# certificate (Secret mailpit-tls) and the authority the services trust (local-ca) are
+# made by `bun run k8s:up`. Mailpit takes any login.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailpit
+  namespace: boilerplate
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: mailpit }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: mailpit }
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        # Above the host's own users, so it never shares one's id (any id works: it writes
+        # nowhere but /tmp).
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: mailpit
+          image: docker.io/axllent/mailpit:v1.31.3@sha256:ed9b00c609e77e99c79b93f1178255ebc271868920f2c69a8d166bd5634ed10d
+          env:
+            - { name: MP_SMTP_TLS_CERT, value: /tls/tls.crt }
+            - { name: MP_SMTP_TLS_KEY, value: /tls/tls.key }
+            - { name: MP_SMTP_REQUIRE_TLS, value: "true" }
+            - { name: MP_SMTP_AUTH_ACCEPT_ANY, value: "true" }
+          ports:
+            - { name: smtp, containerPort: 1025 }
+            - { name: http, containerPort: 8025 }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 200m, memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: tls, mountPath: /tls, readOnly: true }
+            # Its message database is a file in the temp directory: without a writable
+            # one under the read-only root it exits at once.
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tls
+          secret:
+            secretName: mailpit-tls
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit
+  namespace: boilerplate
+spec:
+  selector: { app.kubernetes.io/name: mailpit }
+  ports:
+    - { name: smtp, port: 1025, targetPort: smtp }
+    - { name: http, port: 8025, targetPort: http }
+---
+# The namespace accepts nothing a policy doesn't allow (the data chart's default deny):
+# the services send mail to it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mailpit
+  namespace: boilerplate
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: mailpit }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 1025
+        - port: 8025

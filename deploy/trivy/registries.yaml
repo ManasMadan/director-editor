@@ -1,0 +1,13 @@
+# The registries Kubernetes workloads here may pull from, for Trivy's trusted-registry
+# check (KSV-0125), in place of its default list (the cloud vendors' private registries).
+# A registry is trusted here because each image from it is a named project's release,
+# pinned to a version that only a reviewed pull request (Renovate's, usually) changes;
+# a new registry goes in this list the same way.
+ksv0125:
+  trusted_registries:
+    - ghcr.io # this repository's images, and tools published on GitHub
+    - docker.io # Docker Hub's official and project images (Valkey, Jaeger, Mailpit, ...)
+    - quay.io # SOPS, for Argo CD
+    - gcr.io # distroless
+    - registry.k8s.io # the Kubernetes project's (external-dns, kube-state-metrics)
+    - reg.kyverno.io # Kyverno's

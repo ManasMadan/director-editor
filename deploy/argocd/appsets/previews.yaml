@@ -1,0 +1,120 @@
+# A preview per pull request labelled `preview` (only maintainers can add labels), on
+# the clusters that host previews (label boilerplate.dev/previews=true, normally
+# staging's), at https://pr-<number>.preview.<the cluster's domain>. It runs the images
+# CI built from the PR's head commit (sha-<commit>, only for this repository's own
+# branches) with the charts, values and shared preview Secrets of the branch it targets
+# (deploy/environments/preview/secrets/, decrypted with the preview key alone). The
+# charts never come from the PR: a fork's could run any image with those Secrets. So a
+# PR's chart changes show up once merged, not in its preview. It gets its own database
+# and Valkey. Removing the label or closing the PR deletes the preview and its namespace.
+# Once deployed, its address is posted on the PR (Argo CD's notifications).
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: previews
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          - clusters:
+              selector:
+                matchLabels:
+                  boilerplate.dev/previews: "true"
+          - matrix:
+              generators:
+                - pullRequest:
+                    github:
+                      owner: ManasMadan
+                      repo: boilerplate
+                      labels: [preview]
+                      tokenRef:
+                        secretName: github-token
+                        key: token
+                    requeueAfterSeconds: 120
+                - list:
+                    elements:
+                      - chart: data
+                      - chart: stack
+  strategy:
+    type: RollingSync
+    rollingSync:
+      steps:
+        - matchExpressions:
+            - key: chart
+              operator: In
+              values: [data]
+        - matchExpressions:
+            - key: chart
+              operator: In
+              values: [stack]
+  template:
+    metadata:
+      name: "pr-{{ .number }}-{{ .chart }}"
+      labels:
+        chart: "{{ .chart }}"
+        preview: "pr-{{ .number }}"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: previews
+      destination:
+        server: "{{ .server }}"
+        namespace: "pr-{{ .number }}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        # Argo CD sees a new head commit within two minutes, but its images take about
+        # ten to build: the first sync fails on images that aren't pushed yet. Retrying
+        # for about half an hour lets it pick them up instead of waiting for the next push.
+        retry:
+          limit: 10
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 5m
+  # The stack's Application carries the preview's address and commit, and asks Argo CD's
+  # notifications to post the address on the pull request once it's deployed
+  # (argo-cd-values.yaml): the domain is the cluster's, read here and nowhere else.
+  templatePatch: |
+    {{- $host := printf "pr-%v.preview.%s" .number (index .metadata.annotations "boilerplate.dev/domain") }}
+    {{- if eq .chart "stack" }}
+    metadata:
+      annotations:
+        notifications.argoproj.io/subscribe.on-preview-deployed.github: ""
+        boilerplate.dev/head-sha: "{{ .head_sha }}"
+        boilerplate.dev/url: "https://{{ $host }}"
+    {{- end }}
+    spec:
+      sources:
+        - repoURL: https://github.com/ManasMadan/boilerplate.git
+          targetRevision: "{{ .target_branch }}"
+          path: deploy/charts/{{ .chart }}
+          helm:
+            releaseName: boilerplate
+            valueFiles:
+              - ../../environments/preview/{{ .chart }}.yaml
+            parameters:
+              {{- if eq .chart "data" }}
+              - name: preview.namespace
+                value: "pr-{{ .number }}"
+              {{- else }}
+              - name: image.tag
+                value: "sha-{{ .head_sha }}"
+              - name: site.host
+                value: "{{ $host }}"
+              - name: observability.enabled
+                value: {{ eq (index .metadata.labels "boilerplate.dev/observability" | default "") "true" | quote }}
+              {{- end }}
+        {{- if eq .chart "stack" }}
+        - repoURL: https://github.com/ManasMadan/boilerplate.git
+          targetRevision: "{{ .target_branch }}"
+          path: deploy/environments/preview/secrets
+          plugin:
+            name: sops
+            env:
+              - { name: AGE_KEY, value: preview }
+        {{- end }}

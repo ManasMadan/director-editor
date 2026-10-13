@@ -1,0 +1,50 @@
+{
+  "name": "@repo/notifications",
+  "private": true,
+  "type": "module",
+  "description": "Notification service: consumes the `notifications` queue and delivers over every channel.",
+  "scripts": {
+    "dev": "tsdown --watch --on-success \"node --env-file-if-exists=../../.env --enable-source-maps --import ./dist/telemetry.mjs dist/main.mjs\"",
+    "build": "tsdown",
+    "start": "node --env-file-if-exists=../../.env --enable-source-maps --import ./dist/telemetry.mjs dist/main.mjs",
+    "check-types": "tsc",
+    "test": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@nestjs/bullmq": "catalog:",
+    "@nestjs/common": "catalog:",
+    "@nestjs/core": "catalog:",
+    "@repo/contracts": "workspace:*",
+    "@repo/db": "workspace:*",
+    "@repo/email": "workspace:*",
+    "@repo/i18n": "workspace:*",
+    "@repo/jobs": "workspace:*",
+    "@repo/nest-common": "workspace:*",
+    "@t3-oss/env-core": "catalog:",
+    "bullmq": "catalog:",
+    "ioredis": "catalog:",
+    "jose": "^6.2.12",
+    "nodemailer": "^10.0.12",
+    "reflect-metadata": "catalog:",
+    "rxjs": "catalog:",
+    "web-push": "^3.6.7",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@repo/testing": "workspace:*",
+    "@repo/tsdown-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/nodemailer": "^8.0.2",
+    "@types/pg": "^8.23.1",
+    "@types/web-push": "^3.6.4",
+    "http_ece": "^1.2.0",
+    "pg": "^8.23.0",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

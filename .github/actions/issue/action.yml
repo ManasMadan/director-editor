@@ -1,0 +1,51 @@
+# One open issue per thing that's wrong, for the scheduled checks nobody watches
+# (uptime.yml, infra.yml's drift check): opened when it goes wrong, its description kept
+# current while it stays wrong (no new notification each run), and closed with a comment
+# once it's fixed. The job needs `issues: write`.
+name: Issue
+description: Keep an issue with this title open while something is wrong, and close it once it isn't
+inputs:
+  title:
+    description: The issue's title, which identifies it between runs
+    required: true
+  body:
+    description: What's wrong, in Markdown; empty when nothing is
+    default: ""
+runs:
+  using: composite
+  steps:
+    - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        TITLE: ${{ inputs.title }}
+        BODY: ${{ inputs.body }}
+        RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      with:
+        script: |
+          const { TITLE: title, BODY: body, RUN: run } = process.env;
+          const open = await github.paginate(github.rest.issues.listForRepo, {
+            ...context.repo,
+            state: "open",
+            per_page: 100,
+          });
+          const issue = open.find((i) => i.title === title && !i.pull_request);
+          const text = `${body}\n\nLast checked: ${run}`;
+          if (body && issue) {
+            await github.rest.issues.update({ ...context.repo, issue_number: issue.number, body: text });
+            core.info(`Still wrong: #${issue.number}`);
+          } else if (body) {
+            const { data } = await github.rest.issues.create({ ...context.repo, title, body: text });
+            core.info(`Opened #${data.number}`);
+          } else if (issue) {
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: issue.number,
+              body: `Fixed, as of ${run}`,
+            });
+            await github.rest.issues.update({
+              ...context.repo,
+              issue_number: issue.number,
+              state: "closed",
+              state_reason: "completed",
+            });
+            core.info(`Closed #${issue.number}`);
+          }

@@ -1,0 +1,8 @@
+# Continuous Postgres backups (WAL archiving, base backups, point-in-time recovery) for
+# CloudNativePG, to the data chart's backups object store. Needs cert-manager.
+addon: plugin-barman-cloud
+namespace: cnpg-system
+repoURL: https://cloudnative-pg.github.io/charts
+chart: plugin-barman-cloud
+version: 0.8.0
+wave: "-10"

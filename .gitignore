@@ -1,0 +1,62 @@
+# dependencies
+node_modules
+.venv
+
+# env (commit .env.example, never .env)
+.env
+.env.*
+!.env.example
+
+# build output
+.next
+out
+dist
+*.tsbuildinfo
+next-env.d.ts
+
+# generated code (recreated by `bun run gen`; see docs/codegen.md)
+packages/db/src/generated
+
+# tooling
+.turbo
+coverage
+# Python coverage data (pytest --cov).
+.coverage
+.coverage.*
+playwright-report
+# The Playwright CLI's snapshots, screenshots and saved sign-ins (the playwright-cli skill).
+.playwright-cli/
+storybook-static
+test-results
+# vitest's browser mode: screenshots of failed tests.
+.vitest
+logs
+__pycache__
+.pytest_cache
+.ruff_cache
+.DS_Store
+*.pem
+
+# Claude Code: personal settings and hook state stay local
+.claude/.state/
+.claude/settings.local.json
+CLAUDE.local.md
+
+# Session cookies of the load-test users (apps/api/src/load-users.ts).
+load/.sessions.json
+# Schemathesis's record of the failures it found (scripts/fuzz.ts), for `st replay`.
+.schemathesis/
+
+# OpenTofu: providers, state and plans stay local (state lives in each env's backend).
+# Lock files are committed for the env roots only.
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+infra/tofu/modules/**/.terraform.lock.hcl
+# Environment inputs can hold provider keys; only the examples are committed.
+infra/tofu/envs/*/*.tfvars
+infra/tofu/envs/*/backend-*.hcl
+
+# The charts rendered for the misconfiguration scan (scripts/misconfig.ts).
+deploy/.rendered/

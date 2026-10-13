@@ -1,0 +1,133 @@
+{
+  "title": "ErrorResponse",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "defined": {
+      "type": "boolean"
+    },
+    "code": {
+      "type": "string",
+      "enum": [
+        "BAD_REQUEST",
+        "VALIDATION_FAILED",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "RATE_LIMITED",
+        "INTERNAL",
+        "SERVICE_UNAVAILABLE",
+        "METHOD_NOT_SUPPORTED",
+        "TIMEOUT",
+        "PAYLOAD_TOO_LARGE",
+        "UNSUPPORTED_MEDIA_TYPE",
+        "IDEMPOTENCY_IN_PROGRESS",
+        "FEATURE_DISABLED",
+        "CLIENT_OUTDATED",
+        "FRESH_SESSION_REQUIRED",
+        "DESTINATION_NOT_ALLOWED",
+        "RESPONSE_TOO_LARGE",
+        "TOO_MANY_REDIRECTS",
+        "UPSTREAM_UNAVAILABLE",
+        "NO_ACTIVE_ORGANIZATION",
+        "PHONE_CODE_INVALID",
+        "PHONE_NUMBER_TAKEN",
+        "ENTITLEMENT_REQUIRED",
+        "ALREADY_SUBSCRIBED",
+        "NO_SUBSCRIPTION",
+        "FILE_NOT_FOUND",
+        "FILE_TYPE_NOT_ALLOWED",
+        "FILE_TOO_LARGE",
+        "FILE_SIZE_MISMATCH",
+        "FILE_INFECTED",
+        "FILE_UNREADABLE",
+        "FILE_NOT_UPLOADED",
+        "FILE_NOT_READY",
+        "UNSUBSCRIBE_LINK_INVALID",
+        "INVALID_SIGNATURE",
+        "WEBHOOK_ENDPOINT_NOT_FOUND",
+        "WEBHOOK_DELIVERY_NOT_FOUND",
+        "WEBHOOK_URL_NOT_ALLOWED",
+        "WEBHOOK_ENDPOINT_LIMIT",
+        "APP_NOT_FOUND",
+        "API_KEY_NOT_FOUND",
+        "API_KEY_LIMIT_REACHED",
+        "API_KEY_SCOPE_MISSING",
+        "DOCUMENT_NOT_FOUND",
+        "DOCUMENT_INDEXING_FAILED",
+        "AI_BUDGET_EXCEEDED",
+        "AI_RUN_LIMIT",
+        "TODO_NOT_FOUND",
+        "TODO_VERSION_CONFLICT"
+      ],
+      "title": "ErrorCode"
+    },
+    "status": {
+      "type": "integer"
+    },
+    "message": {
+      "type": "string"
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "params": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "array",
+                "items": {
+                  "type": [
+                    "string",
+                    "number"
+                  ]
+                }
+              },
+              "code": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "code"
+            ],
+            "additionalProperties": false,
+            "title": "ErrorIssue"
+          }
+        }
+      },
+      "required": [
+        "params"
+      ],
+      "additionalProperties": false,
+      "title": "ErrorData"
+    }
+  },
+  "required": [
+    "defined",
+    "code",
+    "status",
+    "message",
+    "data"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,23 @@
+suite: the release's namespace
+templates:
+  - deployment.yaml
+  - hpa.yaml
+  - httproute.yaml
+  - keda.yaml
+  - migrate-job.yaml
+  - networkpolicy.yaml
+  - pdb.yaml
+  - reencrypt-cronjob.yaml
+  - service.yaml
+  - serviceaccount.yaml
+release: { name: demo, namespace: apps }
+set:
+  image.tag: sha-abc123
+  site.host: app.example.com
+  services.clamav.enabled: true
+tests:
+  # Named on each object, not left to whoever applies the manifests: nothing lands in
+  # the default namespace by accident.
+  - it: puts every object in the release's namespace
+    asserts:
+      - equal: { path: metadata.namespace, value: apps }

@@ -1,0 +1,29 @@
+// Owner: apps/worker. The audit log: every domain event, recorded once and never changed.
+//
+// The table is partitioned by month on occurred_at (DDL in the migration SQL; Prisma
+// doesn't model partitioning). The worker creates upcoming partitions and drops ones past
+// retention through audit.ensure_partitions / audit.drop_partitions_before, which run as
+// the migrator (SECURITY DEFINER) because runtime roles own no tables. Dropping a month
+// is instant, however large it is. Nobody can UPDATE or DELETE rows: the worker may only
+// INSERT, and apps/api may only SELECT its own organization's rows (row-level security).
+
+/// One domain event, keyed by the event id (redelivery inserts nothing).
+model AuditLog {
+  id         String   @db.Uuid
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz(3)
+  /// Versioned event name, e.g. "todo.completed.v1".
+  name       String
+  key        String
+  payload    Json
+  orgId      String?  @map("org_id") @db.Uuid
+  actorId    String?  @map("actor_id") @db.Uuid
+  requestId  String?  @map("request_id")
+  /// The owning schema whose outbox the event came from.
+  source     String
+  recordedAt DateTime @default(now()) @map("recorded_at") @db.Timestamptz(3)
+
+  @@id([id, occurredAt])
+  @@index([orgId, occurredAt(sort: Desc)])
+  @@map("audit_log")
+  @@schema("audit")
+}

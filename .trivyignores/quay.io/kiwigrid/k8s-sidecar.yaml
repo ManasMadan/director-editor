@@ -1,0 +1,38 @@
+# Reviewed exceptions for quay.io/kiwigrid/k8s-sidecar (scripts/image-scan.ts): fixable vulnerabilities in
+# the image an add-on's pinned chart runs, scanned by its tag's digest, with no
+# rebuild of that image upstream that has the fix as of 2026-10-06. Each expires in
+# about a month; the scan then fails until the add-on moves to a fixed release
+# (Renovate proposes it) or the entry is reviewed again.
+vulnerabilities:
+  - id: CVE-2026-53612
+    statement: >-
+      libuuid 2.41-r9 (fixed in 2.41.6-r0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-53613
+    statement: >-
+      libuuid 2.41-r9 (fixed in 2.41.6-r0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-53614
+    statement: >-
+      libuuid 2.41-r9 (fixed in 2.41.6-r0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-76642
+    statement: >-
+      libuuid 2.41-r9 (fixed in 2.41.6-r0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-78408
+    statement: >-
+      libuuid 2.41-r9 (fixed in 2.41.6-r1): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-78410
+    statement: >-
+      libuuid 2.41-r9 (fixed in 2.41.6-r0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-97687
+    statement: >-
+      urllib3 2.7.0 (fixed in 2.8.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-97689
+    statement: >-
+      urllib3 2.7.0 (fixed in 2.8.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05

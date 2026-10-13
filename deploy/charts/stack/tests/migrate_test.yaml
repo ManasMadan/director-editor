@@ -1,0 +1,35 @@
+suite: migrations
+templates: [migrate-job.yaml]
+release: { name: demo, namespace: apps }
+set:
+  image.tag: sha-abc123
+  site.host: app.example.com
+tests:
+  - it: runs before the release's pods, on every install and upgrade
+    asserts:
+      - equal:
+          path: metadata.annotations
+          value:
+            helm.sh/hook: pre-install,pre-upgrade
+            helm.sh/hook-weight: "0"
+            helm.sh/hook-delete-policy: before-hook-creation
+      - equal: { path: spec.template.spec.restartPolicy, value: Never }
+
+  - it: is a new Job for each build
+    asserts:
+      - matchRegex: { path: metadata.name, pattern: "^demo-migrate-[0-9a-f]{10}$" }
+
+  - it: connects as the migrator, straight to the primary
+    asserts:
+      - equal: { path: "spec.template.spec.containers[0].image", value: ghcr.io/manasmadan/boilerplate/migrate:sha-abc123 }
+      - equal:
+          path: "spec.template.spec.containers[0].env"
+          value:
+            - name: MIGRATOR_DATABASE_URL
+              valueFrom: { secretKeyRef: { name: db-migrator, key: directUrl } }
+
+  - it: can be turned off
+    set:
+      migrate.enabled: false
+    asserts:
+      - hasDocuments: { count: 0 }

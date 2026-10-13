@@ -1,0 +1,229 @@
+suite: mail
+release: { name: stalwart, namespace: mail }
+set:
+  domain: example.com
+tests:
+  - it: names the server after the email domain, which defaults to the cluster's
+    template: certificate.yaml
+    asserts:
+      - equal: { path: spec.dnsNames, value: [mail.example.com] }
+      - equal: { path: spec.secretName, value: stalwart-tls }
+      - equal: { path: spec.issuerRef, value: { kind: ClusterIssuer, name: letsencrypt } }
+
+  - it: takes a separate email domain when clusters share a zone
+    template: certificate.yaml
+    set:
+      emailDomain: staging.example.com
+    asserts:
+      - equal: { path: spec.dnsNames, value: [mail.staging.example.com] }
+
+  - it: publishes the mail ports on a LoadBalancer, only on the mail node
+    template: service.yaml
+    asserts:
+      - equal: { path: spec.type, value: LoadBalancer }
+      - equal: { path: spec.externalTrafficPolicy, value: Local }
+      - equal:
+          path: spec.ports
+          value:
+            - { name: imaps, port: 993, targetPort: imaps }
+            - { name: smtp, port: 25, targetPort: smtp }
+            - { name: submission, port: 587, targetPort: submission }
+            - { name: submissions, port: 465, targetPort: submissions }
+      - equal:
+          path: metadata.annotations
+          value:
+            svccontroller.k3s.cattle.io/tolerations: '[{"effect":"NoSchedule","key":"dedicated","operator":"Equal","value":"mail"}]'
+
+  - it: runs on the mail node OpenTofu labels and taints
+    template: statefulset.yaml
+    asserts:
+      - equal: { path: spec.template.spec.nodeSelector, value: { boilerplate.dev/mail: "true" } }
+      - equal:
+          path: spec.template.spec.tolerations
+          value: [{ key: dedicated, operator: Equal, value: mail, effect: NoSchedule }]
+
+  - it: takes the host name OpenTofu publishes
+    template: certificate.yaml
+    set:
+      hostname: smtp.example.com
+    asserts:
+      - equal: { path: spec.dnsNames, value: [smtp.example.com] }
+
+  - it: keeps only the database's location in config.json
+    template: configmap.yaml
+    asserts:
+      - equal: { path: 'data["config.json"]', value: '{"@type":"RocksDb","path":"/var/lib/stalwart"}' }
+
+  - it: applies the domain, certificate, DKIM key, sender account and webhook
+    template: configmap.yaml
+    asserts:
+      - matchRegex:
+          path: 'data["plan.ndjson"]'
+          pattern: '^\{"@type":"reconcile","matchOn":"\*","object":"Tracer","value":\{"console":\{"@type":"Stdout"'
+      - matchRegex:
+          path: 'data["plan.ndjson"]'
+          pattern: '(?m)^\{"@type":"upsert","matchOn":\["name"\],"object":"Domain","value":\{"domain":\{.*"dkimManagement":\{"@type":"Manual"\}.*"name":"example.com"'
+      - matchRegex:
+          path: 'data["plan.ndjson"]'
+          pattern: '"object":"SystemSettings","value":\{"defaultCertificateId":"#certificate","defaultDomainId":"#domain","defaultHostname":"mail.example.com"\}'
+      - matchRegex:
+          path: 'data["plan.ndjson"]'
+          pattern: '"object":"DkimSignature".*"privateKey":\{"@type":"File","filePath":"/etc/stalwart/dkim/private.key"\},"selector":"default"'
+      - matchRegex:
+          path: 'data["plan.ndjson"]'
+          pattern: '"matchOn":\["name","domainId"\],"object":"Account".*"credentials":\{"0":\{"@type":"Password","secret":"@SMTP_PASSWORD@"\}\}.*"name":"no-reply"'
+      - matchRegex:
+          path: 'data["plan.ndjson"]'
+          pattern: '"object":"WebHook".*"events":\{"delivery.dsn-perm-fail":true,"delivery.dsn-temp-fail":true\},"eventsPolicy":"include".*"signatureKey":\{"@type":"EnvironmentVariable","variableName":"STALWART_WEBHOOK_SECRET"\},"url":"http://boilerplate-webhooks.boilerplate.svc.cluster.local:3004/webhooks/stalwart"'
+      # One operation per line, nothing else.
+      - notMatchRegex: { path: 'data["plan.ndjson"]', pattern: '\n\s*\n' }
+
+  - it: appends operations the chart doesn't cover
+    template: configmap.yaml
+    set:
+      webhook.enabled: false
+      extraPlan:
+        - { "@type": update, object: SystemSettings, value: { maxConnections: 1000 } }
+    asserts:
+      - notMatchRegex: { path: 'data["plan.ndjson"]', pattern: WebHook }
+      - matchRegex:
+          path: 'data["plan.ndjson"]'
+          pattern: '(?m)^\{"@type":"update","object":"SystemSettings","value":\{"maxConnections":1000\}\}$'
+
+  - it: takes connections on the mail ports only, never the management port
+    template: networkpolicy.yaml
+    asserts:
+      - equal: { path: spec.policyTypes, value: [Ingress] }
+      - equal:
+          path: spec.ingress
+          value: [{ ports: [{ port: 9930 }, { port: 2525 }, { port: 5870 }, { port: 4650 }] }]
+      - equal: { path: spec.podSelector.matchLabels, value: { app.kubernetes.io/name: stalwart, app.kubernetes.io/instance: stalwart } }
+
+  - it: delivers directly unless a relay is set
+    template: configmap.yaml
+    asserts:
+      - notMatchRegex: { path: 'data["plan.ndjson"]', pattern: 'MtaRoute|MtaOutboundStrategy' }
+
+  - it: sends remote mail through a relay, with its password from the Secret
+    template: configmap.yaml
+    set:
+      relay.host: smtp.relay.example
+      relay.username: boilerplate
+    asserts:
+      - matchRegex:
+          path: 'data["plan.ndjson"]'
+          pattern: '(?m)^\{"@type":"upsert","matchOn":\["name"\],"object":"MtaRoute","value":\{"relay":\{"@type":"Relay","address":"smtp.relay.example","allowInvalidCerts":false,"authSecret":\{"@type":"EnvironmentVariable","variableName":"RELAY_PASSWORD"\},"authUsername":"boilerplate","implicitTls":false,"name":"relay","port":587,"protocol":"smtp"\}\}\}$'
+      - matchRegex:
+          path: 'data["plan.ndjson"]'
+          pattern: '(?m)^\{"@type":"update","object":"MtaOutboundStrategy","value":\{"route":\{"else":"\x27relay\x27","match":\[\{"if":"is_local_domain\(rcpt_domain\)","then":"\x27local\x27"\}\]\}\}\}$'
+
+  - it: gives the server the relay's password from the Secret
+    template: statefulset.yaml
+    set:
+      relay.host: smtp.relay.example
+      relay.username: boilerplate
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: RELAY_PASSWORD, valueFrom: { secretKeyRef: { name: stalwart, key: RELAY_PASSWORD } } }
+
+  - it: provisions in recovery mode before the server starts, with the admin only there
+    template: statefulset.yaml
+    asserts:
+      - equal: { path: "spec.template.spec.initContainers[0].name", value: plan }
+      - equal: { path: "spec.template.spec.initContainers[1].name", value: recovery }
+      - equal: { path: "spec.template.spec.initContainers[2].name", value: apply }
+      - equal: { path: "spec.template.spec.initContainers[1].restartPolicy", value: Always }
+      - contains:
+          path: "spec.template.spec.initContainers[1].env"
+          content: { name: STALWART_RECOVERY_ADMIN, value: admin:$(ADMIN_PASSWORD) }
+      - equal: { path: "spec.template.spec.initContainers[2].image", value: docker.io/stalwartlabs/cli:1.0.13@sha256:9a1e07307d6f890a193322c4b737fc0868405f0f8486a19922cbf362f43884fd }
+      - equal: { path: "spec.template.spec.initContainers[2].args", value: [apply, --file, /run/provision/plan.ndjson] }
+      - notContains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: STALWART_RECOVERY_ADMIN, value: admin:$(ADMIN_PASSWORD) }
+      - matchRegex: { path: "spec.template.spec.containers[0].args[0]", pattern: 'until \[ -e /run/provision/stopped \]' }
+
+  - it: runs locked down, with no capability at all, as our own user
+    template: statefulset.yaml
+    asserts:
+      - equal: { path: spec.template.spec.securityContext.runAsUser, value: 10001 }
+      - equal: { path: spec.template.spec.securityContext.runAsGroup, value: 10001 }
+      - equal: { path: spec.template.spec.automountServiceAccountToken, value: false }
+      - equal:
+          path: "spec.template.spec.containers[0].securityContext"
+          value:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+      - equal:
+          path: "spec.template.spec.initContainers[1].securityContext.capabilities"
+          value: { drop: [ALL] }
+      - equal:
+          path: "spec.template.spec.initContainers[2].securityContext.capabilities"
+          value: { drop: [ALL] }
+      # A copy of the server binary, without the image's file capability, which the
+      # kernel won't grant a container that dropped it.
+      - matchRegex: { path: "spec.template.spec.initContainers[0].args[0]", pattern: 'cp /usr/local/bin/stalwart /run/provision/stalwart' }
+      - matchRegex: { path: "spec.template.spec.initContainers[1].args[0]", pattern: '/run/provision/stalwart --config' }
+      - matchRegex: { path: "spec.template.spec.containers[0].args[0]", pattern: '/run/provision/stalwart --config' }
+
+  - it: listens on unprivileged ports, which the Service maps the mail ports to
+    template: statefulset.yaml
+    asserts:
+      - equal:
+          path: "spec.template.spec.containers[0].ports"
+          value:
+            - { name: imaps, containerPort: 9930 }
+            - { name: smtp, containerPort: 2525 }
+            - { name: submission, containerPort: 5870 }
+            - { name: submissions, containerPort: 4650 }
+            - { name: http, containerPort: 8080 }
+
+  - it: has the server listen on those ports, and on nothing else but management
+    template: configmap.yaml
+    asserts:
+      - matchRegex:
+          path: 'data["plan.ndjson"]'
+          pattern: '(?m)^\{"@type":"reconcile","matchOn":\["name"\],"object":"NetworkListener","value":\{"http":\{"bind":\{"\[::\]:8080":true\},"name":"http","protocol":"http","tlsImplicit":false\},"imaps":\{"bind":\{"\[::\]:9930":true\},"name":"imaps","protocol":"imap","tlsImplicit":true\},"smtp":\{"bind":\{"\[::\]:2525":true\},"name":"smtp","protocol":"smtp","tlsImplicit":false\},"submission":\{"bind":\{"\[::\]:5870":true\},"name":"submission","protocol":"smtp","tlsImplicit":false\},"submissions":\{"bind":\{"\[::\]:4650":true\},"name":"submissions","protocol":"smtp","tlsImplicit":true\}\}\}$'
+
+  - it: limits every container's CPU and memory
+    template: statefulset.yaml
+    asserts:
+      - exists: { path: "spec.template.spec.initContainers[0].resources.limits.cpu" }
+      - exists: { path: "spec.template.spec.initContainers[1].resources.limits.cpu" }
+      - exists: { path: "spec.template.spec.initContainers[2].resources.limits.cpu" }
+      - exists: { path: "spec.template.spec.containers[0].resources.limits.cpu" }
+
+  - it: puts every object in the release's namespace
+    templates: [certificate.yaml, configmap.yaml, networkpolicy.yaml, service.yaml, statefulset.yaml]
+    asserts:
+      - equal: { path: metadata.namespace, value: mail }
+
+  - it: reads the certificate, DKIM key and webhook key from their Secrets
+    template: statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content: { name: tls, secret: { secretName: stalwart-tls } }
+      - contains:
+          path: spec.template.spec.volumes
+          content: { name: dkim, secret: { secretName: stalwart, items: [{ key: dkim.key, path: private.key }] } }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: STALWART_WEBHOOK_SECRET
+            valueFrom: { secretKeyRef: { name: stalwart, key: STALWART_WEBHOOK_SECRET } }
+      - equal: { path: "spec.volumeClaimTemplates[0].spec.storageClassName", value: local-path }
+
+  - it: restarts when the settings change
+    template: statefulset.yaml
+    asserts:
+      - exists: { path: 'spec.template.metadata.annotations["checksum/config"]' }
+
+  - it: needs the cluster's domain
+    template: statefulset.yaml
+    set:
+      domain: ""
+    asserts:
+      - failedTemplate: { errorMessage: domain is required }

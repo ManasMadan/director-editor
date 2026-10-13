@@ -1,0 +1,30 @@
+# Worktrunk (https://worktrunk.dev, `wt`): one git worktree per branch, so several
+# branches, or several Claude Code agents, work side by side without stashing or
+# switching. `wt switch --create <branch>` makes one next to this checkout and runs the
+# hooks below; `wt list` shows them all; `wt remove` deletes one with its branch.
+#
+# Every worktree shares this machine's Docker services by default (docker-compose.yml
+# names the project), so each gets the main checkout's .env, ports and databases. Tests
+# and type-checks run in parallel fine (each test file clones its own database). A
+# worktree that needs services of its own (a migration, a flushed Valkey, a stopped
+# container), or runs `bun dev` or the end-to-end suite while another checkout does,
+# runs `bun run setup --stack <n>` (1 to 9): its own compose project and volumes, and
+# every port 100 × n up, the services' and the apps' (web 3000 becomes 3000 + 100 × n),
+# in its .env and for its tests (.env.stack).
+
+# Blocking: the worktree isn't handed over until it can run commands.
+[[pre-start]]
+# .env only (.worktreeinclude): secrets and ports, never caches or build output.
+env = "wt step copy-ignored"
+[[pre-start]]
+install = "bun install --frozen-lockfile"
+
+# In the background: generated code (the Prisma client, the API clients, the Python
+# models), which types, tests and `bun dev` need.
+[post-start]
+gen = "bun run gen"
+
+# `wt merge` refuses to land a branch these fail on. Pull requests are still the way
+# changes reach master; CI runs everything.
+[pre-merge]
+checks = "bun run lint && bun run check-types && bun run test"

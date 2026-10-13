@@ -1,0 +1,286 @@
+{{- /*
+Object storage: RustFS servers (S3 API), one per purpose so each has its own root keys.
+
+  uploads  the application's files. Browsers PUT and GET them directly with presigned
+           URLs at the public host (the HTTPRoute below); the services use the
+           in-cluster endpoint. Keys in the `storage.uploads.secretName` Secret.
+  backups  Postgres's base backups and WAL (on with postgres.backups). Only Postgres
+           reaches it; nothing public, and the application has no key to it.
+
+A Job after every install and upgrade creates each server's bucket, and sets the uploads
+bucket's CORS rule (the site's origins may PUT and GET).
+*/}}
+{{- $s := .Values.storage }}
+{{- $servers := list }}
+{{- if $s.uploads.enabled }}
+{{- if not $s.uploads.corsOrigins }}
+{{- fail "storage.uploads.corsOrigins needs the site's origin (browsers upload from it)" }}
+{{- end }}
+{{- $servers = append $servers (dict "role" "uploads" "config" $s.uploads "secret" $s.uploads.secretName) }}
+{{- end }}
+{{- if .Values.postgres.backups.enabled }}
+{{- $servers = append $servers (dict "role" "backups" "config" $s.backups "secret" (include "data.backupsSecret" .)) }}
+{{- end }}
+{{- range $server := $servers }}
+{{- $role := $server.role }}
+{{- $c := $server.config }}
+{{- $name := include "data.rustfs" (list $ $role) }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" $ | nindent 4 }}
+    app.kubernetes.io/name: rustfs
+    app.kubernetes.io/component: {{ $role }}
+spec:
+  selector:
+    app.kubernetes.io/name: rustfs
+    app.kubernetes.io/component: {{ $role }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: s3
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" $ | nindent 4 }}
+    app.kubernetes.io/name: rustfs
+    app.kubernetes.io/component: {{ $role }}
+spec:
+  serviceName: {{ $name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rustfs
+      app.kubernetes.io/component: {{ $role }}
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rustfs
+        app.kubernetes.io/component: {{ $role }}
+        app.kubernetes.io/instance: {{ $.Release.Name }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "data.podSecurity" $ | nindent 8 }}
+      {{- with $c.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: rustfs
+          image: {{ $s.image }}
+          env:
+            - name: RUSTFS_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: { name: {{ $server.secret }}, key: accessKeyId }
+            - name: RUSTFS_SECRET_KEY
+              valueFrom:
+                secretKeyRef: { name: {{ $server.secret }}, key: secretAccessKey }
+            - name: RUSTFS_VOLUMES
+              value: /data
+            - name: RUSTFS_CONSOLE_ENABLE
+              value: "false"
+            # Empty: logs go to stdout, not to files in the container.
+            - name: RUSTFS_OBS_LOG_DIRECTORY
+              value: ""
+          ports:
+            - name: s3
+              containerPort: 9000
+          startupProbe:
+            httpGet: { path: /health, port: s3 }
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: { path: /health, port: s3 }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: s3 }
+            periodSeconds: 20
+            timeoutSeconds: 5
+          resources:
+            {{- toYaml $c.resources | nindent 12 }}
+          securityContext:
+            {{- include "data.containerSecurity" $ | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with $c.storage.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $c.storage.size }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: rustfs
+      app.kubernetes.io/component: {{ $role }}
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+  policyTypes: [Ingress]
+  ingress:
+    {{- if eq $role "uploads" }}
+    # The services in this namespace, and browsers through the gateway.
+    - from:
+        - podSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml $.Values.gateway.namespaceSelector | nindent 14 }}
+      ports:
+        - port: 9000
+    {{- else }}
+    # Postgres's instances (the Barman Cloud plugin runs in them) and the backup drill's
+    # scratch cluster (restore-drill.yaml), the bucket Job and the offsite copy
+    # (offsite.yaml).
+    - from:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: {{ include "data.postgres" $ }}
+        {{- if $.Values.postgres.drill.enabled }}
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: {{ include "data.postgres" $ }}-drill
+        {{- end }}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: buckets
+              app.kubernetes.io/instance: {{ $.Release.Name }}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: offsite
+              app.kubernetes.io/instance: {{ $.Release.Name }}
+      ports:
+        - port: 9000
+    {{- end }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name }}-buckets
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" $ | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: buckets
+        app.kubernetes.io/instance: {{ $.Release.Name }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "data.podSecurity" $ | nindent 8 }}
+      containers:
+        - name: buckets
+          image: {{ $s.buckets.image }}
+          command: [sh, -c]
+          args:
+            - |
+              set -eu
+              until aws s3api list-buckets > /dev/null; do echo "waiting for RustFS"; sleep 3; done
+              aws s3api head-bucket --bucket "$BUCKET" 2> /dev/null || aws s3api create-bucket --bucket "$BUCKET"
+              {{- if eq $role "uploads" }}
+              aws s3api put-bucket-cors --bucket "$BUCKET" --cors-configuration "$CORS"
+              {{- end }}
+              echo "bucket $BUCKET is ready"
+          env:
+            - name: BUCKET
+              value: {{ $c.bucket | quote }}
+            {{- if eq $role "uploads" }}
+            - name: CORS
+              value: {{ dict "CORSRules" (list (dict
+                  "AllowedOrigins" $c.corsOrigins
+                  "AllowedMethods" (list "PUT" "GET")
+                  "AllowedHeaders" (list "*")
+                  "ExposeHeaders" (list "ETag")
+                  "MaxAgeSeconds" 3600)) | toJson | quote }}
+            {{- end }}
+            - name: AWS_ENDPOINT_URL
+              value: {{ include "data.rustfsEndpoint" (list $ $role) }}
+            - name: AWS_DEFAULT_REGION
+              value: {{ $s.region }}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef: { name: {{ $server.secret }}, key: accessKeyId }
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: { name: {{ $server.secret }}, key: secretAccessKey }
+            - name: AWS_EC2_METADATA_DISABLED
+              value: "true"
+            - name: HOME
+              value: /tmp
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 200m, memory: 256Mi }
+          securityContext:
+            {{- include "data.containerSecurity" $ | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- if eq $role "uploads" }}
+---
+# The uploads server at its public host: presigned requests only (anything unsigned is
+# refused), so the bucket stays private. A host of its own, not a path of the site's:
+# files people upload never run in the site's origin. external-dns creates its DNS
+# record (the site's are OpenTofu's).
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" $ | nindent 4 }}
+  annotations:
+    boilerplate.dev/external-dns: "true"
+spec:
+  parentRefs:
+    {{- toYaml $.Values.gateway.parentRefs | nindent 4 }}
+  hostnames:
+    - {{ $c.host | quote }}
+  rules:
+    - backendRefs:
+        - name: {{ $name }}
+          port: 9000
+      # Uploads of large files take longer than the gateway's default.
+      timeouts:
+        request: 300s
+{{- end }}
+{{- end }}

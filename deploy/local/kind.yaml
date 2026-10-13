@@ -1,0 +1,14 @@
+# The local Kubernetes cluster (`bun run k8s:up`). The gateway listens on the node's
+# port 30080, published as port 80 on this machine: http://localhost.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: boilerplate
+nodes:
+  - role: control-plane
+    # The Kubernetes the clusters run (k3s's release, infra/tofu/modules/k3s), not whatever
+    # kind defaults to: same minor version, tested (scripts/charts.test.ts).
+    image: kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed
+    extraPortMappings:
+      - containerPort: 30080
+        hostPort: 80
+        protocol: TCP

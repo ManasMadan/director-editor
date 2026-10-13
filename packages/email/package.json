@@ -1,0 +1,34 @@
+{
+  "name": "@repo/email",
+  "private": true,
+  "type": "module",
+  "description": "Transactional email templates (React Email). Rendered by apps/notifications.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "bun --env-file=../../.env run previews",
+    "previews": "email dev --dir src/previews --port \"$EMAIL_PREVIEW_PORT\"",
+    "check-types": "tsc",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@react-email/components": "^1.0.12",
+    "@react-email/render": "^2.1.0",
+    "@repo/i18n": "workspace:*",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "devDependencies": {
+    "@react-email/ui": "^6.11.0",
+    "@repo/typescript-config": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "react-email": "^6.11.0",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

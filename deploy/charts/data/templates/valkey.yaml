@@ -1,0 +1,396 @@
+{{- /*
+In-cluster Valkey: append-only persistence, and no eviction (BullMQ keeps its queues in
+it; an evicted key is a lost job). Clients authenticate with the password from the
+`valkey` Secret.
+
+One node by default. With `replication.enabled`: a primary and replicas, each pod with a
+Sentinel beside it that promotes a replica when the primary is lost, and a proxy in
+front (the `<release>-valkey` Service the services' REDIS_URL names) that forwards only
+to whichever node says it's the primary, so no client needs to know about Sentinel.
+*/}}
+{{- $v := .Values.valkey }}
+{{- $name := include "data.valkey" . }}
+{{- $ha := $v.replication.enabled }}
+{{- $replicas := int $v.replication.replicas }}
+{{- $domain := printf "%s.svc.cluster.local" .Release.Namespace }}
+{{- $nodes := list }}
+{{- range $i := until $replicas }}
+{{- $nodes = append $nodes (printf "%s-%d.%s" $name $i $domain) }}
+{{- end }}
+{{- /*
+Rewriting the append-only file forks the server, and every page written meanwhile is
+copied: with maxmemory near the container's limit, a rewrite under load gets it
+OOM-killed. So maxmemory stays at 60% of the memory limit or less.
+*/}}
+{{- $units := dict "kb" 1024 "mb" 1048576 "gb" 1073741824 "Ki" 1024 "Mi" 1048576 "Gi" 1073741824 }}
+{{- $max := mul (regexFind "^[0-9]+" $v.maxmemory | atoi) (index $units (regexFind "[a-z]+$" $v.maxmemory)) }}
+{{- $limit := required "valkey.resources.limits.memory is required" $v.resources.limits.memory }}
+{{- $limitBytes := mul (regexFind "^[0-9]+" $limit | atoi) (index $units (regexFind "[KMG]i$" $limit)) }}
+{{- if gt (mul $max 10) (mul $limitBytes 6) }}
+{{- fail (printf "valkey.maxmemory (%s) must be at most 60%% of limits.memory (%s): an append-only rewrite forks and copies what's written meanwhile" $v.maxmemory $limit) }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+    app.kubernetes.io/name: valkey
+spec:
+  selector:
+    app.kubernetes.io/name: {{ $ha | ternary "valkey-proxy" "valkey" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: valkey
+      port: 6379
+      targetPort: valkey
+{{- if $ha }}
+{{- /*
+A stable name per node, which replication, the Sentinels and the proxy use (the
+StatefulSet's own Service is the one above, which the proxy answers).
+*/}}
+{{- range $i := until $replicas }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-{{ $i }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" $ | nindent 4 }}
+    app.kubernetes.io/name: valkey
+spec:
+  # Sentinels must find a node that isn't ready yet: a replica still syncing, or the
+  # old primary coming back.
+  publishNotReadyAddresses: true
+  selector:
+    statefulset.kubernetes.io/pod-name: {{ $name }}-{{ $i }}
+  ports:
+    - name: valkey
+      port: 6379
+      targetPort: valkey
+    - name: sentinel
+      port: 26379
+      targetPort: sentinel
+{{- end }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+    app.kubernetes.io/name: valkey
+spec:
+  serviceName: {{ $name }}
+  replicas: {{ $ha | ternary $replicas 1 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: valkey
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: valkey
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "data.podSecurity" $ | nindent 8 }}
+      {{- if $ha }}
+      # One node per machine where there are several: two on one machine go together.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: valkey
+                    app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- end }}
+      containers:
+        - name: valkey
+          image: {{ $v.image }}
+          {{- if $ha }}
+          command: [sh, -c]
+          args:
+            - {{ $.Files.Get "files/valkey-node.sh" | quote }}
+          {{- else }}
+          args:
+            - --requirepass
+            - $(VALKEY_PASSWORD)
+            - --appendonly
+            - "yes"
+            - --maxmemory
+            - {{ $v.maxmemory | quote }}
+            - --maxmemory-policy
+            - noeviction
+            - --dir
+            - /data
+          {{- end }}
+          env:
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $v.secretName }}
+                  key: password
+            {{- if $ha }}
+            {{- include "data.valkeyNodeEnv" (list $ $nodes) | nindent 12 }}
+            - { name: MAXMEMORY, value: {{ $v.maxmemory | quote }} }
+            {{- end }}
+          ports:
+            - name: valkey
+              containerPort: 6379
+          readinessProbe:
+            tcpSocket: { port: valkey }
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: valkey }
+            periodSeconds: 20
+          resources:
+            {{- toYaml $v.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+        {{- if $ha }}
+        # Watches the primary with the others, and promotes a replica once a majority
+        # agree it's gone (files/valkey-sentinel.sh).
+        - name: sentinel
+          image: {{ $v.image }}
+          command: [sh, -c]
+          args:
+            - {{ $.Files.Get "files/valkey-sentinel.sh" | quote }}
+          env:
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $v.secretName }}
+                  key: password
+            {{- include "data.valkeyNodeEnv" (list $ $nodes) | nindent 12 }}
+            - { name: QUORUM, value: {{ add (div $replicas 2) 1 | quote }} }
+          ports:
+            - name: sentinel
+              containerPort: 26379
+          readinessProbe:
+            tcpSocket: { port: sentinel }
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: sentinel }
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { cpu: 100m, memory: 64Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+        {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with $v.storage.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $v.storage.size }}
+{{- if $ha }}
+{{- $proxy := $v.replication.proxy }}
+---
+{{- /*
+The proxy asks every node, every second, whether it's the primary (INFO replication),
+and forwards connections only to the one that says so. When that changes, it closes the
+connections to the old one, and the clients reconnect through it to the new one.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-proxy
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+data:
+  haproxy.cfg: |
+    global
+      maxconn 4096
+    defaults
+      mode tcp
+      timeout connect 5s
+      # Queue consumers hold blocking reads open, and idle ones stay connected.
+      timeout client 24h
+      timeout server 24h
+      timeout check 2s
+    resolvers cluster
+      parse-resolv-conf
+      hold valid 5s
+    frontend valkey
+      bind :6379
+      default_backend primary
+    backend primary
+      option tcp-check
+      tcp-check connect
+      tcp-check send "AUTH ${VALKEY_PASSWORD}\r\n"
+      tcp-check expect string +OK
+      tcp-check send "INFO replication\r\n"
+      tcp-check expect string role:master
+      tcp-check send "QUIT\r\n"
+      tcp-check expect string +OK
+      default-server check inter 1s fall 2 rise 2 resolvers cluster init-addr none on-marked-down shutdown-sessions
+      {{- range $i, $node := $nodes }}
+      server node-{{ $i }} {{ $node }}:6379
+      {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-proxy
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+    app.kubernetes.io/name: valkey-proxy
+spec:
+  replicas: {{ $proxy.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: valkey-proxy
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: valkey-proxy
+        app.kubernetes.io/instance: {{ .Release.Name }}
+      annotations:
+        # A new configuration (more nodes) restarts it.
+        checksum/config: {{ printf "%d" $replicas | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "data.podSecurity" $ | nindent 8 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: valkey-proxy
+                    app.kubernetes.io/instance: {{ .Release.Name }}
+      containers:
+        - name: haproxy
+          image: {{ $proxy.image }}
+          args: [haproxy, -W, -db, -f, /usr/local/etc/haproxy/haproxy.cfg]
+          env:
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $v.secretName }}
+                  key: password
+          ports:
+            - name: valkey
+              containerPort: 6379
+          readinessProbe:
+            tcpSocket: { port: valkey }
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: { port: valkey }
+            periodSeconds: 20
+          resources:
+            {{- toYaml $proxy.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: config
+              mountPath: /usr/local/etc/haproxy
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $name }}-proxy
+---
+# Draining a node never takes more than one Valkey node, or the last proxy, at once.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: valkey
+      app.kubernetes.io/instance: {{ .Release.Name }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $name }}-proxy
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: valkey-proxy
+      app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+---
+# Only pods in this namespace (the stack's services) reach Valkey, and KEDA's operator,
+# which scales the queue consumers on their backlog (the namespace the platform installs
+# it in, deploy/platform/addons/keda.yaml).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    {{- if $ha }}
+    matchExpressions:
+      - { key: app.kubernetes.io/name, operator: In, values: [valkey, valkey-proxy] }
+      - { key: app.kubernetes.io/instance, operator: In, values: [{{ .Release.Name }}] }
+    {{- else }}
+    matchLabels:
+      app.kubernetes.io/name: valkey
+      app.kubernetes.io/instance: {{ .Release.Name }}
+    {{- end }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: keda
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: keda-operator
+      ports:
+        - port: 6379
+        {{- if $ha }}
+        - port: 26379
+        {{- end }}

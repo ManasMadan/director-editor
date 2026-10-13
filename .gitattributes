@@ -1,0 +1,16 @@
+* text=auto eol=lf
+
+# Lockfiles and generated code: no line-by-line diffs in reviews, and GitHub leaves them
+# out of language stats.
+bun.lock linguist-generated=true -diff
+apps/ai/uv.lock linguist-generated=true -diff
+**/.terraform.lock.hcl linguist-generated=true
+**/generated/** linguist-generated=true
+**/*.gen.ts linguist-generated=true
+**/openapi.json linguist-generated=true
+
+*.png binary
+*.jpg binary
+*.webp binary
+*.ico binary
+*.woff2 binary

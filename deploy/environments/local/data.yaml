@@ -1,0 +1,29 @@
+# kind (`bun run k8s:up`): one small instance of everything, on kind's default storage
+# class, the files host on the local gateway's plain-HTTP listener. No backups (kind
+# has no cert-manager, which the Barman Cloud plugin needs).
+postgres:
+  instances: 1
+  storage: { size: 2Gi, storageClass: "" }
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 512Mi }
+valkey:
+  storage: { size: 1Gi, storageClass: "" }
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 256Mi }
+  maxmemory: 150mb
+storage:
+  uploads:
+    host: files.localhost
+    scheme: http
+    corsOrigins: [http://localhost]
+    storage: { size: 1Gi, storageClass: "" }
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { memory: 512Mi }
+gateway:
+  parentRefs:
+    - name: public
+      namespace: gateway-system
+      sectionName: http

@@ -1,0 +1,6 @@
+# The release production runs: the git revision Argo CD deploys its charts, values,
+# Secrets and platform add-ons from, and the images (deploy/argocd/appsets/envs.yaml and
+# platform.yaml read this file at master's head). Written only by `bun run promote
+# <version>`, whose pull request is the deploy. Until the first promotion it follows
+# master, with no images to run.
+revision: HEAD

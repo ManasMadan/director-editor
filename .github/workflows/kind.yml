@@ -1,0 +1,113 @@
+# The whole stack on a Kubernetes cluster (kind), exactly as `bun run k8s:up` does
+# locally: every image built, the data and stack charts installed with the local
+# environment's values, and the routes smoke-tested through the gateway. Runs when the
+# images, charts or local cluster setup change (the changes job), and nightly; on every
+# other pull request it reports "Kubernetes passed" without running.
+name: Kubernetes
+
+on:
+  pull_request:
+  merge_group:
+  schedule:
+    - cron: "43 2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: kind-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  changes:
+    name: What changed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: { contents: read }
+    outputs:
+      run: ${{ steps.changes.outputs.run }}
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false, fetch-depth: 0 }
+      # A pull request or merge group runs the cluster when it changes the images, charts, local cluster setup or what the services require at boot (a new variable the charts don't set fails here); anything else (nightly, by hand) always runs.
+      - id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          PATTERN: '^(deploy/|docker-bake\.hcl$|scripts/k8s\.ts$|packages/db/prisma/|apps/[^/]+/src/env\.ts$|packages/nest-common/src/env\.ts$|apps/ai/app/settings\.py$|\.github/workflows/kind\.yml$)'
+        run: |
+          if [[ -z "$BASE" ]] || git diff --name-only "$BASE...HEAD" | grep -qE "$PATTERN"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  kind:
+    name: kind deploy and smoke test
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    permissions: { contents: read }
+    timeout-minutes: 60
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with: { version: v4.3.0 }
+      - name: Install kind
+        env:
+          # renovate: datasource=github-releases depName=kubernetes-sigs/kind
+          VERSION: v0.33.0
+          # The published kind-linux-amd64.sha256sum of that release: update both together.
+          SHA256: aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d
+        run: |
+          curl -fsSLo kind "https://github.com/kubernetes-sigs/kind/releases/download/$VERSION/kind-linux-amd64"
+          echo "$SHA256  kind" | sha256sum -c -
+          sudo install -m 0755 kind /usr/local/bin/kind
+      # GitHub's cache for buildx: the images build (all at once, while the cluster comes up)
+      # from the layers deploy.yml caches on master.
+      - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+      - run: bun run k8s:up
+      - name: Show what went wrong
+        if: failure()
+        run: |
+          kubectl --context kind-boilerplate get pods -A -o wide || true
+          kubectl --context kind-boilerplate -n boilerplate get events --sort-by=.lastTimestamp | tail -50 || true
+          kubectl --context kind-boilerplate -n boilerplate logs -l app.kubernetes.io/part-of=boilerplate --all-containers --tail=100 || true
+
+  # The one check the master ruleset requires from this workflow (docs/repository-settings.md):
+  # it always reports, so a pull request this workflow has nothing to do for isn't left
+  # waiting on it.
+  kind-ok:
+    name: Kubernetes passed
+    if: always()
+    needs: [changes, kind]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >-
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            raw.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+            nodejs.org:443
+            registry.npmjs.org:443
+      - name: Require every job to succeed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        # The cluster run succeeded, or the change touches nothing it checks.
+        run: echo "$NEEDS" | jq -e '.changes.result == "success" and (.kind.result == "success" or .kind.result == "skipped")' > /dev/null

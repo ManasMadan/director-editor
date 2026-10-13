@@ -1,0 +1,81 @@
+suite: services, service accounts and the install notes
+templates: [service.yaml, serviceaccount.yaml, NOTES.txt]
+release: { name: demo, namespace: apps }
+set:
+  image.tag: sha-abc123
+  site.host: app.example.com
+tests:
+  - it: gives every enabled service with a port a Service, and one without a port none
+    template: service.yaml
+    asserts:
+      - hasDocuments: { count: 6 }
+
+  - it: selects the service's own pods and names its HTTP port
+    template: service.yaml
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - equal:
+          path: spec.selector
+          value: { app.kubernetes.io/name: api, app.kubernetes.io/instance: demo }
+      - equal:
+          path: spec.ports
+          value: [{ name: http, port: 3001, targetPort: http, appProtocol: http }]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: demo
+
+  - it: exposes a TCP service on a plain port, with no HTTP protocol
+    template: service.yaml
+    set: { services.clamav.enabled: true }
+    documentSelector: { path: metadata.name, value: demo-clamav }
+    asserts:
+      - equal: { path: spec.ports, value: [{ name: tcp, port: 3310, targetPort: tcp }] }
+
+  - it: makes nothing for a disabled service
+    template: service.yaml
+    set: { services.webhooks.enabled: false }
+    asserts:
+      - hasDocuments: { count: 5 }
+
+  - it: gives every enabled service its own account, with no API token mounted
+    template: serviceaccount.yaml
+    asserts:
+      - hasDocuments: { count: 7 }
+      - isKind: { of: ServiceAccount }
+      - equal: { path: automountServiceAccountToken, value: false }
+
+  - it: names each account after its service
+    template: serviceaccount.yaml
+    documentSelector: { path: metadata.name, value: demo-ai-worker }
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: ai-worker
+
+  - it: makes no account for a disabled service
+    template: serviceaccount.yaml
+    set: { services.ai.enabled: false, services.ai-worker.enabled: false }
+    asserts:
+      - hasDocuments: { count: 5 }
+
+  - it: says where the release is and which services run, with their routes
+    template: NOTES.txt
+    asserts:
+      - equalRaw:
+          value: |
+            demo sha-abc123 is deployed at https://app.example.com.
+
+            Services:
+              ai (/ai/mcp, /.well-known/oauth-protected-resource/ai/mcp)
+              ai-worker
+              api (/api, /docs, /rpc, /.well-known/oauth-authorization-server/api/auth, /.well-known/openid-configuration/api/auth, /.well-known/oauth-protected-resource/api/mcp)
+              notifications
+              web (/)
+              webhooks (/webhooks)
+              worker
+
+  - it: leaves a disabled service out of the notes
+    template: NOTES.txt
+    set: { services.worker.enabled: false }
+    asserts:
+      - notMatchRegexRaw: { pattern: "\n  worker" }

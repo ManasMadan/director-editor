@@ -1,0 +1,116 @@
+# k3s runs the control plane (etcd, scheduler, controller manager) and kube-proxy's job
+# inside its own process, with nothing to scrape at the usual endpoints: scraping them
+# would only raise "target down" alerts.
+kubeEtcd: { enabled: false }
+kubeControllerManager: { enabled: false }
+kubeScheduler: { enabled: false }
+kubeProxy: { enabled: false }
+
+prometheus:
+  prometheusSpec:
+    # The services push their metrics over OTLP (the stack chart sets
+    # OTEL_EXPORTER_OTLP_METRICS_ENDPOINT to /api/v1/otlp/v1/metrics here).
+    enableOTLPReceiver: true
+    # The alerts add-on's rules and pod monitors (deploy/platform/alerts), which aren't
+    # labelled with this release.
+    ruleSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    otlp:
+      promoteResourceAttributes: [service.name, service.instance.id]
+    retention: 15d
+    retentionSize: 18GB
+    resources:
+      requests: { cpu: 200m, memory: 1Gi }
+      limits: { memory: 2Gi }
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 20Gi
+
+grafana:
+  # Our user, which owns the data volume through fsGroup: no root init container to
+  # chown it.
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    seccompProfile: { type: RuntimeDefault }
+  initChownData:
+    enabled: false
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+  sidecar:
+    resources:
+      requests: { cpu: 10m, memory: 64Mi }
+      limits: { cpu: 100m, memory: 128Mi }
+  # From deploy/platform/secrets/<environment>/grafana.sops.yaml (keys admin-user and
+  # admin-password). Not public: kubectl -n observability port-forward
+  # svc/kube-prometheus-stack-grafana 3000:80.
+  admin:
+    existingSecret: grafana-admin
+  # Traces next to the metrics.
+  additionalDataSources:
+    - name: Jaeger
+      type: jaeger
+      uid: jaeger
+      url: http://jaeger.observability.svc.cluster.local:16686
+  persistence:
+    enabled: true
+    storageClassName: local-path
+    size: 2Gi
+
+alertmanager:
+  alertmanagerSpec:
+    # It never talks to the Kubernetes API.
+    automountServiceAccountToken: false
+    # The alerts add-on's receiver (an AlertmanagerConfig) takes every alert, not only
+    # those from its own namespace.
+    alertmanagerConfigMatcherStrategy:
+      type: None
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 2Gi
+
+# Every pod as an unprivileged user above the node's own ids (node-exporter's and
+# kube-state-metrics' 65534 already are; the others 10001) and every container with CPU
+# and memory requested and limited, as for every container here (the misconfiguration
+# scan, scripts/misconfig.ts, fails without). What node-exporter needs from the node is
+# a reviewed exception (.trivyignore.yaml).
+prometheusOperator:
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+  admissionWebhooks:
+    patch:
+      resources:
+        requests: { cpu: 10m, memory: 32Mi }
+        limits: { cpu: 100m, memory: 64Mi }
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+kube-state-metrics:
+  resources:
+    requests: { cpu: 10m, memory: 64Mi }
+    limits: { cpu: 200m, memory: 256Mi }
+prometheus-node-exporter:
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { cpu: 200m, memory: 128Mi }
+  containerSecurityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities: { drop: [ALL] }
+    seccompProfile: { type: RuntimeDefault }

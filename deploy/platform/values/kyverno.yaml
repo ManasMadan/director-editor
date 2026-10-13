@@ -1,0 +1,30 @@
+admissionController:
+  replicas: 3
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    seccompProfile: { type: RuntimeDefault }
+  container:
+    resources:
+      limits: { cpu: "1" }
+# Each pod as user and group 10001 (Kyverno's images need no particular id), and a CPU
+# limit beside the chart's memory limits, as for every container here (the
+# misconfiguration scan, scripts/misconfig.ts, fails without).
+crds:
+  migration:
+    podSecurityContext: &pod { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+webhooksCleanup:
+  podSecurityContext: *pod
+backgroundController:
+  podSecurityContext: *pod
+  resources:
+    limits: { cpu: 500m }
+cleanupController:
+  podSecurityContext: *pod
+  resources:
+    limits: { cpu: 500m }
+reportsController:
+  podSecurityContext: *pod
+  resources:
+    limits: { cpu: 500m }

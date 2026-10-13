@@ -1,0 +1,30 @@
+{{- /*
+What Prometheus scrapes besides the services (which push theirs over OTLP): Postgres's
+instances in every namespace, cert-manager, Envoy Gateway's proxies and KEDA's operator.
+The rules in rules.yaml read these.
+*/}}
+{{- $monitors := list
+  (dict "name" "postgres" "namespaces" (dict "any" true) "labels" (dict "cnpg.io/podRole" "instance") "port" "metrics" "path" "/metrics")
+  (dict "name" "cert-manager" "namespaces" (dict "matchNames" (list "cert-manager")) "labels" (dict "app.kubernetes.io/name" "cert-manager" "app.kubernetes.io/component" "controller") "port" "http-metrics" "path" "/metrics")
+  (dict "name" "gateway" "namespaces" (dict "matchNames" (list "envoy-gateway-system")) "labels" (dict "app.kubernetes.io/component" "proxy") "port" "metrics" "path" "/stats/prometheus")
+  (dict "name" "keda" "namespaces" (dict "matchNames" (list "keda")) "labels" (dict "app.kubernetes.io/name" "keda-operator") "port" "metrics" "path" "/metrics")
+}}
+{{- range $m := $monitors }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ $m.name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "alerts.labels" $ | nindent 4 }}
+spec:
+  namespaceSelector:
+    {{- toYaml $m.namespaces | nindent 4 }}
+  selector:
+    matchLabels:
+      {{- toYaml $m.labels | nindent 6 }}
+  podMetricsEndpoints:
+    - port: {{ $m.port }}
+      path: {{ $m.path }}
+{{- end }}

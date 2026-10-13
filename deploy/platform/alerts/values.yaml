@@ -1,0 +1,32 @@
+# The cluster's facts (the observability ApplicationSet sets them from its Argo CD
+# Secret, which OpenTofu writes).
+environment: ""
+# The DNS zone; the email domain and the mail host default from it, as in the mail chart.
+domain: ""
+emailDomain: ""
+mailHost: ""
+
+# Where alerts are emailed (OpenTofu's alert_email). Required in production: a cluster
+# nobody hears from isn't monitored.
+email: ""
+
+# Alertmanager sends through the mail server's submission account (the one the
+# notifications service uses), with its password from this Secret in the observability
+# namespace (deploy/platform/secrets/<env>/, key `password`: the mail server's
+# SMTP_PASSWORD).
+smtp:
+  account: no-reply
+  secretName: alertmanager-smtp
+
+# When each alert fires.
+thresholds:
+  # WAL not archived for this long: point-in-time recovery stops at the last one.
+  walArchiveStale: 30m
+  # No base backup for this long (they're daily).
+  backupStale: 36h
+  # Certificates renew 30 days before they expire; this means renewal is failing.
+  certificateExpiresWithin: 14d
+  # Share of the gateway's responses that are 5xx.
+  errorRatio: 0.05
+  # Jobs waiting in one queue.
+  queueBacklog: 1000

@@ -1,0 +1,7 @@
+# Queue-driven autoscaling for the workers.
+addon: keda
+namespace: keda
+repoURL: https://kedacore.github.io/charts
+chart: keda
+version: 2.21.0
+wave: "-20"

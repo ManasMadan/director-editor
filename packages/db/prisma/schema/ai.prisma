@@ -1,0 +1,65 @@
+// Owner: apps/ai (the Python service), which reads and writes it through SQLAlchemy
+// models generated from the migrated database; Prisma owns the DDL, like every schema.
+// Tenant tables: every query runs with app.org_id set (row-level security).
+
+/// Something the assistant can answer from: a workspace's own text, split into chunks.
+model Document {
+  id           String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  orgId        String          @map("org_id") @db.Uuid
+  createdBy    String?         @map("created_by") @db.Uuid
+  title        String
+  /// The text as added; kept so the document can be re-indexed (e.g. a new embedding model).
+  content      String
+  /// A short summary, written after indexing when a model is configured.
+  summary      String?
+  /// pending (waiting to be indexed) | indexing | ready | failed
+  status       String          @default("pending")
+  /// Why indexing failed (an error code).
+  error        String?
+  chunkCount   Int             @default(0) @map("chunk_count")
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  creator      User?           @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  chunks       DocumentChunk[]
+
+  @@index([orgId, createdAt])
+  @@map("document")
+  @@schema("ai")
+}
+
+/// A passage of a document with its embedding. `org_id` is copied from the document so
+/// retrieval filters (and row-level security) never need a join.
+model DocumentChunk {
+  id         String                      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  documentId String                      @map("document_id") @db.Uuid
+  orgId      String                      @map("org_id") @db.Uuid
+  ordinal    Int
+  content    String
+  /// 1536 dimensions (OpenAI text-embedding-3-small; the local embedder matches).
+  embedding  Unsupported("vector(1536)")
+  document   Document                    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, ordinal])
+  @@index([orgId])
+  @@map("chunk")
+  @@schema("ai")
+}
+
+/// Tokens each model call used, for budgets and cost reporting.
+model AiUsage {
+  id           String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  orgId        String       @map("org_id") @db.Uuid
+  userId       String?      @map("user_id") @db.Uuid
+  /// What used them, e.g. "assistant".
+  feature      String
+  model        String
+  inputTokens  Int          @map("input_tokens")
+  outputTokens Int          @map("output_tokens")
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt])
+  @@map("usage")
+  @@schema("ai")
+}

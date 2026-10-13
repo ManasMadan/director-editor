@@ -1,0 +1,22 @@
+# Copy to backend-production.hcl (kept out of git). Any S3-compatible bucket that lives
+# outside the cluster it describes (Cloudflare R2, Backblaze B2, Hetzner, Scaleway, AWS
+# S3, …), created once. The keys can instead come from AWS_ACCESS_KEY_ID and
+# AWS_SECRET_ACCESS_KEY. Production's state in its own key (or its own bucket, with keys
+# only production's operators have). The copy in infra-production-plan (pull request
+# plans, .github/workflows/infra.yml) gets keys that can only read.
+bucket     = "your-tofu-state"
+key        = "boilerplate/production.tfstate"
+region     = "auto"
+endpoints  = { s3 = "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com" }
+access_key = "…"
+secret_key = "…"
+
+# Not AWS: skip the AWS-only checks. The lock file needs conditional writes (R2, B2 and
+# most current S3 implementations have them).
+use_lockfile                = true
+use_path_style              = true
+skip_credentials_validation = true
+skip_region_validation      = true
+skip_requesting_account_id  = true
+skip_metadata_api_check     = true
+skip_s3_checksum            = true

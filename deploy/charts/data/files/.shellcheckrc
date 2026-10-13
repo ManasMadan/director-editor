@@ -1,0 +1,2 @@
+# The charts run each script here with `sh -c`: shellcheck reads them as POSIX sh.
+shell=sh

@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "platform config chart values",
+  "type": "object",
+  "additionalProperties": false,
+  "$comment": "Argo CD passes the cluster's settings as parameters, an empty string where a cluster sets none: switches and numbers take that too.",
+  "properties": {
+    "global": { "type": "object" },
+    "domain": { "type": "string" },
+    "previews": { "type": ["boolean", "string"] },
+    "gateway": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "serviceAnnotations": { "type": "object", "additionalProperties": { "type": "string" } },
+        "trustedHops": { "type": ["integer", "string"] },
+        "originPulls": { "type": ["boolean", "string"] },
+        "proxy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["image", "resources"],
+          "properties": {
+            "image": { "type": "string", "minLength": 1 },
+            "resources": { "type": "object" }
+          }
+        }
+      }
+    },
+    "tls": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "email": { "type": "string" },
+        "staging": { "type": ["boolean", "string"] },
+        "cloudflareTokenSecret": { "type": "string", "minLength": 1 },
+        "dns01": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "provider": { "type": "string" },
+            "rfc2136": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "nameserver": { "type": "string" },
+                "tsigKeyName": { "type": "string" },
+                "tsigAlgorithm": { "type": "string" },
+                "tsigSecretName": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "imagePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": ["boolean", "string"] },
+        "images": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "namespaces": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "subject": { "type": "string" },
+        "publicKey": { "type": "string" }
+      }
+    }
+  }
+}

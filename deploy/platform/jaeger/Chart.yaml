@@ -1,0 +1,10 @@
+apiVersion: v2
+name: jaeger
+description: >-
+  Traces for clusters that opt into observability: Jaeger v2 in one pod, receiving OTLP
+  from every service and keeping the latest traces in memory. The same server and
+  configuration as local development (docker compose's telemetry profile).
+type: application
+version: 0.1.0
+appVersion: "2.21.0"
+kubeVersion: ">=1.31.0-0"

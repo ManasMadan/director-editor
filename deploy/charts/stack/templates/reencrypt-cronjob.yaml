@@ -1,0 +1,77 @@
+{{- /*
+Re-encrypting stored secrets after a key rotation (the rotate-secrets skill): run it with
+  kubectl -n <namespace> create job --from=cronjob/<release>-reencrypt reencrypt-$(date +%s)
+It's a suspended CronJob only so that command has a template: it never runs on a
+schedule. It runs in its own pod rather than through `kubectl exec` into the api, where
+a second process shares the api's memory limit and gets the container OOM-killed.
+*/}}
+{{- $svc := include "stack.service" (list . .Values.reencrypt.service) | fromYaml }}
+{{- if and .Values.reencrypt.enabled $svc.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "stack.fullname" (list . "reencrypt") }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "stack.labels" (list . "reencrypt") | nindent 4 }}
+spec:
+  suspend: true
+  schedule: "@yearly"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: {{ .Values.reencrypt.activeDeadlineSeconds }}
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            {{- include "stack.selectorLabels" (list . "reencrypt") | nindent 12 }}
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          {{- with .Values.image.pullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: reencrypt
+              image: {{ include "stack.image" (list . $svc) }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command: ["/nodejs/bin/node", "dist/reencrypt.mjs"]
+              {{- include "stack.containerEnv" (list . .Values.reencrypt.service $svc) | nindent 14 }}
+              resources:
+                {{- toYaml .Values.reencrypt.resources | nindent 16 }}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+                {{- with $svc.caBundle }}
+                - name: ca-bundle
+                  mountPath: /etc/ssl/extra
+                  readOnly: true
+                {{- end }}
+                {{- include "stack.dbCaMount" (list $ $svc) | nindent 16 }}
+          volumes:
+            - name: tmp
+              emptyDir: {}
+            {{- include "stack.dbCaVolume" (list $ $svc) | nindent 12 }}
+            {{- with $svc.caBundle }}
+            - name: ca-bundle
+              secret:
+                secretName: {{ . }}
+                items:
+                  - { key: ca.crt, path: ca.crt }
+            {{- end }}
+{{- end }}

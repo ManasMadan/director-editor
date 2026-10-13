@@ -1,0 +1,4 @@
+# The git revision Argo CD deploys staging's charts, values, Secrets and platform add-ons
+# from (deploy/argocd/appsets/envs.yaml and platform.yaml read it at master's head).
+# Staging follows master; its image tag is in stack.yaml, written by deploy.yml.
+revision: HEAD

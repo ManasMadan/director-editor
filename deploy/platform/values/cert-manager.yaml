@@ -1,0 +1,49 @@
+crds:
+  enabled: true
+  keep: true
+# Certificates for Gateway listeners (cert-manager.io/cluster-issuer on the Gateway).
+config:
+  apiVersion: controller.config.cert-manager.io/v1alpha1
+  kind: ControllerConfiguration
+  enableGatewayAPI: true
+podDisruptionBudget:
+  enabled: true
+
+# Each pod as user and group 10001 (none of cert-manager's images needs a particular id),
+# and CPU and memory requested and limited, as for every container here (the
+# misconfiguration scan, scripts/misconfig.ts, fails without).
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  seccompProfile: { type: RuntimeDefault }
+resources:
+  requests: { cpu: 10m, memory: 64Mi }
+  limits: { cpu: 500m, memory: 256Mi }
+webhook:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    seccompProfile: { type: RuntimeDefault }
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { cpu: 200m, memory: 128Mi }
+cainjector:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    seccompProfile: { type: RuntimeDefault }
+  resources:
+    requests: { cpu: 10m, memory: 64Mi }
+    limits: { cpu: 200m, memory: 256Mi }
+startupapicheck:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    seccompProfile: { type: RuntimeDefault }
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { cpu: 100m, memory: 64Mi }

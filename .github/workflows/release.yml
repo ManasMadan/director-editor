@@ -1,0 +1,53 @@
+# Releases are version tags pushed by hand (`git tag v1.4.0 && git push origin v1.4.0`):
+# this checks the tag (a version, on master, with images: a commit deploy.yml passed for
+# or the staging bump right after it, waiting while they still run; and matching the
+# mobile app's version) and
+# publishes the GitHub release with notes from the Conventional Commit titles since the
+# previous tag. Production then moves through its promotion pull request, opened with
+# `bun run promote v1.4.0` (scripts/release.ts); merging it is the deploy. The mobile
+# store builds start from the same tag (mobile.yml).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  release:
+    name: GitHub release
+    runs-on: ubuntu-24.04
+    # Up to an hour waiting for CI and deploy.yml on a commit tagged right after its merge.
+    timeout-minutes: 75
+    permissions: { contents: write, actions: read }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      # Every tag and master: the notes start at the previous tag, and the check needs master.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false, fetch-depth: 0 }
+      # No cache: a release must not run a Bun some earlier run put in the shared cache.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+          no-cache: true
+      - name: Check the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun scripts/release.ts check "$GITHUB_REF_NAME"
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bun scripts/release.ts notes "$GITHUB_REF_NAME" > notes.md
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file notes.md
+          {
+            echo "Released $GITHUB_REF_NAME. To put it in production once deploy.yml has passed for it:"
+            echo
+            echo "    bun run promote $GITHUB_REF_NAME"
+          } >> "$GITHUB_STEP_SUMMARY"

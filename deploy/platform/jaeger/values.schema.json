@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "jaeger chart values",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "global": { "type": "object" },
+    "image": { "type": "string", "minLength": 1 },
+    "maxTraces": { "type": "integer", "minimum": 1000 },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requests": { "type": "object", "additionalProperties": { "type": "string" } },
+        "limits": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    }
+  }
+}

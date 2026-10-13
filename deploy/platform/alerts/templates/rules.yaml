@@ -1,0 +1,73 @@
+{{- /*
+The alerts that matter to this application, on top of kube-prometheus-stack's own
+(pods crash-looping or not ready, nodes, disks, the Kubernetes components):
+backups, certificates, the gateway's error rate and queue backlogs.
+*/}}
+{{- $t := .Values.thresholds }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: application
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "alerts.labels" . | nindent 4 }}
+spec:
+  groups:
+    - name: backups
+      rules:
+        - alert: PostgresWalArchivingFailing
+          expr: increase(cnpg_pg_stat_archiver_failed_count[15m]) > 0
+          for: 15m
+          labels: { severity: critical }
+          annotations:
+            summary: "{{`{{ $labels.namespace }}/{{ $labels.pod }}`}} can't archive its WAL"
+            description: Point-in-time recovery stops at the last segment archived. Check the backups server and the Barman Cloud plugin's logs.
+        - alert: PostgresWalArchiveStale
+          expr: cnpg_pg_stat_archiver_seconds_since_last_archival > {{ include "alerts.seconds" $t.walArchiveStale }}
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "{{`{{ $labels.namespace }}/{{ $labels.pod }}`}} archived no WAL for {{ $t.walArchiveStale }}"
+            description: Archiving has stalled (or the database has been idle that long).
+        - alert: PostgresBackupStale
+          expr: cnpg_collector_last_available_backup_timestamp > 0 and time() - cnpg_collector_last_available_backup_timestamp > {{ include "alerts.seconds" $t.backupStale }}
+          for: 1h
+          labels: { severity: critical }
+          annotations:
+            summary: "{{`{{ $labels.namespace }}`}} has no base backup newer than {{ $t.backupStale }}"
+            description: The daily ScheduledBackup isn't succeeding. kubectl get backups -n {{`{{ $labels.namespace }}`}}
+    - name: certificates
+      rules:
+        - alert: CertificateExpiringSoon
+          expr: certmanager_certificate_expiration_timestamp_seconds - time() < {{ include "alerts.seconds" $t.certificateExpiresWithin }}
+          for: 1h
+          labels: { severity: warning }
+          annotations:
+            summary: "{{`{{ $labels.namespace }}/{{ $labels.name }}`}} expires within {{ $t.certificateExpiresWithin }}"
+            description: cert-manager renews 30 days ahead, so renewal is failing. kubectl describe certificate -n {{`{{ $labels.namespace }} {{ $labels.name }}`}}
+        - alert: CertificateNotReady
+          expr: certmanager_certificate_ready_status{condition="False"} == 1
+          for: 30m
+          labels: { severity: warning }
+          annotations:
+            summary: "{{`{{ $labels.namespace }}/{{ $labels.name }}`}} isn't ready"
+    - name: gateway
+      rules:
+        - alert: GatewayErrorRate
+          expr: |
+            sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class="5"}[5m]))
+              / sum(rate(envoy_http_downstream_rq_total[5m])) > {{ $t.errorRatio }}
+          for: 10m
+          labels: { severity: critical }
+          annotations:
+            summary: "{{`{{ $value | humanizePercentage }}`}} of the gateway's responses are errors"
+            description: More than {{ $t.errorRatio }} of requests answered 5xx for ten minutes. Check the services' logs and traces.
+    - name: queues
+      rules:
+        - alert: QueueBacklog
+          expr: max by (namespace, scaledObject, metric) (keda_scaler_metrics_value) > {{ $t.queueBacklog }}
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "{{`{{ $labels.namespace }}/{{ $labels.scaledObject }}`}} has {{`{{ $value }}`}} jobs waiting"
+            description: Its consumers aren't keeping up (or are at their KEDA maximum). Check their logs and replica count.

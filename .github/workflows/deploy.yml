@@ -1,0 +1,265 @@
+# Ships master: once CI has passed on a commit, its images are built for amd64 and
+# arm64, pushed to GHCR as sha-<commit>, signed (cosign, keyless: production's Kyverno
+# policy admits only images this workflow signed on master) and attested (build
+# provenance, and an SBOM per platform). Staging then moves to that tag: this workflow
+# commits it to deploy/environments/staging/stack.yaml and Argo CD rolls it out.
+#
+# Production changes only through a promotion pull request (release.yml).
+#
+# Setup (docs/repository-settings.md): the repository's GitHub App may push the staging
+# bump past master's protection, and packages must be writable by this repository.
+name: Deploy
+
+# workflow_run runs with secrets whatever triggered the run it follows; the build job
+# checks out that run's commit only when it was this repository's own push to master.
+on: # zizmor: ignore[dangerous-triggers]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+
+# One run per commit, never cancelled: one group for all of them would keep only the
+# latest pending run, so a commit merged in between would never get images (and couldn't
+# be released). Only moving staging is one at a time (the staging job).
+concurrency:
+  group: deploy-${{ github.event.workflow_run.head_sha || github.sha }}
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  REGISTRY: ghcr.io/manasmadan/boilerplate
+  IMAGES: api worker notifications webhooks web ai migrate
+
+jobs:
+  # One job per image and architecture: all seven on one runner ran it out of disk.
+  build:
+    name: Image ${{ matrix.image }} (${{ matrix.arch }})
+    # Only this repository's own pushes to master, never a fork's: this job checks that
+    # commit out and pushes its images.
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event.workflow_run.conclusion == 'success'
+        && github.event.workflow_run.event == 'push'
+        && github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions: { contents: read, packages: write }
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [api, worker, notifications, webhooks, web, ai, migrate]
+        arch: [amd64, arm64]
+        include:
+          - { arch: amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false, ref: "${{ env.SHA }}" }
+      - uses: ./.github/actions/free-disk
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          TAG: sha-${{ env.SHA }}-${{ matrix.arch }}
+          RELEASE: ${{ env.SHA }}
+        with:
+          source: .
+          targets: ${{ matrix.image }}
+          push: true
+          # A cache scope per image and architecture: one shared scope had every build
+          # overwrite the others' layers. CI, preview and kind read these.
+          set: |
+            *.platform=linux/${{ matrix.arch }}
+            *.cache-from=type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+            *.cache-to=type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
+
+  publish:
+    name: Publish and sign
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions: { contents: read, packages: write, id-token: write }
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    # The tag, and each image's multi-arch digest, which the attest job attests.
+    outputs:
+      tag: sha-${{ env.SHA }}
+      api: ${{ steps.merge.outputs.api }}
+      worker: ${{ steps.merge.outputs.worker }}
+      notifications: ${{ steps.merge.outputs.notifications }}
+      webhooks: ${{ steps.merge.outputs.webhooks }}
+      web: ${{ steps.merge.outputs.web }}
+      ai: ${{ steps.merge.outputs.ai }}
+      migrate: ${{ steps.merge.outputs.migrate }}
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      # One multi-arch tag per image, from the two single-arch builds.
+      - name: Merge the architectures
+        id: merge
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: |
+          for image in $IMAGES; do
+            docker buildx imagetools create -t "$REGISTRY/$image:sha-$SHA" \
+              "$REGISTRY/$image:sha-$SHA-amd64" "$REGISTRY/$image:sha-$SHA-arm64"
+            digest=$(docker buildx imagetools inspect "$REGISTRY/$image:sha-$SHA" --format '{{json .Manifest}}' | jq -r .digest)
+            echo "$image=$digest" >> "$GITHUB_OUTPUT"
+            if [[ -n "$COSIGN_PRIVATE_KEY" ]]; then
+              # With a key pair (imagePolicy.publicKey): nothing public is involved.
+              cosign sign --yes --key env://COSIGN_PRIVATE_KEY --tlog-upload=false "$REGISTRY/$image@$digest"
+            else
+              cosign sign --yes "$REGISTRY/$image@$digest"
+            fi
+          done
+
+  # Build provenance for each image's multi-arch tag, and an SBOM for each of its
+  # platforms: an SBOM describes one platform's filesystem, so each architecture's image
+  # gets its own, attached to that platform's digest. One job per image, like the build.
+  attest:
+    name: Attest ${{ matrix.image }}
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions: { contents: read, packages: write, id-token: write, attestations: write }
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [api, worker, notifications, webhooks, web, ai, migrate]
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The digest of each platform's image in the multi-arch one publish signed.
+      - name: Find each platform's digest
+        id: digests
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ matrix.image }}@${{ needs.publish.outputs[matrix.image] }}
+        run: |
+          raw=$(docker buildx imagetools inspect "$IMAGE" --raw)
+          for arch in amd64 arm64; do
+            digest=$(jq -r --arg arch "$arch" '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest' <<< "$raw")
+            if [[ "$digest" != sha256:* ]]; then
+              echo "No linux/$arch image in $IMAGE" >&2
+              exit 1
+            fi
+            echo "$arch=$digest" >> "$GITHUB_OUTPUT"
+          done
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ matrix.image }}
+          subject-digest: ${{ needs.publish.outputs[matrix.image] }}
+          push-to-registry: true
+      - uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          image: ${{ env.REGISTRY }}/${{ matrix.image }}@${{ steps.digests.outputs.amd64 }}
+          format: spdx-json
+          output-file: sbom-amd64.spdx.json
+          upload-artifact: false
+      - uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ matrix.image }}
+          subject-digest: ${{ steps.digests.outputs.amd64 }}
+          sbom-path: sbom-amd64.spdx.json
+          push-to-registry: true
+      - uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          image: ${{ env.REGISTRY }}/${{ matrix.image }}@${{ steps.digests.outputs.arm64 }}
+          format: spdx-json
+          output-file: sbom-arm64.spdx.json
+          upload-artifact: false
+      - uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ matrix.image }}
+          subject-digest: ${{ steps.digests.outputs.arm64 }}
+          sbom-path: sbom-arm64.spdx.json
+          push-to-registry: true
+
+  staging:
+    name: Deploy to staging
+    # Only images with their attestations ship. The bump is pushed to master as the GitHub
+    # App (docs/repository-settings.md): without one it's skipped, since the ruleset refuses
+    # any other push, and the images are still published.
+    needs: [publish, attest]
+    if: vars.BOT_APP_CLIENT_ID != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: staging
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+    permissions: { contents: write }
+    env:
+      TAG: ${{ needs.publish.outputs.tag }}
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/bot
+        id: bot
+        with:
+          client-id: ${{ vars.BOT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+          fallback-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        # All of master's history: whether staging's commit comes before this one.
+        with:
+          ref: master
+          token: "${{ steps.bot.outputs.token }}"
+          fetch-depth: 0
+          persist-credentials: false
+      # Runs finish out of order: a commit whose images come last must not move staging
+      # back past a newer one. The push retries on top of whatever landed meanwhile.
+      - name: Point staging at the new images
+        env:
+          # For this step's fetches and push only, never written to .git/config.
+          TOKEN: ${{ steps.bot.outputs.token }}
+        run: |
+          basic=$(printf 'x-access-token:%s' "$TOKEN" | base64 | tr -d '\n')
+          echo "::add-mask::$basic"
+          git() { command git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $basic" "$@"; }
+          file=deploy/environments/staging/stack.yaml
+          for attempt in 1 2 3; do
+            git fetch --quiet origin master
+            git reset --quiet --hard origin/master
+            current=$(sed -n -E '/^image:/,/^[^ ]/ s/^  tag: "?sha-([0-9a-f]+)"?.*/\1/p' "$file")
+            if [[ -n "$current" ]] && git cat-file -e "$current^{commit}" 2>/dev/null \
+              && ! git merge-base --is-ancestor "$current" "${TAG#sha-}"; then
+              echo "Staging runs sha-$current, newer than $TAG: leaving it."
+              exit 0
+            fi
+            sed -i -E '/^image:/,/^[^ ]/ s/^  tag: .*/  tag: "'"$TAG"'"/' "$file"
+            if git diff --quiet; then
+              echo "Staging already runs $TAG."
+              exit 0
+            fi
+            git commit -qam "chore(infra): deploy $TAG to staging [skip ci]"
+            if git push origin HEAD:master; then exit 0; fi
+            echo "master moved while pushing (attempt $attempt): trying again on top of it."
+          done
+          exit 1

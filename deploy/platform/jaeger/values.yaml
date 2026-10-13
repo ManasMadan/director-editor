@@ -1,0 +1,7 @@
+image: docker.io/jaegertracing/jaeger:2.21.0@sha256:3d0ac795ff98aa04d1be04311d2dac6c25b4bfc8322dc02e53bc5b170c5018c3
+# Traces kept in memory (the oldest are dropped): a restart loses them, which is fine
+# for looking at what just happened. Memory grows with it; raise both together.
+maxTraces: 20000
+resources:
+  requests: { cpu: 50m, memory: 256Mi }
+  limits: { cpu: "1", memory: 1Gi }

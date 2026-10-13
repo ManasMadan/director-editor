@@ -1,0 +1,7 @@
+# The staged files' checks (scripts/pre-commit.ts): lint-staged's formatters and linters
+# (Biome, ruff, prisma format, Squawk on new migrations, tofu fmt, the SOPS check) first,
+# then side by side the secret scan (gitleaks) and, when the staged files include what
+# they read, the infrastructure misconfiguration scan (Trivy), the known-vulnerability
+# scan (OSV) and the linters of scripts/linters.ts, as CI runs them. The full suite runs
+# in CI.
+bun scripts/pre-commit.ts

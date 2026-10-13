@@ -1,0 +1,29 @@
+# Copy to production.tfvars (kept out of git). Secrets don't go here: they come from
+# TF_VAR_ssh_private_key, TF_VAR_sops_age_key and TF_VAR_state_passphrase.
+environment           = "production"
+domain                = "example.com"
+site_host             = "app.example.com"
+cloudflare_account_id = "0123456789abcdef0123456789abcdef"
+tls_email             = "ops@example.com"
+observability         = true
+# Where alerts are emailed (through the mail server); required in production.
+alert_email = "ops@example.com"
+
+# Three servers (etcd survives losing one) on a private network, and agents for the
+# workloads. Name servers in the order they're added: the first one bootstraps.
+nodes = {
+  server-1 = { address = "203.0.113.10", private_address = "10.0.0.10", role = "server" }
+  server-2 = { address = "203.0.113.11", private_address = "10.0.0.11", role = "server" }
+  server-3 = { address = "203.0.113.12", private_address = "10.0.0.12", role = "server" }
+  agent-1  = { address = "203.0.113.20", private_address = "10.0.0.20", role = "agent" }
+  agent-2  = { address = "203.0.113.21", private_address = "10.0.0.21", role = "agent" }
+}
+
+mail = {
+  node               = "agent-1"
+  ipv6               = "2001:db8::20"
+  dkim_selector      = "stalwart"
+  dkim_public_key    = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA…"
+  dmarc_policy       = "reject"
+  dmarc_report_email = "dmarc@example.com"
+}

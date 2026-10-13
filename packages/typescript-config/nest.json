@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // For NestJS services (apps/api, apps/webhooks, apps/notifications, apps/worker).
+  "extends": "./base.json",
+  "compilerOptions": {
+    // NestJS uses legacy ("experimental") decorators.
+    "experimentalDecorators": true,
+    // Nest's dependency injection reads constructor parameter types at runtime from
+    // `design:paramtypes` metadata. Without this, `constructor(private todos: TodoService)`
+    // injects `undefined`. tsdown/Oxc honours this flag when bundling.
+    "emitDecoratorMetadata": true,
+    "lib": ["ES2024"],
+    // Services render React components server-side (React Email templates).
+    "jsx": "react-jsx",
+    "types": ["node"]
+  }
+}

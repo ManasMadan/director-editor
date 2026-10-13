@@ -1,0 +1,56 @@
+# What each kind of Application may deploy, and where.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+spec:
+  description: Cluster add-ons and their settings (operators, CRDs, the gateway, mail, observability).
+  sourceRepos:
+    - https://github.com/ManasMadan/boilerplate.git
+    - https://charts.jetstack.io
+    - registry-1.docker.io/envoyproxy
+    - https://kubernetes-sigs.github.io/external-dns/
+    - https://kedacore.github.io/charts
+    - https://cloudnative-pg.github.io/charts
+    - https://kyverno.github.io/kyverno/
+    - https://prometheus-community.github.io/helm-charts
+  destinations:
+    - server: "*"
+      namespace: "*"
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: apps
+  namespace: argocd
+spec:
+  description: The application (data + stack charts) in staging and production.
+  sourceRepos:
+    - https://github.com/ManasMadan/boilerplate.git
+  destinations:
+    - server: "*"
+      namespace: boilerplate
+  # Namespaced resources only: the application never changes the cluster itself.
+  clusterResourceWhitelist: []
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: previews
+  namespace: argocd
+spec:
+  description: One preview per labelled pull request, each in its own namespace.
+  sourceRepos:
+    - https://github.com/ManasMadan/boilerplate.git
+  destinations:
+    - server: "*"
+      namespace: "pr-*"
+  # A preview's data release owns its namespace.
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace

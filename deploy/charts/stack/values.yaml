@@ -1,0 +1,363 @@
+# The application's services. Environments override these in
+# deploy/environments/<env>/stack.yaml; values.schema.json rejects unknown keys, so a
+# typo fails `helm template` instead of silently doing nothing.
+
+# Every image is <registry>/<service image>:<tag>. CI builds them all with one tag
+# (sha-<commit>), and RELEASE in every service is set to it.
+image:
+  registry: ghcr.io/manasmadan/boilerplate
+  # Required: the build to run.
+  tag: ""
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+# The public site. One host for everything: the gateway routes paths to services, so
+# the browser only ever talks to one origin (first-party cookies, no CORS).
+site:
+  # Required, e.g. app.example.com.
+  host: ""
+  scheme: https
+
+# Gateway API routes to the services (Envoy Gateway in this repo's platform). Routes
+# attach to whichever of the gateway's HTTPS listeners matches the site's host (the
+# plain-HTTP listener only redirects, and accepts no application routes).
+gateway:
+  enabled: true
+  parentRefs:
+    - name: public
+      namespace: gateway-system
+  # Where the gateway's proxy pods run, allowed through each routed service's network
+  # policy (Envoy Gateway runs them in its own namespace, not the Gateway's).
+  namespaceSelector:
+    kubernetes.io/metadata.name: envoy-gateway-system
+
+# Where the services may connect (their egress network policies). Besides these: DNS,
+# every pod of this namespace (the other services, Postgres, Valkey, object storage,
+# ClamAV), and ServiceLB's pods in kube-system on the gateway's and mail server's ports
+# (a pod reaching a node's own public address lands there). The internet is every
+# address outside `privateRanges`, so a request forged to reach something internal
+# (another namespace, a node, the cloud's metadata address) goes nowhere.
+networkPolicy:
+  # The mail server's (SMTP submission) and the telemetry backends'.
+  egressNamespaces: [mail, observability]
+  privateRanges:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 100.64.0.0/10
+    - 169.254.0.0/16
+    - 127.0.0.0/8
+    - 0.0.0.0/8
+  privateRangesV6:
+    - fc00::/7
+    - fe80::/10
+    - ::1/128
+
+# Settings every service gets. Values are templates, so they can refer to the site or
+# to other services (`{{ include "stack.url" (list $ "api") }}`).
+env:
+  NODE_ENV: production
+  LOG_LEVEL: info
+  # Who may set X-Forwarded-For: the gateway, which reaches pods from private addresses.
+  TRUSTED_PROXIES: uniquelocal
+
+# Traces and metrics, to the cluster's Jaeger and Prometheus (the observability
+# add-ons). The envs and previews ApplicationSets turn it on for clusters labelled
+# boilerplate.dev/observability. Off, the services export nothing.
+observability:
+  enabled: false
+  # OTLP over HTTP: traces (and anything without its own endpoint) to Jaeger...
+  otlpEndpoint: http://jaeger.observability.svc.cluster.local:4318
+  # ...and metrics to Prometheus's OTLP receiver, a full URL.
+  metricsEndpoint: http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090/api/v1/otlp/v1/metrics
+  # Alertmanager, which the api asks whether Prometheus's Watchdog alert still arrives
+  # (system.alerting, for the uptime check outside the cluster).
+  alertmanagerUrl: http://kube-prometheus-stack-alertmanager.observability.svc.cluster.local:9093
+
+# Connection URLs, one Secret per database role with keys `url` and `directUrl` (both
+# straight to the primary). The data chart generates them.
+database:
+  secretPrefix: db-
+  # Connections are TLS, verified against CloudNativePG's certificate authority: the
+  # Secret <cluster>-ca it creates (the data release's name, then -postgres-ca). The
+  # services' URLs get sslmode=verify-full with that CA mounted; empty leaves the URLs as
+  # the Secret has them.
+  caSecret: boilerplate-postgres-ca
+
+# The Secret with Valkey's connection details: keys `url`, `host`, `port`, `password`.
+redis:
+  secretName: valkey
+
+# The Secret with the uploads bucket's details (the data chart generates it): bucket,
+# region, endpoint (in-cluster), publicEndpoint (what browsers reach), accessKeyId,
+# secretAccessKey. A service's `storage` says what it gets from it:
+#   presign   S3_* with the public endpoint: the URLs it signs are for browsers
+#   internal  S3_* with the in-cluster endpoint: it reads and writes objects itself
+#   origin    STORAGE_ORIGIN only (the web app's Content-Security-Policy)
+# Files are on in a service when it has S3_BUCKET, so leave `storage` off to keep them
+# off (an environment without ClamAV).
+storage:
+  secretName: storage
+
+# Everything else secret (auth secret, API keys, signing keys) is one Secret per
+# service, `<release>-<service>`, loaded as environment variables. They're committed
+# encrypted in deploy/environments/<env>/secrets/ (SOPS) and Argo CD decrypts them into
+# the namespace; on kind, `bun run k8s:up` creates them.
+
+# The database migration: `prisma migrate deploy` as the migrator role, before every
+# install and upgrade. Its URL is in the `<secretPrefix>migrator` Secret.
+migrate:
+  enabled: true
+  image: migrate
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 512Mi }
+
+# Re-encrypting stored secrets after a key rotation: a suspended CronJob that runs the
+# api's image with the api's environment, started by hand (templates/reencrypt-cronjob.yaml).
+reencrypt:
+  enabled: true
+  service: api
+  activeDeadlineSeconds: 1800
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 512Mi }
+
+# What every service starts from; each entry under `services` overrides any of it.
+defaults:
+  replicas: 2
+  # A CPU limit as well as a memory one for every container (the misconfiguration scan,
+  # scripts/misconfig.ts, fails without): a busy service slows itself down instead of its
+  # node's other pods. Raise it with the requests where a service needs more; an
+  # environment's values override any.
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 512Mi }
+  terminationGracePeriodSeconds: 30
+  nodeSelector: {}
+  tolerations: []
+  podAnnotations: {}
+  # Spread replicas across nodes and zones where the cluster has them.
+  topologySpread: true
+  pdb:
+    enabled: true
+    maxUnavailable: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  keda:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    # Jobs waiting per replica before another one starts.
+    listLength: 20
+    queues: []
+  # Other services of this release allowed to connect to this one (besides the gateway,
+  # for routed services).
+  allowFrom: []
+  # Namespaces whose pods may connect to this one (the mail server's, for webhooks).
+  allowFromNamespaces: []
+  # Paths the process may write to (the root filesystem is read-only; /tmp always is).
+  writablePaths: []
+  # A Secret with `ca.crt`: certificate authorities a Node service trusts besides the
+  # public ones (NODE_EXTRA_CA_CERTS), for servers with a private CA (kind's Mailpit).
+  caBundle: ""
+
+services:
+  web:
+    enabled: true
+    image: web
+    port: 3000
+    probes:
+      liveness: /healthz
+      readiness: /healthz
+    routes:
+      - path: /
+    writablePaths:
+      - /app/apps/web/.next/cache
+    storage: origin
+    # Nothing secret: no Secret of its own.
+    secretFrom: none
+    env:
+      WEB_URL: "{{ include \"stack.siteUrl\" $ }}"
+    autoscaling:
+      enabled: true
+
+  api:
+    enabled: true
+    image: api
+    port: 3001
+    database: { role: app_api, envPrefix: API }
+    redis: true
+    storage: presign
+    probes:
+      liveness: /health/live
+      readiness: /health/ready
+    routes:
+      - path: /api
+      - path: /docs
+      # oRPC over HTTP, including the live-update event streams: no request timeout.
+      - path: /rpc
+        timeout: 0s
+      - path: /.well-known/oauth-authorization-server/api/auth
+        match: Exact
+      - path: /.well-known/openid-configuration/api/auth
+        match: Exact
+      - path: /.well-known/oauth-protected-resource/api/mcp
+        match: Exact
+    env:
+      PORT: "3001"
+      WEB_URL: "{{ include \"stack.siteUrl\" $ }}"
+      BETTER_AUTH_URL: "{{ include \"stack.siteUrl\" $ }}"
+      AI_URL: "{{ include \"stack.url\" (list $ \"ai\") }}"
+      # Empty (unset, so system.alerting answers "off") without observability.
+      ALERTMANAGER_URL: "{{ if .Values.observability.enabled }}{{ .Values.observability.alertmanagerUrl }}{{ end }}"
+    # The AI service fetches the api's signing keys (MCP tokens) directly.
+    allowFrom: [ai]
+    autoscaling:
+      enabled: true
+
+  worker:
+    enabled: true
+    image: worker
+    port: 3002
+    database: { role: app_worker, envPrefix: WORKER, directUrl: true }
+    redis: true
+    storage: internal
+    secretFrom: none
+    probes:
+      liveness: /health/live
+      readiness: /health/ready
+    # Long jobs (scans, audit batches) get time to finish on shutdown.
+    terminationGracePeriodSeconds: 120
+    env:
+      PORT: "3002"
+      CLAMAV_URL: "tcp://{{ include \"stack.host\" (list $ \"clamav\") }}:3310"
+    keda:
+      enabled: true
+      queues: [events-audit, events-realtime, files, maintenance]
+
+  notifications:
+    enabled: true
+    image: notifications
+    port: 3003
+    database: { role: app_notifications, envPrefix: NOTIFICATIONS }
+    redis: true
+    probes:
+      liveness: /health/live
+      readiness: /health/ready
+    terminationGracePeriodSeconds: 60
+    env:
+      PORT: "3003"
+      WEB_URL: "{{ include \"stack.siteUrl\" $ }}"
+    keda:
+      enabled: true
+      queues: [notifications-critical, notifications-bulk, events-notifications]
+
+  webhooks:
+    enabled: true
+    image: webhooks
+    port: 3004
+    database: { role: app_webhooks, envPrefix: WEBHOOKS }
+    redis: true
+    probes:
+      liveness: /health/live
+      readiness: /health/ready
+    routes:
+      # Inbound provider webhooks (Stripe).
+      - path: /webhooks
+    # The mail server posts delivery failures straight to it (/webhooks/stalwart).
+    allowFromNamespaces: [mail]
+    terminationGracePeriodSeconds: 60
+    env:
+      PORT: "3004"
+    keda:
+      enabled: true
+      queues: [events-webhooks, webhook-deliveries]
+
+  ai:
+    enabled: true
+    image: ai
+    port: 8000
+    database: { role: app_ai, envPrefix: AI }
+    redis: true
+    probes:
+      liveness: /health/live
+      readiness: /health/ready
+    routes:
+      - path: /ai/mcp
+      - path: /.well-known/oauth-protected-resource/ai/mcp
+        match: Exact
+    allowFrom: [api]
+    env:
+      BETTER_AUTH_URL: "{{ include \"stack.siteUrl\" $ }}"
+      API_URL: "{{ include \"stack.url\" (list $ \"api\") }}"
+
+  ai-worker:
+    enabled: true
+    image: ai
+    command: [python, -m, app.worker]
+    # No port to probe: the worker touches a file while its loop runs, and this fails once
+    # it's a minute old (apps/ai/app/heartbeat.py), so a stuck worker is restarted.
+    livenessCommand: [python, -m, app.heartbeat]
+    database: { role: app_ai, envPrefix: AI }
+    redis: true
+    # Its secrets are the AI service's.
+    secretFrom: ai
+    terminationGracePeriodSeconds: 120
+    env:
+      API_URL: "{{ include \"stack.url\" (list $ \"api\") }}"
+    keda:
+      enabled: true
+      queues: [ai-ingest]
+
+  # Virus scanning for uploads (only needed when file uploads are on).
+  clamav:
+    enabled: false
+    image: ""
+    # The Debian image, as locally: it has arm64 builds too.
+    imageRef: docker.io/clamav/clamav-debian:1.5.4@sha256:9bb8712a50f0e75166e936c452cd82dd5e5be0b85586598930b5bbb84a99a578
+    port: 3310
+    tcpProbe: true
+    replicas: 1
+    # As every service: our own unprivileged user and a read-only root. The image's own
+    # entrypoint can't run that way (it hands its signature directory to its clamav user
+    # and edits its configuration in place), so this starts ClamAV itself: its settings in
+    # /tmp, the signatures fetched into an empty directory of the pod's (about 110 MB from
+    # database.clamav.net, a minute or two, on every new pod), then freshclam keeping them
+    # current and clamd serving on 3310.
+    command: [sh, -c]
+    args:
+      - |
+        set -eu
+        cat > /tmp/clamd.conf <<EOF
+        Foreground yes
+        TCPSocket 3310
+        DatabaseDirectory /var/lib/clamav
+        TemporaryDirectory /tmp
+        LogTime yes
+        EOF
+        cat > /tmp/freshclam.conf <<EOF
+        Foreground yes
+        DatabaseDirectory /var/lib/clamav
+        DatabaseMirror database.clamav.net
+        NotifyClamd /tmp/clamd.conf
+        EOF
+        # No clamd to tell yet, and nothing to test the first download against.
+        grep -v NotifyClamd /tmp/freshclam.conf > /tmp/freshclam-first.conf
+        echo "TestDatabases no" >> /tmp/freshclam-first.conf
+        freshclam --config-file=/tmp/freshclam-first.conf --stdout
+        freshclam --config-file=/tmp/freshclam.conf --daemon --checks=12 --stdout &
+        exec clamd --config-file=/tmp/clamd.conf
+    writablePaths: [/var/lib/clamav]
+    resources:
+      requests: { cpu: 200m, memory: 1536Mi }
+      limits: { cpu: "2", memory: 3Gi }
+    allowFrom: [worker]
+    secretFrom: none
+    pdb:
+      enabled: false

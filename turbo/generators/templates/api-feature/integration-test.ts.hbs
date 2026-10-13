@@ -1,0 +1,108 @@
+
+describe("{{kebabCase name}}", () => {
+  /** A row as its table needs it: the required columns the generator asked for. */
+  const row = {{{row}}};
+
+  /** Two signed-in users, each in their own workspace, and `insert` for either. */
+  async function twoWorkspaces() {
+    const { createDb, withTenant } = await import("@repo/db");
+    const db = createDb({ url: harness.testDb.urlFor("app_api"), poolMax: 1, service: "test" });
+    const workspace = async () => {
+      const { session } = await signedInUser();
+      const { activeOrganizationId: orgId } = await session.rpc.user.me();
+      if (!orgId) {
+        throw new Error("A new user has a personal workspace");
+      }
+      const insert = () => withTenant(db, orgId).{{model}}.create({ data: { ...row, orgId } });
+      return { session, insert };
+    };
+    return { mine: await workspace(), theirs: await workspace(), close: () => db.$disconnect() };
+  }
+
+  /** The domain events recorded about one row, oldest first. */
+  async function eventsAbout(id: string) {
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await client.connect();
+    try {
+      const { rows } = await client.query(
+        "SELECT name, payload FROM app.outbox_event WHERE key = $1 ORDER BY id",
+        [id],
+      );
+      return rows;
+    } finally {
+      await client.end();
+    }
+  }
+
+  it("starts empty for a new organization", async () => {
+    const { session } = await signedInUser();
+    expect(await session.rpc.{{camelCase name}}.list({ limit: 20 })).toEqual({
+      items: [],
+      nextCursor: null,
+    });
+  });
+
+  it("lists only the caller's workspace's, newest first, a page at a time", async () => {
+    const { mine, theirs, close } = await twoWorkspaces();
+    try {
+      const first = await mine.insert();
+      const second = await mine.insert();
+      const other = await theirs.insert();
+      const page = await mine.session.rpc.{{camelCase name}}.list({ limit: 1 });
+      expect(page.items.map((item) => item.id)).toEqual([second.id]);
+      expect(page.nextCursor).toBe(second.id);
+      const next = await mine.session.rpc.{{camelCase name}}.list({ limit: 1, cursor: page.nextCursor ?? undefined });
+      expect(next).toEqual({ items: [expect.objectContaining({ id: first.id })], nextCursor: null });
+      // The other workspace sees its own and none of mine.
+      const theirList = await theirs.session.rpc.{{camelCase name}}.list({ limit: 20 });
+      expect(theirList.items.map((item) => item.id)).toEqual([other.id]);
+    } finally {
+      await close();
+    }
+  });
+
+  it("deletes one and records the event in the same transaction", async () => {
+    const { mine, close } = await twoWorkspaces();
+    try {
+      const item = await mine.insert();
+      await mine.session.rpc.{{camelCase name}}.delete({ id: item.id });
+      expect(await mine.session.rpc.{{camelCase name}}.list({ limit: 20 })).toEqual({
+        items: [],
+        nextCursor: null,
+      });
+      expect(await eventsAbout(item.id)).toEqual([
+        { name: "{{snakeCase item}}.deleted.v1", payload: { {{camelCase item}}Id: item.id } },
+      ]);
+      // Deleted once: the second time there's nothing to delete.
+      await expectError(mine.session.rpc.{{camelCase name}}.delete({ id: item.id }), "NOT_FOUND");
+    } finally {
+      await close();
+    }
+  });
+
+  it("can't delete another workspace's, which it's told isn't there", async () => {
+    const { mine, theirs, close } = await twoWorkspaces();
+    try {
+      const item = await theirs.insert();
+      await expectError(mine.session.rpc.{{camelCase name}}.delete({ id: item.id }), "NOT_FOUND");
+      const theirList = await theirs.session.rpc.{{camelCase name}}.list({ limit: 20 });
+      expect(theirList.items.map((found) => found.id)).toEqual([item.id]);
+      expect(await eventsAbout(item.id)).toEqual([]);
+    } finally {
+      await close();
+    }
+  });
+
+  it("refuses a caller who isn't signed in", async () => {
+    const anonymous = createSession(harness);
+    await expectError(anonymous.rpc.{{camelCase name}}.list({}), "UNAUTHENTICATED");
+    await expectError(anonymous.rpc.{{camelCase name}}.delete({ id: randomUUID() }), "UNAUTHENTICATED");
+  });
+
+  it("refuses a page size outside 1 to 100, and an id that isn't one", async () => {
+    const { session } = await signedInUser();
+    await expectError(session.rpc.{{camelCase name}}.list({ limit: 0 }), "VALIDATION_FAILED");
+    await expectError(session.rpc.{{camelCase name}}.list({ limit: 101 }), "VALIDATION_FAILED");
+    await expectError(session.rpc.{{camelCase name}}.delete({ id: "not-an-id" }), "VALIDATION_FAILED");
+  });
+});

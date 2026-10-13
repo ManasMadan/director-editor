@@ -1,0 +1,52 @@
+{{- /*
+A pull-request preview owns its namespace: deleting the preview's release (Argo CD
+prunes it when the PR closes) deletes the namespace and everything in it. Quotas keep
+one preview from starving the others on the shared cluster. Argo CD applies them before
+everything else (the credentials Job runs in this namespace).
+*/}}
+{{- if .Values.preview.enabled }}
+{{- $ns := required "preview.namespace is required for a preview" .Values.preview.namespace }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $ns }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-30"
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+    # Pods must meet the restricted Pod Security Standard.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: preview
+  namespace: {{ $ns }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-30"
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+spec:
+  hard:
+    {{- range $key, $value := .Values.preview.quota }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+---
+# Defaults for containers that don't set their own (the quota requires every pod to),
+# and the most and least one container may ask for (`preview.limits`).
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: preview
+  namespace: {{ $ns }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-30"
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+spec:
+  limits:
+    - type: Container
+      {{- toYaml .Values.preview.limits | nindent 6 }}
+{{- end }}

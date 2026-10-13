@@ -1,0 +1,27 @@
+// Prisma schema, split into one file per owning service (auth.prisma, app.prisma, ...).
+// Each Postgres schema has exactly one owner that may write to it; other services only
+// get SELECT on published tables, granted in migrations. See docs/database.md.
+//
+// Conventions for every model:
+//   id          String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+//               (Postgres 18's native UUIDv7: time-ordered, and raw SQL inserts get one too)
+//   timestamps  DateTime @db.Timestamptz(3)   (always with time zone)
+//   columns     snake_case via @map, tables via @@map, and @@schema on every model
+//   tenancy     tables owned by an organization have org_id and a row-level security
+//               policy (added in the migration SQL), queried through withTenant/tenantTx
+
+generator client {
+  // Rust-free, ESM TypeScript client generated into src/generated: no per-platform
+  // query engine binary, so images stay small and cold starts fast.
+  provider        = "prisma-client"
+  output          = "../../src/generated/prisma"
+  moduleFormat    = "esm"
+  // Partial indexes keep hot "work queue" scans (e.g. unpublished outbox rows) tiny.
+  previewFeatures = ["partialIndexes"]
+}
+
+// The connection URL lives in prisma.config.ts (Prisma 7).
+datasource db {
+  provider = "postgresql"
+  schemas  = ["auth", "app", "audit", "webhooks", "notifications", "files", "billing", "ai"]
+}

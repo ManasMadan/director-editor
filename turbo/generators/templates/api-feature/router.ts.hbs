@@ -1,0 +1,10 @@
+/** Thin adapters from the contract to the service; no business logic lives here. */
+import type { Procedures } from "../../rpc/procedures";
+import type { {{pascalCase name}}Service } from "./{{kebabCase name}}.service";
+
+export const {{camelCase name}}Router = ({ inOrg }: Procedures, service: {{pascalCase name}}Service) => ({
+  list: inOrg.{{camelCase name}}.list.handler(({ context, input }) => service.list(context.orgId, input)),
+  delete: inOrg.{{camelCase name}}.delete.handler(({ context, input }) =>
+    service.delete(context.orgId, input.id),
+  ),
+});

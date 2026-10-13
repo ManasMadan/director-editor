@@ -1,0 +1,13 @@
+# Envoy Gateway's chart is published as an OCI artifact.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: envoyproxy-charts
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+stringData:
+  type: helm
+  name: envoyproxy
+  url: registry-1.docker.io/envoyproxy
+  enableOCI: "true"

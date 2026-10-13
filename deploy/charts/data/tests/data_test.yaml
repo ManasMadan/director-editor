@@ -1,0 +1,619 @@
+suite: data
+release: { name: demo, namespace: apps }
+set:
+  storage.uploads.host: files.example.com
+  storage.uploads.corsOrigins: [https://app.example.com]
+tests:
+  - it: bootstraps Postgres with the migrator owning the database
+    template: postgres.yaml
+    documentSelector: { path: kind, value: Cluster }
+    asserts:
+      - equal: { path: spec.bootstrap.initdb.owner, value: migrator }
+      - equal: { path: spec.bootstrap.initdb.secret.name, value: db-migrator }
+      - equal: { path: spec.enableSuperuserAccess, value: false }
+      - equal: { path: spec.postgresql.pg_hba, value: [hostnossl all all all reject] }
+      - equal: { path: spec.storage.storageClass, value: local-path }
+      - contains: { path: spec.bootstrap.initdb.postInitApplicationSQL, content: CREATE EXTENSION IF NOT EXISTS vector }
+      - contains: { path: spec.bootstrap.initdb.postInitApplicationSQL, content: CREATE ROLE app_api NOLOGIN NOBYPASSRLS NOINHERIT }
+      - contains: { path: spec.bootstrap.initdb.postInitApplicationSQL, content: GRANT CONNECT ON DATABASE app TO app_api }
+      - notContains: { path: spec.bootstrap.initdb.postInitApplicationSQL, content: CREATE ROLE migrator NOLOGIN NOBYPASSRLS NOINHERIT }
+
+  - it: manages each service role without row-level security bypass
+    template: postgres.yaml
+    documentSelector: { path: kind, value: Cluster }
+    asserts:
+      - lengthEqual: { path: spec.managed.roles, count: 5 }
+      - contains:
+          path: spec.managed.roles
+          content:
+            name: app_worker
+            ensure: present
+            login: true
+            bypassrls: false
+            inherit: false
+            passwordSecret: { name: db-app-worker }
+
+  - it: takes no backups unless asked to
+    template: postgres.yaml
+    asserts:
+      - hasDocuments: { count: 1 }
+      - notExists: { path: spec.plugins }
+
+  - it: archives WAL and takes scheduled base backups to the backups server
+    template: postgres.yaml
+    set:
+      postgres.backups.enabled: true
+    asserts:
+      - hasDocuments: { count: 3 }
+      - equal:
+          path: spec.plugins
+          value:
+            - name: barman-cloud.cloudnative-pg.io
+              isWALArchiver: true
+              parameters: { barmanObjectName: demo-backups, serverName: demo-postgres }
+        documentSelector: { path: kind, value: Cluster }
+      - equal:
+          path: spec.configuration.endpointURL
+          value: http://demo-backups.apps.svc.cluster.local:9000
+        documentSelector: { path: kind, value: ObjectStore }
+      - equal: { path: spec.configuration.destinationPath, value: s3://backups/ }
+        documentSelector: { path: kind, value: ObjectStore }
+      - equal: { path: spec.retentionPolicy, value: 30d }
+        documentSelector: { path: kind, value: ObjectStore }
+      - equal:
+          path: spec.configuration.s3Credentials.accessKeyId
+          value: { name: demo-backups-storage, key: accessKeyId }
+        documentSelector: { path: kind, value: ObjectStore }
+      - equal: { path: spec.method, value: plugin }
+        documentSelector: { path: kind, value: ScheduledBackup }
+      - equal: { path: spec.immediate, value: true }
+        documentSelector: { path: kind, value: ScheduledBackup }
+
+  - it: restores from the backups to a point in time, archiving to a new folder
+    template: postgres.yaml
+    set:
+      postgres.backups.enabled: true
+      postgres.backups.serverName: demo-postgres-2
+      postgres.restore.enabled: true
+      postgres.restore.serverName: demo-postgres
+      postgres.restore.targetTime: "2026-09-30T08:15:00Z"
+    documentSelector: { path: kind, value: Cluster }
+    asserts:
+      - notExists: { path: spec.bootstrap.initdb }
+      - equal:
+          path: spec.bootstrap.recovery
+          value:
+            source: origin
+            database: app
+            owner: migrator
+            secret: { name: db-migrator }
+            recoveryTarget: { targetTime: "2026-09-30T08:15:00Z" }
+      - equal:
+          path: spec.externalClusters
+          value:
+            - name: origin
+              plugin:
+                name: barman-cloud.cloudnative-pg.io
+                parameters: { barmanObjectName: demo-backups, serverName: demo-postgres }
+      - equal: { path: "spec.plugins[0].parameters.serverName", value: demo-postgres-2 }
+
+  - it: refuses to restore into the folder the backup came from
+    template: postgres.yaml
+    set:
+      postgres.backups.enabled: true
+      postgres.restore.enabled: true
+      postgres.restore.serverName: demo-postgres
+    asserts:
+      - failedTemplate:
+          errorMessage: "postgres.backups.serverName must differ from postgres.restore.serverName: the restored cluster archives to a new folder, never over the backup it came from"
+
+  - it: refuses to restore without backups
+    template: postgres.yaml
+    set:
+      postgres.restore.enabled: true
+      postgres.restore.serverName: demo-postgres
+    asserts:
+      - failedTemplate:
+          errorMessage: "postgres.restore needs postgres.backups.enabled: the backups are what it restores from"
+
+  - it: generates every credential in the cluster before the release's resources
+    template: credentials.yaml
+    documentSelector: { path: kind, value: Job }
+    asserts:
+      - equal:
+          path: metadata.annotations
+          value:
+            helm.sh/hook: pre-install,pre-upgrade
+            helm.sh/hook-weight: "-10"
+            helm.sh/hook-delete-policy: before-hook-creation
+            argocd.argoproj.io/hook: Sync
+            argocd.argoproj.io/sync-wave: "-10"
+            argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+      - equal: { path: spec.template.spec.serviceAccountName, value: demo-credentials }
+      - equal: { path: spec.template.spec.securityContext.runAsNonRoot, value: true }
+      - matchRegex:
+          path: "spec.template.spec.containers[0].args[0]"
+          pattern: >-
+            create db-app-api '\{"apiVersion":"v1","kind":"Secret","metadata":\{"labels":\{"cnpg.io/reload":"true"\},"name":"db-app-api"\},"stringData":\{"directUrl":"postgresql://app_api:@password@@demo-postgres-rw.apps.svc.cluster.local:5432/app","password":"@password@","url":"postgresql://app_api:@password@@demo-postgres-rw.apps.svc.cluster.local:5432/app","username":"app_api"\},"type":"kubernetes.io/basic-auth"\}'
+      - matchRegex:
+          path: "spec.template.spec.containers[0].args[0]"
+          pattern: 'create valkey .*"url":"redis://:@password@@demo-valkey.apps.svc.cluster.local:6379"'
+      - matchRegex:
+          path: "spec.template.spec.containers[0].args[0]"
+          pattern: 'create storage .*"accessKeyId":"@key@","bucket":"uploads","endpoint":"http://demo-uploads.apps.svc.cluster.local:9000","publicEndpoint":"https://files.example.com"'
+      # The backups server's keys only with backups on.
+      - notMatchRegex:
+          path: "spec.template.spec.containers[0].args[0]"
+          pattern: demo-backups-storage
+
+  - it: may only create Secrets, never read or change them
+    template: credentials.yaml
+    documentSelector: { path: kind, value: Role }
+    asserts:
+      - equal:
+          path: rules
+          value: [{ apiGroups: [""], resources: [secrets], verbs: [create] }]
+      - equal: { path: 'metadata.annotations["argocd.argoproj.io/sync-wave"]', value: "-20" }
+
+  - it: generates the backups server's keys with backups on
+    template: credentials.yaml
+    set:
+      postgres.backups.enabled: true
+    documentSelector: { path: kind, value: Job }
+    asserts:
+      - matchRegex:
+          path: "spec.template.spec.containers[0].args[0]"
+          pattern: 'create demo-backups-storage .*"accessKeyId":"@key@","secretAccessKey":"@password@"'
+
+  - it: runs Valkey without eviction, persisted, with its password from the Secret
+    template: valkey.yaml
+    documentSelector: { path: kind, value: StatefulSet }
+    asserts:
+      - contains: { path: "spec.template.spec.containers[0].args", content: noeviction }
+      - contains: { path: "spec.template.spec.containers[0].args", content: "$(VALKEY_PASSWORD)" }
+      - equal: { path: "spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem", value: true }
+      - equal: { path: "spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef", value: { name: valkey, key: password } }
+      - equal: { path: "spec.volumeClaimTemplates[0].spec.storageClassName", value: local-path }
+
+  - it: runs every data service as one unprivileged user of ours, with a CPU limit
+    templates: [credentials.yaml, offsite.yaml, preview-mail.yaml, restore-drill.yaml, storage.yaml, valkey.yaml]
+    set:
+      postgres.backups.enabled: true
+      postgres.drill.enabled: true
+      valkey.replication.enabled: true
+      offsite.endpoint: https://s3.elsewhere.example
+      offsite.bucket: copies
+      offsite.prefix: production
+      preview.enabled: true
+      preview.namespace: pr-1
+    # Every pod template: each one is locked down to a non-root user.
+    documentSelector: { path: spec.template.spec.securityContext.runAsNonRoot, value: true, matchMany: true }
+    asserts:
+      - equal: { path: spec.template.spec.securityContext.runAsUser, value: 10001 }
+      - equal: { path: spec.template.spec.securityContext.runAsGroup, value: 10001 }
+      - exists: { path: "spec.template.spec.containers[0].resources.limits.cpu" }
+
+  - it: runs the scheduled copies and the drill as the same user, with a CPU limit
+    templates: [offsite.yaml, restore-drill.yaml]
+    set:
+      postgres.backups.enabled: true
+      postgres.drill.enabled: true
+      offsite.endpoint: https://s3.elsewhere.example
+      offsite.bucket: copies
+      offsite.prefix: production
+    documentSelector: { path: spec.jobTemplate.spec.template.spec.securityContext.runAsNonRoot, value: true, matchMany: true }
+    asserts:
+      - equal: { path: spec.jobTemplate.spec.template.spec.securityContext.runAsUser, value: 10001 }
+      - equal: { path: spec.jobTemplate.spec.template.spec.securityContext.runAsGroup, value: 10001 }
+      - exists: { path: "spec.jobTemplate.spec.template.spec.containers[0].resources.limits.cpu" }
+
+  - it: lets the stack's services and KEDA's operator reach Valkey, nothing else
+    template: valkey.yaml
+    documentSelector: { path: kind, value: NetworkPolicy }
+    asserts:
+      - equal:
+          path: spec.ingress
+          value:
+            - from:
+                - podSelector: {}
+                - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: keda } }
+                  podSelector: { matchLabels: { app.kubernetes.io/name: keda-operator } }
+              ports: [{ port: 6379 }]
+
+  - it: accepts nothing in the namespace that a policy of its own doesn't allow
+    template: networkpolicy.yaml
+    documentSelector: { path: metadata.name, value: demo-default-deny }
+    asserts:
+      - equal: { path: spec, value: { podSelector: {}, policyTypes: [Ingress] } }
+
+  - it: lets only this namespace, the operator and the metrics scraper reach Postgres
+    template: networkpolicy.yaml
+    documentSelector: { path: metadata.name, value: demo-postgres }
+    asserts:
+      - equal: { path: spec.podSelector, value: { matchLabels: { cnpg.io/cluster: demo-postgres } } }
+      - equal:
+          path: spec.ingress
+          value:
+            - from: [{ podSelector: {} }]
+              ports: [{ port: 5432 }]
+            - from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: cnpg-system } } }]
+              ports: [{ port: 5432 }, { port: 8000 }]
+            - from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: observability } } }]
+              ports: [{ port: 9187 }]
+
+  - it: keeps Valkey's maxmemory to 60% of its limit, for the rewrite's fork
+    template: valkey.yaml
+    set:
+      valkey.maxmemory: 400mb
+    asserts:
+      - failedTemplate:
+          errorPattern: valkey.maxmemory \(400mb\) must be at most 60% of limits.memory \(512Mi\)
+
+  - it: takes maxmemory in any unit against a limit in any unit
+    template: valkey.yaml
+    set:
+      valkey.maxmemory: 1gb
+      valkey.resources.limits.memory: 2Gi
+    documentSelector: { path: kind, value: StatefulSet }
+    asserts:
+      - contains: { path: "spec.template.spec.containers[0].args", content: 1gb }
+
+  - it: points the services' Valkey host at the one node by default
+    template: valkey.yaml
+    documentSelector: { path: metadata.name, value: demo-valkey }
+    asserts:
+      - equal: { path: spec.selector, value: { app.kubernetes.io/name: valkey, app.kubernetes.io/instance: demo } }
+        documentSelector: { path: kind, value: Service }
+
+  - it: with replication, puts a proxy behind the services' Valkey host
+    template: valkey.yaml
+    set: { valkey.replication.enabled: true }
+    asserts:
+      # The Service the services' REDIS_URL names is the one that selects the proxy.
+      - equal: { path: metadata.name, value: demo-valkey }
+        documentSelector:
+          path: 'spec.selector["app.kubernetes.io/name"]'
+          value: valkey-proxy
+      # A name per node, found even while it isn't ready.
+      - equal: { path: spec.selector, value: { statefulset.kubernetes.io/pod-name: demo-valkey-2 } }
+        documentSelector: { path: metadata.name, value: demo-valkey-2 }
+      - equal: { path: spec.publishNotReadyAddresses, value: true }
+        documentSelector: { path: metadata.name, value: demo-valkey-2 }
+
+  - it: with replication, runs every node with a Sentinel beside it
+    template: valkey.yaml
+    set: { valkey.replication.enabled: true, valkey.replication.replicas: 5 }
+    documentSelector: { path: kind, value: StatefulSet }
+    asserts:
+      - equal: { path: spec.replicas, value: 5 }
+      - equal: { path: "spec.template.spec.containers[0].command", value: [sh, -c] }
+      - matchRegex: { path: "spec.template.spec.containers[0].args[0]", pattern: "--replicaof" }
+      - matchRegex: { path: "spec.template.spec.containers[1].args[0]", pattern: "exec valkey-sentinel" }
+      - contains:
+          path: "spec.template.spec.containers[1].env"
+          content: { name: QUORUM, value: "3" }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: NODES
+            value: demo-valkey-0.apps.svc.cluster.local demo-valkey-1.apps.svc.cluster.local demo-valkey-2.apps.svc.cluster.local demo-valkey-3.apps.svc.cluster.local demo-valkey-4.apps.svc.cluster.local
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: SELF, value: "$(POD_NAME).apps.svc.cluster.local" }
+      - equal: { path: "spec.template.spec.containers[1].securityContext.readOnlyRootFilesystem", value: true }
+
+  - it: with replication, forwards only to the node that says it's the primary
+    template: valkey.yaml
+    set: { valkey.replication.enabled: true }
+    documentSelector: { path: kind, value: ConfigMap }
+    asserts:
+      - matchRegex: { path: 'data["haproxy.cfg"]', pattern: 'tcp-check send "AUTH \$\{VALKEY_PASSWORD\}\\r\\n"' }
+      - matchRegex: { path: 'data["haproxy.cfg"]', pattern: "tcp-check expect string role:master" }
+      - matchRegex: { path: 'data["haproxy.cfg"]', pattern: "on-marked-down shutdown-sessions" }
+      - matchRegex: { path: 'data["haproxy.cfg"]', pattern: "server node-2 demo-valkey-2.apps.svc.cluster.local:6379" }
+
+  - it: with replication, lets the services and KEDA reach the proxy, and the Sentinels each other
+    template: valkey.yaml
+    set: { valkey.replication.enabled: true }
+    documentSelector: { path: kind, value: NetworkPolicy }
+    asserts:
+      - contains:
+          path: spec.podSelector.matchExpressions
+          content: { key: app.kubernetes.io/name, operator: In, values: [valkey, valkey-proxy] }
+      - equal: { path: "spec.ingress[0].ports", value: [{ port: 6379 }, { port: 26379 }] }
+
+  - it: with replication, never drains more than one node or the last proxy
+    template: valkey.yaml
+    set: { valkey.replication.enabled: true }
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels
+          value: { app.kubernetes.io/name: valkey, app.kubernetes.io/instance: demo }
+        documentSelector: { path: spec.maxUnavailable, value: 1 }
+      - equal:
+          path: spec.selector.matchLabels
+          value: { app.kubernetes.io/name: valkey-proxy, app.kubernetes.io/instance: demo }
+        documentSelector: { path: spec.minAvailable, value: 1 }
+
+  - it: drills the backups only when they're on
+    template: restore-drill.yaml
+    set: { postgres.drill.enabled: true }
+    asserts:
+      - failedTemplate: { errorMessage: "postgres.drill needs postgres.backups.enabled: the backups are what it restores" }
+
+  - it: restores the latest backup into a scratch cluster that archives nothing
+    template: restore-drill.yaml
+    set: { postgres.backups.enabled: true, postgres.drill.enabled: true }
+    documentSelector: { path: kind, value: ConfigMap }
+    asserts:
+      - matchRegex: { path: 'data["cluster.yaml"]', pattern: "name: demo-postgres-drill" }
+      - matchRegex: { path: 'data["cluster.yaml"]', pattern: 'serverName: demo-postgres\n' }
+      - matchRegex: { path: 'data["cluster.yaml"]', pattern: 'recovery:\n\s+source: origin' }
+      - notMatchRegex: { path: 'data["cluster.yaml"]', pattern: "isWALArchiver|app.kubernetes.io/instance" }
+      - matchRegex: { path: 'data["fingerprint.sql"]', pattern: "^-- One line per fact" }
+
+  - it: follows the live cluster's archive when it has moved to a new folder
+    template: restore-drill.yaml
+    set: { postgres.backups.enabled: true, postgres.backups.serverName: demo-2026, postgres.drill.enabled: true }
+    documentSelector: { path: kind, value: ConfigMap }
+    asserts:
+      - matchRegex: { path: 'data["cluster.yaml"]', pattern: 'serverName: demo-2026\n' }
+
+  - it: restores from the backups server in the cluster when there's no offsite copy
+    template: restore-drill.yaml
+    set: { postgres.backups.enabled: true, postgres.drill.enabled: true }
+    asserts:
+      - matchRegex: { path: 'data["cluster.yaml"]', pattern: 'barmanObjectName: demo-backups\n' }
+        documentSelector: { path: kind, value: ConfigMap }
+      - hasDocuments: { count: 0 }
+        documentSelector: { path: kind, value: ObjectStore, skipEmptyTemplates: true }
+
+  - it: restores from the offsite copy where there is one, as after losing the cluster
+    template: restore-drill.yaml
+    set:
+      postgres.backups.enabled: true
+      postgres.drill.enabled: true
+      offsite.endpoint: https://s3.elsewhere.example
+      offsite.bucket: copies
+      offsite.prefix: production
+    asserts:
+      - matchRegex: { path: 'data["cluster.yaml"]', pattern: 'barmanObjectName: demo-backups-offsite\n' }
+        documentSelector: { path: kind, value: ConfigMap }
+      - equal:
+          path: spec.configuration
+          value:
+            # Where templates/offsite.yaml copies the backups bucket.
+            destinationPath: s3://copies/production/backups/
+            endpointURL: https://s3.elsewhere.example
+            s3Credentials:
+              accessKeyId: { name: offsite-storage, key: accessKeyId }
+              secretAccessKey: { name: offsite-storage, key: secretAccessKey }
+        documentSelector: { path: kind, value: ObjectStore }
+      - notExists: { path: spec.retentionPolicy }
+        documentSelector: { path: kind, value: ObjectStore }
+
+  - it: runs the drill weekly, once at a time, never retried, with only what it needs
+    template: restore-drill.yaml
+    set: { postgres.backups.enabled: true, postgres.drill.enabled: true }
+    asserts:
+      - equal: { path: spec.schedule, value: "30 4 * * 0" }
+        documentSelector: { path: kind, value: CronJob }
+      - equal: { path: spec.concurrencyPolicy, value: Forbid }
+        documentSelector: { path: kind, value: CronJob }
+      - equal: { path: spec.jobTemplate.spec.backoffLimit, value: 0 }
+        documentSelector: { path: kind, value: CronJob }
+      - matchRegex:
+          path: "spec.jobTemplate.spec.template.spec.containers[0].args[0]"
+          pattern: kubectl wait "cluster/\$DRILL" --for=condition=Ready
+        documentSelector: { path: kind, value: CronJob }
+      - contains:
+          path: "spec.jobTemplate.spec.template.spec.containers[0].env"
+          content: { name: DRILL, value: demo-postgres-drill }
+        documentSelector: { path: kind, value: CronJob }
+      - equal:
+          path: rules
+          value:
+            - { apiGroups: [postgresql.cnpg.io], resources: [clusters], verbs: [get, list, watch, create, patch, delete] }
+            - { apiGroups: [""], resources: [pods], verbs: [get, list] }
+            - { apiGroups: [""], resources: [pods/exec], verbs: [create] }
+        documentSelector: { path: kind, value: Role }
+
+  - it: lets the scratch cluster read the backups
+    template: storage.yaml
+    set: { postgres.backups.enabled: true, postgres.drill.enabled: true }
+    documentSelector:
+      path: 'spec.podSelector.matchLabels["app.kubernetes.io/component"]'
+      value: backups
+    asserts:
+      - contains:
+          path: "spec.ingress[0].from"
+          content: { podSelector: { matchLabels: { cnpg.io/cluster: demo-postgres-drill } } }
+
+  - it: runs the uploads server with its keys from the storage Secret
+    template: storage.yaml
+    documentSelector: { path: kind, value: StatefulSet }
+    asserts:
+      - equal: { path: metadata.name, value: demo-uploads }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: RUSTFS_ACCESS_KEY
+            valueFrom: { secretKeyRef: { name: storage, key: accessKeyId } }
+      - equal: { path: spec.template.spec.securityContext.runAsUser, value: 10001 }
+      - equal: { path: "spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem", value: true }
+      - equal: { path: "spec.template.spec.containers[0].readinessProbe.httpGet.path", value: /health }
+
+  - it: routes the public files host to the uploads server
+    template: storage.yaml
+    documentSelector: { path: kind, value: HTTPRoute }
+    asserts:
+      - equal: { path: spec.hostnames, value: [files.example.com] }
+      - equal: { path: "spec.rules[0].backendRefs", value: [{ name: demo-uploads, port: 9000 }] }
+      - equal: { path: spec.parentRefs, value: [{ name: public, namespace: gateway-system }] }
+      - equal: { path: metadata.annotations, value: { boilerplate.dev/external-dns: "true" } }
+
+  - it: creates the uploads bucket with CORS for the site after each sync
+    template: storage.yaml
+    documentSelector: { path: metadata.name, value: demo-uploads-buckets }
+    asserts:
+      - equal: { path: 'metadata.annotations["argocd.argoproj.io/hook"]', value: PostSync }
+      - equal: { path: 'metadata.annotations["helm.sh/hook"]', value: "post-install,post-upgrade" }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: CORS
+            value: '{"CORSRules":[{"AllowedHeaders":["*"],"AllowedMethods":["PUT","GET"],"AllowedOrigins":["https://app.example.com"],"ExposeHeaders":["ETag"],"MaxAgeSeconds":3600}]}'
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: BUCKET, value: uploads }
+
+  - it: lets only Postgres, the bucket Job and the offsite copy reach the backups server
+    template: storage.yaml
+    set:
+      postgres.backups.enabled: true
+      storage.uploads.enabled: false
+    documentSelector: { path: kind, value: NetworkPolicy }
+    asserts:
+      - equal:
+          path: spec.ingress
+          value:
+            - from:
+                - podSelector: { matchLabels: { cnpg.io/cluster: demo-postgres } }
+                - podSelector: { matchLabels: { app.kubernetes.io/name: buckets, app.kubernetes.io/instance: demo } }
+                - podSelector: { matchLabels: { app.kubernetes.io/name: offsite, app.kubernetes.io/instance: demo } }
+              ports: [{ port: 9000 }]
+
+  - it: copies the backups and the uploads outside the cluster, never deleting there
+    template: offsite.yaml
+    set:
+      postgres.backups.enabled: true
+      offsite.endpoint: https://s3.elsewhere.example
+      offsite.bucket: copies
+      offsite.prefix: production
+    asserts:
+      - hasDocuments: { count: 2 }
+      - equal: { path: metadata.name, value: demo-offsite-backups }
+        documentIndex: 0
+      - equal:
+          path: "spec.jobTemplate.spec.template.spec.containers[0].args"
+          value: [copy, "cluster:backups", "offsite:copies/production/backups", --s3-no-check-bucket, --stats-one-line, --stats=0, -v]
+        documentIndex: 0
+      - contains:
+          path: "spec.jobTemplate.spec.template.spec.containers[0].env"
+          content: { name: RCLONE_CONFIG_CLUSTER_ACCESS_KEY_ID, valueFrom: { secretKeyRef: { name: demo-backups-storage, key: accessKeyId } } }
+        documentIndex: 0
+      - contains:
+          path: "spec.jobTemplate.spec.template.spec.containers[0].env"
+          content: { name: RCLONE_CONFIG_OFFSITE_ENDPOINT, value: https://s3.elsewhere.example }
+        documentIndex: 1
+      - equal:
+          path: "spec.jobTemplate.spec.template.spec.containers[0].args[2]"
+          value: "offsite:copies/production/uploads"
+        documentIndex: 1
+      - equal: { path: spec.concurrencyPolicy, value: Forbid }
+
+  - it: refuses to render without an offsite copy where one is required
+    template: offsite.yaml
+    set:
+      offsite.required: true
+    asserts:
+      - failedTemplate:
+          errorPattern: offsite.endpoint is required here
+
+  - it: makes no offsite copy until it has somewhere to go
+    template: offsite.yaml
+    asserts:
+      - hasDocuments: { count: 0 }
+
+  - it: runs no backups server and no public route for backups
+    template: storage.yaml
+    set:
+      postgres.backups.enabled: true
+      storage.uploads.enabled: false
+    asserts:
+      # Service, StatefulSet, NetworkPolicy and the bucket Job.
+      - hasDocuments: { count: 4 }
+      - notEqual: { path: kind, value: HTTPRoute }
+
+  - it: needs the uploads host and the site's origin
+    template: storage.yaml
+    set:
+      storage.uploads.corsOrigins: []
+    asserts:
+      - failedTemplate: { errorMessage: "storage.uploads.corsOrigins needs the site's origin (browsers upload from it)" }
+
+  - it: renders no object storage when it's off
+    template: storage.yaml
+    set:
+      storage.uploads.enabled: false
+    asserts:
+      - hasDocuments: { count: 0 }
+
+  - it: owns a preview's namespace, with quotas, applied before everything else
+    template: preview.yaml
+    set:
+      preview.enabled: true
+      preview.namespace: pr-42
+    asserts:
+      - hasDocuments: { count: 3 }
+      - equal: { path: 'metadata.labels["pod-security.kubernetes.io/enforce"]', value: restricted }
+        documentSelector: { path: kind, value: Namespace }
+      - equal: { path: 'metadata.annotations["argocd.argoproj.io/sync-wave"]', value: "-30" }
+        documentSelector: { path: kind, value: Namespace }
+      - equal: { path: 'spec.hard["requests.memory"]', value: 8Gi }
+        documentSelector: { path: kind, value: ResourceQuota }
+      # CPU and memory, requested and limited: every container sets all four.
+      - equal: { path: 'spec.hard["limits.cpu"]', value: "16" }
+        documentSelector: { path: kind, value: ResourceQuota }
+      - equal:
+          path: spec.limits
+          value:
+            - type: Container
+              defaultRequest: { cpu: 50m, memory: 128Mi }
+              default: { cpu: 500m, memory: 512Mi }
+              min: { cpu: 10m, memory: 16Mi }
+              max: { cpu: "2", memory: 4Gi }
+        documentSelector: { path: kind, value: LimitRange }
+
+  - it: needs a preview's quota in full, CPU limits included
+    template: preview.yaml
+    values: [values/quota-without-cpu.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: "missing property 'limits.cpu'" }
+
+  - it: catches a preview's mail in a Mailpit of its own, over TLS from its own authority
+    template: preview-mail.yaml
+    set:
+      preview.enabled: true
+      preview.namespace: pr-1
+    asserts:
+      - hasDocuments: { count: 7 }
+      - equal: { path: spec.dnsNames, value: [mailpit] }
+        documentIndex: 3
+      - equal: { path: spec.issuerRef, value: { name: mailpit-ca, kind: Issuer } }
+        documentIndex: 3
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: MP_SMTP_REQUIRE_TLS, value: "true" }
+        documentIndex: 4
+      # Mailpit keeps its database in the temp directory, and the root is read-only.
+      - contains:
+          path: "spec.template.spec.containers[0].volumeMounts"
+          content: { name: tmp, mountPath: /tmp }
+        documentIndex: 4
+      - contains:
+          path: spec.template.spec.volumes
+          content: { name: tmp, emptyDir: { sizeLimit: 64Mi } }
+        documentIndex: 4
+
+  - it: runs no Mailpit outside a preview
+    template: preview-mail.yaml
+    asserts:
+      - hasDocuments: { count: 0 }
+
+  - it: needs a namespace for a preview
+    template: preview.yaml
+    set:
+      preview.enabled: true
+    asserts:
+      - failedTemplate: { errorMessage: preview.namespace is required for a preview }

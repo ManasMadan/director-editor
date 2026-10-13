@@ -1,0 +1,66 @@
+# The dead man's switch: every half hour, from GitHub's runners (outside every cluster),
+# scripts/uptime.ts asks each environment's site, API and mail server whether they
+# answer, and the API whether Prometheus's Watchdog alert still reaches Alertmanager. A
+# cluster, its gateway, its mail server or its alerting going down can't alert through
+# the cluster's own Alertmanager and mail server, so this does: it fails, and keeps the
+# issue "Uptime: an environment is down" open (with what failed) until everything
+# answers again, then closes it. GitHub notifies the repository's watchers of the new
+# issue, and whoever last changed this schedule of the failed run.
+#
+# Nothing to set up: hosts still on the placeholders (example.com) in
+# deploy/environments/<env>/stack.yaml are skipped. Each run bills a runner minute, about
+# 1,500 a month (free on a public repository); a shorter interval finds an outage sooner
+# for more. deploy/README.md, "Observability".
+name: Uptime
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  probe:
+    name: Every environment answers
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: { contents: read, issues: write }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      # Bun alone: the script uses nothing the dependencies would install.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+      - name: Ask each environment
+        id: probe
+        run: |
+          set +e
+          bun scripts/uptime.ts > report.txt 2>&1
+          status=$?
+          cat report.txt
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          if [[ $status -ne 0 ]]; then
+            delimiter=$(openssl rand -hex 16)
+            {
+              echo "report<<$delimiter"
+              echo '```'
+              sed 's/\x1b\[[0-9;]*m//g' report.txt
+              echo '```'
+              echo "$delimiter"
+            } >> "$GITHUB_OUTPUT"
+          fi
+      - uses: ./.github/actions/issue
+        with:
+          title: "Uptime: an environment is down"
+          body: ${{ steps.probe.outputs.report }}
+      - name: Fail while anything is down
+        if: steps.probe.outputs.status != '0'
+        run: exit 1

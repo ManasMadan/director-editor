@@ -1,0 +1,23 @@
+{{- range $name := keys .Values.services | sortAlpha }}
+{{- $svc := include "stack.service" (list $ $name) | fromYaml }}
+{{- if and $svc.enabled $svc.port }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "stack.fullname" (list $ $name) }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "stack.labels" (list $ $name) | nindent 4 }}
+spec:
+  selector:
+    {{- include "stack.selectorLabels" (list $ $name) | nindent 4 }}
+  ports:
+    - name: {{ if $svc.tcpProbe }}tcp{{ else }}http{{ end }}
+      port: {{ $svc.port }}
+      targetPort: {{ if $svc.tcpProbe }}tcp{{ else }}http{{ end }}
+      {{- if not $svc.tcpProbe }}
+      appProtocol: http
+      {{- end }}
+{{- end }}
+{{- end }}

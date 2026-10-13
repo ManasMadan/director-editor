@@ -1,0 +1,213 @@
+# Where the application's data lives. Environments override these in
+# deploy/environments/<env>/data.yaml.
+
+# Postgres roles: the migrator owns every schema; each service logs in as its own role
+# and can only use what migrations grant it (see infra/postgres/init for the same setup
+# locally). One Secret per role, `<secretPrefix><role>` (underscores become dashes),
+# with keys username, password, url and directUrl.
+database:
+  name: app
+  secretPrefix: db-
+  roles: [migrator, app_api, app_worker, app_notifications, app_webhooks, app_ai]
+
+# Every password and key of the data services (the database roles, Valkey, object
+# storage) is generated in the cluster the first time the release is installed, by a
+# Job that creates each Secret only if it doesn't exist yet. They never leave the
+# cluster, so they never need to be in git; everything else secret is (SOPS, see
+# deploy/README.md).
+credentials:
+  image: docker.io/curlimages/curl:8.22.0@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777
+
+# Postgres with CloudNativePG.
+postgres:
+  instances: 2
+  # PostgreSQL 18 with pgvector.
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.6-standard-trixie@sha256:79be0d10e78b7ac4520cf6c5db199a8bb7f6de53b3229f47e90cab5865528a0d
+  storage:
+    size: 20Gi
+    # k3s's default: a directory on the node. Replicas on other nodes are what keeps
+    # the data when one is lost, so run at least two instances on a multi-node cluster.
+    storageClass: local-path
+  # Every container here has a CPU limit as well as a memory one (the misconfiguration
+  # scan, scripts/misconfig.ts, fails without), so a runaway process slows itself down
+  # instead of its node's neighbours; set an environment's own with its load.
+  # CloudNativePG applies these to each instance.
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "2", memory: 1Gi }
+  parameters:
+    max_connections: "200"
+  # Continuous backups with the Barman Cloud plugin: WAL archived as it's written and a
+  # base backup every day, to the backups object store below. Any point in time since
+  # the oldest backup kept can be restored (see restore).
+  backups:
+    enabled: false
+    # Six fields, seconds first (CloudNativePG's cron format): 03:00 every day.
+    schedule: "0 0 3 * * *"
+    # How long base backups and the WAL between them are kept.
+    retention: 30d
+    # The folder in the bucket this cluster archives to. Empty: the cluster's name. A
+    # cluster restored from a backup must archive somewhere new (CloudNativePG refuses to
+    # write over another cluster's WAL), so set it when you restore.
+    serverName: ""
+  # Bootstrap the cluster from the backups instead of an empty database: set enabled,
+  # serverName to the folder the backup is in (the old cluster's serverName) and a new
+  # backups.serverName, and optionally a point in time. Only for a new cluster: an
+  # existing one ignores its bootstrap. deploy/README.md has the whole procedure.
+  # The backup drill: every week, the latest backup restored into a scratch cluster and
+  # checked against the live database (templates/restore-drill.yaml); from the offsite
+  # copy where there is one (`offsite`). Needs backups, and free disk for a second copy
+  # of the database while it runs.
+  drill:
+    enabled: false
+    # Kubernetes' cron format (five fields): 04:30 on Sundays.
+    schedule: "30 4 * * 0"
+    # How old the restored data may be: older means WAL isn't reaching the backups.
+    maxAgeHours: 26
+    timeoutMinutes: 60
+    image: docker.io/alpine/kubectl:1.37.1@sha256:b57b3bd3cd9f4f02dd444281857126aa78efa4b7b7e6ec57579dd927bf146fc3
+  restore:
+    enabled: false
+    serverName: ""
+    # RFC 3339 (2026-09-30T08:15:00Z); empty restores to the end of the archived WAL.
+    targetTime: ""
+
+# Valkey (queues, sessions, rate limits, caches; one node unless `replication` is on).
+# Its connection details are in the `secretName` Secret (host, port, password, url).
+valkey:
+  image: docker.io/valkey/valkey:9.1.2-alpine@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11
+  secretName: valkey
+  storage:
+    size: 5Gi
+    storageClass: local-path
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 512Mi }
+  # BullMQ needs every key kept: never evict, and persist to disk. At most 60% of the
+  # memory limit: the append-only rewrite forks, and copies what's written meanwhile.
+  maxmemory: 300mb
+  # Survive losing a node: `replicas` Valkey nodes (a primary, the rest replicas), each
+  # with a Sentinel that promotes a replica when the primary is gone, and a proxy in
+  # front that the services' REDIS_URL already names. Needs as many nodes as replicas to
+  # survive one (deploy/README.md, "What a lost node takes down"). Turning it on for a
+  # running release keeps the data: the first node is the old one and starts as primary.
+  replication:
+    enabled: false
+    # Odd, so a majority of Sentinels can always agree.
+    replicas: 3
+    proxy:
+      image: docker.io/haproxy:3.4.6-alpine@sha256:7af8255207ee9964ccb4eec8ce4b7a40b777769665e3ae83897fb01b24d8a43a
+      replicas: 2
+      resources:
+        requests: { cpu: 20m, memory: 32Mi }
+        limits: { cpu: 500m, memory: 128Mi }
+
+# Object storage with RustFS (S3 API). Two separate servers: `uploads`, which the
+# browser reaches at `host` through the gateway (presigned URLs), and `backups`, which
+# only Postgres reaches. Separate servers with their own root keys, so the application's
+# keys can't touch the backups.
+storage:
+  image: docker.io/rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff
+  # Creates the buckets and sets their CORS rules after every install and upgrade.
+  buckets:
+    image: docker.io/amazon/aws-cli:2.37.9@sha256:92de75724b6a746951f0e8b915d86bbccd7cb55aff96cd0cb4f7017272160780
+  region: us-east-1
+  uploads:
+    enabled: true
+    bucket: uploads
+    # The public host browsers upload to and download from (the stack's STORAGE_ORIGIN
+    # and presigned URLs), e.g. files.example.com: it must be one of the gateway's hosts.
+    host: ""
+    scheme: https
+    # Origins allowed to PUT and GET with presigned URLs (the site's).
+    corsOrigins: []
+    # The Secret the stack reads: bucket, region, endpoint (in-cluster), publicEndpoint,
+    # accessKeyId, secretAccessKey.
+    secretName: storage
+    storage:
+      size: 20Gi
+      storageClass: local-path
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { cpu: "1", memory: 1Gi }
+  # On with postgres.backups. Pin it to another node with nodeSelector where there is
+  # one, so losing a node's disk doesn't take the database and its backups together.
+  backups:
+    bucket: backups
+    nodeSelector: {}
+    storage:
+      size: 50Gi
+      storageClass: local-path
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { cpu: "1", memory: 1Gi }
+
+# The gateway the uploads host is routed through (as in the stack chart), and where its
+# proxies run, allowed through RustFS's network policy.
+gateway:
+  parentRefs:
+    - name: public
+      namespace: gateway-system
+  namespaceSelector:
+    kubernetes.io/metadata.name: envoy-gateway-system
+
+# Where CloudNativePG's operator runs (it reaches each instance's status port and
+# Postgres) and where Prometheus scrapes Postgres's metrics from: the platform's
+# (deploy/platform/addons/cloudnative-pg.yaml, the observability add-ons).
+networkPolicy:
+  operatorNamespace: cnpg-system
+  metricsNamespace: observability
+
+# A copy of the backups and the uploads outside the cluster, so losing the cluster (or
+# the one disk of a one-node cluster) doesn't take the database, its backups and every
+# upload together. Any S3-compatible storage you run somewhere else will do: a RustFS
+# or MinIO on another machine, in another place. On once `endpoint` is set: a CronJob
+# per bucket copies new objects there on `schedule` (rclone copy: nothing is deleted
+# offsite, so a wiped bucket here can't wipe the copy; expire old objects with the
+# bucket's lifecycle rules there). The keys are in the `secretName` Secret
+# (accessKeyId, secretAccessKey), from environments/<env>/secrets/. `required` refuses
+# to render without it (production).
+offsite:
+  required: false
+  # e.g. https://s3.backups.example.net
+  endpoint: ""
+  region: us-east-1
+  bucket: ""
+  # A folder of the bucket for this environment: <bucket>/<prefix>/{backups,uploads}.
+  prefix: ""
+  secretName: offsite-storage
+  schedule: "17 * * * *"
+  image: docker.io/rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: "1", memory: 256Mi }
+
+# A pull-request preview: this release owns its namespace (so deleting the preview
+# deletes everything in it) with quotas that keep one preview from starving others.
+preview:
+  enabled: false
+  namespace: ""
+  quota:
+    requests.cpu: "4"
+    requests.memory: 8Gi
+    # Every container has a CPU limit: room for all of a preview's at once (one CPU per
+    # service, two for Postgres, less for the rest), with a migration running.
+    limits.cpu: "16"
+    limits.memory: 12Gi
+    persistentvolumeclaims: "4"
+  # The preview namespace's LimitRange for a container: what one gets when it sets
+  # nothing, and the least and most it may set (the largest here is Postgres's two CPUs).
+  limits:
+    defaultRequest: { cpu: 50m, memory: 128Mi }
+    default: { cpu: 500m, memory: 512Mi }
+    min: { cpu: 10m, memory: 16Mi }
+    max: { cpu: "2", memory: 4Gi }
+  # Where a preview's mail goes instead of out (templates/preview-mail.yaml).
+  mailpit:
+    enabled: true
+    image: docker.io/axllent/mailpit:v1.31.3@sha256:ed9b00c609e77e99c79b93f1178255ebc271868920f2c69a8d166bd5634ed10d
+    # Its certificate, with the authority the notifications service trusts (ca.crt).
+    tlsSecret: mailpit-tls
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits: { cpu: 200m, memory: 128Mi }

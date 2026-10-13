@@ -1,0 +1,46 @@
+// Everything to develop, test and ship this repository, in a container (VS Code Dev
+// Containers or Codespaces): the toolchain and the shipping tools are in the Dockerfile,
+// kubectl and Helm come from the feature below. `bun run setup` runs once it's created;
+// then `bun dev`.
+{
+  "name": "boilerplate",
+  "build": { "dockerfile": "Dockerfile" },
+  // The full profile (`bun dev:full`) with ClamAV and the AI service needs this much.
+  "hostRequirements": { "cpus": 4, "memory": "8gb" },
+  "features": {
+    // The local services (docker compose) run on the container's own Docker.
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
+      // renovate: datasource=github-releases depName=kubernetes/kubernetes
+      "version": "1.36.4",
+      // renovate: datasource=github-releases depName=helm/helm
+      "helm": "4.3.0",
+      "minikube": "none"
+    }
+  },
+  "forwardPorts": [3000, 3001, 8000, 58025, 59001],
+  "portsAttributes": {
+    "3000": { "label": "web" },
+    "3001": { "label": "api" },
+    "8000": { "label": "ai" },
+    "58025": { "label": "Mailpit (sent email)" },
+    "59001": { "label": "RustFS console (uploads)" }
+  },
+  "postCreateCommand": "bun run setup",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "anthropic.claude-code",
+        "biomejs.biome",
+        "prisma.prisma",
+        "bradlc.vscode-tailwindcss",
+        "ms-python.python",
+        "charliermarsh.ruff",
+        "detachhead.basedpyright",
+        "opentofu.vscode-opentofu",
+        "tim-koehler.helm-intellisense",
+        "github.vscode-github-actions"
+      ]
+    }
+  }
+}

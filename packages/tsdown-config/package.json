@@ -1,0 +1,12 @@
+{
+  "name": "@repo/tsdown-config",
+  "private": true,
+  "type": "module",
+  "description": "Build preset for Node services (NestJS apps).",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "dependencies": {
+    "tsdown": "catalog:"
+  }
+}

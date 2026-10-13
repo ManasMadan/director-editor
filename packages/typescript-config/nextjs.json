@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // For Next.js apps. Next reads this file itself and may add fields on first run.
+  "extends": "./base.json",
+  "compilerOptions": {
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "allowJs": false,
+    // Next's plugin powers editor hints such as invalid `"use client"` usage.
+    "plugins": [{ "name": "next" }]
+  }
+}

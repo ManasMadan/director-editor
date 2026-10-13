@@ -1,0 +1,95 @@
+{{- /*
+Each service accepts connections only from the gateway (if it has routes), from the
+services of this release listed in its `allowFrom`, and from the namespaces in its
+`allowFromNamespaces`. It connects only to DNS, this namespace (the other services and
+the data), the namespaces in networkPolicy.egressNamespaces (the mail server,
+telemetry), ServiceLB on the ports it serves, and the internet outside the private
+ranges: providers (SMS, push, Stripe, models) and customers' webhook endpoints, never
+another namespace or a node.
+*/}}
+{{- range $name := keys .Values.services | sortAlpha }}
+{{- $svc := include "stack.service" (list $ $name) | fromYaml }}
+{{- if $svc.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "stack.fullname" (list $ $name) }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "stack.labels" (list $ $name) | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "stack.selectorLabels" (list $ $name) | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    {{- if $svc.port }}
+    {{- if and $svc.routes $.Values.gateway.enabled }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml $.Values.gateway.namespaceSelector | nindent 14 }}
+      ports:
+        - port: {{ $svc.port }}
+    {{- end }}
+    {{- range $namespace := $svc.allowFromNamespaces }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $namespace }}
+      ports:
+        - port: {{ $svc.port }}
+    {{- end }}
+    {{- range $from := $svc.allowFrom }}
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "stack.selectorLabels" (list $ $from) | nindent 14 }}
+      ports:
+        - port: {{ $svc.port }}
+    {{- end }}
+    {{- end }}
+    {{- /* Health checks come from the node (kubelet), which network policies don't cover. */}}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { port: 53, protocol: UDP }
+        - { port: 53, protocol: TCP }
+    - to:
+        - podSelector: {}
+    {{- range $namespace := $.Values.networkPolicy.egressNamespaces }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $namespace }}
+    {{- end }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchExpressions:
+              - { key: svccontroller.k3s.cattle.io/svcname, operator: Exists }
+      ports:
+        - port: 80
+        - port: 443
+        - port: 465
+        - port: 587
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              {{- toYaml $.Values.networkPolicy.privateRanges | nindent 14 }}
+        - ipBlock:
+            cidr: ::/0
+            except:
+              {{- toYaml $.Values.networkPolicy.privateRangesV6 | nindent 14 }}
+{{- end }}
+{{- end }}

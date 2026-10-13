@@ -1,0 +1,13 @@
+#!/usr/bin/env node
+// The `playwright-cli` command that Playwright's official skill runs, from the
+// playwright-core this project installs, so it's the e2e suites' version. The
+// session-start hook puts this folder on the PATH of Claude Code's shell.
+import { createRequire } from "node:module";
+
+const require = createRequire(`${process.cwd()}/`);
+require("playwright-core/lib/tools/cli-client/program")
+  .program()
+  .catch((error) => {
+    console.error(error.message);
+    process.exit(1);
+  });

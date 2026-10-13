@@ -1,0 +1,61 @@
+# A Claude Code review of every pull request, with the repository's own reviewer agents
+# (.claude/agents): the reviewer on every change, the security reviewer and the migration
+# reviewer where they apply. It posts one comment with the findings and each verdict. It
+# advises; CI's checks and a person's approval still decide the merge.
+#
+# Off until the repository opts in: set the variable CLAUDE_REVIEW to `true` and the
+# secret ANTHROPIC_API_KEY (Settings, Secrets and variables, Actions). Pull requests
+# from forks are never reviewed: they get no secrets, and their code chose the agents.
+name: Claude review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  review:
+    name: Review
+    if: >-
+      vars.CLAUDE_REVIEW == 'true' &&
+      !github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions: { contents: read, pull-requests: write }
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with: { egress-policy: audit }
+      # The whole history: the agents diff against the base branch.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { fetch-depth: 0, persist-credentials: false }
+      - uses: anthropics/claude-code-action@12dd8d74c712f5f3669365b2369b558c495b1104 # v1.0.238
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
+          # The project's hooks need the toolchain, which this job doesn't install; the
+          # tool list below keeps the run read-only without them.
+          settings: '{"disableAllHooks": true}'
+          prompt: |
+            Review pull request #${{ github.event.pull_request.number }} of ${{ github.repository }}:
+            the changes are `git diff origin/${{ github.base_ref }}...HEAD`.
+
+            Run the `reviewer` agent on the change. Also run `security-reviewer` when it
+            touches authentication, authorization, input handling, secrets, uploads,
+            webhooks or anything in `apps/*/src`, and `migration-reviewer` when it touches
+            `packages/db/prisma`. The agents can't start services here: they report such
+            checks as not run.
+
+            Then post one comment with `gh pr comment`: the findings, most severe first,
+            each as the agent wrote it, and each agent's verdict. Don't edit files, commit
+            or push.
+          # Headless and read-only: nothing outside this list runs, and nothing asks.
+          claude_args: >-
+            --permission-mode dontAsk
+            --max-turns 60
+            --allowedTools "Read,Glob,Grep,Agent,Bash(git diff *),Bash(git log *),Bash(git show *),Bash(gh pr comment *),Bash(gh pr diff *),Bash(gh pr view *)"

@@ -1,0 +1,9 @@
+# Not a Python project: the AI service's is apps/ai/pyproject.toml, which its type
+# checker (basedpyright) and ruff read. This only tells a pyright language server opened
+# on the repository root, such as Claude Code's pyright-lsp plugin or an editor's, where
+# that service's code and virtual environment are; without it every third-party import
+# there reads as missing.
+[tool.pyright]
+executionEnvironments = [{ root = "apps/ai" }]
+venvPath = "apps/ai"
+venv = ".venv"

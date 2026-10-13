@@ -1,0 +1,156 @@
+# Values for the Argo CD Helm chart (argo-helm's argo-cd), which OpenTofu's bootstrap
+# installs Argo CD with. Not a manifest: root.yaml leaves this file out.
+#
+# Secrets are committed to this repository encrypted with SOPS (age). Argo CD decrypts
+# them with the `sops` config management plugin below: Applications whose source says
+# `plugin: { name: sops }` get every *.sops.yaml file of their path, decrypted. It runs
+# in a sidecar of the repo server, the only container that can read the cluster's age
+# keys: the Secret `sops-age` in this namespace (the bootstrap creates it), key
+# `keys.txt` for the cluster's own secrets and, on the cluster hosting previews,
+# `preview.txt` for theirs. A source with the plugin env `AGE_KEY: preview` decrypts
+# with the preview key alone.
+configs:
+  cmp:
+    create: true
+    plugins:
+      sops:
+        generate:
+          command: [sh, -c]
+          args:
+            - |
+              set -eu
+              case "${ARGOCD_ENV_AGE_KEY:-keys}" in
+                keys|preview) export SOPS_AGE_KEY_FILE="/sops/${ARGOCD_ENV_AGE_KEY:-keys}.txt" ;;
+                *) echo "unknown AGE_KEY: $ARGOCD_ENV_AGE_KEY" >&2; exit 1 ;;
+              esac
+              for file in *.sops.yaml; do
+                [ -e "$file" ] || continue
+                printf -- '---\n'
+                sops --decrypt "$file"
+              done
+
+repoServer:
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 1Gi }
+  copyutil:
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits: { cpu: 100m, memory: 64Mi }
+  extraContainers:
+    - name: sops
+      image: quay.io/getsops/sops:v3.13.3-alpine@sha256:ae501277bf742f1662e0f881f43dd8fd6798b489a8058e921dbf6cda597140ea
+      # The plugin server Argo CD copies into var-files; it runs the command above.
+      command: [/var/run/argocd/argocd-cmp-server]
+      securityContext:
+        runAsNonRoot: true
+        # Argo CD's user, as in the repo server.
+        runAsUser: 999
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+        seccompProfile:
+          type: RuntimeDefault
+      resources:
+        requests: { cpu: 10m, memory: 64Mi }
+        limits: { cpu: 200m, memory: 256Mi }
+      volumeMounts:
+        - { name: var-files, mountPath: /var/run/argocd }
+        - { name: plugins, mountPath: /home/argocd/cmp-server/plugins }
+        - { name: argocd-cmp-cm, mountPath: /home/argocd/cmp-server/config/plugin.yaml, subPath: sops.yaml }
+        - { name: sops-tmp, mountPath: /tmp }
+        - { name: sops-age, mountPath: /sops, readOnly: true }
+  volumes:
+    - name: argocd-cmp-cm
+      configMap:
+        name: argocd-cmp-cm
+    - name: sops-tmp
+      emptyDir: {}
+    - name: sops-age
+      secret:
+        secretName: sops-age
+
+# Notifications: a pull request's preview posts its address on the pull request once Argo
+# CD has deployed it (the previews ApplicationSet subscribes each preview's stack), so
+# the address comes from the cluster's own domain and nothing else has to repeat it. They
+# go through the repository's GitHub App (Pull requests: write), whose id, installation
+# id and private key are the `argocd-notifications-secret` Secret in this namespace, from
+# deploy/platform/secrets/<environment>/ on the cluster hosting previews. Without it,
+# nothing is posted; Argo CD runs the same.
+notifications:
+  resources:
+    requests: { cpu: 10m, memory: 64Mi }
+    limits: { cpu: 200m, memory: 256Mi }
+  secret:
+    create: false
+  notifiers:
+    service.github: |
+      appID: $github-appID
+      installationID: $github-installationID
+      privateKey: $github-privateKey
+  triggers:
+    # Once per commit: when that commit's images are running and healthy.
+    trigger.on-preview-deployed: |
+      - when: app.status.operationState != nil and app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
+        oncePer: app.metadata.annotations["boilerplate.dev/head-sha"]
+        send: [preview-deployed]
+  templates:
+    # On the pull request whose head is that commit; later commits update the comment.
+    template.preview-deployed: |
+      message: Preview deployed
+      github:
+        repoURLPath: "{{ (index .app.spec.sources 0).repoURL }}"
+        revisionPath: '{{ index .app.metadata.annotations "boilerplate.dev/head-sha" }}'
+        pullRequestComment:
+          commentTag: preview
+          content: |
+            Preview of `{{ index .app.metadata.annotations "boilerplate.dev/head-sha" | trunc 7 }}`: {{ index .app.metadata.annotations "boilerplate.dev/url" }}
+
+            Removing the `preview` label deletes it.
+
+# Every pod with an explicit, unprivileged security context (Argo CD's own user, 999:
+# its images need it, .trivyignore.yaml), and every container with CPU and memory
+# requested and limited (the misconfiguration scan, scripts/misconfig.ts, fails
+# without).
+global:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
+    seccompProfile: { type: RuntimeDefault }
+controller:
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "2", memory: 2Gi }
+server:
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+applicationSet:
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+dex:
+  resources:
+    requests: { cpu: 10m, memory: 64Mi }
+    limits: { cpu: 200m, memory: 256Mi }
+redis:
+  # The same official image from Docker Hub, a registry the scan trusts, rather than its
+  # copy on AWS's public mirror.
+  image:
+    repository: docker.io/library/redis
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+redisSecretInit:
+  # It takes no global setting.
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    seccompProfile: { type: RuntimeDefault }
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { cpu: 100m, memory: 64Mi }

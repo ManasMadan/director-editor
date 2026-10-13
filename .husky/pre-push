@@ -1,0 +1,4 @@
+# Before anything leaves the machine: every check CI runs on the pull request that can run
+# here, for the areas the push changes, side by side (scripts/pre-push.ts). It needs
+# Docker running: it starts the services itself. `git push --no-verify` skips it.
+bun scripts/pre-push.ts

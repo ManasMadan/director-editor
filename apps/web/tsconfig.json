@@ -1,0 +1,23 @@
+{
+  "extends": "@repo/typescript-config/nextjs.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"],
+      // The UI package imports itself by its public name (`@repo/ui/lib/utils`);
+      // resolve those to source exactly like packages/ui does.
+      "@repo/ui/*": ["../../packages/ui/src/*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "next.config.ts",
+    "src",
+    "e2e",
+    "test",
+    "scripts",
+    "*.config.ts",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": ["node_modules", ".next"]
+}

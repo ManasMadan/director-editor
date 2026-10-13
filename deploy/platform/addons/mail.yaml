@@ -1,0 +1,11 @@
+# The mail server (Stalwart, deploy/platform/mail): the application sends through it,
+# and its delivery failures reach the webhooks service.
+addon: mail
+namespace: mail
+path: deploy/platform/mail
+wave: "10"
+clusterParameters:
+  domain: domain
+  # Optional (OpenTofu's mail.host and mail.domain): otherwise mail.<zone> and the zone.
+  hostname: mail-host
+  emailDomain: mail-domain

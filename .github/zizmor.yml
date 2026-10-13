@@ -1,0 +1,7 @@
+# zizmor's configuration (scripts/linters.ts runs it). Each rule turned off here has a row
+# in docs/testing.md's Suppressions table.
+rules:
+  # GitHub's `uses: $/...` for this repository's own actions: actionlint (the same lint
+  # job) doesn't read it yet and fails every workflow that has it.
+  self-repository:
+    disable: true

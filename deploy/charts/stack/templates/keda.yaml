@@ -1,0 +1,59 @@
+{{- /*
+Queue consumers scale on their backlog with KEDA: one Redis trigger per queue, on the
+BullMQ waiting list `{<queue>}:<queue>:wait` (see packages/jobs/src/queues.ts). At zero
+jobs they stay at minReplicas, so delayed and repeating jobs still run.
+*/}}
+{{- $scaled := list }}
+{{- range $name := keys .Values.services | sortAlpha }}
+{{- $svc := include "stack.service" (list $ $name) | fromYaml }}
+{{- if and $svc.enabled $svc.keda.enabled }}
+{{- if not $svc.keda.queues }}
+{{- fail (printf "services.%s.keda.queues is required when KEDA is on" $name) }}
+{{- end }}
+{{- $scaled = append $scaled $name }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "stack.fullname" (list $ $name) }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "stack.labels" (list $ $name) | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: {{ include "stack.fullname" (list $ $name) }}
+  minReplicaCount: {{ $svc.keda.minReplicas }}
+  maxReplicaCount: {{ $svc.keda.maxReplicas }}
+  cooldownPeriod: 300
+  triggers:
+    {{- range $queue := $svc.keda.queues }}
+    - type: redis
+      metadata:
+        listName: {{ printf "{%s}:%s:wait" $queue $queue | quote }}
+        listLength: {{ $svc.keda.listLength | quote }}
+      authenticationRef:
+        name: {{ include "stack.fullname" (list $ "valkey") }}
+    {{- end }}
+{{- end }}
+{{- end }}
+{{- if $scaled }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: {{ include "stack.fullname" (list $ "valkey") }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "stack.labels" (list $ "valkey") | nindent 4 }}
+spec:
+  secretTargetRef:
+    - parameter: host
+      name: {{ .Values.redis.secretName }}
+      key: host
+    - parameter: port
+      name: {{ .Values.redis.secretName }}
+      key: port
+    - parameter: password
+      name: {{ .Values.redis.secretName }}
+      key: password
+{{- end }}

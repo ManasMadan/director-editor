@@ -1,0 +1,42 @@
+{
+  "title": "AiIngestSummarizeJob",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "meta": {
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        },
+        "orgId": {
+          "type": "string"
+        }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "documentId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "orgId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "documentId",
+        "orgId"
+      ]
+    }
+  },
+  "required": [
+    "meta",
+    "payload"
+  ]
+}

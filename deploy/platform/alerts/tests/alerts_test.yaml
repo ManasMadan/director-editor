@@ -1,0 +1,84 @@
+suite: alerts
+release: { name: alerts, namespace: observability }
+set:
+  domain: example.com
+  email: ops@example.com
+tests:
+  - it: emails alerts through the cluster's mail server, as its submission account
+    template: alertmanager.yaml
+    asserts:
+      - equal:
+          path: spec.receivers[0].emailConfigs[0]
+          value:
+            to: ops@example.com
+            from: no-reply@example.com
+            smarthost: mail.example.com:587
+            authUsername: no-reply@example.com
+            authPassword: { name: alertmanager-smtp, key: password }
+            requireTLS: true
+            sendResolved: true
+
+  - it: leaves out the always-firing Watchdog and informational alerts
+    template: alertmanager.yaml
+    asserts:
+      - equal:
+          path: spec.route.matchers
+          value:
+            - { name: alertname, matchType: "!~", value: "Watchdog|InfoInhibitor" }
+            - { name: severity, matchType: "=~", value: "warning|critical" }
+
+  - it: sends from the mail server OpenTofu names, on its email domain
+    template: alertmanager.yaml
+    set:
+      emailDomain: mail.example.org
+      mailHost: smtp.example.org
+    asserts:
+      - equal: { path: "spec.receivers[0].emailConfigs[0].smarthost", value: smtp.example.org:587 }
+      - equal: { path: "spec.receivers[0].emailConfigs[0].from", value: no-reply@mail.example.org }
+
+  - it: refuses a production cluster nobody hears from
+    template: alertmanager.yaml
+    set:
+      environment: production
+      email: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: email is required in production
+
+  - it: sends nothing elsewhere until an address is set
+    template: alertmanager.yaml
+    set:
+      environment: staging
+      email: ""
+    asserts:
+      - hasDocuments: { count: 0 }
+
+  - it: alerts on backups, certificates, the gateway's errors and queue backlogs
+    template: rules.yaml
+    asserts:
+      - lengthEqual: { path: spec.groups, count: 4 }
+      - equal: { path: "spec.groups[0].name", value: backups }
+      - equal: { path: "spec.groups[1].name", value: certificates }
+      - equal: { path: "spec.groups[2].name", value: gateway }
+      - equal: { path: "spec.groups[3].name", value: queues }
+      - equal: { path: "spec.groups[0].rules[0].alert", value: PostgresWalArchivingFailing }
+      - equal: { path: "spec.groups[0].rules[1].alert", value: PostgresWalArchiveStale }
+      - equal:
+          path: "spec.groups[0].rules[2].expr"
+          value: cnpg_collector_last_available_backup_timestamp > 0 and time() - cnpg_collector_last_available_backup_timestamp > 129600
+
+  - it: scrapes what the rules read
+    template: monitors.yaml
+    asserts:
+      - hasDocuments: { count: 4 }
+      - equal: { path: spec.podMetricsEndpoints, value: [{ port: metrics, path: /metrics }] }
+        documentIndex: 0
+      - equal: { path: spec.namespaceSelector, value: { any: true } }
+        documentIndex: 0
+      - equal: { path: spec.podMetricsEndpoints, value: [{ port: metrics, path: /stats/prometheus }] }
+        documentIndex: 2
+
+  - it: puts every object in the release's namespace
+    templates: [alertmanager.yaml, monitors.yaml, rules.yaml]
+    asserts:
+      - equal: { path: metadata.namespace, value: observability }

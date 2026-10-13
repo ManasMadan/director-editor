@@ -1,0 +1,13 @@
+# CPU and memory requested and limited, as for every container here (the
+# misconfiguration scan, scripts/misconfig.ts, fails without): the controller (the
+# chart's own requests, with CPU and memory limits) and its certificate Job.
+deployment:
+  envoyGateway:
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { cpu: "1", memory: 1024Mi }
+certgen:
+  job:
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits: { cpu: 100m, memory: 64Mi }

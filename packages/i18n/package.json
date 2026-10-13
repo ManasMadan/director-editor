@@ -1,0 +1,30 @@
+{
+  "name": "@repo/i18n",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Every user-facing string, for every surface: web, mobile, emails, push, SMS and in-app notifications.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./locales": "./src/locales.ts",
+    "./messages/*.json": "./messages/*.json"
+  },
+  "scripts": {
+    "check-types": "tsc",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage",
+    "gen": "bun scripts/declare-messages.ts"
+  },
+  "dependencies": {
+    "react": "catalog:",
+    "use-intl": "catalog:"
+  },
+  "devDependencies": {
+    "@formatjs/icu-messageformat-parser": "3.5.20",
+    "@repo/contracts": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

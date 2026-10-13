@@ -1,0 +1,224 @@
+{{- /*
+The backup drill: on a schedule, a Job restores the latest backup (a base backup and the
+archived WAL, through the Barman Cloud plugin) into a scratch cluster beside the live
+one, checks it against the live database and deletes it (files/restore-drill.sh). A
+failed run is a failed Job, which the cluster's alerts report. The scratch cluster takes
+as much disk as the live one while it runs, and archives nothing.
+
+Where there's an offsite copy (`offsite`), it restores from that copy instead of the
+backups server in the cluster: what a restore after losing the cluster would have, so
+the copy is known to be complete, current and restorable.
+*/}}
+{{- $pg := .Values.postgres }}
+{{- if and $pg.drill.enabled (not $pg.backups.enabled) }}
+{{- fail "postgres.drill needs postgres.backups.enabled: the backups are what it restores" }}
+{{- end }}
+{{- if $pg.drill.enabled }}
+{{- $cluster := include "data.postgres" . }}
+{{- $drill := printf "%s-drill" $cluster }}
+{{- $name := printf "%s-restore-drill" (include "data.name" .) }}
+{{- $store := include "data.objectStore" . }}
+{{- with .Values.offsite }}
+{{- if .endpoint }}
+{{- $store = printf "%s-offsite" $store }}
+---
+# The offsite copy of the backups bucket (templates/offsite.yaml), read only by the drill:
+# no cluster archives here, so nothing applies a retention policy to it.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: {{ $store }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" $ | nindent 4 }}
+spec:
+  configuration:
+    destinationPath: {{ printf "s3://%s/%s/backups/" .bucket .prefix }}
+    endpointURL: {{ .endpoint }}
+    s3Credentials:
+      accessKeyId:
+        name: {{ .secretName }}
+        key: accessKeyId
+      secretAccessKey:
+        name: {{ .secretName }}
+        key: secretAccessKey
+{{- end }}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+data:
+  fingerprint.sql: {{ .Files.Get "files/fingerprint.sql" | quote }}
+  cluster.yaml: |
+    apiVersion: postgresql.cnpg.io/v1
+    kind: Cluster
+    metadata:
+      name: {{ $drill }}
+      # Not the release's labels: Argo CD would take it for part of the release, and prune
+      # it while the drill runs.
+      labels:
+        app.kubernetes.io/part-of: {{ include "data.name" . }}
+        app.kubernetes.io/component: restore-drill
+    spec:
+      instances: 1
+      imageName: {{ $pg.imageName }}
+      enableSuperuserAccess: false
+      postgresql:
+        pg_hba:
+          - hostnossl all all all reject
+        parameters:
+          {{- range $key, $value := $pg.parameters }}
+          {{ $key }}: {{ $value | quote }}
+          {{- end }}
+      bootstrap:
+        recovery:
+          source: origin
+          database: {{ .Values.database.name }}
+          owner: migrator
+          secret:
+            name: {{ include "data.roleSecret" (list . "migrator") }}
+      # Where the live cluster archives now, or the offsite copy of it.
+      externalClusters:
+        - name: origin
+          plugin:
+            name: barman-cloud.cloudnative-pg.io
+            parameters:
+              barmanObjectName: {{ $store }}
+              serverName: {{ $pg.backups.serverName | default $cluster }}
+      storage:
+        size: {{ $pg.storage.size }}
+        {{- with $pg.storage.storageClass }}
+        storageClass: {{ . }}
+        {{- end }}
+      resources:
+        {{- toYaml $pg.resources | nindent 8 }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+---
+# Creating and deleting the scratch cluster, and running psql in both clusters' pods.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [postgresql.cnpg.io]
+    resources: [clusters]
+    verbs: [get, list, watch, create, patch, delete]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/exec]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+---
+# The scratch cluster takes what the live one does from the operator.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $drill }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: {{ $drill }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.operatorNamespace }}
+      ports:
+        - port: 5432
+        - port: 8000
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+spec:
+  schedule: {{ $pg.drill.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: {{ mul $pg.drill.timeoutMinutes 60 | add 600 }}
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: restore-drill
+            app.kubernetes.io/instance: {{ .Release.Name }}
+        spec:
+          serviceAccountName: {{ $name }}
+          restartPolicy: Never
+          securityContext:
+            {{- include "data.podSecurity" $ | nindent 12 }}
+          containers:
+            - name: drill
+              image: {{ $pg.drill.image }}
+              command: [sh, -c]
+              args:
+                - {{ .Files.Get "files/restore-drill.sh" | quote }}
+              env:
+                - { name: CLUSTER, value: {{ $cluster | quote }} }
+                - { name: DRILL, value: {{ $drill | quote }} }
+                - { name: DATABASE, value: {{ .Values.database.name | quote }} }
+                - { name: MAX_AGE_HOURS, value: {{ $pg.drill.maxAgeHours | quote }} }
+                - { name: TIMEOUT, value: "{{ $pg.drill.timeoutMinutes }}m" }
+                - { name: SPEC, value: /drill/cluster.yaml }
+                - { name: FINGERPRINT, value: /drill/fingerprint.sql }
+                # kubectl's cache.
+                - { name: HOME, value: /tmp }
+              resources:
+                requests: { cpu: 10m, memory: 32Mi }
+                limits: { cpu: 200m, memory: 128Mi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              volumeMounts:
+                - { name: drill, mountPath: /drill, readOnly: true }
+                - { name: tmp, mountPath: /tmp }
+          volumes:
+            - name: drill
+              configMap:
+                name: {{ $name }}
+            - name: tmp
+              emptyDir: {}
+{{- end }}

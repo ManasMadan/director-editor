@@ -1,0 +1,48 @@
+{{- /*
+Nothing in this namespace accepts a connection unless a policy of its own says so (the
+stack's services, Valkey, object storage and Postgres each have one). Postgres takes
+connections from this namespace only (the services, the migration, its own replicas),
+from CloudNativePG's operator, and its metrics from the telemetry namespace: another
+environment's namespace (a preview on the staging cluster) can't reach it.
+*/}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "data.name" . }}-default-deny
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "data.postgres" . }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "data.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: {{ include "data.postgres" . }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 5432
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.operatorNamespace }}
+      ports:
+        - port: 5432
+        - port: 8000
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.metricsNamespace }}
+      ports:
+        - port: 9187

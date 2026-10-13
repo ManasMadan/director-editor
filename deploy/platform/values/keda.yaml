@@ -1,0 +1,9 @@
+podDisruptionBudget:
+  operator:
+    minAvailable: 1
+# Each pod as user and group 10001, as every container here (none of KEDA's needs a
+# particular id).
+podSecurityContext:
+  operator: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001 }
+  metricServer: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001 }
+  webhooks: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001 }

@@ -1,0 +1,75 @@
+suite: network policies
+templates: [networkpolicy.yaml]
+release: { name: demo, namespace: apps }
+set:
+  image.tag: sha-abc123
+  site.host: app.example.com
+tests:
+  - it: lets the gateway reach routed services
+    template: networkpolicy.yaml
+    documentSelector: { path: metadata.name, value: demo-web }
+    asserts:
+      - equal:
+          path: spec.ingress
+          value:
+            - from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: envoy-gateway-system } } }]
+              ports: [{ port: 3000 }]
+
+  - it: lets only the listed services reach the AI service directly
+    template: networkpolicy.yaml
+    documentSelector: { path: metadata.name, value: demo-ai }
+    asserts:
+      - contains:
+          path: spec.ingress
+          content:
+            from: [{ podSelector: { matchLabels: { app.kubernetes.io/name: api, app.kubernetes.io/instance: demo } } }]
+            ports: [{ port: 8000 }]
+
+  - it: accepts no connections to a service without routes or callers
+    template: networkpolicy.yaml
+    documentSelector: { path: metadata.name, value: demo-notifications }
+    asserts:
+      - isNullOrEmpty: { path: spec.ingress }
+      - equal: { path: spec.policyTypes, value: [Ingress, Egress] }
+
+  - it: limits where a service connects to DNS, its namespace, mail, telemetry and the internet
+    template: networkpolicy.yaml
+    documentSelector: { path: metadata.name, value: demo-webhooks }
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            to: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: kube-system } }, podSelector: { matchLabels: { k8s-app: kube-dns } } }]
+            ports: [{ port: 53, protocol: UDP }, { port: 53, protocol: TCP }]
+      - contains: { path: spec.egress, content: { to: [{ podSelector: {} }] } }
+      - contains: { path: spec.egress, content: { to: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: mail } } }] } }
+      - contains: { path: spec.egress, content: { to: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: observability } } }] } }
+      - lengthEqual: { path: spec.egress, count: 6 }
+
+  - it: reaches the internet only outside the private ranges (no other namespace, node or metadata address)
+    template: networkpolicy.yaml
+    documentSelector: { path: metadata.name, value: demo-webhooks }
+    asserts:
+      - equal:
+          path: "spec.egress[5].to[0].ipBlock"
+          value:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16, 127.0.0.0/8, 0.0.0.0/8]
+      - equal: { path: "spec.egress[5].to[1].ipBlock", value: { cidr: "::/0", except: ["fc00::/7", "fe80::/10", "::1/128"] } }
+
+  - it: gives a service without a port a policy too, accepting nothing
+    template: networkpolicy.yaml
+    documentSelector: { path: metadata.name, value: demo-ai-worker }
+    asserts:
+      - isNullOrEmpty: { path: spec.ingress }
+      - equal: { path: spec.policyTypes, value: [Ingress, Egress] }
+
+  - it: lets the mail server's namespace post to the webhooks service
+    template: networkpolicy.yaml
+    documentSelector: { path: metadata.name, value: demo-webhooks }
+    asserts:
+      - contains:
+          path: spec.ingress
+          content:
+            from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: mail } } }]
+            ports: [{ port: 3004 }]

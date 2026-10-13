@@ -1,0 +1,128 @@
+# Traces and metrics (deploy/platform/addons/observability) on the clusters that opt in
+# with the label boilerplate.dev/observability: "true" on their Argo CD Secret. The same
+# label makes the envs and previews ApplicationSets point every service's OTLP export at
+# them. Add-on files have the same shape as the platform ApplicationSet's, and in-repo
+# charts take `clusterParameters` the same way.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: observability
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          - matrix:
+              generators:
+                - clusters:
+                    selector:
+                      matchLabels:
+                        boilerplate.dev/observability: "true"
+                # The revision the environment deploys from, and production's images:
+                # deploy/environments/<env>/release.yaml, read at HEAD.
+                - git:
+                    repoURL: https://github.com/ManasMadan/boilerplate.git
+                    revision: HEAD
+                    pathParamPrefix: release
+                    files:
+                      - path: 'deploy/environments/{{ index .metadata.labels "boilerplate.dev/environment" }}/release.yaml'
+          - git:
+              repoURL: https://github.com/ManasMadan/boilerplate.git
+              revision: "{{ .revision }}"
+              # The generator's own `path` parameter (the file's location) would replace
+              # an add-on's `path` key; this moves it to `.file.path`.
+              pathParamPrefix: file
+              files:
+                - path: deploy/platform/addons/observability/*.yaml
+  # Add-ons roll out in the order of their waves, each once the one before is healthy
+  # (the CRDs an add-on needs are installed by one of an earlier wave). A sync-wave
+  # annotation on generated Applications orders nothing; progressive syncs do (OpenTofu's
+  # bootstrap turns them on). A new wave needs a step here.
+  strategy:
+    type: RollingSync
+    rollingSync:
+      steps:
+        - matchExpressions:
+            - key: wave
+              operator: In
+              values: ["wave-10"]
+        - matchExpressions:
+            - key: wave
+              operator: In
+              values: ["wave0"]
+        - matchExpressions:
+            - key: wave
+              operator: In
+              values: ["wave10"]
+  template:
+    metadata:
+      name: "{{ .name }}-{{ .addon }}"
+      labels:
+        wave: "wave{{ .wave }}"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: platform
+      destination:
+        server: "{{ .server }}"
+        namespace: "{{ .namespace }}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          # kube-prometheus-stack's CRDs are larger than the client-side apply limit.
+          - ServerSideApply=true
+        managedNamespaceMetadata:
+          labels:
+            # node-exporter reads the host (hostPath, hostNetwork, hostPID).
+            pod-security.kubernetes.io/enforce: privileged
+        retry:
+          limit: 10
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 5m
+  templatePatch: |
+    {{- $cluster := . }}
+    spec:
+      sources:
+        {{- if hasKey . "path" }}
+        - repoURL: https://github.com/ManasMadan/boilerplate.git
+          targetRevision: "{{ .revision }}"
+          path: {{ .path }}
+          helm:
+            releaseName: {{ .addon }}
+            {{- if hasKey . "clusterParameters" }}
+            parameters:
+              {{- range $key, $given := .clusterParameters }}
+              {{- $field := splitList "|" $given | first }}
+              {{- $fallback := splitList "|" $given | rest | join "|" }}
+              {{- $value := "" }}
+              {{- if eq $field "name" }}
+              {{- $value = $cluster.name }}
+              {{- else if hasPrefix "label:" $field }}
+              {{- $value = index $cluster.metadata.labels (printf "boilerplate.dev/%s" (trimPrefix "label:" $field)) | default "" }}
+              {{- else }}
+              {{- $value = index $cluster.metadata.annotations (printf "boilerplate.dev/%s" $field) | default "" }}
+              {{- end }}
+              {{- $value = $value | default $fallback }}
+              - name: {{ $key | quote }}
+                value: {{ $value | quote }}
+              {{- end }}
+            {{- end }}
+        {{- else }}
+        - repoURL: {{ .repoURL }}
+          chart: {{ .chart }}
+          targetRevision: {{ .version }}
+          helm:
+            releaseName: {{ .addon }}
+            valueFiles:
+              - $repo/deploy/platform/values/{{ .addon }}.yaml
+        - repoURL: https://github.com/ManasMadan/boilerplate.git
+          targetRevision: "{{ .revision }}"
+          ref: repo
+        {{- end }}

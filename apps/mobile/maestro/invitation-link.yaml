@@ -1,0 +1,9 @@
+# An invitation link opened by the OS (boilerplate://invitations/<id>) shows the
+# invitation, and joins the workspace once accepted. INVITATION_ID comes from an
+# invitation sent to the signed-in user's address.
+appId: com.boilerplate.app.development
+---
+- runFlow: sign-up-and-restart.yaml
+- openLink: boilerplate://invitations/${INVITATION_ID}
+- tapOn: "Accept invitation"
+- assertVisible: "What needs doing?"

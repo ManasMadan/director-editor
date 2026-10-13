@@ -1,0 +1,6 @@
+{
+  // The Claude Code hooks: type-checked by `bun run check-types` like the repo's scripts.
+  "extends": "../../packages/typescript-config/bun.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["*.ts"]
+}

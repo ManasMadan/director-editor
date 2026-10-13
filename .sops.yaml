@@ -1,0 +1,27 @@
+# Who can decrypt the secrets committed under deploy/ (SOPS with age). Each rule lists the
+# age public keys of a cluster (its private key is the Secret sops-age in its argocd
+# namespace) and of the people who edit that environment's secrets; `sops` picks the
+# rule by path when it creates a file. The keys below are placeholders until you set
+# yours (deploy/README.md, "Secrets with SOPS"): sops refuses to encrypt with them.
+#
+# Only the Secrets' values are encrypted (data, stringData); names and namespaces stay
+# readable, so reviews show which Secret changed.
+creation_rules:
+  - path_regex: (^|/)deploy/(environments/staging/secrets|platform/secrets/staging)/[^/]+\.sops\.yaml$
+    encrypted_regex: ^(data|stringData)$
+    age: >-
+      age1stagingclusterpublickeyreplaceme,
+      age1yourpublickeyreplaceme
+  # Previews have a key of their own, which the cluster hosting them holds next to its
+  # own and decrypts previews with alone: a staging Secret copied into a preview's
+  # directory doesn't decrypt there.
+  - path_regex: (^|/)deploy/environments/preview/secrets/[^/]+\.sops\.yaml$
+    encrypted_regex: ^(data|stringData)$
+    age: >-
+      age1previewpublickeyreplaceme,
+      age1yourpublickeyreplaceme
+  - path_regex: (^|/)deploy/(environments/production/secrets|platform/secrets/production)/[^/]+\.sops\.yaml$
+    encrypted_regex: ^(data|stringData)$
+    age: >-
+      age1productionclusterpublickeyreplaceme,
+      age1yourpublickeyreplaceme

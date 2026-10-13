@@ -1,0 +1,252 @@
+# Local infrastructure for development and tests.
+#
+# Profiles keep the default fast: with no profile you get the core that every flow
+# needs (Postgres, Valkey, Mailpit). `bun dev:full` / `bun run db:up:full` add the rest.
+#
+#   core     Postgres  localhost:55432  pgvector; `app` and `app_test` databases
+#            Valkey    localhost:56379  Redis-compatible: sessions, cache, rate limits, queues
+#            Mailpit   localhost:58025  catches every email sent in dev (SMTP :51025)
+#   files    RustFS    localhost:59000  S3-compatible object storage (console :59001)
+#            ClamAV    localhost:53310  virus scanning for uploads (clamd; first start
+#                                       downloads signatures, a few minutes)
+#   mail     Stalwart  localhost:51465  the mail server production uses (submission over
+#                                       TLS; admin API :58080), `bun run db:up:mail`
+#
+# Every port listens on 127.0.0.1 only: the databases have well-known passwords (or
+# none) and Mailpit shows every sign-in code, so nobody else on the network may reach
+# them. To test uploads from a phone, set DOCKER_BIND_ADDRESS=0.0.0.0 (on a network you
+# trust) and S3_ENDPOINT to this machine's LAN address.
+#
+# Sharing a machine with other projects: host ports are in the 5xxxx range, so the usual
+# 5432/6379 stay free for them, and every container has a memory limit, so one that
+# grows is stopped on its own instead of starving everything else in Docker. Start them
+# with `bun run db:up` (it checks the limits fit next to what's already running) and
+# remove everything with `bun run docker:clean`.
+#
+# Images are pinned; Renovate proposes upgrades. Ports can be overridden in .env.
+# The project is named, so every worktree of this repository (.config/wt.toml) shares
+# these containers and volumes by default. A worktree that needs its own runs
+# `bun run setup --stack <n>`: COMPOSE_PROJECT_NAME in its .env (which compose reads,
+# and which wins over `name:`) and every port 100 × n up.
+name: boilerplate
+
+services:
+  postgres:
+    # The official Postgres image plus pgvector, on the same Debian (trixie) base as the
+    # CloudNativePG image used in Kubernetes, so extensions and collation match.
+    image: pgvector/pgvector:0.8.7-pg18-trixie@sha256:9d9c930220cb9bf2f956d10a8f909cf9973d9672ca0278aef2c1e6facccad2e0
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app
+    ports: ["${DOCKER_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_PORT:-55432}:5432"]
+    mem_limit: 512m
+    volumes:
+      - postgres:/var/lib/postgresql
+      # Creates the separate `app_test` database used by integration tests.
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d app"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  valkey:
+    image: valkey/valkey:9.1.2-alpine@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11
+    # Queued jobs live here: never evict keys (noeviction) and persist with AOF.
+    # A memory ceiling below the container's limit: when full, writes fail with an error
+    # instead of the container being killed. 32 logical databases: the test suites each
+    # take one (docs/testing.md).
+    command:
+      [
+        "valkey-server",
+        "--appendonly",
+        "yes",
+        "--maxmemory",
+        "200mb",
+        "--maxmemory-policy",
+        "noeviction",
+        "--databases",
+        "32",
+      ]
+    ports: ["${DOCKER_BIND_ADDRESS:-127.0.0.1}:${VALKEY_PORT:-56379}:6379"]
+    mem_limit: 256m
+    volumes: [valkey:/data]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # RustFS: Apache-2.0, S3-compatible object storage (MinIO stopped publishing images).
+  rustfs:
+    image: rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff
+    profiles: [files, full]
+    environment:
+      RUSTFS_ACCESS_KEY: rustfs
+      RUSTFS_SECRET_KEY: rustfs-secret
+      RUSTFS_CONSOLE_ENABLE: "true"
+    ports: ["${DOCKER_BIND_ADDRESS:-127.0.0.1}:${S3_PORT:-59000}:9000", "${DOCKER_BIND_ADDRESS:-127.0.0.1}:${S3_CONSOLE_PORT:-59001}:9001"]
+    mem_limit: 384m
+    volumes: [rustfs:/data]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/health"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # Creates the uploads bucket once storage is up, so `bun dev` needs no manual step.
+  s3-init:
+    image: amazon/aws-cli:2.37.9@sha256:92de75724b6a746951f0e8b915d86bbccd7cb55aff96cd0cb4f7017272160780
+    profiles: [files, full]
+    depends_on:
+      rustfs: { condition: service_healthy }
+    environment:
+      AWS_ACCESS_KEY_ID: rustfs
+      AWS_SECRET_ACCESS_KEY: rustfs-secret
+      AWS_DEFAULT_REGION: us-east-1
+    mem_limit: 128m
+    entrypoint: ["/bin/sh", "-c"]
+    # Browsers upload straight to the bucket with presigned PUTs, so it needs CORS for
+    # the web origin; production buckets get the same rule from OpenTofu.
+    command:
+      - |
+        set -e
+        S3="aws --endpoint-url http://rustfs:9000"
+        $$S3 s3api head-bucket --bucket uploads 2>/dev/null || $$S3 s3 mb s3://uploads
+        $$S3 s3api put-bucket-cors --bucket uploads --cors-configuration '{"CORSRules":[{"AllowedOrigins":["${WEB_URL:-http://localhost:3000}"],"AllowedMethods":["PUT","GET"],"AllowedHeaders":["*"],"ExposeHeaders":["ETag"],"MaxAgeSeconds":3600}]}'
+    restart: "no"
+
+  # clamd scans every upload before it's accepted. The Debian image has arm64 builds.
+  clamav:
+    image: clamav/clamav-debian:1.5.4@sha256:9bb8712a50f0e75166e936c452cd82dd5e5be0b85586598930b5bbb84a99a578
+    profiles: [files, full]
+    ports: ["${DOCKER_BIND_ADDRESS:-127.0.0.1}:${CLAMAV_PORT:-53310}:3310"]
+    # Signatures take about 1 GB in memory. Loading the new set before dropping the old
+    # one (the default) doubles that during every update; one copy at a time instead,
+    # at the cost of a pause in scanning while it reloads.
+    environment:
+      CLAMD_CONF_ConcurrentDatabaseReload: "no"
+    mem_limit: 1536m
+    # The signatures; CLAMAV_DATA puts them in a directory instead (CI caches it).
+    volumes: ["${CLAMAV_DATA:-clamav}:/var/lib/clamav"]
+    healthcheck:
+      test: ["CMD-SHELL", "clamdcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 6m
+
+  mailpit:
+    image: axllent/mailpit:v1.31.3@sha256:ed9b00c609e77e99c79b93f1178255ebc271868920f2c69a8d166bd5634ed10d
+    ports: ["${DOCKER_BIND_ADDRESS:-127.0.0.1}:${MAILPIT_SMTP_PORT:-51025}:1025", "${DOCKER_BIND_ADDRESS:-127.0.0.1}:${MAILPIT_UI_PORT:-58025}:8025"]
+    mem_limit: 128m
+    # Keeps more than the default 500: a full e2e run sends hundreds of emails.
+    environment: { MP_MAX_MESSAGES: "5000" }
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+
+  # Stalwart, the mail server production sends through (SMTP submission, outbound queue,
+  # DKIM signing, bounce webhooks). Mailpit stays the everyday catcher because it needs
+  # no credentials, TLS or DNS and shows every email at once; this is the prod-like path,
+  # opt-in with `bun run db:up:mail`, and the integration tests that prove it
+  # (apps/webhooks, apps/notifications) skip themselves unless STALWART_URL and
+  # STALWART_SMTP_URL are set (.env.example).
+  #
+  # Local shape: domain boilerplate.test, submission user no-reply@boilerplate.test on
+  # 51465 (implicit TLS, self-signed certificate), admin API on 58080. Mail to any other
+  # domain is relayed to Mailpit, so what Stalwart delivers shows up there too, except
+  # bounce.test, which is sent back to this server's own port 25; it refuses to relay for
+  # a domain it doesn't serve (550 5.1.2), the permanent refusal a remote MX gives for an
+  # address that doesn't exist, so bounces work offline. Delivery failures are posted to the webhooks
+  # service on the host (/webhooks/stalwart), signed with STALWART_WEBHOOK_SECRET.
+  stalwart:
+    image: stalwartlabs/stalwart:v0.16.24@sha256:ec011be228596e37e65f41aab17deed573859614430472f7eeb42178c50d87b7
+    profiles: [mail, full]
+    environment:
+      # Signs in to the management API (the init service below and the tests use it).
+      # Stalwart's documented bootstrap/recovery credential; local only, never in production.
+      STALWART_RECOVERY_ADMIN: admin:${STALWART_ADMIN_PASSWORD:-stalwart-admin}
+      # Read by the webhook's signatureKey (EnvironmentVariable) in the plan below.
+      STALWART_WEBHOOK_SECRET: ${STALWART_WEBHOOK_SECRET:-change-me}
+    ports: ["${DOCKER_BIND_ADDRESS:-127.0.0.1}:${STALWART_SMTPS_PORT:-51465}:465", "${DOCKER_BIND_ADDRESS:-127.0.0.1}:${STALWART_HTTP_PORT:-58080}:8080"]
+    # The webhooks service runs on the host (bun dev); Linux needs the name mapped.
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    mem_limit: 256m
+    configs:
+      - source: stalwart-config
+        target: /etc/stalwart/config.json
+    volumes: [stalwart:/var/lib/stalwart]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz/ready"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Applies the plan below through the management API once Stalwart is up (services.ts
+  # runs it after `up`). Upserts, singleton updates and one reconcile, so every start
+  # converges on the same state instead of failing the second time.
+  stalwart-init:
+    image: stalwartlabs/cli:1.0.13@sha256:9a1e07307d6f890a193322c4b737fc0868405f0f8486a19922cbf362f43884fd
+    profiles: [mail, full]
+    depends_on:
+      stalwart: { condition: service_healthy }
+    environment:
+      STALWART_URL: http://stalwart:8080
+      STALWART_USER: admin
+      STALWART_PASSWORD: ${STALWART_ADMIN_PASSWORD:-stalwart-admin}
+    configs:
+      - source: stalwart-plan
+        target: /plan.ndjson
+    command: ["apply", "--file", "/plan.ndjson", "--quiet"]
+    mem_limit: 64m
+    restart: "no"
+
+  # Traces and metrics, locally: Jaeger v2 (built on the OpenTelemetry Collector) receives
+  # OTLP and shows traces at http://localhost:56686. Point the services at it with
+  # OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:54318 (see .env.example).
+  jaeger:
+    image: jaegertracing/jaeger:2.21.0@sha256:3d0ac795ff98aa04d1be04311d2dac6c25b4bfc8322dc02e53bc5b170c5018c3
+    profiles: [telemetry, full]
+    ports: ["${DOCKER_BIND_ADDRESS:-127.0.0.1}:${JAEGER_OTLP_PORT:-54318}:4318", "${DOCKER_BIND_ADDRESS:-127.0.0.1}:${JAEGER_UI_PORT:-56686}:16686"]
+    mem_limit: 256m
+
+
+volumes:
+  postgres:
+  valkey:
+  rustfs:
+  clamav:
+  stalwart:
+
+configs:
+  # Only the data store lives in Stalwart's config file; everything else is objects in
+  # that store, written by the plan. RocksDB's write buffers and block cache default to
+  # 128 MB each, more than the container's limit, so they're capped at 16 MB.
+  stalwart-config:
+    content: |
+      {"@type": "RocksDb", "path": "/var/lib/stalwart/", "bufferSize": 16777216, "cacheSize": 16777216}
+  # One operation per line (NDJSON; lists are objects keyed "0", "1", ...); "#dom" refers
+  # to the domain created by an earlier line. Compose fills in the password from .env.
+  # In order: logs to stdout (docker logs) instead of files; the domain (DKIM keys are
+  # generated for it) and the host name it greets with; the no-reply account the app
+  # submits as; the two relay routes and the rule choosing between them and local
+  # delivery; the bounce webhook; Pyzor off (a public network service, and reloads fail
+  # while its host can't be resolved); then a reload, since settings written through the
+  # API only apply on one.
+  stalwart-plan:
+    content: |
+      {"@type": "reconcile", "object": "Tracer", "matchOn": "*", "value": {"console": {"@type": "Stdout", "level": "info", "enable": true, "ansi": false, "buffered": false, "multiline": false, "lossy": false, "events": {}, "eventsPolicy": "exclude"}}}
+      {"@type": "upsert", "object": "Domain", "matchOn": ["name"], "value": {"dom": {"name": "boilerplate.test"}}}
+      {"@type": "update", "object": "SystemSettings", "value": {"defaultHostname": "mail.boilerplate.test", "defaultDomainId": "#dom"}}
+      {"@type": "upsert", "object": "Account", "matchOn": ["name", "domainId"], "value": {"no-reply": {"@type": "User", "name": "no-reply", "domainId": "#dom", "credentials": {"0": {"@type": "Password", "secret": "${STALWART_SMTP_PASSWORD:-no-reply-password}"}}}}}
+      {"@type": "upsert", "object": "MtaRoute", "matchOn": ["name"], "value": {"mailpit": {"@type": "Relay", "name": "mailpit", "description": "Everything else, to Mailpit", "address": "mailpit", "port": 1025, "protocol": "smtp", "implicitTls": false, "allowInvalidCerts": true, "authSecret": {"@type": "None"}}}}
+      {"@type": "upsert", "object": "MtaRoute", "matchOn": ["name"], "value": {"refuse": {"@type": "Relay", "name": "refuse", "description": "bounce.test, refused by our own port 25", "address": "127.0.0.1", "port": 25, "protocol": "smtp", "implicitTls": false, "allowInvalidCerts": true, "authSecret": {"@type": "None"}}}}
+      {"@type": "update", "object": "MtaOutboundStrategy", "value": {"route": {"match": {"0": {"if": "is_local_domain(rcpt_domain)", "then": "'local'"}, "1": {"if": "rcpt_domain == 'bounce.test'", "then": "'refuse'"}}, "else": "'mailpit'"}}}
+      {"@type": "upsert", "object": "WebHook", "matchOn": ["url"], "value": {"feedback": {"url": "http://host.docker.internal:${WEBHOOKS_PORT:-3004}/webhooks/stalwart", "events": {"delivery.dsn-perm-fail": true, "delivery.dsn-temp-fail": true}, "eventsPolicy": "include", "signatureKey": {"@type": "EnvironmentVariable", "variableName": "STALWART_WEBHOOK_SECRET"}, "httpAuth": {"@type": "Unauthenticated"}, "httpHeaders": {}}}}
+      {"@type": "update", "object": "SpamPyzor", "value": {"enable": false}}
+      {"@type": "create", "object": "Action", "value": {"reload": {"@type": "ReloadSettings"}}}

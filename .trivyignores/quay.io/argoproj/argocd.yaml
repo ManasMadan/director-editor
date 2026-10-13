@@ -1,0 +1,186 @@
+# Reviewed exceptions for quay.io/argoproj/argocd (scripts/image-scan.ts): fixable vulnerabilities in
+# the image an add-on's pinned chart runs, scanned by its tag's digest, with no
+# rebuild of that image upstream that has the fix as of 2026-10-06. Each expires in
+# about a month; the scan then fails until the add-on moves to a fixed release
+# (Renovate proposes it) or the entry is reviewed again.
+vulnerabilities:
+  - id: CVE-2025-22874
+    statement: >-
+      stdlib v1.24.0 (fixed in 1.24.4): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2025-47913
+    statement: >-
+      golang.org/x/crypto v0.36.0 (fixed in 0.43.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2025-61726
+    statement: >-
+      stdlib v1.24.0 (fixed in 1.24.12); stdlib v1.25.3 (fixed in 1.24.12): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2025-61729
+    statement: >-
+      stdlib v1.24.0 (fixed in 1.24.11); stdlib v1.25.3 (fixed in 1.24.11): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2025-68121
+    statement: >-
+      stdlib v1.24.0 (fixed in 1.24.13); stdlib v1.25.3 (fixed in 1.24.13): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-25679
+    statement: >-
+      stdlib v1.24.0 (fixed in 1.25.8); stdlib v1.25.3 (fixed in 1.25.8): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-25681
+    statement: >-
+      golang.org/x/net v0.38.0 (fixed in 0.55.0); golang.org/x/net v0.40.0 (fixed in 0.55.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-27136
+    statement: >-
+      golang.org/x/net v0.38.0 (fixed in 0.55.0); golang.org/x/net v0.40.0 (fixed in 0.55.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-27145
+    statement: >-
+      stdlib v1.24.0 (fixed in 1.25.11); stdlib v1.25.3 (fixed in 1.25.11); stdlib v1.26.2 (fixed in 1.25.11): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-32280
+    statement: >-
+      stdlib v1.24.0 (fixed in 1.25.9); stdlib v1.25.3 (fixed in 1.25.9): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-32281
+    statement: >-
+      stdlib v1.24.0 (fixed in 1.25.9); stdlib v1.25.3 (fixed in 1.25.9): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-32283
+    statement: >-
+      stdlib v1.24.0 (fixed in 1.25.9); stdlib v1.25.3 (fixed in 1.25.9): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-33811
+    statement: >-
+      stdlib v1.24.0 (fixed in 1.25.10); stdlib v1.25.3 (fixed in 1.25.10); stdlib v1.26.2 (fixed in 1.25.10): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-33814
+    statement: >-
+      golang.org/x/net v0.38.0 (fixed in 0.53.0); golang.org/x/net v0.40.0 (fixed in 0.53.0); stdlib v1.24.0 (fixed in 1.25.10) and 2 more: no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-33818
+    statement: >-
+      stdlib v1.24.0 (fixed in 1.25.13); stdlib v1.25.3 (fixed in 1.25.13); stdlib v1.26.2 (fixed in 1.25.13) and 1 more: no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-39820
+    statement: >-
+      stdlib v1.24.0 (fixed in 1.25.10); stdlib v1.25.3 (fixed in 1.25.10); stdlib v1.26.2 (fixed in 1.25.10): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-39821
+    statement: >-
+      golang.org/x/net v0.38.0 (fixed in 0.55.0); golang.org/x/net v0.40.0 (fixed in 0.55.0); stdlib v1.24.0 (fixed in 1.25.13) and 3 more: no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-39822
+    statement: >-
+      stdlib v1.24.0 (fixed in 1.25.12); stdlib v1.25.3 (fixed in 1.25.12); stdlib v1.26.2 (fixed in 1.25.12) and 1 more: no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-39828
+    statement: >-
+      golang.org/x/crypto v0.36.0 (fixed in 0.52.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-39829
+    statement: >-
+      golang.org/x/crypto v0.36.0 (fixed in 0.52.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-39830
+    statement: >-
+      golang.org/x/crypto v0.36.0 (fixed in 0.52.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-39831
+    statement: >-
+      golang.org/x/crypto v0.36.0 (fixed in 0.52.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-39832
+    statement: >-
+      golang.org/x/crypto v0.36.0 (fixed in 0.52.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-39835
+    statement: >-
+      golang.org/x/crypto v0.36.0 (fixed in 0.52.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-39836
+    statement: >-
+      stdlib v1.24.0 (fixed in 1.25.10); stdlib v1.25.3 (fixed in 1.25.10); stdlib v1.26.2 (fixed in 1.25.10): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-42499
+    statement: >-
+      stdlib v1.24.0 (fixed in 1.25.10); stdlib v1.25.3 (fixed in 1.25.10); stdlib v1.26.2 (fixed in 1.25.10): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-42504
+    statement: >-
+      stdlib v1.24.0 (fixed in 1.25.11); stdlib v1.25.3 (fixed in 1.25.11); stdlib v1.26.2 (fixed in 1.25.11): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-42508
+    statement: >-
+      golang.org/x/crypto v0.36.0 (fixed in 0.52.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-46595
+    statement: >-
+      golang.org/x/crypto v0.36.0 (fixed in 0.52.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-46597
+    statement: >-
+      golang.org/x/crypto v0.36.0 (fixed in 0.52.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-46600
+    statement: >-
+      golang.org/x/net v0.38.0 (fixed in 0.56.0); golang.org/x/net v0.40.0 (fixed in 0.56.0); golang.org/x/net v0.55.0 (fixed in 0.56.0) and 2 more: no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-50163
+    statement: >-
+      oras.land/oras-go/v2 v2.6.1 (fixed in 2.6.2): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56852
+    statement: >-
+      golang.org/x/text v0.23.0 (fixed in 0.39.0); golang.org/x/text v0.28.0 (fixed in 0.39.0); golang.org/x/text v0.38.0 (fixed in 0.39.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56853
+    statement: >-
+      stdlib v1.24.0 (fixed in 1.25.13); stdlib v1.25.3 (fixed in 1.25.13); stdlib v1.26.2 (fixed in 1.25.13) and 1 more: no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56854
+    statement: >-
+      golang.org/x/crypto v0.36.0 (fixed in 0.55.0); golang.org/x/crypto v0.53.0 (fixed in 0.55.0): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56858
+    statement: >-
+      stdlib v1.24.0 (fixed in 1.25.13); stdlib v1.25.3 (fixed in 1.25.13); stdlib v1.26.2 (fixed in 1.25.13) and 1 more: no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56859
+    statement: >-
+      stdlib v1.24.0 (fixed in 1.25.13); stdlib v1.25.3 (fixed in 1.25.13); stdlib v1.26.2 (fixed in 1.25.13) and 1 more: no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56860
+    statement: >-
+      stdlib v1.24.0 (fixed in 1.25.13); stdlib v1.25.3 (fixed in 1.25.13); stdlib v1.26.2 (fixed in 1.25.13) and 1 more: no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-56862
+    statement: >-
+      stdlib v1.24.0 (fixed in 1.25.13); stdlib v1.25.3 (fixed in 1.25.13); stdlib v1.26.2 (fixed in 1.25.13) and 1 more: no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-71556
+    statement: >-
+      github.com/go-git/go-git/v5 v5.19.1 (fixed in 5.19.2): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-84304
+    statement: >-
+      google.golang.org/grpc v1.81.1 (fixed in 1.83.1): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-84445
+    statement: >-
+      google.golang.org/grpc v1.81.1 (fixed in 1.82.2): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-84782
+    statement: >-
+      libssl3t64 3.5.5-1ubuntu3.5 (fixed in 3.5.5-1ubuntu3.6); openssl 3.5.5-1ubuntu3.5 (fixed in 3.5.5-1ubuntu3.6); openssl-provider-legacy 3.5.5-1ubuntu3.5 (fixed in 3.5.5-1ubuntu3.6): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: CVE-2026-85731
+    statement: >-
+      oras.land/oras-go/v2 v2.6.1 (fixed in 2.6.2): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05
+  - id: GHSA-hrxh-6v49-42gf
+    statement: >-
+      google.golang.org/grpc v1.81.1 (fixed in 1.82.1): no upstream rebuild with the fixed package as of 2026-10-06
+    expired_at: 2026-11-05

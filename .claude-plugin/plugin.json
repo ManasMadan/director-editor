@@ -1,0 +1,141 @@
+{
+  "name": "boilerplate",
+  "description": "This template's Claude Code setup: its skills, reviewer and verifier agents, guard and check hooks, output style and Postgres MCP server.",
+  "author": {
+    "name": "Manas Madan"
+  },
+  "repository": "https://github.com/ManasMadan/boilerplate",
+  "license": "UNLICENSED",
+  "skills": ["./.claude/skills/"],
+  "agents": [
+    "./.claude/agents/ci-triager.md",
+    "./.claude/agents/docs-sync.md",
+    "./.claude/agents/frontend-reviewer.md",
+    "./.claude/agents/i18n-checker.md",
+    "./.claude/agents/migration-reviewer.md",
+    "./.claude/agents/python-reviewer.md",
+    "./.claude/agents/reviewer.md",
+    "./.claude/agents/security-reviewer.md",
+    "./.claude/agents/test-writer.md",
+    "./.claude/agents/verifier.md"
+  ],
+  "outputStyles": "./.claude/output-styles/",
+  "dependencies": [
+    "typescript-lsp@claude-plugins-official",
+    "pyright-lsp@claude-plugins-official",
+    "expo@claude-plugins-official",
+    "stripe@claude-plugins-official",
+    "redis-development@claude-plugins-official",
+    "terraform@claude-plugins-official",
+    "security-guidance@claude-plugins-official"
+  ],
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/.claude/hooks/session-start.ts\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/.claude/hooks/turn-start.ts\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v bun >/dev/null 2>&1 || { echo 'Bun is not on PATH, so this guard cannot run and the call is blocked. Install Bun (bun.sh) and restart Claude Code.' >&2; exit 2; }; bun \"${CLAUDE_PLUGIN_ROOT}/.claude/hooks/guard-files.ts\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v bun >/dev/null 2>&1 || { echo 'Bun is not on PATH, so this guard cannot run and the call is blocked. Install Bun (bun.sh) and restart Claude Code.' >&2; exit 2; }; bun \"${CLAUDE_PLUGIN_ROOT}/.claude/hooks/bash-guard.ts\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/.claude/hooks/format-file.ts\"",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/.claude/hooks/suppressions.ts\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/.claude/hooks/tool-failure.ts\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/.claude/hooks/subagent-stop.ts\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/.claude/hooks/verify-turn.ts\"",
+            "timeout": 90
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/.claude/hooks/session-end.ts\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

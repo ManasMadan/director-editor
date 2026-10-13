@@ -1,0 +1,328 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(bun run build)",
+      "Bash(bun run charts:check)",
+      "Bash(bun run check-types)",
+      "Bash(bun run codeql)",
+      "Bash(bun run db:deploy)",
+      "Bash(bun run db:lint)",
+      "Bash(bun run db:migrate)",
+      "Bash(bun run db:seed)",
+      "Bash(bun run db:studio)",
+      "Bash(bun run db:up)",
+      "Bash(bun run db:up:full)",
+      "Bash(bun run db:up:mail)",
+      "Bash(bun run db:down)",
+      "Bash(bun run db:restore-drill)",
+      "Bash(bun run dev)",
+      "Bash(bun run dev:full)",
+      "Bash(bun run doctor)",
+      "Bash(bun run env:set)",
+      "Bash(bun run env:unset)",
+      "Bash(bun run format)",
+      "Bash(bun run gen)",
+      "Bash(bun run gen:new)",
+      "Bash(bun run infra:check)",
+      "Bash(bun run jobs)",
+      "Bash(bun run k8s:smoke)",
+      "Bash(bun run k8s:up)",
+      "Bash(bun run lint)",
+      "Bash(bun run lint:actionlint)",
+      "Bash(bun run lint:boundaries)",
+      "Bash(bun run lint:hadolint)",
+      "Bash(bun run lint:markers)",
+      "Bash(bun run lint:patterns)",
+      "Bash(bun run lint:prisma)",
+      "Bash(bun run lint:renovate)",
+      "Bash(bun run lint:shellcheck)",
+      "Bash(bun run lint:suppressions)",
+      "Bash(bun run lint:tflint)",
+      "Bash(bun run lint:unused)",
+      "Bash(bun run lint:zizmor)",
+      "Bash(bun run rename)",
+      "Bash(bun run setup)",
+      "Bash(bun run stripe:fake)",
+      "Bash(bun run test)",
+      "Bash(bun run test:coverage)",
+      "Bash(bun run test:e2e)",
+      "Bash(bun run test:integration)",
+      "Bash(bun run test:integration:files)",
+      "Bash(bun run test:integration:files *)",
+      "Bash(bun run test:load)",
+      "Bash(bun run build *)",
+      "Bash(bun run charts:check *)",
+      "Bash(bun run check-types *)",
+      "Bash(bun run codeql *)",
+      "Bash(bun run db:deploy *)",
+      "Bash(bun run db:lint *)",
+      "Bash(bun run db:migrate *)",
+      "Bash(bun run db:seed *)",
+      "Bash(bun run db:studio *)",
+      "Bash(bun run db:up *)",
+      "Bash(bun run db:up:full *)",
+      "Bash(bun run db:up:mail *)",
+      "Bash(bun run db:down *)",
+      "Bash(bun run db:restore-drill *)",
+      "Bash(bun run dev *)",
+      "Bash(bun run dev:full *)",
+      "Bash(bun run doctor *)",
+      "Bash(bun run env:set *)",
+      "Bash(bun run env:unset *)",
+      "Bash(bun run format *)",
+      "Bash(bun run gen *)",
+      "Bash(bun run gen:new *)",
+      "Bash(bun run infra:check *)",
+      "Bash(bun run jobs *)",
+      "Bash(bun run k8s:smoke *)",
+      "Bash(bun run k8s:up *)",
+      "Bash(bun run lint *)",
+      "Bash(bun run lint:actionlint *)",
+      "Bash(bun run lint:boundaries *)",
+      "Bash(bun run lint:hadolint *)",
+      "Bash(bun run lint:markers *)",
+      "Bash(bun run lint:patterns *)",
+      "Bash(bun run lint:prisma *)",
+      "Bash(bun run lint:renovate *)",
+      "Bash(bun run lint:shellcheck *)",
+      "Bash(bun run lint:suppressions *)",
+      "Bash(bun run lint:tflint *)",
+      "Bash(bun run lint:unused *)",
+      "Bash(bun run lint:zizmor *)",
+      "Bash(bun run rename *)",
+      "Bash(bun run setup *)",
+      "Bash(bun run stripe:fake *)",
+      "Bash(bun run test *)",
+      "Bash(bun run test:coverage *)",
+      "Bash(bun run test:e2e *)",
+      "Bash(bun run test:integration *)",
+      "Bash(bun run test:load *)",
+      "Bash(bun run --filter *)",
+      "Bash(bun run --cwd *)",
+      "Bash(bun test*)",
+      "Bash(bun install*)",
+      "Bash(bun remove *)",
+      "Bash(bunx biome *)",
+      "Bash(bunx turbo *)",
+      "Bash(bunx tsc *)",
+      "Bash(bunx vitest *)",
+      "Bash(bunx playwright *)",
+      "Bash(playwright-cli *)",
+      "Bash(npx playwright trace *)",
+      "Bash(bunx prisma *)",
+      "Bash(bunx depcruise *)",
+      "Bash(bunx knip*)",
+      "Bash(bun scripts/*)",
+      "Bash(uv run ruff *)",
+      "Bash(uv run basedpyright*)",
+      "Bash(uv run pytest*)",
+      "Bash(uv run python -m evals*)",
+      "Bash(uv sync*)",
+      "Bash(docker compose ps*)",
+      "Bash(docker compose logs*)",
+      "Bash(docker compose up*)",
+      "Bash(wt list*)",
+      "Bash(wt switch*)",
+      "Bash(wt step diff*)",
+      "Bash(wt step copy-ignored*)",
+      "Bash(wt --version)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git branch*)",
+      "Bash(gh pr view*)",
+      "Bash(gh pr checks*)",
+      "Bash(gh run view*)",
+      "Bash(gh run list*)"
+    ],
+    "ask": [
+      "Bash(git push*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean*)",
+      "Bash(docker compose down*)",
+      "Bash(bun run db:reset*)",
+      "Bash(bunx prisma migrate reset*)",
+      "Bash(gh pr merge*)",
+      "Bash(gh workflow run*)",
+      "Bash(kubectl *)",
+      "Bash(helm *)",
+      "Bash(tofu apply*)",
+      "Bash(bun run docker:clean*)",
+      "Bash(bun run promote*)",
+      "Bash(bun run k8s:down*)",
+      "Bash(bun run secrets:reencrypt*)",
+      "Bash(bun add *)",
+      "Bash(uv add *)",
+      "Bash(git commit*)",
+      "Bash(gh pr create*)",
+      "Bash(gh api *)",
+      "Bash(gh release *)",
+      "Bash(tofu destroy*)"
+    ],
+    "deny": [
+      "Read(./**/.env)",
+      "Read(./**/.env.local)",
+      "Read(./**/.env.*.local)",
+      "Read(./**/.env.development)",
+      "Read(./**/.env.production)",
+      "Read(./**/.env.staging)",
+      "Read(./**/.env.test)",
+      "Read(./**/*.pem)",
+      "Read(./**/*.key)",
+      "Read(./**/*.agekey)",
+      "Read(./**/*.tfvars)",
+      "Read(./**/*.tfstate*)",
+      "Read(./load/.sessions.json)",
+      "Read(~/.config/sops/**)",
+      "Bash(cat .env*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(sops -d*)",
+      "Bash(sops decrypt*)"
+    ]
+  },
+  "env": {
+    "MCP_TIMEOUT": "10000",
+    "BASH_DEFAULT_TIMEOUT_MS": "300000",
+    "BASH_MAX_TIMEOUT_MS": "1200000"
+  },
+  "outputStyle": "Engineering",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.ts\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/turn-start.ts\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v bun >/dev/null 2>&1 || { echo 'Bun is not on PATH, so this guard cannot run and the call is blocked. Install Bun (bun.sh) and restart Claude Code.' >&2; exit 2; }; bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-files.ts\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v bun >/dev/null 2>&1 || { echo 'Bun is not on PATH, so this guard cannot run and the call is blocked. Install Bun (bun.sh) and restart Claude Code.' >&2; exit 2; }; bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/bash-guard.ts\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/format-file.ts\"",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/suppressions.ts\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/tool-failure.ts\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/subagent-stop.ts\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/verify-turn.ts\"",
+            "timeout": 90
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-end.ts\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "cleanupPeriodDays": 30,
+  "statusLine": {
+    "type": "command",
+    "command": "bun \"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/hooks/statusline.ts\""
+  },
+  "extraKnownMarketplaces": {
+    "worktrunk": {
+      "source": {
+        "source": "github",
+        "repo": "max-sixty/worktrunk"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "worktrunk@worktrunk": true,
+    "typescript-lsp@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "expo@claude-plugins-official": true,
+    "stripe@claude-plugins-official": true,
+    "redis-development@claude-plugins-official": true,
+    "terraform@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true
+  }
+}

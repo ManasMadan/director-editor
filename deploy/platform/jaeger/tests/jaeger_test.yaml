@@ -1,0 +1,24 @@
+suite: jaeger
+templates: [jaeger.yaml]
+release: { name: jaeger, namespace: observability }
+tests:
+  - it: receives OTLP over HTTP and gRPC and keeps traces in memory
+    documentSelector: { path: kind, value: ConfigMap }
+    asserts:
+      - matchRegex: { path: 'data["config.yaml"]', pattern: 'endpoint: 0\.0\.0\.0:4318' }
+      - matchRegex: { path: 'data["config.yaml"]', pattern: 'max_traces: 20000' }
+      - matchRegex: { path: 'data["config.yaml"]', pattern: 'trace_storage: memory' }
+
+  - it: serves OTLP at the address the stack chart points services to
+    documentSelector: { path: kind, value: Service }
+    asserts:
+      - equal: { path: metadata.name, value: jaeger }
+      - contains: { path: spec.ports, content: { name: otlp-http, port: 4318, targetPort: otlp-http } }
+
+  - it: runs one locked-down replica with the configuration
+    documentSelector: { path: kind, value: Deployment }
+    asserts:
+      - equal: { path: spec.replicas, value: 1 }
+      - equal: { path: "spec.template.spec.containers[0].args", value: [--config, /etc/jaeger/config.yaml] }
+      - equal: { path: "spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem", value: true }
+      - equal: { path: spec.template.spec.securityContext.runAsNonRoot, value: true }
