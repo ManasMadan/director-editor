@@ -103,4 +103,14 @@ describe("the edit", () => {
     // Not filmed yet: the script runs from the shot's start.
     expect(editLines(clipsOf(shots, new Map()))[0]).toMatchObject({ text: "Cut", startSeconds: 0 });
   });
+
+  it("plays from the take's start when its pick is gone by the time it's read", () => {
+    const fading = take(0);
+    for (const key of ["bestStartMs", "bestEndMs"] as const) {
+      let reads = 0;
+      Object.defineProperty(fading, key, { get: () => (reads++ === 0 ? 1000 : null) });
+    }
+    const [clip] = clipsOf(shots, new Map([[0, fading]]));
+    expect(clip).toMatchObject({ from: 0, to: 0, seconds: 0 });
+  });
 });

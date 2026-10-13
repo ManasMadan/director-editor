@@ -29,4 +29,13 @@ describe("the timeline", () => {
     expect(peaks(new Float32Array(8), 4, 0, 2, 2)).toEqual([0, 0]);
     expect(peaks(samples, 4, 0, 2, 0)).toEqual([]);
   });
+
+  it("reads a sample the buffer doesn't hold as silence", () => {
+    // A buffer that claims more samples than it has.
+    const short = new Float32Array([0.5, -1]);
+    const claimed = new Proxy(short, {
+      get: (target, key) => (key === "length" ? 4 : Reflect.get(target, key)),
+    });
+    expect(peaks(claimed, 4, 0, 1, 2)).toEqual([1, 0]);
+  });
 });

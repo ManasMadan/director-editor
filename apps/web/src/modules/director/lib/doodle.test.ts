@@ -86,6 +86,7 @@ describe("doodles", () => {
       true,
     );
     expect(framingArrows("step-left", box)[0]?.to.x).toBeLessThan(0.5);
+    expect(framingArrows("step-right", box)[0]?.to.x).toBeGreaterThan(0.5);
     expect(framingArrows("aim-right", box)[0]?.to.x).toBeGreaterThan(0.5);
     expect(framingArrows("in-frame", box)).toEqual([]);
     expect(framingArrows(null, box)).toEqual([]);
@@ -105,5 +106,8 @@ describe("doodles", () => {
     expect(moved.from.x).toBeGreaterThan(0.2);
     expect(moved.from.y).toBe(0.5);
     expect(bob(arrow, -Math.PI / 10).from.x).toBeCloseTo(0.2);
+    // An arrow with no length has no way to go: it stays put.
+    const dot = { from: { x: 0.3, y: 0.3 }, to: { x: 0.3, y: 0.3 }, bend: 0 };
+    expect(bob(dot, 1)).toEqual(dot);
   });
 });
