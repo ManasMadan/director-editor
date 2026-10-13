@@ -74,6 +74,7 @@ lets it in (`deploy/charts/data/templates/valkey.yaml`).
 | `webhook-deliveries` | `deliver`, `redeliver`, `send-test` | webhooks (fan-out, retries), api (replay and test from settings) | webhooks |
 | `files` | `process` | api (upload completed) | worker |
 | `ai-ingest` | `ingest`, `summarize` | ai (FastAPI and its worker) | ai worker (Python) |
+| `ai-director` | `plan`, `review-take` | ai (FastAPI and its worker) | ai worker (Python) |
 | `maintenance` | `outbox-retention`, `audit-partitions`, `session-retention`, `files-cleanup` | worker (job schedulers) | worker |
 
 Scheduled work uses BullMQ job schedulers upserted at boot (`maintenance.processor.ts`,

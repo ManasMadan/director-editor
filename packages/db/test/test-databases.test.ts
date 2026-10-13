@@ -21,7 +21,11 @@ afterAll(async () => {
   await client.end();
 });
 
-describe("abandoned test databases", () => {
+// These tests clone the template themselves, and a clone waits while another run prepares
+// it (a minute on a busy runner, as the hooks allow): longer than the default for a test.
+const CLONES = { timeout: 120_000 };
+
+describe("abandoned test databases", CLONES, () => {
   it("tell a process that's gone from one that runs, as this user or another", () => {
     expect(isRunning(process.pid)).toBe(true);
     // The pid of a process that has exited.
@@ -50,7 +54,7 @@ describe("abandoned test databases", () => {
   });
 });
 
-describe("dropping a test database", () => {
+describe("dropping a test database", CLONES, () => {
   it("waits for a service's connection that's closing", async () => {
     const testDb = await createTestDatabase();
     const service = new pg.Client({ connectionString: testDb.urlFor("app_api") });

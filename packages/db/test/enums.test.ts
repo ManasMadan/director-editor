@@ -4,7 +4,13 @@
  * allows fails on the other: an insert the contract accepts is refused, or a row the
  * database holds can't be read back.
  */
-import { aiDocumentSchema, fileSchema } from "@repo/contracts/api";
+import {
+  aiDocumentSchema,
+  directorPlanSchema,
+  directorTakeSchema,
+  fileSchema,
+  shortReactionKinds,
+} from "@repo/contracts/api";
 import { pushPlatforms } from "@repo/contracts/notifications";
 import pg from "pg";
 import { afterAll, beforeAll, expect, it } from "vitest";
@@ -14,6 +20,10 @@ const expected: Record<string, readonly string[]> = {
   "notifications.device.device_platform_check": pushPlatforms,
   "files.file.file_status_check": fileSchema.shape.status.options,
   "ai.document.document_status_check": aiDocumentSchema.shape.status.options,
+  "ai.director_plan.director_plan_status_check": directorPlanSchema.shape.status.options,
+  "ai.director_take.director_take_status_check": directorTakeSchema.shape.status.options,
+  "ai.director_take.director_take_kind_check": directorTakeSchema.shape.kind.options,
+  "app.short_reaction.short_reaction_kind_check": shortReactionKinds,
 };
 
 let testDb: TestDatabase;

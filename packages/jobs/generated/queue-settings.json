@@ -15,5 +15,22 @@
         "age": 604800
       }
     }
+  },
+  "ai-director": {
+    "prefix": "{ai-director}",
+    "options": {
+      "attempts": 3,
+      "backoff": {
+        "type": "exponential",
+        "delay": 5000,
+        "jitter": 0.5
+      },
+      "removeOnComplete": {
+        "age": 86400
+      },
+      "removeOnFail": {
+        "age": 604800
+      }
+    }
   }
 }

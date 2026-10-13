@@ -53,6 +53,329 @@
         "title": "AssistantRequest",
         "type": "object"
       },
+      "Box": {
+        "properties": {
+          "height": {
+            "maximum": 1.0,
+            "minimum": 0.01,
+            "title": "Height",
+            "type": "number"
+          },
+          "width": {
+            "maximum": 1.0,
+            "minimum": 0.01,
+            "title": "Width",
+            "type": "number"
+          },
+          "x": {
+            "description": "Left edge, as a fraction of the frame's width.",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "description": "Top edge, as a fraction of the frame's height.",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
+        "title": "Box",
+        "type": "object"
+      },
+      "CameraMove": {
+        "enum": [
+          "static",
+          "up",
+          "down",
+          "left",
+          "right",
+          "forward",
+          "back",
+          "orbit",
+          "tilt-up",
+          "tilt-down"
+        ],
+        "type": "string"
+      },
+      "Direction": {
+        "enum": [
+          "none",
+          "left",
+          "right",
+          "forward",
+          "back",
+          "turn-left",
+          "turn-right"
+        ],
+        "type": "string"
+      },
+      "DirectorPlanCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "videoId": {
+            "pattern": "^[A-Za-z0-9_-]{11}$",
+            "title": "Videoid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "videoId"
+        ],
+        "title": "DirectorPlanCreate",
+        "type": "object"
+      },
+      "DirectorPlanOut": {
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShotPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "analyzing",
+              "ready",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "title": "Updatedat",
+            "type": "string"
+          },
+          "videoId": {
+            "title": "Videoid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "videoId",
+          "status",
+          "error",
+          "plan",
+          "model",
+          "createdAt",
+          "updatedAt"
+        ],
+        "title": "DirectorPlanOut",
+        "type": "object"
+      },
+      "DirectorTakeCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "contentType": {
+            "enum": [
+              "video/webm",
+              "video/mp4",
+              "image/jpeg"
+            ],
+            "title": "Contenttype",
+            "type": "string"
+          },
+          "fileId": {
+            "format": "uuid",
+            "title": "Fileid",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "video",
+              "photo"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "shotIndex": {
+            "exclusiveMaximum": 12.0,
+            "minimum": 0.0,
+            "title": "Shotindex",
+            "type": "integer"
+          },
+          "sourceUrl": {
+            "description": "A presigned read of the take's file, for the review.",
+            "maxLength": 4000,
+            "pattern": "^https?://",
+            "title": "Sourceurl",
+            "type": "string"
+          },
+          "videoId": {
+            "pattern": "^[A-Za-z0-9_-]{11}$",
+            "title": "Videoid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "videoId",
+          "shotIndex",
+          "fileId",
+          "kind",
+          "contentType",
+          "sourceUrl"
+        ],
+        "title": "DirectorTakeCreate",
+        "type": "object"
+      },
+      "DirectorTakeOut": {
+        "properties": {
+          "bestEndMs": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bestendms"
+          },
+          "bestStartMs": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beststartms"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "feedback": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedback"
+          },
+          "fileId": {
+            "format": "uuid",
+            "title": "Fileid",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "video",
+              "photo"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "shotIndex": {
+            "title": "Shotindex",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "reviewing",
+              "ready",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "shotIndex",
+          "fileId",
+          "kind",
+          "status",
+          "error",
+          "bestStartMs",
+          "bestEndMs",
+          "score",
+          "feedback",
+          "createdAt"
+        ],
+        "title": "DirectorTakeOut",
+        "type": "object"
+      },
       "DocumentCreate": {
         "additionalProperties": false,
         "properties": {
@@ -224,6 +547,15 @@
           "DOCUMENT_INDEXING_FAILED",
           "AI_BUDGET_EXCEEDED",
           "AI_RUN_LIMIT",
+          "SHORT_NOT_FOUND",
+          "SHORT_TOO_LONG",
+          "DIRECTOR_PLAN_NOT_FOUND",
+          "DIRECTOR_PLAN_NOT_READY",
+          "DIRECTOR_SHOT_NOT_FOUND",
+          "DIRECTOR_TAKE_KIND_MISMATCH",
+          "DIRECTOR_VIDEO_UNREADABLE",
+          "DIRECTOR_ANALYSIS_FAILED",
+          "DIRECTOR_REVIEW_FAILED",
           "TODO_NOT_FOUND",
           "TODO_VERSION_CONFLICT"
         ],
@@ -363,6 +695,38 @@
         "title": "ErrorResponse",
         "type": "object"
       },
+      "Framing": {
+        "properties": {
+          "note": {
+            "description": "How to frame it, in a phrase.",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Note",
+            "type": "string"
+          },
+          "shotSize": {
+            "enum": [
+              "close-up",
+              "medium",
+              "full-body",
+              "wide"
+            ],
+            "title": "Shotsize",
+            "type": "string"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/Box",
+            "description": "Where the person (or the object filmed) sits in frame."
+          }
+        },
+        "required": [
+          "shotSize",
+          "subject",
+          "note"
+        ],
+        "title": "Framing",
+        "type": "object"
+      },
       "HealthResponse": {
         "properties": {
           "status": {
@@ -375,6 +739,238 @@
           "status"
         ],
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "Keypoint": {
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/KeypointName"
+          },
+          "x": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "x",
+          "y"
+        ],
+        "title": "Keypoint",
+        "type": "object"
+      },
+      "KeypointName": {
+        "enum": [
+          "nose",
+          "left_shoulder",
+          "right_shoulder",
+          "left_elbow",
+          "right_elbow",
+          "left_wrist",
+          "right_wrist",
+          "left_hip",
+          "right_hip",
+          "left_knee",
+          "right_knee",
+          "left_ankle",
+          "right_ankle"
+        ],
+        "type": "string"
+      },
+      "PhoneAngle": {
+        "properties": {
+          "height": {
+            "enum": [
+              "floor",
+              "waist",
+              "chest",
+              "shoulder",
+              "eye",
+              "overhead"
+            ],
+            "title": "Height",
+            "type": "string"
+          },
+          "pitch": {
+            "description": "Degrees the camera points above (+) or below (-) the horizon.",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Pitch",
+            "type": "number"
+          },
+          "roll": {
+            "description": "Degrees the phone leans clockwise (+) from upright.",
+            "maximum": 45.0,
+            "minimum": -45.0,
+            "title": "Roll",
+            "type": "number"
+          },
+          "tolerance": {
+            "description": "Degrees either way that still look right.",
+            "maximum": 30.0,
+            "minimum": 3.0,
+            "title": "Tolerance",
+            "type": "number"
+          }
+        },
+        "required": [
+          "pitch",
+          "roll",
+          "tolerance",
+          "height"
+        ],
+        "title": "PhoneAngle",
+        "type": "object"
+      },
+      "SceneCheck": {
+        "properties": {
+          "direction": {
+            "$ref": "#/components/schemas/Direction"
+          },
+          "distanceMeters": {
+            "anyOf": [
+              {
+                "maximum": 50.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distancemeters"
+          },
+          "inPlace": {
+            "description": "The frame already looks like the shot's scene.",
+            "title": "Inplace",
+            "type": "boolean"
+          },
+          "instruction": {
+            "description": "One short spoken direction: \"Move about five meters left, to the tree.\"",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Instruction",
+            "type": "string"
+          },
+          "landmark": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SceneLandmark"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the scene's landmark is in this frame, when it is in it."
+          },
+          "lighting": {
+            "enum": [
+              "good",
+              "too-dark",
+              "too-bright",
+              "backlit"
+            ],
+            "title": "Lighting",
+            "type": "string"
+          }
+        },
+        "required": [
+          "inPlace",
+          "instruction",
+          "direction",
+          "distanceMeters",
+          "landmark",
+          "lighting"
+        ],
+        "title": "SceneCheck",
+        "type": "object"
+      },
+      "SceneCheckRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "image": {
+            "description": "A JPEG camera frame, base64.",
+            "maxLength": 400000,
+            "minLength": 100,
+            "title": "Image",
+            "type": "string"
+          },
+          "shotIndex": {
+            "exclusiveMaximum": 12.0,
+            "minimum": 0.0,
+            "title": "Shotindex",
+            "type": "integer"
+          },
+          "videoId": {
+            "pattern": "^[A-Za-z0-9_-]{11}$",
+            "title": "Videoid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "videoId",
+          "shotIndex",
+          "image"
+        ],
+        "title": "SceneCheckRequest",
+        "type": "object"
+      },
+      "SceneLandmark": {
+        "properties": {
+          "box": {
+            "$ref": "#/components/schemas/Box"
+          },
+          "label": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "box"
+        ],
+        "title": "SceneLandmark",
+        "type": "object"
+      },
+      "ScriptLine": {
+        "properties": {
+          "endSeconds": {
+            "maximum": 60.0,
+            "minimum": 0.1,
+            "title": "Endseconds",
+            "type": "number"
+          },
+          "startSeconds": {
+            "description": "From the shot's start.",
+            "maximum": 60.0,
+            "minimum": 0.0,
+            "title": "Startseconds",
+            "type": "number"
+          },
+          "text": {
+            "description": "What to say, word for word.",
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "startSeconds",
+          "endSeconds",
+          "text"
+        ],
+        "title": "ScriptLine",
         "type": "object"
       },
       "SentimentRequest": {
@@ -426,6 +1022,209 @@
         "title": "SentimentResponse",
         "type": "object"
       },
+      "Shot": {
+        "properties": {
+          "camera": {
+            "enum": [
+              "front",
+              "back"
+            ],
+            "title": "Camera",
+            "type": "string"
+          },
+          "durationSeconds": {
+            "description": "How long it lasts in the edit (a photo: how long it is shown).",
+            "maximum": 60.0,
+            "minimum": 0.5,
+            "title": "Durationseconds",
+            "type": "number"
+          },
+          "framing": {
+            "$ref": "#/components/schemas/Framing"
+          },
+          "kind": {
+            "enum": [
+              "video",
+              "photo"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "phoneAngle": {
+            "$ref": "#/components/schemas/PhoneAngle"
+          },
+          "pose": {
+            "$ref": "#/components/schemas/TargetPose"
+          },
+          "purpose": {
+            "description": "What it shows, and why.",
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Purpose",
+            "type": "string"
+          },
+          "scene": {
+            "description": "Where to be: \"Stand near a tree\".",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Scene",
+            "type": "string"
+          },
+          "sceneLandmark": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The one thing the scene needs, to look for in the camera.",
+            "title": "Scenelandmark"
+          },
+          "script": {
+            "description": "Empty when nothing is said.",
+            "items": {
+              "$ref": "#/components/schemas/ScriptLine"
+            },
+            "maxItems": 20,
+            "title": "Script",
+            "type": "array"
+          },
+          "sourceEndSeconds": {
+            "maximum": 180.0,
+            "minimum": 0.1,
+            "title": "Sourceendseconds",
+            "type": "number"
+          },
+          "sourceStartSeconds": {
+            "maximum": 180.0,
+            "minimum": 0.0,
+            "title": "Sourcestartseconds",
+            "type": "number"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/ShotStep"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Steps",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "purpose",
+          "sourceStartSeconds",
+          "sourceEndSeconds",
+          "durationSeconds",
+          "camera",
+          "scene",
+          "sceneLandmark",
+          "framing",
+          "phoneAngle",
+          "pose",
+          "steps",
+          "script"
+        ],
+        "title": "Shot",
+        "type": "object"
+      },
+      "ShotPlan": {
+        "properties": {
+          "audio": {
+            "enum": [
+              "speech",
+              "music",
+              "speech-and-music",
+              "none"
+            ],
+            "title": "Audio",
+            "type": "string"
+          },
+          "durationSeconds": {
+            "maximum": 180.0,
+            "minimum": 0.5,
+            "title": "Durationseconds",
+            "type": "number"
+          },
+          "format": {
+            "description": "The trend, e.g. \"GRWM\".",
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Format",
+            "type": "string"
+          },
+          "shots": {
+            "items": {
+              "$ref": "#/components/schemas/Shot"
+            },
+            "maxItems": 12,
+            "minItems": 1,
+            "title": "Shots",
+            "type": "array"
+          },
+          "summary": {
+            "maxLength": 400,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "format",
+          "summary",
+          "audio",
+          "durationSeconds",
+          "shots"
+        ],
+        "title": "ShotPlan",
+        "type": "object"
+      },
+      "ShotStep": {
+        "properties": {
+          "atSeconds": {
+            "description": "From the shot's start.",
+            "maximum": 60.0,
+            "minimum": 0.0,
+            "title": "Atseconds",
+            "type": "number"
+          },
+          "cameraMove": {
+            "$ref": "#/components/schemas/CameraMove"
+          },
+          "instruction": {
+            "description": "One imperative sentence, read out loud.",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Instruction",
+            "type": "string"
+          }
+        },
+        "required": [
+          "atSeconds",
+          "instruction",
+          "cameraMove"
+        ],
+        "title": "ShotStep",
+        "type": "object"
+      },
       "Source": {
         "properties": {
           "documentId": {
@@ -465,6 +1264,31 @@
           "sources"
         ],
         "title": "SourcesEvent",
+        "type": "object"
+      },
+      "TargetPose": {
+        "properties": {
+          "description": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "keypoints": {
+            "description": "The person's joints at the shot's key moment; empty when no one is in it.",
+            "items": {
+              "$ref": "#/components/schemas/Keypoint"
+            },
+            "maxItems": 13,
+            "title": "Keypoints",
+            "type": "array"
+          }
+        },
+        "required": [
+          "description",
+          "keypoints"
+        ],
+        "title": "TargetPose",
         "type": "object"
       },
       "TextEvent": {
@@ -669,6 +1493,374 @@
           }
         },
         "summary": "Answer"
+      }
+    },
+    "/v1/director/plans": {
+      "post": {
+        "description": "The workspace's plan for a short; asking queues its analysis when there is none.",
+        "operationId": "requestDirectorPlan",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectorPlanCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectorPlanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Request Director Plan"
+      }
+    },
+    "/v1/director/plans/{video_id}": {
+      "get": {
+        "operationId": "getDirectorPlan",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "video_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{11}$",
+              "title": "Video Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectorPlanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Get Director Plan"
+      }
+    },
+    "/v1/director/plans/{video_id}/takes": {
+      "get": {
+        "description": "The caller's takes for the short's plan, newest first.",
+        "operationId": "listDirectorTakes",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "video_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{11}$",
+              "title": "Video Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DirectorTakeOut"
+                  },
+                  "title": "Response Listdirectortakes",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "List Director Takes"
+      }
+    },
+    "/v1/director/scene-checks": {
+      "post": {
+        "description": "Where to go for a shot, judged from one camera frame.",
+        "operationId": "checkDirectorScene",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SceneCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneCheck"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Check Director Scene"
+      }
+    },
+    "/v1/director/takes": {
+      "post": {
+        "description": "Records a take and queues its review.",
+        "operationId": "createDirectorTake",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectorTakeCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectorTakeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Create Director Take"
       }
     },
     "/v1/documents": {

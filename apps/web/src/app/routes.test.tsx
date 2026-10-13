@@ -17,6 +17,7 @@ import {
 } from "@/modules/auth";
 import { BillingPage } from "@/modules/billing";
 import { DashboardPage } from "@/modules/dashboard";
+import { DirectorPage, ReviewPage, ShootPage } from "@/modules/director";
 import { InvitationPage } from "@/modules/invitations";
 import {
   NotificationSettingsPage,
@@ -25,6 +26,7 @@ import {
 } from "@/modules/notifications";
 import { OAuthConsentPage } from "@/modules/oauth";
 import { ProfileSettingsPage, SecuritySettingsPage, SettingsLayout } from "@/modules/settings";
+import { HomePage, SavedPage, ShortsPlayerPage } from "@/modules/shorts";
 import {
   WebhookEndpointPage,
   WorkspaceApiKeysPage,
@@ -36,9 +38,14 @@ import {
 import { renderHtml } from "../../test/next-server";
 import * as assistant from "./(app)/assistant/page";
 import * as dashboard from "./(app)/dashboard/page";
+import * as director from "./(app)/director/[videoId]/page";
+import * as review from "./(app)/director/[videoId]/review/page";
+import * as shoot from "./(app)/director/[videoId]/shoot/page";
+import * as home from "./(app)/home/page";
 import * as invitation from "./(app)/invitations/[id]/page";
 import * as notifications from "./(app)/notifications/page";
 import * as consent from "./(app)/oauth/consent/page";
+import * as saved from "./(app)/saved/page";
 import * as apiKeys from "./(app)/settings/api-keys/page";
 import * as audit from "./(app)/settings/audit/page";
 import * as billing from "./(app)/settings/billing/page";
@@ -50,6 +57,8 @@ import * as security from "./(app)/settings/security/page";
 import * as webhookEndpoint from "./(app)/settings/webhooks/[id]/page";
 import * as webhooks from "./(app)/settings/webhooks/page";
 import * as general from "./(app)/settings/workspace/page";
+import * as short from "./(app)/shorts/[videoId]/page";
+import * as shorts from "./(app)/shorts/page";
 import * as forgotPassword from "./(auth)/forgot-password/page";
 import AuthLayout from "./(auth)/layout";
 import * as resetPassword from "./(auth)/reset-password/page";
@@ -70,7 +79,9 @@ interface Route {
 const pages: [string, Route, string, unknown][] = [
   ["/assistant", assistant, en.assistant.title, AssistantPage],
   ["/dashboard", dashboard, en.common.dashboard, DashboardPage],
+  ["/home", home, en.shorts.homeTitle, HomePage],
   ["/notifications", notifications, en.notificationCenter.title, NotificationsPage],
+  ["/saved", saved, en.shorts.savedTitle, SavedPage],
   ["/settings/api-keys", apiKeys, en.workspace.apiKeys.title, WorkspaceApiKeysPage],
   ["/settings/audit", audit, en.workspace.audit.title, WorkspaceAuditPage],
   ["/settings/billing", billing, en.billing.title, BillingPage],
@@ -118,6 +129,43 @@ describe("route files", () => {
     expect(await webhookEndpoint.generateMetadata()).toEqual({
       title: en.workspace.webhooks.title,
     });
+  });
+
+  it("plays the Shorts feed, from the short in the address when there is one", async () => {
+    expect(await rendered(shorts.default)).toEqual(<ShortsPlayerPage />);
+    expect(
+      await rendered(short.default, { params: Promise.resolve({ videoId: "kJQP7kiw5Fk" }) }),
+    ).toEqual(<ShortsPlayerPage videoId="kJQP7kiw5Fk" />);
+    expect(await shorts.generateMetadata()).toEqual({ title: en.shorts.title });
+    expect(await short.generateMetadata()).toEqual({ title: en.shorts.title });
+  });
+
+  it("serves Director's pages for a short, with the shot and audio from the query", async () => {
+    const params = Promise.resolve({ videoId: "dQw4w9WgXcQ" });
+    expect(await rendered(director.default, { params })).toEqual(
+      <DirectorPage videoId="dQw4w9WgXcQ" />,
+    );
+    expect(
+      await rendered(shoot.default, {
+        params,
+        searchParams: Promise.resolve({ shot: ["2", "5"], audio: "voice" }),
+      }),
+    ).toEqual(<ShootPage videoId="dQw4w9WgXcQ" shot="2" audio="voice" />);
+    expect(await rendered(shoot.default, { params, searchParams: Promise.resolve({}) })).toEqual(
+      <ShootPage videoId="dQw4w9WgXcQ" shot={undefined} audio={undefined} />,
+    );
+    expect(
+      await rendered(review.default, {
+        params,
+        searchParams: Promise.resolve({ audio: ["original", "voice"] }),
+      }),
+    ).toEqual(<ReviewPage videoId="dQw4w9WgXcQ" audio="original" />);
+    expect(
+      await rendered(review.default, { params, searchParams: Promise.resolve({ audio: "voice" }) }),
+    ).toEqual(<ReviewPage videoId="dQw4w9WgXcQ" audio="voice" />);
+    expect(await director.generateMetadata()).toEqual({ title: en.director.title });
+    expect(await shoot.generateMetadata()).toEqual({ title: en.director.title });
+    expect(await review.generateMetadata()).toEqual({ title: en.director.review.title });
   });
 
   it("renders pages that read the query string inside a Suspense boundary", async () => {

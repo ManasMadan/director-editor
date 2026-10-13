@@ -444,7 +444,7 @@ export const STEPS: Step[] = [
     jobs: ["security.yml:images"],
     areas: [],
     memory: 0.5,
-    run: (ctx) => passes(ctx, "bun", ["scripts/image-scan.ts"]),
+    run: (ctx) => passes(ctx, "bun", ["scripts/image-scan.ts", `--since=${ctx.base}`]),
   },
   {
     name: "migration safety",

@@ -1,0 +1,27 @@
+{
+  "name": "@repo/fake-google",
+  "private": true,
+  "type": "module",
+  "description": "A local stand-in for the Gemini API and YouTube Data API v3 that Director uses, for tests, offline development and demos.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "bun --env-file=../../.env src/main.ts",
+    "start": "bun --env-file=../../.env src/main.ts",
+    "check-types": "tsc",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@repo/ai-client": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

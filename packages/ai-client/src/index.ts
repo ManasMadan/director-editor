@@ -15,8 +15,24 @@ import { EventSourceParserStream } from "eventsource-parser/stream";
 import { SignJWT } from "jose";
 import type * as z from "zod";
 import { createClient } from "./generated/client";
-import { createDocument, deleteDocument, listDocuments, sentiment } from "./generated/sdk.gen";
-import type { AnswerData, ErrorCode, ErrorIssue } from "./generated/types.gen";
+import {
+  checkDirectorScene,
+  createDirectorTake,
+  createDocument,
+  deleteDocument,
+  getDirectorPlan,
+  listDirectorTakes,
+  listDocuments,
+  requestDirectorPlan,
+  sentiment,
+} from "./generated/sdk.gen";
+import type {
+  AnswerData,
+  DirectorTakeCreate,
+  ErrorCode,
+  ErrorIssue,
+  SceneCheckRequest,
+} from "./generated/types.gen";
 import { zAssistantEvent, zErrorResponse } from "./generated/zod.gen";
 
 export type AssistantEvent = z.infer<typeof zAssistantEvent>["event"];
@@ -92,6 +108,31 @@ async function unwrap<T>(call: Promise<{ data?: T; error?: unknown; response?: R
   return data;
 }
 
+/** Director's calls (apps/ai/app/director.py), each on a client made for that call. */
+function directorCalls(forCall: (caller: AiCaller) => Promise<ReturnType<typeof createClient>>) {
+  return {
+    async requestPlan(caller: AiCaller, videoId: string) {
+      return unwrap(requestDirectorPlan({ client: await forCall(caller), body: { videoId } }));
+    },
+    async getPlan(caller: AiCaller, videoId: string) {
+      return unwrap(
+        getDirectorPlan({ client: await forCall(caller), path: { video_id: videoId } }),
+      );
+    },
+    async checkScene(caller: AiCaller, body: SceneCheckRequest) {
+      return unwrap(checkDirectorScene({ client: await forCall(caller), body }));
+    },
+    async createTake(caller: AiCaller, body: DirectorTakeCreate) {
+      return unwrap(createDirectorTake({ client: await forCall(caller), body }));
+    },
+    async listTakes(caller: AiCaller, videoId: string) {
+      return unwrap(
+        listDirectorTakes({ client: await forCall(caller), path: { video_id: videoId } }),
+      );
+    },
+  };
+}
+
 export function createAiClient(options: {
   baseUrl: string;
   secret: string;
@@ -117,6 +158,7 @@ export function createAiClient(options: {
     });
   }
 
+  const director = directorCalls(forCall);
   return {
     async sentiment(caller: AiCaller, text: string) {
       return unwrap(sentiment({ client: await forCall(caller), body: { text } }));
@@ -132,6 +174,9 @@ export function createAiClient(options: {
         deleteDocument({ client: await forCall(caller), path: { document_id: documentId } }),
       );
     },
+
+    /** Director's calls, as `ai.director.requestPlan(...)`. */
+    director,
 
     /**
      * Starts an answer. Refusals (budget, feature off, validation) and an unreachable

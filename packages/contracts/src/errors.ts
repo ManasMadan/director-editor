@@ -85,6 +85,21 @@ export const ERROR_CODES = {
   DOCUMENT_INDEXING_FAILED: 422,
   AI_BUDGET_EXCEEDED: 429,
   AI_RUN_LIMIT: 422,
+  // Shorts (YouTube) and Director
+  SHORT_NOT_FOUND: 404,
+  /** Director films shorts, not long videos (params: maxSeconds). */
+  SHORT_TOO_LONG: 422,
+  DIRECTOR_PLAN_NOT_FOUND: 404,
+  /** The plan is still being worked out, or its analysis failed. */
+  DIRECTOR_PLAN_NOT_READY: 409,
+  DIRECTOR_SHOT_NOT_FOUND: 404,
+  /** A photo for a video shot, or the other way round. */
+  DIRECTOR_TAKE_KIND_MISMATCH: 422,
+  // The next three are only ever a plan's or take's error, never an HTTP answer.
+  /** Gemini couldn't watch the video (private, age-restricted, removed). */
+  DIRECTOR_VIDEO_UNREADABLE: 422,
+  DIRECTOR_ANALYSIS_FAILED: 422,
+  DIRECTOR_REVIEW_FAILED: 422,
   // Todos (example feature)
   TODO_NOT_FOUND: 404,
   TODO_VERSION_CONFLICT: 409,
@@ -103,6 +118,7 @@ export const ERROR_PARAMS = {
   WEBHOOK_ENDPOINT_LIMIT: z.object({ max: z.number().int() }),
   FILE_TYPE_NOT_ALLOWED: z.object({ types: z.string() }),
   FILE_TOO_LARGE: z.object({ maxBytes: z.number().int() }),
+  SHORT_TOO_LONG: z.object({ maxSeconds: z.number().int() }),
   API_KEY_SCOPE_MISSING: z.object({ scope: z.string() }),
 } as const satisfies Partial<Record<ErrorCode, z.ZodObject>>;
 

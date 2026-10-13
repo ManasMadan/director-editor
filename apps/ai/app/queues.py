@@ -26,6 +26,9 @@ from bullmq.types import (  # pyright: ignore[reportMissingTypeStubs]
 )
 from pydantic import TypeAdapter
 
+from app.contracts.ai_director_job_name import AiDirectorJobName
+from app.contracts.ai_director_plan_job import AiDirectorPlanJob
+from app.contracts.ai_director_review_take_job import AiDirectorReviewTakeJob
 from app.contracts.ai_ingest_ingest_job import AiIngestIngestJob
 from app.contracts.ai_ingest_job_name import AiIngestJobName
 from app.contracts.ai_ingest_summarize_job import AiIngestSummarizeJob
@@ -36,6 +39,7 @@ SETTINGS = TypeAdapter(dict[SharedQueueName, QueueSetting]).validate_json(
     (Path(__file__).parent / "contracts" / "queue_settings.json").read_bytes()
 )
 INGEST: SharedQueueName = "ai-ingest"
+DIRECTOR: SharedQueueName = "ai-director"
 _JOB_OPTIONS = TypeAdapter(JobOptions)
 
 
@@ -84,10 +88,74 @@ class IngestQueue:
         await self._queue.close()
 
 
+class DirectorQueue:
+    """Director's jobs. Each add names its job id, which decides what counts as the same
+    job: BullMQ adds a job whose id it already holds only once."""
+
+    def __init__(self, redis_url: str) -> None:
+        options: QueueBaseOptions = {"connection": redis_url, "prefix": SETTINGS[DIRECTOR].prefix}
+        self._queue = Queue(DIRECTOR, options)
+
+    async def add_plan(
+        self,
+        plan_id: UUID,
+        org_id: UUID,
+        *,
+        job_id: str,
+        request_id: str | None,
+        user_id: UUID | None,
+    ) -> None:
+        data = AiDirectorPlanJob.model_validate(
+            {
+                "meta": _meta(org_id, request_id, user_id),
+                "payload": {"planId": plan_id, "orgId": org_id},
+            }
+        )
+        await self._add("plan", data.model_dump(mode="json", exclude_none=True), job_id)
+
+    async def add_review(
+        self,
+        take_id: UUID,
+        org_id: UUID,
+        source_url: str,
+        *,
+        request_id: str | None,
+        user_id: UUID | None,
+    ) -> None:
+        data = AiDirectorReviewTakeJob.model_validate(
+            {
+                "meta": _meta(org_id, request_id, user_id),
+                "payload": {"takeId": take_id, "orgId": org_id, "sourceUrl": source_url},
+            }
+        )
+        # One review per take.
+        await self._add(
+            "review-take", data.model_dump(mode="json", exclude_none=True), str(take_id)
+        )
+
+    async def _add(self, name: AiDirectorJobName, data: dict[str, object], job_id: str) -> None:
+        await self._queue.add(  # pyright: ignore[reportUnknownMemberType]  # bullmq leaves the job's data untyped
+            name, data, job_options(DIRECTOR, job_id)
+        )
+
+    async def close(self) -> None:
+        await self._queue.close()
+
+
+def _meta(org_id: UUID, request_id: str | None, user_id: UUID | None) -> dict[str, str | None]:
+    return {
+        "requestId": request_id,
+        "userId": str(user_id) if user_id else None,
+        "orgId": str(org_id),
+    }
+
+
 class JobLike(Protocol):
     id: str | None
     name: str
     data: object
+    # How many times it ran before this one (bullmq's own camelCase name).
+    attemptsMade: int
 
 
 class RunningWorker(Protocol):

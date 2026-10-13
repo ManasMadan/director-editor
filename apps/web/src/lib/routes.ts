@@ -8,9 +8,20 @@ export const APP_PATHS = [
   "/invitations",
   "/notifications",
   "/assistant",
+  // Director: the Shorts feed and filming one.
+  "/home",
+  "/shorts",
+  "/saved",
+  "/director",
   // Approving an app's OAuth request.
   "/oauth",
 ];
+
+/**
+ * Full-screen pages that bring their own chrome (the YouTube-style feed and Director's
+ * camera), so the site header and the page column stay out of their way.
+ */
+export const IMMERSIVE_PATHS = ["/home", "/shorts", "/saved", "/director"];
 export const GUEST_PATHS = [
   "/sign-in",
   "/sign-up",

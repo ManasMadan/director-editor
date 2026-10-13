@@ -165,7 +165,8 @@ jobs:
   # Known vulnerabilities in the third-party images the charts, compose and the dev
   # container run (our own are scanned as CI builds them): each read from its registry by
   # its pinned digest, a fixable critical or high one failing (scripts/image-scan.ts, which
-  # the pre-push runner can call too). Blocks changes; the weekly run only reports, like OSV.
+  # the pre-push runner can call too). Blocks a change to what decides the images; the
+  # weekly run scans them all and only reports, like OSV.
   images:
     name: Third-party images
     runs-on: ubuntu-24.04
@@ -175,7 +176,8 @@ jobs:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
+        # The whole history: a pull request's change is read against its base.
+        with: { persist-credentials: false, fetch-depth: 0 }
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with: { bun-version-file: package.json }
       - uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
@@ -191,7 +193,11 @@ jobs:
           path: ~/.cache/director-editor/trivy/db
           key: trivy-db-${{ steps.day.outputs.day }}
           restore-keys: trivy-db-
-      - run: bun scripts/image-scan.ts
+      # Pull requests and the merge queue scan only when they change what decides the
+      # images; the weekly run scans all of them and reports.
+      - run: bun scripts/image-scan.ts ${BASE:+--since=$BASE}
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         continue-on-error: ${{ github.event_name == 'schedule' }}
 
   # The one check the master ruleset requires from this workflow (docs/repository-settings.md):

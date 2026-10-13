@@ -788,11 +788,15 @@ describe("the mobile app's release", () => {
   const { jobs } = workflow("mobile.yml");
   const eas = jobs.eas as Job;
 
-  it("checks the native dependencies against the Expo SDK in lint, which CI's lint job runs", async () => {
+  // Not whether a newer Expo patch is out: the repository installs nothing younger than
+  // three days (bunfig.toml), so that check failed every pull request after each Expo
+  // release until it was old enough to take. Renovate's Expo group keeps them current.
+  it("checks the native dependencies' health in lint, which CI's lint job runs", async () => {
     const mobile = JSON.parse(readFileSync(join(ROOT, "apps/mobile/package.json"), "utf8")) as {
       scripts: Record<string, string>;
     };
-    expect(mobile.scripts.lint).toBe("expo-doctor && expo install --check");
+    expect(mobile.scripts.lint).toBe("EXPO_DOCTOR_SKIP_DEPENDENCY_VERSION_CHECK=1 expo-doctor");
+    expect(mobile.scripts.doctor).toBe("expo-doctor");
     const { STEPS } = await import("./lint");
     expect(STEPS).toContainEqual(["bunx", "turbo", "run", "lint"]);
     expect(workflow("ci.yml").jobs.lint?.steps?.map((s) => s.run)).toContain("bun run lint");
@@ -1038,5 +1042,26 @@ describe("a job acting as the GitHub App", () => {
         .map(([id]) => `${file}:${id}`),
     );
     expect(unguarded).toEqual([]);
+  });
+});
+
+describe("a job with service containers", () => {
+  // Harden-Runner can restart Docker after the services start, which stops them for good:
+  // the job then fails on a refused connection with nothing wrong in the code.
+  it("starts them again if they stopped, and waits until they're healthy, before using them", () => {
+    const files = readdirSync(join(ROOT, ".github/workflows")).filter((f) => f.endsWith(".yml"));
+    const missing = files.flatMap((file) =>
+      Object.entries(workflow(file).jobs)
+        .filter(([, job]) => "services" in job)
+        .filter(([, job]) => {
+          const uses = (job.steps ?? []).map((step) => step.uses ?? "");
+          const up = uses.indexOf("./.github/actions/services-up");
+          return (
+            up === -1 || up !== uses.findIndex((use) => use.startsWith("actions/checkout@")) + 1
+          );
+        })
+        .map(([id]) => `${file}:${id}`),
+    );
+    expect(missing).toEqual([]);
   });
 });

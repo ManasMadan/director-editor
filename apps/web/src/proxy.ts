@@ -14,6 +14,9 @@ import { type NextRequest, NextResponse } from "next/server";
 import { env } from "@/env";
 import { APP_PATHS, GUEST_PATHS, isOAuthRequest, matchesPath } from "@/lib/routes";
 
+/** Where Director's pose model comes from (src/modules/director/lib/pose.ts). */
+const POSE_MODEL_ORIGINS = "https://cdn.jsdelivr.net https://storage.googleapis.com";
+
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   // Only whether better-auth's session cookie is there (any of its names); the API
@@ -39,16 +42,21 @@ export function proxy(request: NextRequest) {
   const storage = env.STORAGE_ORIGIN ? ` ${new URL(env.STORAGE_ORIGIN).origin}` : "";
   const csp = [
     "default-src 'self'",
-    // 'strict-dynamic' lets Next's nonce'd bootstrap load its chunks; dev needs eval for HMR.
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${development ? " 'unsafe-eval'" : ""}`,
+    // 'strict-dynamic' lets Next's nonce'd bootstrap load its chunks (and Director's pose
+    // model its loader); dev needs eval for HMR. The pose model is WebAssembly.
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'wasm-unsafe-eval'${development ? " 'unsafe-eval'" : ""}`,
     "style-src 'self' 'unsafe-inline'",
     `img-src 'self' data: blob: https:${storage}`,
     "font-src 'self'",
     // The push service worker (public/sw.js).
     "worker-src 'self'",
-    // The API is on this origin; Turnstile (captcha) needs its origin when enabled.
-    `connect-src 'self' https://challenges.cloudflare.com${storage}`,
-    "frame-src https://challenges.cloudflare.com",
+    // The API is on this origin; Turnstile (captcha) needs its origin when enabled;
+    // Director's pose model loads its runtime from jsDelivr and its weights from Google.
+    `connect-src 'self' https://challenges.cloudflare.com ${POSE_MODEL_ORIGINS}${storage}`,
+    // Recorded takes play from blob: URLs, reviewed ones from storage.
+    `media-src 'self' blob:${storage}`,
+    // Shorts play in YouTube's privacy-enhanced embed.
+    "frame-src https://challenges.cloudflare.com https://www.youtube-nocookie.com",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

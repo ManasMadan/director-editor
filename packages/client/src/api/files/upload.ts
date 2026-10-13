@@ -4,6 +4,7 @@
  */
 import { type UploadPurpose, uploadPurposes } from "@repo/contracts/files";
 import { useMutation } from "@tanstack/react-query";
+import type { ApiClient } from "../../client";
 import { useApi } from "../../provider";
 
 /** Why a file can't be uploaded for `purpose`, before anything is sent (or null). */
@@ -37,26 +38,30 @@ export class UploadFailedError extends Error {
   }
 }
 
+/** Uploads `file` for `purpose` and completes it: the worker checks it next. */
+export async function uploadFile(client: ApiClient, purpose: UploadPurpose, file: File) {
+  const { file: created, upload } = await client.files.createUpload({
+    purpose,
+    filename: file.name,
+    contentType: file.type,
+    size: file.size,
+  });
+  // Content-Length is set by the browser from the body; the rest as signed.
+  const headers = Object.fromEntries(
+    Object.entries(upload.headers).filter(([name]) => name.toLowerCase() !== "content-length"),
+  );
+  const response = await fetch(upload.url, { method: "PUT", headers, body: file });
+  if (!response.ok) {
+    throw new UploadFailedError(response.status);
+  }
+  return client.files.completeUpload({ fileId: created.id });
+}
+
 export function useUploadFileMutation() {
   const { api, client } = useApi();
   return useMutation({
     mutationKey: api.files.createUpload.key(),
-    mutationFn: async ({ purpose, file }: { purpose: UploadPurpose; file: File }) => {
-      const { file: created, upload } = await client.files.createUpload({
-        purpose,
-        filename: file.name,
-        contentType: file.type,
-        size: file.size,
-      });
-      // Content-Length is set by the browser from the body; the rest as signed.
-      const headers = Object.fromEntries(
-        Object.entries(upload.headers).filter(([name]) => name.toLowerCase() !== "content-length"),
-      );
-      const response = await fetch(upload.url, { method: "PUT", headers, body: file });
-      if (!response.ok) {
-        throw new UploadFailedError(response.status);
-      }
-      return client.files.completeUpload({ fileId: created.id });
-    },
+    mutationFn: ({ purpose, file }: { purpose: UploadPurpose; file: File }) =>
+      uploadFile(client, purpose, file),
   });
 }

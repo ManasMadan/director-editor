@@ -17,10 +17,10 @@ import uuid
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import ForeignKey, Index, Integer, Text, text
-from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from app.schemas import DocumentStatus
+from app.schemas import DocumentStatus, PlanStatus, TakeKind, TakeStatus
 
 EMBEDDING_DIMENSIONS = 1536
 
@@ -110,3 +110,54 @@ class AiUsage(Base):
     input_tokens: Mapped[int] = mapped_column(Integer)
     output_tokens: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime.datetime] = _now()
+
+
+class DirectorPlan(Base):
+    __tablename__ = "director_plan"
+    __table_args__: TableArgs = (
+        Index("director_plan_org_id_id_idx", "org_id", text("id DESC")),
+        Index("director_plan_org_id_video_id_key", "org_id", "video_id", unique=True),
+        {"schema": "ai"},
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    video_id: Mapped[str] = mapped_column(Text)
+    status: Mapped[PlanStatus] = mapped_column(Text, server_default=text("'pending'::text"))
+    error: Mapped[str | None] = mapped_column(Text)
+    # The ShotPlan as JSON (app/schemas.py); parsed back with its model when read.
+    plan: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    model: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime.datetime] = _now()
+    updated_at: Mapped[datetime.datetime] = mapped_column(TIMESTAMP(timezone=True, precision=3))
+
+
+class DirectorTake(Base):
+    __tablename__ = "director_take"
+    __table_args__: TableArgs = (
+        Index("director_take_org_id_id_idx", "org_id", text("id DESC")),
+        Index("director_take_plan_id_user_id_shot_index_idx", "plan_id", "user_id", "shot_index"),
+        Index("director_take_user_id_idx", "user_id"),
+        Index("director_take_file_id_idx", "file_id"),
+        {"schema": "ai"},
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    plan_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("ai.director_plan.id", ondelete="CASCADE", onupdate="CASCADE"),
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    shot_index: Mapped[int] = mapped_column(Integer)
+    file_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    kind: Mapped[TakeKind] = mapped_column(Text)
+    status: Mapped[TakeStatus] = mapped_column(Text, server_default=text("'pending'::text"))
+    error: Mapped[str | None] = mapped_column(Text)
+    best_start_ms: Mapped[int | None] = mapped_column(Integer)
+    best_end_ms: Mapped[int | None] = mapped_column(Integer)
+    score: Mapped[int | None] = mapped_column(Integer)
+    feedback: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime.datetime] = _now()
+    updated_at: Mapped[datetime.datetime] = mapped_column(TIMESTAMP(timezone=True, precision=3))

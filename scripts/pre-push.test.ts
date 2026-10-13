@@ -210,7 +210,7 @@ const COUNTERPARTS: Record<string, Record<string, string>> = {
   },
   "security.yml:images": {
     "The day, for the database's cache key": "setup: a cache key",
-    "bun scripts/image-scan.ts": "third-party images",
+    "bun scripts/image-scan.ts ${BASE:+--since=$BASE}": "third-party images",
   },
   "security.yml:osv": {
     "google/osv-scanner-action/osv-scanner-action": "known vulnerabilities",
@@ -220,7 +220,7 @@ const COUNTERPARTS: Record<string, Record<string, string>> = {
 
 /** What only sets a runner up: the toolchain, caches, artifacts. */
 const RUNNER_SETUP =
-  /^(step-security\/harden-runner|actions\/(checkout|cache|upload-artifact|download-artifact)|\.\/\.github\/actions\/(setup|free-disk)|azure\/setup-helm|opentofu\/setup-opentofu|oven-sh\/setup-bun|aquasecurity\/setup-trivy)@?/;
+  /^(step-security\/harden-runner|actions\/(checkout|cache|upload-artifact|download-artifact)|\.\/\.github\/actions\/(setup|free-disk|services-up)|azure\/setup-helm|opentofu\/setup-opentofu|oven-sh\/setup-bun|aquasecurity\/setup-trivy)@?/;
 
 describe("every step of a job the hook mirrors", () => {
   type CiStep = { name?: string; run?: string; uses?: string };

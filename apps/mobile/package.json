@@ -15,7 +15,7 @@
     "check-types": "tsc",
     "test": "jest",
     "doctor": "expo-doctor",
-    "lint": "expo-doctor && expo install --check",
+    "lint": "EXPO_DOCTOR_SKIP_DEPENDENCY_VERSION_CHECK=1 expo-doctor",
     "test:e2e": "bun --env-file=../../.env run playwright test",
     "coverage": "jest --coverage"
   },

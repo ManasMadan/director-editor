@@ -16,9 +16,11 @@ import { ApiKeysModule } from "./modules/api-keys";
 import { AppsModule } from "./modules/apps";
 import { AuditModule } from "./modules/audit";
 import { BillingModule } from "./modules/billing";
+import { DirectorModule } from "./modules/director";
 import { FilesModule } from "./modules/files";
 import { NotificationsModule } from "./modules/notifications";
 import { RealtimeModule } from "./modules/realtime";
+import { ShortsModule } from "./modules/shorts";
 import { TodoModule } from "./modules/todo";
 import { UserModule } from "./modules/user";
 import { WebhooksModule } from "./modules/webhooks";
@@ -57,6 +59,8 @@ import { NotificationsProducerModule } from "./notifications";
     NotificationsModule,
     FilesModule,
     BillingModule,
+    ShortsModule,
+    DirectorModule,
   ],
 })
 export class AppModule {}

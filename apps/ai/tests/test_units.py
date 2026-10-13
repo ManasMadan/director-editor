@@ -74,6 +74,19 @@ def test_production_refuses_development_stand_ins() -> None:
         _settings(AI_SERVICE_SECRET="x" * 31)  # one character short
 
 
+def test_production_refuses_a_plain_http_gemini_endpoint() -> None:
+    base = {"NODE_ENV": "production", "AI_EMBEDDINGS": "openai:text-embedding-3-small"}
+    assert _settings(**base, GOOGLE_BASE_URL="https://gateway.example.com").google_base_url
+    with pytest.raises(ValidationError, match="GOOGLE_BASE_URL must be HTTPS"):
+        _settings(**base, GOOGLE_BASE_URL="http://localhost:12112")
+
+
+def test_director_needs_its_gemini_key() -> None:
+    assert _settings(DIRECTOR_MODEL="gemini-3.5-flash", GOOGLE_API_KEY="key").director_model
+    with pytest.raises(ValidationError, match="DIRECTOR_MODEL needs GOOGLE_API_KEY"):
+        _settings(DIRECTOR_MODEL="gemini-3.5-flash")
+
+
 async def test_hashing_embeddings_put_similar_wording_close() -> None:
     [query, near, far] = await HashingEmbedder().embed(
         [
@@ -208,3 +221,34 @@ def test_the_liveness_probe_passes_only_with_a_fresh_heartbeat(tmp_path: Path) -
     assert probe() == 1
     (tmp_path / "ai-worker-alive").touch()
     assert probe() == 0
+
+
+def test_a_best_part_under_a_millisecond_is_no_part() -> None:
+    from app.director import best_range
+    from app.schemas import TakeReview
+
+    def review(start: float, end: float) -> TakeReview:
+        return TakeReview(bestStartSeconds=start, bestEndSeconds=end, score=50, feedback="Fine.")
+
+    assert best_range(review(1.0002, 1.0004), "video") == (None, None)
+    assert best_range(review(1.0, 2.5), "video") == (1000, 2500)
+    assert best_range(review(1.0, 2.5), "photo") == (None, None)
+
+
+def test_the_service_boots_from_the_example_with_its_empty_values() -> None:
+    """`bun --env-file` hands an empty `KEY=` over as an empty string: that means unset."""
+    from dotenv import dotenv_values
+
+    from app.settings import get_settings
+    from tests import ENV_EXAMPLE
+
+    raw = {key: value or "" for key, value in dotenv_values(ENV_EXAMPLE).items()}
+    raw |= {"AI_DATABASE_URL": "postgresql://u:p@localhost/db", "AI_SERVICE_SECRET": SECRET}
+    get_settings.cache_clear()
+    try:
+        with patch.dict(os.environ, raw, clear=True):
+            settings = get_settings()
+        assert raw["AI_FALLBACK_MODEL"] == ""
+        assert settings.fallback_model is None
+    finally:
+        get_settings.cache_clear()

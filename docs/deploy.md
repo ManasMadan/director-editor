@@ -111,9 +111,12 @@ The mobile app follows the same events on EAS (`mobile.yml`, see
 [web-and-mobile.md](web-and-mobile.md#eas-builds-and-over-the-air-updates)): updates once
 CI has passed on master, store builds once a release has. The store builds' run waits
 for EAS to build and submit both apps, so a failed build or submission fails it. Before
-any of that, CI's lint job runs `expo-doctor` and `expo install --check` (the mobile
-app's `lint`), so a native dependency that doesn't match the Expo SDK fails the pull
-request rather than the store build.
+any of that, CI's lint job runs `expo-doctor` (the mobile app's `lint`), so duplicate or
+misconfigured native modules fail the pull request rather than the store build. It
+skips the check for newer Expo patches: nothing younger than three days can be
+installed (bunfig.toml), so it would fail every pull request after each Expo release.
+Renovate's Expo group moves them once they're old enough, and the mobile app's `doctor`
+script runs the full check.
 
 ## Rollback
 

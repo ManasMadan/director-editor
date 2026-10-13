@@ -38,7 +38,14 @@ describe("features off", () => {
   it("reports every optional feature off, with no keys for the browser", async () => {
     const info = await createSession(harness).rpc.system.info();
     expect(info).toMatchObject({
-      features: { google: false, ai: false, captcha: false, files: false, billing: false },
+      features: {
+        google: false,
+        ai: false,
+        captcha: false,
+        director: false,
+        files: false,
+        billing: false,
+      },
       captchaSiteKey: null,
       webPushPublicKey: null,
     });
@@ -64,6 +71,12 @@ describe("features off", () => {
       "FEATURE_DISABLED",
     );
     expect(error.data?.params).toEqual({ feature: "ai" });
+  });
+
+  it("answers FEATURE_DISABLED for the Shorts feed without a YouTube key", async () => {
+    const session = await signedIn();
+    const error = await expectError(session.rpc.shorts.feed({ topic: "all" }), "FEATURE_DISABLED");
+    expect(error.data?.params).toEqual({ feature: "director" });
   });
 
   it("without billing, every workspace has everything and there's nothing to pay", async () => {

@@ -1,0 +1,106 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { type CaptionInk, drawCaption } from "@/modules/director/lib/caption-draw";
+import type { CaptionWord } from "@/modules/director/lib/captions";
+import { canvasOf, hue } from "./footage";
+
+const INK: CaptionInk = {
+  text: "#ffffff",
+  outline: "#000000",
+  highlight: "#ff0000",
+  box: "#0000ff",
+};
+const WIDTH = 360;
+const HEIGHT = 640;
+
+const words = (...list: [string, CaptionWord["state"]][]): CaptionWord[] =>
+  list.map(([text, state]) => ({ text, state }));
+
+function canvas() {
+  const { ctx } = canvasOf(WIDTH, HEIGHT);
+  return {
+    ctx,
+    fillText: vi.spyOn(ctx, "fillText"),
+    strokeText: vi.spyOn(ctx, "strokeText"),
+    roundRect: vi.spyOn(ctx, "roundRect"),
+  };
+}
+
+/** Whether anything at all was painted. */
+const painted = (ctx: CanvasRenderingContext2D) =>
+  ctx.getImageData(0, 0, WIDTH, HEIGHT).data.some((value) => value > 0);
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("drawing a caption", () => {
+  it("draws nothing between lines, or with captions off", () => {
+    const { ctx, fillText } = canvas();
+    drawCaption(ctx, WIDTH, HEIGHT, null, "pop", INK);
+    drawCaption(ctx, WIDTH, HEIGHT, words(["hi", "now"]), "off", INK);
+    expect(fillText).not.toHaveBeenCalled();
+    expect(painted(ctx)).toBe(false);
+  });
+
+  it("pops the words in capitals, outlined, the one being said on a red tag", () => {
+    const { ctx, fillText, strokeText, roundRect } = canvas();
+    drawCaption(
+      ctx,
+      WIDTH,
+      HEIGHT,
+      words(["make", "said"], ["it", "now"], ["pop", "next"]),
+      "pop",
+      INK,
+    );
+    expect(fillText.mock.calls.map(([text]) => text)).toEqual(["MAKE", "IT", "POP"]);
+    expect(strokeText.mock.calls.map(([text]) => text)).toEqual(["MAKE", "IT", "POP"]);
+    // One row centred below the frame's middle, and one tag, behind "IT".
+    const ys = new Set(fillText.mock.calls.map(([, , y]) => y));
+    expect(ys.size).toBe(1);
+    expect([...ys][0]).toBeCloseTo(HEIGHT * 0.64);
+    const xs = fillText.mock.calls.map(([, x]) => x);
+    expect(xs).toEqual([...xs].sort((a, b) => a - b));
+    expect(roundRect).toHaveBeenCalledTimes(1);
+    // Red fills the tag around "IT" (whatever the font paints over it), and nothing else.
+    const [tagX = 0, tagY = 0, tagW = 0, tagH = 0] = roundRect.mock.calls[0] ?? [];
+    expect(tagX).toBeLessThan(xs[1] ?? 0);
+    const red = (x: number, y: number, w: number, h: number) => {
+      const data = ctx.getImageData(x, y, w, h).data;
+      let count = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        count += hue([data[i] ?? 0, data[i + 1] ?? 0, data[i + 2] ?? 0]) === "red" ? 1 : 0;
+      }
+      return count / (w * h);
+    };
+    expect(red(tagX, tagY, tagW, tagH)).toBeGreaterThan(0.3);
+    expect(red(0, 0, tagX - 1, HEIGHT)).toBe(0);
+    // The canvas's own settings are left as they were.
+    expect(ctx.textBaseline).toBe("alphabetic");
+  });
+
+  it("boxes each row of classic captions, as written, wrapping a long line", () => {
+    const { ctx, fillText, strokeText, roundRect } = canvas();
+    const long = "This caption is far too long to fit across the frame on one row".split(" ");
+    drawCaption(
+      ctx,
+      WIDTH,
+      HEIGHT,
+      long.map((text) => ({ text, state: "next" })),
+      "classic",
+      INK,
+    );
+    expect(fillText.mock.calls.map(([text]) => text)).toEqual(long);
+    expect(strokeText).not.toHaveBeenCalled();
+    const rows = new Set(fillText.mock.calls.map(([, , y]) => y));
+    expect(rows.size).toBeGreaterThan(1);
+    // A box behind every row, and each row inside the frame's margins.
+    expect(roundRect).toHaveBeenCalledTimes(rows.size);
+    for (const [x, , w] of roundRect.mock.calls) {
+      expect(x).toBeGreaterThan(0);
+      expect(x + w).toBeLessThan(WIDTH);
+    }
+    const [, firstX, firstY] = fillText.mock.calls[0] ?? [];
+    const behind = ctx.getImageData((firstX ?? 0) - 4, (firstY ?? 0) - 10, 1, 1).data;
+    expect(hue(Array.from(behind))).toBe("blue");
+  });
+});

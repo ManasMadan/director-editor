@@ -5,7 +5,14 @@ import { errorCode } from "./errors";
 
 const info = {
   release: "1.0.0",
-  features: { ai: false, billing: false, captcha: false, files: false, google: false },
+  features: {
+    ai: false,
+    billing: false,
+    captcha: false,
+    director: false,
+    files: false,
+    google: false,
+  },
   minimumClientVersion: "1.0.0",
   captchaSiteKey: null,
   webPushPublicKey: null,

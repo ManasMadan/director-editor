@@ -1,0 +1,16 @@
+# Reviewed exceptions for ghcr.io/kyverno/readiness-checker:v1.19.1 (scripts/image-scan.ts): no upstream image
+# has the fixed packages yet. Each expires in about a month; the scan then fails until
+# the image moves to a fixed release or the entry is reviewed again.
+vulnerabilities:
+  - id: CVE-2026-78669
+    statement: >-
+      golang.org/x/net v0.58.0 (fixed in 0.60.0): no upstream rebuild with the fixed package as of 2026-10-13
+    expired_at: 2026-11-12
+  - id: CVE-2026-78667
+    statement: >-
+      stdlib v1.26.6 (fixed in 1.26.9, 1.27.2): no upstream rebuild with the fixed package as of 2026-10-13
+    expired_at: 2026-11-12
+  - id: CVE-2026-97031
+    statement: >-
+      stdlib v1.26.6 (fixed in 1.26.9, 1.27.2): no upstream rebuild with the fixed package as of 2026-10-13
+    expired_at: 2026-11-12

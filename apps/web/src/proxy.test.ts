@@ -40,10 +40,17 @@ describe("the proxy", () => {
     const second = proxy(request("/dashboard", true));
     const csp = first.headers.get("content-security-policy") ?? "";
     expect(getRedirectUrl(first)).toBeNull();
-    expect(csp).toMatch(/script-src 'self' 'nonce-[^']+' 'strict-dynamic'(;|$)/);
-    // Uploads go to object storage (STORAGE_ORIGIN in .env.example, moved by a stack).
+    // Director's pose model is WebAssembly, loaded by a script Next's chunks insert.
+    expect(csp).toMatch(/script-src 'self' 'nonce-[^']+' 'strict-dynamic' 'wasm-unsafe-eval'(;|$)/);
+    // Uploads go to object storage (STORAGE_ORIGIN in .env.example, moved by a stack); the
+    // pose model's runtime and weights come from jsDelivr and Google.
     expect(csp).toContain(
-      `connect-src 'self' https://challenges.cloudflare.com ${process.env.STORAGE_ORIGIN}`,
+      `connect-src 'self' https://challenges.cloudflare.com https://cdn.jsdelivr.net https://storage.googleapis.com ${process.env.STORAGE_ORIGIN}`,
+    );
+    // Takes play back from memory and from storage; shorts in YouTube's privacy embed.
+    expect(csp).toContain(`media-src 'self' blob: ${process.env.STORAGE_ORIGIN}`);
+    expect(csp).toContain(
+      "frame-src https://challenges.cloudflare.com https://www.youtube-nocookie.com;",
     );
     // A fresh nonce per request, handed to the page render.
     expect(second.headers.get("content-security-policy")).not.toBe(csp);
@@ -58,7 +65,7 @@ describe("the proxy", () => {
     vi.stubEnv("STORAGE_ORIGIN", "");
     const { proxy: fresh } = await import("./proxy");
     const csp = fresh(request("/")).headers.get("content-security-policy") ?? "";
-    expect(csp).toContain("'strict-dynamic' 'unsafe-eval'");
+    expect(csp).toContain("'strict-dynamic' 'wasm-unsafe-eval' 'unsafe-eval'");
     expect(csp).not.toContain(storage);
   });
 

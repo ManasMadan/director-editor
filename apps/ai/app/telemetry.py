@@ -21,7 +21,7 @@ from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
+from opentelemetry.sdk.trace import ReadableSpan, SpanProcessor, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from structlog.typing import EventDict
 
@@ -48,7 +48,11 @@ def start_telemetry(
     # open, whatever imported them first.
     PsycopgInstrumentor().instrument(tracer_provider=tracer_provider)
     RedisInstrumentor().instrument(tracer_provider=tracer_provider)  # pyright: ignore[reportUnknownMemberType]  # its instrument() is untyped
-    HTTPXClientInstrumentor().instrument(tracer_provider=tracer_provider)
+    HTTPXClientInstrumentor().instrument(
+        tracer_provider=tracer_provider,
+        request_hook=redact_request,
+        async_request_hook=redact_async_request,
+    )
     if app is not None:
         FastAPIInstrumentor.instrument_app(
             app,
@@ -56,6 +60,31 @@ def start_telemetry(
             excluded_urls="health/live,health/ready,health/dependencies",
         )
     return True
+
+
+# Where a span records an outgoing request's URL (current and older conventions).
+URL_ATTRIBUTES = ("url.full", "http.url")
+
+
+def redact_span_urls(span: trace.Span) -> None:
+    """An outgoing request's URL in a trace without its query: a presigned take URL (the
+    review job's download) carries its signature there, and whoever reads the traces must
+    not be able to fetch the take. The same as the Node services (redactSpanUrls)."""
+    if not isinstance(span, ReadableSpan):
+        return
+    attributes = span.attributes or {}
+    for key in URL_ATTRIBUTES:
+        value = attributes.get(key)
+        if isinstance(value, str):
+            span.set_attribute(key, value.split("?", 1)[0])
+
+
+def redact_request(span: trace.Span, _request: object) -> None:
+    redact_span_urls(span)
+
+
+async def redact_async_request(span: trace.Span, _request: object) -> None:
+    redact_span_urls(span)
 
 
 def add_trace_ids(_logger: object, _method: str, event: EventDict) -> EventDict:

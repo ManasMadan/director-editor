@@ -137,8 +137,8 @@ screenshots are identical on every machine and in CI.
 | `build:web`, `serve:web` | the app rendered for the web, served on `MOBILE_WEB_PORT` (3005) with the API and the web app's captcha page on its own origin (the mobile end-to-end suite runs against it) |
 | `test` | Jest (React Native Testing Library) |
 | `test:e2e` | Playwright against the web build |
-| `doctor` | expo-doctor |
-| `lint` | expo-doctor, then `expo install --check` (every native dependency at the version the Expo SDK expects); part of `bun run lint`, so CI's lint job runs it |
+| `doctor` | expo-doctor, every check (versions too: newer Expo patches show here first) |
+| `lint` | expo-doctor without the newer-patch check, which a patch younger than the three days `bunfig.toml` waits would fail on every pull request; part of `bun run lint`, so CI's lint job runs it |
 
 ### EAS builds and over-the-air updates
 

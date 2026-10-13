@@ -40,3 +40,15 @@ vulnerabilities:
     statement: >-
       stdlib v1.26.5 (fixed in 1.25.13): no upstream rebuild with the fixed package as of 2026-10-06
     expired_at: 2026-11-05
+  - id: CVE-2026-78669
+    statement: >-
+      golang.org/x/net v0.57.0 (fixed in 0.60.0): no upstream rebuild with the fixed package as of 2026-10-13
+    expired_at: 2026-11-12
+  - id: CVE-2026-78667
+    statement: >-
+      stdlib v1.26.5 (fixed in 1.26.9, 1.27.2): no upstream rebuild with the fixed package as of 2026-10-13
+    expired_at: 2026-11-12
+  - id: CVE-2026-97031
+    statement: >-
+      stdlib v1.26.5 (fixed in 1.26.9, 1.27.2): no upstream rebuild with the fixed package as of 2026-10-13
+    expired_at: 2026-11-12

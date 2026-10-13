@@ -10,4 +10,7 @@ export const filesRouter = ({ authed }: Procedures, files: FilesService) => ({
     files.complete(context.user.id, input.fileId),
   ),
   get: authed.files.get.handler(({ context, input }) => files.get(context.user.id, input.fileId)),
+  downloadUrl: authed.files.downloadUrl.handler(({ context, input }) =>
+    files.requireDownloadUrl(context.user.id, input.fileId),
+  ),
 });

@@ -42,6 +42,9 @@ model User {
   notificationDevices     NotificationDevice[]
   files                   File[]
   aiDocuments             Document[]
+  directorPlans           DirectorPlan[]
+  directorTakes           DirectorTake[]
+  shortReactions          ShortReaction[]
   invitations             Invitation[]
   oauthClients            OauthClient[]
   oauthRefreshTokens      OauthRefreshToken[]
@@ -161,6 +164,9 @@ model Organization {
   billingCustomer    BillingCustomer?
   aiDocuments        Document[]
   aiUsage            AiUsage[]
+  directorPlans      DirectorPlan[]
+  directorTakes      DirectorTake[]
+  shortReactions     ShortReaction[]
   subscriptions      Subscription[]
   invitations        Invitation[]
   /// MCP grants approved for this workspace (oauth-provider's reference id).

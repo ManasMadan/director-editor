@@ -34,47 +34,56 @@ const PASSED_ON = new Set<ErrorCode>([
   "AI_BUDGET_EXCEEDED",
   "FEATURE_DISABLED",
   "VALIDATION_FAILED",
+  "UPSTREAM_UNAVAILABLE",
+  "DIRECTOR_PLAN_NOT_FOUND",
+  "DIRECTOR_PLAN_NOT_READY",
+  "DIRECTOR_SHOT_NOT_FOUND",
+  "DIRECTOR_TAKE_KIND_MISMATCH",
 ]);
+
+/** The AI service's client, when it is configured (the `ai` feature). */
+const aiClient =
+  env.AI_URL && env.AI_SERVICE_SECRET
+    ? createAiClient({ baseUrl: env.AI_URL, secret: env.AI_SERVICE_SECRET })
+    : null;
+
+/** Who a call to the AI service is for, with this request's id. */
+export function aiCaller(userId: UserId, orgId: OrgId): AiCaller {
+  return { userId, orgId, requestId: currentContext()?.requestId };
+}
+
+/**
+ * Runs a call to the AI service: FEATURE_DISABLED when it isn't configured, and its
+ * errors mapped to this API's codes.
+ */
+export async function callAi<T>(work: (ai: AiClient) => Promise<T>): Promise<T> {
+  if (!aiClient) {
+    throw new AppError("FEATURE_DISABLED", { params: { feature: "ai" } });
+  }
+  try {
+    return await work(aiClient);
+  } catch (error) {
+    throw toAppError(error);
+  }
+}
+
+type AiClient = ReturnType<typeof createAiClient>;
 
 @Injectable()
 export class AiService {
-  private readonly client =
-    env.AI_URL && env.AI_SERVICE_SECRET
-      ? createAiClient({ baseUrl: env.AI_URL, secret: env.AI_SERVICE_SECRET })
-      : null;
-
   constructor(@InjectPinoLogger(AiService.name) private readonly log: PinoLogger) {}
 
-  private get ai() {
-    if (!this.client) {
-      throw new AppError("FEATURE_DISABLED", { params: { feature: "ai" } });
-    }
-    return this.client;
-  }
-
-  private caller(userId: UserId, orgId: OrgId): AiCaller {
-    return { userId, orgId, requestId: currentContext()?.requestId };
-  }
-
-  private async call<T>(work: () => Promise<T>): Promise<T> {
-    try {
-      return await work();
-    } catch (error) {
-      throw toAppError(error);
-    }
-  }
-
   async sentiment(userId: UserId, orgId: OrgId, text: string) {
-    return this.call(() => this.ai.sentiment(this.caller(userId, orgId), text));
+    return callAi((ai) => ai.sentiment(aiCaller(userId, orgId), text));
   }
 
   async documents(userId: UserId, orgId: OrgId): Promise<AiDocument[]> {
-    const rows = await this.call(() => this.ai.listDocuments(this.caller(userId, orgId)));
+    const rows = await callAi((ai) => ai.listDocuments(aiCaller(userId, orgId)));
     return rows.map(toDocument);
   }
 
   async addDocument(userId: UserId, orgId: OrgId, input: { title: string; content: string }) {
-    const row = await this.call(() => this.ai.createDocument(this.caller(userId, orgId), input));
+    const row = await callAi((ai) => ai.createDocument(aiCaller(userId, orgId), input));
     return toDocument(row);
   }
 
@@ -89,7 +98,7 @@ export class AiService {
         throw new AppError("FORBIDDEN");
       }
     }
-    await this.call(() => this.ai.deleteDocument(this.caller(userId, orgId), documentId));
+    await callAi((ai) => ai.deleteDocument(aiCaller(userId, orgId), documentId));
   }
 
   /**
@@ -103,9 +112,7 @@ export class AiService {
     question: string,
     signal?: AbortSignal,
   ): Promise<AsyncGenerator<AssistantEvent, void, unknown>> {
-    const stream = await this.call(() =>
-      this.ai.answer(this.caller(userId, orgId), question, signal),
-    );
+    const stream = await callAi((ai) => ai.answer(aiCaller(userId, orgId), question, signal));
     const log = this.log;
     return (async function* () {
       try {

@@ -35,6 +35,163 @@ export type AssistantRequest = {
 };
 
 /**
+ * Box
+ */
+export type Box = {
+    /**
+     * Height
+     */
+    height: number;
+    /**
+     * Width
+     */
+    width: number;
+    /**
+     * X
+     *
+     * Left edge, as a fraction of the frame's width.
+     */
+    x: number;
+    /**
+     * Y
+     *
+     * Top edge, as a fraction of the frame's height.
+     */
+    y: number;
+};
+
+export type CameraMove = 'static' | 'up' | 'down' | 'left' | 'right' | 'forward' | 'back' | 'orbit' | 'tilt-up' | 'tilt-down';
+
+export type Direction = 'none' | 'left' | 'right' | 'forward' | 'back' | 'turn-left' | 'turn-right';
+
+/**
+ * DirectorPlanCreate
+ */
+export type DirectorPlanCreate = {
+    /**
+     * Videoid
+     */
+    videoId: string;
+};
+
+/**
+ * DirectorPlanOut
+ */
+export type DirectorPlanOut = {
+    /**
+     * Createdat
+     */
+    createdAt: string;
+    /**
+     * Error
+     */
+    error: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Model
+     */
+    model: string | null;
+    plan: ShotPlan | null;
+    /**
+     * Status
+     */
+    status: 'pending' | 'analyzing' | 'ready' | 'failed';
+    /**
+     * Updatedat
+     */
+    updatedAt: string;
+    /**
+     * Videoid
+     */
+    videoId: string;
+};
+
+/**
+ * DirectorTakeCreate
+ */
+export type DirectorTakeCreate = {
+    /**
+     * Contenttype
+     */
+    contentType: 'video/webm' | 'video/mp4' | 'image/jpeg';
+    /**
+     * Fileid
+     */
+    fileId: string;
+    /**
+     * Kind
+     */
+    kind: 'video' | 'photo';
+    /**
+     * Shotindex
+     */
+    shotIndex: number;
+    /**
+     * Sourceurl
+     *
+     * A presigned read of the take's file, for the review.
+     */
+    sourceUrl: string;
+    /**
+     * Videoid
+     */
+    videoId: string;
+};
+
+/**
+ * DirectorTakeOut
+ */
+export type DirectorTakeOut = {
+    /**
+     * Bestendms
+     */
+    bestEndMs: number | null;
+    /**
+     * Beststartms
+     */
+    bestStartMs: number | null;
+    /**
+     * Createdat
+     */
+    createdAt: string;
+    /**
+     * Error
+     */
+    error: string | null;
+    /**
+     * Feedback
+     */
+    feedback: string | null;
+    /**
+     * Fileid
+     */
+    fileId: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: 'video' | 'photo';
+    /**
+     * Score
+     */
+    score: number | null;
+    /**
+     * Shotindex
+     */
+    shotIndex: number;
+    /**
+     * Status
+     */
+    status: 'pending' | 'reviewing' | 'ready' | 'failed';
+};
+
+/**
  * DocumentCreate
  */
 export type DocumentCreate = {
@@ -102,7 +259,7 @@ export type DoneEvent = {
 /**
  * ErrorCode
  */
-export type ErrorCode = 'BAD_REQUEST' | 'VALIDATION_FAILED' | 'UNAUTHENTICATED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT' | 'RATE_LIMITED' | 'INTERNAL' | 'SERVICE_UNAVAILABLE' | 'METHOD_NOT_SUPPORTED' | 'TIMEOUT' | 'PAYLOAD_TOO_LARGE' | 'UNSUPPORTED_MEDIA_TYPE' | 'IDEMPOTENCY_IN_PROGRESS' | 'FEATURE_DISABLED' | 'CLIENT_OUTDATED' | 'FRESH_SESSION_REQUIRED' | 'DESTINATION_NOT_ALLOWED' | 'RESPONSE_TOO_LARGE' | 'TOO_MANY_REDIRECTS' | 'UPSTREAM_UNAVAILABLE' | 'NO_ACTIVE_ORGANIZATION' | 'PHONE_CODE_INVALID' | 'PHONE_NUMBER_TAKEN' | 'ENTITLEMENT_REQUIRED' | 'ALREADY_SUBSCRIBED' | 'NO_SUBSCRIPTION' | 'FILE_NOT_FOUND' | 'FILE_TYPE_NOT_ALLOWED' | 'FILE_TOO_LARGE' | 'FILE_SIZE_MISMATCH' | 'FILE_INFECTED' | 'FILE_UNREADABLE' | 'FILE_NOT_UPLOADED' | 'FILE_NOT_READY' | 'UNSUBSCRIBE_LINK_INVALID' | 'INVALID_SIGNATURE' | 'WEBHOOK_ENDPOINT_NOT_FOUND' | 'WEBHOOK_DELIVERY_NOT_FOUND' | 'WEBHOOK_URL_NOT_ALLOWED' | 'WEBHOOK_ENDPOINT_LIMIT' | 'APP_NOT_FOUND' | 'API_KEY_NOT_FOUND' | 'API_KEY_LIMIT_REACHED' | 'API_KEY_SCOPE_MISSING' | 'DOCUMENT_NOT_FOUND' | 'DOCUMENT_INDEXING_FAILED' | 'AI_BUDGET_EXCEEDED' | 'AI_RUN_LIMIT' | 'TODO_NOT_FOUND' | 'TODO_VERSION_CONFLICT';
+export type ErrorCode = 'BAD_REQUEST' | 'VALIDATION_FAILED' | 'UNAUTHENTICATED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT' | 'RATE_LIMITED' | 'INTERNAL' | 'SERVICE_UNAVAILABLE' | 'METHOD_NOT_SUPPORTED' | 'TIMEOUT' | 'PAYLOAD_TOO_LARGE' | 'UNSUPPORTED_MEDIA_TYPE' | 'IDEMPOTENCY_IN_PROGRESS' | 'FEATURE_DISABLED' | 'CLIENT_OUTDATED' | 'FRESH_SESSION_REQUIRED' | 'DESTINATION_NOT_ALLOWED' | 'RESPONSE_TOO_LARGE' | 'TOO_MANY_REDIRECTS' | 'UPSTREAM_UNAVAILABLE' | 'NO_ACTIVE_ORGANIZATION' | 'PHONE_CODE_INVALID' | 'PHONE_NUMBER_TAKEN' | 'ENTITLEMENT_REQUIRED' | 'ALREADY_SUBSCRIBED' | 'NO_SUBSCRIPTION' | 'FILE_NOT_FOUND' | 'FILE_TYPE_NOT_ALLOWED' | 'FILE_TOO_LARGE' | 'FILE_SIZE_MISMATCH' | 'FILE_INFECTED' | 'FILE_UNREADABLE' | 'FILE_NOT_UPLOADED' | 'FILE_NOT_READY' | 'UNSUBSCRIBE_LINK_INVALID' | 'INVALID_SIGNATURE' | 'WEBHOOK_ENDPOINT_NOT_FOUND' | 'WEBHOOK_DELIVERY_NOT_FOUND' | 'WEBHOOK_URL_NOT_ALLOWED' | 'WEBHOOK_ENDPOINT_LIMIT' | 'APP_NOT_FOUND' | 'API_KEY_NOT_FOUND' | 'API_KEY_LIMIT_REACHED' | 'API_KEY_SCOPE_MISSING' | 'DOCUMENT_NOT_FOUND' | 'DOCUMENT_INDEXING_FAILED' | 'AI_BUDGET_EXCEEDED' | 'AI_RUN_LIMIT' | 'SHORT_NOT_FOUND' | 'SHORT_TOO_LONG' | 'DIRECTOR_PLAN_NOT_FOUND' | 'DIRECTOR_PLAN_NOT_READY' | 'DIRECTOR_SHOT_NOT_FOUND' | 'DIRECTOR_TAKE_KIND_MISMATCH' | 'DIRECTOR_VIDEO_UNREADABLE' | 'DIRECTOR_ANALYSIS_FAILED' | 'DIRECTOR_REVIEW_FAILED' | 'TODO_NOT_FOUND' | 'TODO_VERSION_CONFLICT';
 
 /**
  * ErrorData
@@ -173,6 +330,26 @@ export type ErrorResponse = {
 };
 
 /**
+ * Framing
+ */
+export type Framing = {
+    /**
+     * Note
+     *
+     * How to frame it, in a phrase.
+     */
+    note: string;
+    /**
+     * Shotsize
+     */
+    shotSize: 'close-up' | 'medium' | 'full-body' | 'wide';
+    /**
+     * Where the person (or the object filmed) sits in frame.
+     */
+    subject: Box;
+};
+
+/**
  * HealthResponse
  */
 export type HealthResponse = {
@@ -180,6 +357,135 @@ export type HealthResponse = {
      * Status
      */
     status: 'ok';
+};
+
+/**
+ * Keypoint
+ */
+export type Keypoint = {
+    name: KeypointName;
+    /**
+     * X
+     */
+    x: number;
+    /**
+     * Y
+     */
+    y: number;
+};
+
+export type KeypointName = 'nose' | 'left_shoulder' | 'right_shoulder' | 'left_elbow' | 'right_elbow' | 'left_wrist' | 'right_wrist' | 'left_hip' | 'right_hip' | 'left_knee' | 'right_knee' | 'left_ankle' | 'right_ankle';
+
+/**
+ * PhoneAngle
+ */
+export type PhoneAngle = {
+    /**
+     * Height
+     */
+    height: 'floor' | 'waist' | 'chest' | 'shoulder' | 'eye' | 'overhead';
+    /**
+     * Pitch
+     *
+     * Degrees the camera points above (+) or below (-) the horizon.
+     */
+    pitch: number;
+    /**
+     * Roll
+     *
+     * Degrees the phone leans clockwise (+) from upright.
+     */
+    roll: number;
+    /**
+     * Tolerance
+     *
+     * Degrees either way that still look right.
+     */
+    tolerance: number;
+};
+
+/**
+ * SceneCheck
+ */
+export type SceneCheck = {
+    direction: Direction;
+    /**
+     * Distancemeters
+     */
+    distanceMeters: number | null;
+    /**
+     * Inplace
+     *
+     * The frame already looks like the shot's scene.
+     */
+    inPlace: boolean;
+    /**
+     * Instruction
+     *
+     * One short spoken direction: "Move about five meters left, to the tree."
+     */
+    instruction: string;
+    /**
+     * Where the scene's landmark is in this frame, when it is in it.
+     */
+    landmark: SceneLandmark | null;
+    /**
+     * Lighting
+     */
+    lighting: 'good' | 'too-dark' | 'too-bright' | 'backlit';
+};
+
+/**
+ * SceneCheckRequest
+ */
+export type SceneCheckRequest = {
+    /**
+     * Image
+     *
+     * A JPEG camera frame, base64.
+     */
+    image: string;
+    /**
+     * Shotindex
+     */
+    shotIndex: number;
+    /**
+     * Videoid
+     */
+    videoId: string;
+};
+
+/**
+ * SceneLandmark
+ */
+export type SceneLandmark = {
+    box: Box;
+    /**
+     * Label
+     */
+    label: string;
+};
+
+/**
+ * ScriptLine
+ */
+export type ScriptLine = {
+    /**
+     * Endseconds
+     */
+    endSeconds: number;
+    /**
+     * Startseconds
+     *
+     * From the shot's start.
+     */
+    startSeconds: number;
+    /**
+     * Text
+     *
+     * What to say, word for word.
+     */
+    text: string;
 };
 
 /**
@@ -217,6 +523,120 @@ export type SentimentResponse = {
 };
 
 /**
+ * Shot
+ */
+export type Shot = {
+    /**
+     * Camera
+     */
+    camera: 'front' | 'back';
+    /**
+     * Durationseconds
+     *
+     * How long it lasts in the edit (a photo: how long it is shown).
+     */
+    durationSeconds: number;
+    framing: Framing;
+    /**
+     * Kind
+     */
+    kind: 'video' | 'photo';
+    phoneAngle: PhoneAngle;
+    pose: TargetPose;
+    /**
+     * Purpose
+     *
+     * What it shows, and why.
+     */
+    purpose: string;
+    /**
+     * Scene
+     *
+     * Where to be: "Stand near a tree".
+     */
+    scene: string;
+    /**
+     * Scenelandmark
+     *
+     * The one thing the scene needs, to look for in the camera.
+     */
+    sceneLandmark: string | null;
+    /**
+     * Script
+     *
+     * Empty when nothing is said.
+     */
+    script: Array<ScriptLine>;
+    /**
+     * Sourceendseconds
+     */
+    sourceEndSeconds: number;
+    /**
+     * Sourcestartseconds
+     */
+    sourceStartSeconds: number;
+    /**
+     * Steps
+     */
+    steps: Array<ShotStep>;
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
+ * ShotPlan
+ */
+export type ShotPlan = {
+    /**
+     * Audio
+     */
+    audio: 'speech' | 'music' | 'speech-and-music' | 'none';
+    /**
+     * Durationseconds
+     */
+    durationSeconds: number;
+    /**
+     * Format
+     *
+     * The trend, e.g. "GRWM".
+     */
+    format: string;
+    /**
+     * Shots
+     */
+    shots: Array<Shot>;
+    /**
+     * Summary
+     */
+    summary: string;
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
+ * ShotStep
+ */
+export type ShotStep = {
+    /**
+     * Atseconds
+     *
+     * From the shot's start.
+     */
+    atSeconds: number;
+    cameraMove: CameraMove;
+    /**
+     * Instruction
+     *
+     * One imperative sentence, read out loud.
+     */
+    instruction: string;
+};
+
+/**
  * Source
  */
 export type Source = {
@@ -242,6 +662,22 @@ export type SourcesEvent = {
      * Type
      */
     type?: 'sources';
+};
+
+/**
+ * TargetPose
+ */
+export type TargetPose = {
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Keypoints
+     *
+     * The person's joints at the shot's key moment; empty when no one is in it.
+     */
+    keypoints: Array<Keypoint>;
 };
 
 /**
@@ -381,6 +817,193 @@ export type AnswerResponses = {
 };
 
 export type AnswerResponse = AnswerResponses[keyof AnswerResponses];
+
+export type RequestDirectorPlanData = {
+    body: DirectorPlanCreate;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/director/plans';
+};
+
+export type RequestDirectorPlanErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type RequestDirectorPlanError = RequestDirectorPlanErrors[keyof RequestDirectorPlanErrors];
+
+export type RequestDirectorPlanResponses = {
+    /**
+     * Successful Response
+     */
+    200: DirectorPlanOut;
+};
+
+export type RequestDirectorPlanResponse = RequestDirectorPlanResponses[keyof RequestDirectorPlanResponses];
+
+export type GetDirectorPlanData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path: {
+        /**
+         * Video Id
+         */
+        video_id: string;
+    };
+    query?: never;
+    url: '/v1/director/plans/{video_id}';
+};
+
+export type GetDirectorPlanErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type GetDirectorPlanError = GetDirectorPlanErrors[keyof GetDirectorPlanErrors];
+
+export type GetDirectorPlanResponses = {
+    /**
+     * Successful Response
+     */
+    200: DirectorPlanOut;
+};
+
+export type GetDirectorPlanResponse = GetDirectorPlanResponses[keyof GetDirectorPlanResponses];
+
+export type ListDirectorTakesData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path: {
+        /**
+         * Video Id
+         */
+        video_id: string;
+    };
+    query?: never;
+    url: '/v1/director/plans/{video_id}/takes';
+};
+
+export type ListDirectorTakesErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type ListDirectorTakesError = ListDirectorTakesErrors[keyof ListDirectorTakesErrors];
+
+export type ListDirectorTakesResponses = {
+    /**
+     * Response Listdirectortakes
+     *
+     * Successful Response
+     */
+    200: Array<DirectorTakeOut>;
+};
+
+export type ListDirectorTakesResponse = ListDirectorTakesResponses[keyof ListDirectorTakesResponses];
+
+export type CheckDirectorSceneData = {
+    body: SceneCheckRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/director/scene-checks';
+};
+
+export type CheckDirectorSceneErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type CheckDirectorSceneError = CheckDirectorSceneErrors[keyof CheckDirectorSceneErrors];
+
+export type CheckDirectorSceneResponses = {
+    /**
+     * Successful Response
+     */
+    200: SceneCheck;
+};
+
+export type CheckDirectorSceneResponse = CheckDirectorSceneResponses[keyof CheckDirectorSceneResponses];
+
+export type CreateDirectorTakeData = {
+    body: DirectorTakeCreate;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/director/takes';
+};
+
+export type CreateDirectorTakeErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type CreateDirectorTakeError = CreateDirectorTakeErrors[keyof CreateDirectorTakeErrors];
+
+export type CreateDirectorTakeResponses = {
+    /**
+     * Successful Response
+     */
+    201: DirectorTakeOut;
+};
+
+export type CreateDirectorTakeResponse = CreateDirectorTakeResponses[keyof CreateDirectorTakeResponses];
 
 export type ListDocumentsData = {
     body?: never;

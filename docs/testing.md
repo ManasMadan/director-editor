@@ -73,7 +73,7 @@ with the job's own commands:
 | `bun run codeql --languages …` | CodeQL | the languages the push changes |
 | `bun scripts/osv.ts`: OSV on `bun.lock` and `apps/ai/uv.lock` | OSV | every push |
 | `bun scripts/misconfig.ts`: Trivy's misconfiguration scan, the charts rendered first | misconfig | every push |
-| `bun scripts/image-scan.ts`: Trivy on every third-party image the renders, compose and the dev container run | Third-party images | every push |
+| `bun scripts/image-scan.ts --since=<base>`: Trivy on every third-party image the renders, compose and the dev container run | Third-party images | a push changing what decides the images |
 | the licenses of the npm packages the push adds or upgrades, against `security.yml`'s list | dependency review | a `bun.lock` change |
 | gitleaks over the pushed commits | secrets | every push |
 
@@ -211,7 +211,8 @@ address.
   `userEvent` and `page` locators from `vitest/browser`. They call the real API: the
   global setup builds apps/api and runs it twice, once with every optional feature on
   (billing against the fake Stripe, files on RustFS, a stand-in for the AI service in
-  `test/fake-ai.ts`, Google sign-in) and once with them all off except captcha, where
+  `test/fake-ai.ts`, Google sign-in, Director's Shorts feed from the mock YouTube in
+  `packages/fake-google`) and once with them all off except captcha, where
   Turnstile's script is a stand-in (`test/commands.ts`) and tokens are checked with
   Cloudflare's always-pass test secret. Files named `*.features-off.test.tsx` run against
   the second. The test pages are served on the origin the API knows as `WEB_URL`, and
@@ -334,6 +335,7 @@ file below 100%, or one no test loads.
 | File | Suppression | Why |
 |---|---|---|
 | `apps/web/src/lib/cookies.ts` | `biome-ignore lint/suspicious/noDocumentCookie` | the Cookie Store API isn't in every browser yet |
+| `packages/db/prisma/migrations/20261010121359_director/migration.sql` | `-- squawk-ignore` (`adding-foreign-key-constraint`, `constraint-missing-not-valid`, `require-concurrent-index-creation`) | every flagged statement acts on a table the same migration creates: it is empty and no running release reads it, so nothing waits on a scan; the foreign keys hold writes on the tables they point at only until the migration commits, bounded by `lock_timeout` |
 | `packages/ui/src/components/field.tsx` | `biome-ignore lint/a11y/useSemanticElements` | `Field` is a `div` with the group role: a fieldset brings its own border, padding and minimum width into every form row (`FieldSet` is the fieldset, for a group of fields) |
 | `packages/ui/src/components/input-otp.tsx` | `biome-ignore lint/a11y/useSemanticElements` | the separator holds an icon, which an `hr` can't |
 | `packages/ui/src/components/label.tsx` | `biome-ignore lint/a11y/noLabelWithoutControl` | `Label` is a wrapper: the caller ties it to its control (`htmlFor`, or the control inside it) through props the rule can't see |
@@ -582,7 +584,11 @@ container as it builds, for fixable critical or high vulnerabilities, as CI's Co
 images jobs scan ours; `bun scripts/image-scan.ts <ref>` scans one. A vulnerability no
 upstream image fixes yet goes in that image's file under `.trivyignores/` (named after
 its repository), with the package, why, and an expiry about a month out; when it passes,
-the scan fails until the image moves to a fixed release.
+the scan fails until the image moves to a fixed release. Pull requests and the merge
+queue run it only when they change what decides the images (deploy/, compose, the dev
+container, the workflows, `.trivyignores/`, `trivy.yaml` or the scan:
+`--since=<base>`), since a vulnerability published upstream would otherwise stop every
+pull request until someone reviewed it; the weekly run scans every image and reports.
 
 ## Nightly and weekly
 

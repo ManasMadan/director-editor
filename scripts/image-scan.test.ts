@@ -12,10 +12,12 @@ import { join } from "node:path";
 import {
   atDigest,
   DEVCONTAINER,
+  decidesImages,
   ignoreFile,
   imageFiles,
   imageReferences,
   imageScan,
+  imagesChanged,
   passFile,
   renderedImages,
   thirdPartyImages,
@@ -274,8 +276,46 @@ describe("the image scan", () => {
   it("is in the Security workflow, weekly too, against the same Trivy", () => {
     const security = readFileSync(join(ROOT, ".github/workflows/security.yml"), "utf8");
     const job = security.slice(security.indexOf("  images:"), security.indexOf("  security-ok:"));
-    expect(job).toContain("run: bun scripts/image-scan.ts\n");
+    expect(job).toContain("run: bun scripts/image-scan.ts ${BASE:+--since=$BASE}\n");
+    expect(job).toContain(
+      "github.event.pull_request.base.sha || github.event.merge_group.base_sha",
+    );
+    expect(job).toContain("fetch-depth: 0");
     expect(job).toContain(`version: v${TRIVY_VERSION}\n`);
     expect(security).toMatch(/needs: \[[^\]]*\bimages\b[^\]]*\]/);
+  });
+});
+
+describe("a change the scan is for", () => {
+  it("is one to what decides which images run, or what passes for them", () => {
+    const deciding = [
+      "deploy/charts/stack/values.yaml",
+      "docker-compose.yml",
+      ".devcontainer/Dockerfile",
+      ".github/workflows/security.yml",
+      ".trivyignores/grafana/grafana.yaml",
+      "trivy.yaml",
+      "scripts/image-scan.ts",
+    ];
+    expect(deciding.every(decidesImages)).toBe(true);
+    expect(["apps/api/src/main.ts", "docs/testing.md", "scripts/lint.ts"].some(decidesImages)).toBe(
+      false,
+    );
+  });
+
+  it("skips the scan when nothing since the base decides the images, and scans otherwise", () => {
+    const printed = captureOutput();
+    const appOnly = fakeRun((line) =>
+      line.startsWith("git diff") ? { stdout: "apps/api/src/main.ts\n" } : undefined,
+    );
+    expect(imageScan(["--since=abc123", "a/b:1"], appOnly.run, "/repo")).toBe(0);
+    expect(appOnly.calls).toEqual(["git diff --name-only abc123...HEAD"]);
+    expect(printed()).toContain("nothing since abc123 decides the images");
+    const deploy = fakeRun((line) =>
+      line.startsWith("git diff") ? { stdout: "deploy/charts/stack/values.yaml\n" } : undefined,
+    );
+    expect(imagesChanged("abc123", deploy.run, "/repo")).toBe(true);
+    // An unknown change (no such base here) is scanned rather than waved through.
+    expect(imagesChanged("abc123", fakeRun(() => ({ status: 128 })).run, "/repo")).toBe(true);
   });
 });

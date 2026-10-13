@@ -42,6 +42,7 @@ describe("the site header", () => {
 
   it.each([
     ["Dashboard", "/dashboard"],
+    ["Director", "/home"],
     ["Settings", "/settings"],
   ])("goes to %s", async (item, path) => {
     const user = await signUp();

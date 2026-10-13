@@ -8,7 +8,7 @@ import { getLocale, getMessages, getTimeZone, getTranslations } from "next-intl/
 import type { ReactNode } from "react";
 import { textDirection } from "@/i18n/request";
 import { PushSync } from "@/modules/notifications";
-import { LiveUpdates, PreferenceSync, SiteHeader } from "@/modules/shell";
+import { LiveUpdates, PreferenceSync, SiteChrome, SiteHeader } from "@/modules/shell";
 import { Providers } from "./providers";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -47,8 +47,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           <PreferenceSync timeZone={timeZone} />
           <LiveUpdates />
           <PushSync />
-          <SiteHeader />
-          <main className="mx-auto w-full max-w-5xl px-4 py-10">{children}</main>
+          <SiteChrome header={<SiteHeader />}>{children}</SiteChrome>
         </Providers>
       </body>
     </html>

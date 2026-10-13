@@ -1,0 +1,26 @@
+# A job's service containers, running and healthy before the steps use them. Harden-Runner
+# can restart Docker as it starts, after the services are up, and a restart stops them for
+# good: Postgres then refuses every connection and the job fails with nothing wrong in
+# the code. This starts any service container that stopped and waits until each is healthy.
+name: Service containers up
+description: Start any stopped service container again and wait until all are healthy
+runs:
+  using: composite
+  steps:
+    - name: Service containers up
+      shell: bash
+      run: |
+        stopped=$(docker ps -aq --filter status=exited --filter status=created)
+        if [[ -n "$stopped" ]]; then
+          echo "::warning::Docker restarted under the service containers: starting them again"
+          xargs docker start <<< "$stopped" > /dev/null
+        fi
+        for _ in $(seq 60); do
+          if [[ -z "$(docker ps -q --filter health=starting --filter health=unhealthy)" ]]; then
+            exit 0
+          fi
+          sleep 2
+        done
+        docker ps -a
+        echo "::error::A service container isn't healthy after two minutes"
+        exit 1

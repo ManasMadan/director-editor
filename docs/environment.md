@@ -158,6 +158,7 @@ written anywhere else, so a new app gets its variable here.
 | `EXPO_PORT` | 8081 | apps/mobile `dev` (Expo's bundler) |
 | `STORYBOOK_PORT` | 6006 | packages/ui `storybook` |
 | `STRIPE_FAKE_PORT` | 12111 | the fake Stripe (`bun run stripe:fake`, the e2e run) |
+| `GOOGLE_FAKE_PORT` | 12112 | the mock Google: Gemini and YouTube for Director (`bun run google:fake`, `bun dev:full`) |
 
 ## Auth and the API (apps/api)
 
@@ -279,6 +280,25 @@ both `AI_URL` and `AI_SERVICE_SECRET` are set.
 | `AI_MONTHLY_TOKENS_PER_ORG` | ai | 2000000 | Tokens a workspace may use per calendar month. |
 | `AI_TOKENS_PER_RUN` | ai | 20000 | Cap per answer (at least 1000). |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | ai (the Pydantic AI providers, not `settings.py`) | unset | The provider key for the model names above. Not in `.env.example`: add with `bun run env:set`. |
+
+## Director (apps/ai watches shorts; apps/api reads YouTube)
+
+The `director` feature in the API is on when `YOUTUBE_API_KEY` is set and the `ai` and
+`files` features are; the AI service answers `FEATURE_DISABLED` for Director until
+`DIRECTOR_MODEL` is set. Locally `.env.example` points both at the mock Google
+(`packages/fake-google`): real requests, mock answers, no real keys. See
+[director.md](director.md).
+
+| Variable | Read by | Default / example | What it does |
+|---|---|---|---|
+| `DIRECTOR_MODEL` | ai | `gemini-mock` in `.env.example` | The Gemini model, by its Gemini API name (`gemini-3.5-flash`). Gemini because it watches a YouTube video from its URL. Unset: Director off. |
+| `GOOGLE_API_KEY` | ai (req. with `DIRECTOR_MODEL`), the mock Google | `mock-google-key` in `.env.example` | The Gemini API key (the mock's own locally). |
+| `GOOGLE_BASE_URL` | ai | `http://localhost:12112` in `.env.example` | Another Gemini API endpoint: the mock Google locally, a gateway, or unset for Google's. Must be HTTPS in production. |
+| `DIRECTOR_TOKENS_PER_PLAN` | ai | 200000 | Cap per plan: watching the whole short and thinking (at least 10000). |
+| `DIRECTOR_TOKENS_PER_SCENE_CHECK` | ai | 12000 | Cap per scene check: one camera frame (at least 2000). |
+| `DIRECTOR_TOKENS_PER_REVIEW` | ai | 120000 | Cap per take review: watching one take (at least 10000). |
+| `YOUTUBE_API_KEY` | api, the mock Google | `mock-google-key` in `.env.example` | YouTube Data API v3 key: the Shorts feed, search, video details and comments. Unset: Director off. |
+| `YOUTUBE_API_URL` | api | `https://www.googleapis.com/youtube/v3` (`http://localhost:12112/youtube/v3` in `.env.example`) | Where the API reads YouTube: the mock Google locally. Must be HTTPS in production. |
 
 ## Web (apps/web)
 

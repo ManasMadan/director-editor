@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
-import { cpSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { identityFrom, leftovers, main, OLD, rename, rewrite } from "./rename";
@@ -124,6 +124,24 @@ describe("renaming the project", () => {
       readFileSync(join(ROOT, captured), "utf8"),
     );
   }, 60_000);
+
+  it("moves a path that names the template, rewritten or not", () => {
+    const dir = repo({});
+    mkdirSync(join(dir, `.trivyignores/${OLD.name}`), { recursive: true });
+    writeFileSync(
+      join(dir, `.trivyignores/${OLD.name}/devcontainer.yaml`),
+      "vulnerabilities: []\n",
+    );
+    writeFileSync(join(dir, `${OLD.name}-notes.md`), `about ${OLD.name}\n`);
+    Bun.spawnSync(["git", "add", "-A"], { cwd: dir });
+    const { changed } = rename(dir, acme);
+    expect(changed.sort()).toEqual([".trivyignores/shop/devcontainer.yaml", "shop-notes.md"]);
+    expect(readFileSync(join(dir, ".trivyignores/shop/devcontainer.yaml"), "utf8")).toBe(
+      "vulnerabilities: []\n",
+    );
+    expect(readFileSync(join(dir, "shop-notes.md"), "utf8")).toBe("about shop\n");
+    expect(existsSync(join(dir, `${OLD.name}-notes.md`))).toBe(false);
+  });
 
   it("says what it did, and fails on what it couldn't rename", () => {
     const printed = captureOutput();

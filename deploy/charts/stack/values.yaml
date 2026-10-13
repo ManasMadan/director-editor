@@ -313,7 +313,7 @@ services:
       API_URL: "{{ include \"stack.url\" (list $ \"api\") }}"
     keda:
       enabled: true
-      queues: [ai-ingest]
+      queues: [ai-ingest, ai-director]
 
   # Virus scanning for uploads (only needed when file uploads are on).
   clamav:

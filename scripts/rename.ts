@@ -13,8 +13,8 @@
  * The default branch (`master`) stays: rename it in GitHub's settings and the
  * workflows together if you want another.
  */
-import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import { fail, messageOf, ok, ROOT, type Run, runMain, runSync } from "./lib";
 
@@ -154,6 +154,21 @@ export function rename(root: string, identity: Identity) {
     if (after !== before) {
       writeFileSync(join(root, path), after);
       changed.push(path);
+    }
+  }
+  // A path that names the template moves too: the dev container's reviewed exceptions
+  // (.trivyignores/<name>/) follow its image's new name.
+  for (const path of tracked.filter((path) => !KEPT.has(path))) {
+    const moved = rewrite(path, identity);
+    if (moved !== path) {
+      mkdirSync(dirname(join(root, moved)), { recursive: true });
+      runSync("git", ["mv", path, moved], { cwd: root });
+      const at = changed.indexOf(path);
+      if (at === -1) {
+        changed.push(moved);
+      } else {
+        changed[at] = moved;
+      }
     }
   }
   const self = join(root, "scripts/rename.ts");

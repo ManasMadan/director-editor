@@ -22,6 +22,8 @@ import {
   webhookEvents,
 } from "@repo/contracts/events";
 import {
+  directorPlanIdSchema,
+  directorTakeIdSchema,
   documentIdSchema,
   fileIdSchema,
   orgIdSchema,
@@ -306,6 +308,33 @@ export const queues = {
       summarize: aiDocumentJob,
     },
     options: { ...retrying, removeOnComplete: { age: DAY_S }, removeOnFail: { age: 7 * DAY_S } },
+  },
+  /**
+   * Director (apps/ai produces and consumes it): Gemini watches a YouTube short and
+   * writes its shot plan, and reviews each take a member records for it. Model calls
+   * cost money and a provider outage passes, so a few spaced retries, no more.
+   */
+  "ai-director": {
+    jobs: {
+      /** Work out how to film the plan's video. */
+      plan: z.object({ planId: directorPlanIdSchema, orgId: orgIdSchema }),
+      /**
+       * Review a take. `sourceUrl` is a presigned read of the take's file (apps/api signs
+       * it for 30 minutes): the AI service has no storage credentials of its own, and the
+       * URL only ever sits in this queue, never in a table.
+       */
+      "review-take": z.object({
+        takeId: directorTakeIdSchema,
+        orgId: orgIdSchema,
+        sourceUrl: z.url(),
+      }),
+    },
+    options: {
+      attempts: 3,
+      backoff: { type: "exponential", delay: 5 * SECOND_MS, jitter: 0.5 },
+      removeOnComplete: { age: DAY_S },
+      removeOnFail: { age: 7 * DAY_S },
+    },
   },
   maintenance: {
     jobs: {

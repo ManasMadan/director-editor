@@ -4,8 +4,8 @@ import * as z from 'zod';
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AnswerData, AnswerErrors, AnswerResponses, CreateDocumentData, CreateDocumentErrors, CreateDocumentResponses, DeleteDocumentData, DeleteDocumentErrors, DeleteDocumentResponses, DependenciesData, DependenciesErrors, DependenciesResponses, ListDocumentsData, ListDocumentsErrors, ListDocumentsResponses, LiveData, LiveErrors, LiveResponses, ReadyData, ReadyErrors, ReadyResponses, SentimentData, SentimentErrors, SentimentResponses } from './types.gen';
-import { zAnswerBody, zAnswerHeaders, zAnswerResponse, zCreateDocumentBody, zCreateDocumentHeaders, zCreateDocumentResponse, zDeleteDocumentHeaders, zDeleteDocumentPath, zDeleteDocumentResponse, zDependenciesResponse, zListDocumentsHeaders, zListDocumentsResponse, zLiveResponse, zReadyResponse, zSentimentBody, zSentimentHeaders, zSentimentResponse2 } from './zod.gen';
+import type { AnswerData, AnswerErrors, AnswerResponses, CheckDirectorSceneData, CheckDirectorSceneErrors, CheckDirectorSceneResponses, CreateDirectorTakeData, CreateDirectorTakeErrors, CreateDirectorTakeResponses, CreateDocumentData, CreateDocumentErrors, CreateDocumentResponses, DeleteDocumentData, DeleteDocumentErrors, DeleteDocumentResponses, DependenciesData, DependenciesErrors, DependenciesResponses, GetDirectorPlanData, GetDirectorPlanErrors, GetDirectorPlanResponses, ListDirectorTakesData, ListDirectorTakesErrors, ListDirectorTakesResponses, ListDocumentsData, ListDocumentsErrors, ListDocumentsResponses, LiveData, LiveErrors, LiveResponses, ReadyData, ReadyErrors, ReadyResponses, RequestDirectorPlanData, RequestDirectorPlanErrors, RequestDirectorPlanResponses, SentimentData, SentimentErrors, SentimentResponses } from './types.gen';
+import { zAnswerBody, zAnswerHeaders, zAnswerResponse, zCheckDirectorSceneBody, zCheckDirectorSceneHeaders, zCheckDirectorSceneResponse, zCreateDirectorTakeBody, zCreateDirectorTakeHeaders, zCreateDirectorTakeResponse, zCreateDocumentBody, zCreateDocumentHeaders, zCreateDocumentResponse, zDeleteDocumentHeaders, zDeleteDocumentPath, zDeleteDocumentResponse, zDependenciesResponse, zGetDirectorPlanHeaders, zGetDirectorPlanPath, zGetDirectorPlanResponse, zListDirectorTakesHeaders, zListDirectorTakesPath, zListDirectorTakesResponse, zListDocumentsHeaders, zListDocumentsResponse, zLiveResponse, zReadyResponse, zRequestDirectorPlanBody, zRequestDirectorPlanHeaders, zRequestDirectorPlanResponse, zSentimentBody, zSentimentHeaders, zSentimentResponse2 } from './zod.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -80,6 +80,101 @@ export const answer = <ThrowOnError extends boolean = false>(options: Options<An
     }).parseAsync(data),
     responseValidator: async (data) => await zAnswerResponse.parseAsync(data),
     url: '/v1/assistant/answers',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Request Director Plan
+ *
+ * The workspace's plan for a short; asking queues its analysis when there is none.
+ */
+export const requestDirectorPlan = <ThrowOnError extends boolean = false>(options: Options<RequestDirectorPlanData, ThrowOnError>): RequestResult<RequestDirectorPlanResponses, RequestDirectorPlanErrors, ThrowOnError> => (options.client ?? client).post<RequestDirectorPlanResponses, RequestDirectorPlanErrors, ThrowOnError>({
+    requestValidator: async (data) => await z.object({
+        body: zRequestDirectorPlanBody,
+        headers: zRequestDirectorPlanHeaders.optional(),
+        path: z.never().optional(),
+        query: z.never().optional()
+    }).parseAsync(data),
+    responseValidator: async (data) => await zRequestDirectorPlanResponse.parseAsync(data),
+    url: '/v1/director/plans',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get Director Plan
+ */
+export const getDirectorPlan = <ThrowOnError extends boolean = false>(options: Options<GetDirectorPlanData, ThrowOnError>): RequestResult<GetDirectorPlanResponses, GetDirectorPlanErrors, ThrowOnError> => (options.client ?? client).get<GetDirectorPlanResponses, GetDirectorPlanErrors, ThrowOnError>({
+    requestValidator: async (data) => await z.object({
+        body: z.never().optional(),
+        headers: zGetDirectorPlanHeaders.optional(),
+        path: zGetDirectorPlanPath,
+        query: z.never().optional()
+    }).parseAsync(data),
+    responseValidator: async (data) => await zGetDirectorPlanResponse.parseAsync(data),
+    url: '/v1/director/plans/{video_id}',
+    ...options
+});
+
+/**
+ * List Director Takes
+ *
+ * The caller's takes for the short's plan, newest first.
+ */
+export const listDirectorTakes = <ThrowOnError extends boolean = false>(options: Options<ListDirectorTakesData, ThrowOnError>): RequestResult<ListDirectorTakesResponses, ListDirectorTakesErrors, ThrowOnError> => (options.client ?? client).get<ListDirectorTakesResponses, ListDirectorTakesErrors, ThrowOnError>({
+    requestValidator: async (data) => await z.object({
+        body: z.never().optional(),
+        headers: zListDirectorTakesHeaders.optional(),
+        path: zListDirectorTakesPath,
+        query: z.never().optional()
+    }).parseAsync(data),
+    responseValidator: async (data) => await zListDirectorTakesResponse.parseAsync(data),
+    url: '/v1/director/plans/{video_id}/takes',
+    ...options
+});
+
+/**
+ * Check Director Scene
+ *
+ * Where to go for a shot, judged from one camera frame.
+ */
+export const checkDirectorScene = <ThrowOnError extends boolean = false>(options: Options<CheckDirectorSceneData, ThrowOnError>): RequestResult<CheckDirectorSceneResponses, CheckDirectorSceneErrors, ThrowOnError> => (options.client ?? client).post<CheckDirectorSceneResponses, CheckDirectorSceneErrors, ThrowOnError>({
+    requestValidator: async (data) => await z.object({
+        body: zCheckDirectorSceneBody,
+        headers: zCheckDirectorSceneHeaders.optional(),
+        path: z.never().optional(),
+        query: z.never().optional()
+    }).parseAsync(data),
+    responseValidator: async (data) => await zCheckDirectorSceneResponse.parseAsync(data),
+    url: '/v1/director/scene-checks',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Create Director Take
+ *
+ * Records a take and queues its review.
+ */
+export const createDirectorTake = <ThrowOnError extends boolean = false>(options: Options<CreateDirectorTakeData, ThrowOnError>): RequestResult<CreateDirectorTakeResponses, CreateDirectorTakeErrors, ThrowOnError> => (options.client ?? client).post<CreateDirectorTakeResponses, CreateDirectorTakeErrors, ThrowOnError>({
+    requestValidator: async (data) => await z.object({
+        body: zCreateDirectorTakeBody,
+        headers: zCreateDirectorTakeHeaders.optional(),
+        path: z.never().optional(),
+        query: z.never().optional()
+    }).parseAsync(data),
+    responseValidator: async (data) => await zCreateDirectorTakeResponse.parseAsync(data),
+    url: '/v1/director/takes',
     ...options,
     headers: {
         'Content-Type': 'application/json',
