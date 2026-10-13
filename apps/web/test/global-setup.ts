@@ -1,7 +1,7 @@
 /**
  * Starts what the browser tests talk to: two builds of the real API, one with every
  * optional feature on (billing against the fake Stripe, files on the local RustFS, the
- * AI stand-in, Google sign-in) and one with every feature off except captcha, both on one
+ * AI stand-in, Google sign-in, Director's Shorts feed from the mock YouTube) and one with every feature off except captcha, both on one
  * cloned database. The browser reaches them on its own origin, through the proxy in
  * vitest.config.ts, exactly like the site does through the gateway.
  */
@@ -9,6 +9,7 @@ import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { mkdirSync, openSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { createTestDatabase, prepareTemplate } from "@repo/db/testing";
+import { startFakeGoogle } from "@repo/fake-google";
 import { startFakeStripe } from "@repo/fake-stripe";
 import { startFakeAi } from "./fake-ai";
 import { API, CAPTCHA, REDIS_URL, type Services, SITE, STRIPE, VAPID_PUBLIC_KEY } from "./services";
@@ -82,6 +83,7 @@ async function start(): Promise<Services> {
     },
   });
   const ai = await startFakeAi();
+  const google = await startFakeGoogle({ apiKey: "web-tests-youtube-key" });
 
   const logs = join(ROOT, "logs");
   mkdirSync(logs, { recursive: true });
@@ -109,6 +111,7 @@ async function start(): Promise<Services> {
     STRIPE_API_URL: "",
     AI_URL: "",
     AI_SERVICE_SECRET: "",
+    YOUTUBE_API_KEY: "",
   };
   const variants = {
     full: {
@@ -122,6 +125,8 @@ async function start(): Promise<Services> {
       STRIPE_API_URL: stripe.url,
       AI_URL: ai.url,
       AI_SERVICE_SECRET: ai.secret,
+      YOUTUBE_API_KEY: "web-tests-youtube-key",
+      YOUTUBE_API_URL: `${google.url}/youtube/v3`,
     },
     bare: {
       ...off,
@@ -169,6 +174,7 @@ async function start(): Promise<Services> {
       );
       await stripe.close();
       await ai.close();
+      await google.close();
       await database.drop();
       rmSync(dist, { recursive: true, force: true });
     },
