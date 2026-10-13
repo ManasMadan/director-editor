@@ -17,6 +17,7 @@ import {
 } from "@/modules/auth";
 import { BillingPage } from "@/modules/billing";
 import { DashboardPage } from "@/modules/dashboard";
+import { DirectorPage, ReviewPage, ShootPage } from "@/modules/director";
 import { InvitationPage } from "@/modules/invitations";
 import {
   NotificationSettingsPage,
@@ -37,6 +38,9 @@ import {
 import { renderHtml } from "../../test/next-server";
 import * as assistant from "./(app)/assistant/page";
 import * as dashboard from "./(app)/dashboard/page";
+import * as director from "./(app)/director/[videoId]/page";
+import * as review from "./(app)/director/[videoId]/review/page";
+import * as shoot from "./(app)/director/[videoId]/shoot/page";
 import * as home from "./(app)/home/page";
 import * as invitation from "./(app)/invitations/[id]/page";
 import * as notifications from "./(app)/notifications/page";
@@ -134,6 +138,34 @@ describe("route files", () => {
     ).toEqual(<ShortsPlayerPage videoId="kJQP7kiw5Fk" />);
     expect(await shorts.generateMetadata()).toEqual({ title: en.shorts.title });
     expect(await short.generateMetadata()).toEqual({ title: en.shorts.title });
+  });
+
+  it("serves Director's pages for a short, with the shot and audio from the query", async () => {
+    const params = Promise.resolve({ videoId: "dQw4w9WgXcQ" });
+    expect(await rendered(director.default, { params })).toEqual(
+      <DirectorPage videoId="dQw4w9WgXcQ" />,
+    );
+    expect(
+      await rendered(shoot.default, {
+        params,
+        searchParams: Promise.resolve({ shot: ["2", "5"], audio: "voice" }),
+      }),
+    ).toEqual(<ShootPage videoId="dQw4w9WgXcQ" shot="2" audio="voice" />);
+    expect(await rendered(shoot.default, { params, searchParams: Promise.resolve({}) })).toEqual(
+      <ShootPage videoId="dQw4w9WgXcQ" shot={undefined} audio={undefined} />,
+    );
+    expect(
+      await rendered(review.default, {
+        params,
+        searchParams: Promise.resolve({ audio: ["original", "voice"] }),
+      }),
+    ).toEqual(<ReviewPage videoId="dQw4w9WgXcQ" audio="original" />);
+    expect(
+      await rendered(review.default, { params, searchParams: Promise.resolve({ audio: "voice" }) }),
+    ).toEqual(<ReviewPage videoId="dQw4w9WgXcQ" audio="voice" />);
+    expect(await director.generateMetadata()).toEqual({ title: en.director.title });
+    expect(await shoot.generateMetadata()).toEqual({ title: en.director.title });
+    expect(await review.generateMetadata()).toEqual({ title: en.director.review.title });
   });
 
   it("renders pages that read the query string inside a Suspense boundary", async () => {
