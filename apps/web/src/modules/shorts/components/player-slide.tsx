@@ -30,15 +30,15 @@ export function PlayerSlide({
   const observe = useCallback(
     (element: HTMLElement) => {
       const observer = new IntersectionObserver(
-        ([entry]) => {
-          const visible = (entry?.intersectionRatio ?? 0) > 0.6;
+        (entries) => {
+          // The latest report on the slide: the browser may deliver several at once.
+          const visible = entries.reduce((_, entry) => entry.intersectionRatio, 0) > 0.6;
           setActive(visible);
-          // The player comes back muted, as browsers autoplay only without sound.
-          if (!visible) {
-            setMuted(true);
-          }
           if (visible) {
             onVisible(short.videoId);
+          } else {
+            // The player comes back muted, as browsers autoplay only without sound.
+            setMuted(true);
           }
         },
         { threshold: [0, 0.6, 1] },
