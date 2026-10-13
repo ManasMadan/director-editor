@@ -9,5 +9,6 @@ export default async function Page({
 }: PageProps<"/director/[videoId]/review">) {
   const [{ videoId }, query] = await Promise.all([params, searchParams]);
   const audio = Array.isArray(query.audio) ? query.audio[0] : query.audio;
-  return <ReviewPage videoId={videoId} audio={audio} />;
+  // Arriving from the last shot: Director calls the wrap and plays its cut.
+  return <ReviewPage videoId={videoId} audio={audio} wrap={query.wrap === "1"} />;
 }

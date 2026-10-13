@@ -1,5 +1,7 @@
 "use client";
 
+import "@fontsource/gochi-hand/400.css";
+import "../live.css";
 import { useApiErrorMessage } from "@repo/client";
 import { latestTakes } from "@repo/client/api/director/latest";
 import { useDirectorPlanQuery } from "@repo/client/api/director/plan";
@@ -11,7 +13,7 @@ import { ChevronRight, Pause, Play, Redo2, Undo2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DirectorGate } from "@/modules/shorts";
 import { ClipPanel } from "../components/clip-panel";
 import { EditPlayer } from "../components/edit-player";
@@ -24,6 +26,7 @@ import {
   type Tool,
 } from "../components/edit-tools";
 import { type EditChoices, useEditHistory } from "../hooks/use-edit-history";
+import { useMemory } from "../hooks/use-memory";
 import { useObjectUrl } from "../hooks/use-object-url";
 import { usePlayback } from "../hooks/use-playback";
 import { type MediaState, useTakeMedia } from "../hooks/use-take-media";
@@ -39,6 +42,7 @@ import {
   editSeconds,
 } from "../lib/edit";
 import { captionInk } from "../lib/ink";
+import { hush, say } from "../lib/speech";
 import { OUTPUT_HEIGHT, type Segment, stitch } from "../lib/stitch";
 import { timecode } from "../lib/track";
 
@@ -426,7 +430,61 @@ function Workbench({
   );
 }
 
-function Editor({ videoId, plan, audio }: { videoId: string; plan: ShotPlan; audio: AudioMode }) {
+/**
+ * Arriving from the last shot: Director calls the wrap (aloud, when the member has its
+ * voice on) and plays the cut it made of the takes, once they've all loaded, so the
+ * editor opens on the finished short ready for last changes.
+ */
+function WrapCall({ ready, play }: { ready: boolean; play: () => void }) {
+  const t = useTranslations("director.live");
+  const locale = useLocale();
+  const [shown, setShown] = useState(true);
+  const played = useRef(false);
+  const { speak } = useMemory().memory;
+  useEffect(() => {
+    if (speak) {
+      say(t("say.wrap"), locale);
+    }
+    const timer = window.setTimeout(() => setShown(false), 4500);
+    return () => {
+      window.clearTimeout(timer);
+      hush();
+    };
+  }, [t, locale, speak]);
+  useEffect(() => {
+    if (ready && !played.current) {
+      played.current = true;
+      play();
+    }
+  }, [ready, play]);
+  if (!shown) {
+    return null;
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => setShown(false)}
+      className="live-motion absolute inset-x-6 top-6 z-10 flex animate-[live-rise_500ms_cubic-bezier(.2,.9,.3,1.2)_both] flex-col items-center gap-1 rounded-3xl bg-doodle-paper px-5 py-4 text-studio shadow-2xl"
+    >
+      <span className="-rotate-2 font-[family-name:var(--font-hand)] text-3xl">
+        {t("wrap.title")}
+      </span>
+      <span className="text-sm text-balance">{t("wrap.body")}</span>
+    </button>
+  );
+}
+
+function Editor({
+  videoId,
+  plan,
+  audio,
+  wrap,
+}: {
+  videoId: string;
+  plan: ShotPlan;
+  audio: AudioMode;
+  wrap: boolean;
+}) {
   const t = useTranslations("director");
   const errorMessage = useApiErrorMessage();
   const editor = useEditor(videoId, plan, audio);
@@ -451,7 +509,10 @@ function Editor({ videoId, plan, audio }: { videoId: string; plan: ShotPlan; aud
         canFinish={editor.ready && render.progress === null}
         onNext={next}
       />
-      <Stage editor={editor} progress={render.progress} />
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <Stage editor={editor} progress={render.progress} />
+        {wrap ? <WrapCall ready={editor.ready} play={playback.play} /> : null}
+      </div>
       {render.failed ? (
         <p role="alert" className="px-4 text-center text-sm text-studio-error">
           {t("review.renderFailed")}
@@ -477,12 +538,20 @@ function Editor({ videoId, plan, audio }: { videoId: string; plan: ShotPlan; aud
   );
 }
 
-function Review({ videoId, audio }: { videoId: string; audio: string | undefined }) {
+function Review({
+  videoId,
+  audio,
+  wrap,
+}: {
+  videoId: string;
+  audio: string | undefined;
+  wrap: boolean;
+}) {
   const t = useTranslations("director");
   const plan = useDirectorPlanQuery(videoId);
   const ready = plan.data?.status === "ready" ? plan.data.plan : null;
   if (ready) {
-    return <Editor videoId={videoId} plan={ready} audio={parseAudio(audio, ready)} />;
+    return <Editor videoId={videoId} plan={ready} audio={parseAudio(audio, ready)} wrap={wrap} />;
   }
   if (plan.isError) {
     return (
@@ -502,10 +571,10 @@ function Review({ videoId, audio }: { videoId: string; audio: string | undefined
 }
 
 /** The editor: the member's takes on a timeline, Director's review of each, and the short. */
-export function ReviewPage(props: { videoId: string; audio: string | undefined }) {
+export function ReviewPage(props: { videoId: string; audio: string | undefined; wrap?: boolean }) {
   return (
     <DirectorGate>
-      <Review {...props} />
+      <Review {...props} wrap={props.wrap ?? false} />
     </DirectorGate>
   );
 }

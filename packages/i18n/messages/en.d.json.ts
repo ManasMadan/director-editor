@@ -1207,6 +1207,156 @@ declare const messages: {
         "classic": "Classic",
         "off": "Off"
       }
+    },
+    "live": {
+      "live": "Live",
+      "paused": "Paused",
+      "onDevice": "On-device",
+      "onDeviceHint": "Gemini is out of reach: Director is guiding you from what the camera shows.",
+      "status": "Take {take, number} • {size}",
+      "size": {
+        "close-up": "Close-up",
+        "medium": "Medium shot",
+        "full-body": "Full shot",
+        "wide": "Wide shot"
+      },
+      "ready": {
+        "label": "Ready check",
+        "spot": "Spot",
+        "frame": "Frame",
+        "angle": "Angle",
+        "light": "Light",
+        "done": "{done, number} of {total, number} ready"
+      },
+      "dock": {
+        "label": "Camera controls",
+        "share": "Show Director your screen",
+        "stopShare": "Back to the camera",
+        "listen": "Talk to Director",
+        "stopListen": "Stop listening",
+        "pause": "Pause Director",
+        "resume": "Resume Director",
+        "end": "End the session",
+        "flip": "Flip the camera",
+        "speak": "Director's voice",
+        "timer": "Countdown: {seconds, number} seconds",
+        "timerAutoHint": "Director picks it from how your takes start",
+        "sharingNoRecord": "Switch back to the camera to record.",
+        "timerAutoValue": "Auto {seconds, number}s",
+        "timerValue": "{seconds, number}s"
+      },
+      "listening": "Listening…",
+      "voice": {
+        "unsupported": "This browser can't hear you. Try Chrome or Safari.",
+        "blocked": "Director can't hear you. Allow the microphone in your browser's settings.",
+        "words": {
+          "action": "action|record|roll|rolling|let's go|go|ready|start",
+          "cut": "cut|stop|that's it|done",
+          "again": "again|retake|one more|go again|back to one|redo",
+          "keep": "keep|keep it|use it|perfect|next|moving on|that's the one",
+          "flip": "flip|switch camera|flip the camera|turn the camera",
+          "repeat": "repeat|say again|what|pardon|sorry what|what did you say",
+          "help": "help|where|where do i go|what now|what do i do",
+          "quiet": "quiet|shh|mute|be quiet|stop talking",
+          "talk": "talk|speak|unmute|talk to me"
+        }
+      },
+      "say": {
+        "first": "Hi, I'm your director! First up: {title}. {scene}. Let's make it gorgeous.",
+        "back": "Welcome back! {title}. {scene}.",
+        "backLight": "Welcome back! Last time the light was {problem, select, dark {a little dark} bright {a little harsh} other {behind you}}, so let's find a good spot. {title}.",
+        "backThing": "Welcome back! Bring your {thing} again? It looked great last time. {title}.",
+        "next": "Moving on! {title}. {scene}.",
+        "offline": "Gemini's out of reach, so I'll guide you from what the camera shows.",
+        "ready": "That's the shot! Say action, raise a hand, or tap record.",
+        "inPlace": "Great spot! Right there.",
+        "matched": "Pose matched! Hold it.",
+        "match": "Now match the outline.",
+        "rolling": "Quiet on set. Rolling in {seconds, number}.",
+        "count": "{seconds, number}",
+        "action": "Action!",
+        "cut": "Cut!",
+        "backToOne": "Back to one. Let's go again!",
+        "wrap": "That's a wrap! Let's see what we made.",
+        "heard": "Got it.",
+        "light": {
+          "too-dark": "It's a bit dark here. Face a window or switch on a lamp.",
+          "too-bright": "That's very bright. Turn away from the sun a little.",
+          "backlit": "The light's behind you. Turn so it falls on your face."
+        },
+        "thing": "{role, select, pet {I see a {thing}! A co-star?} prop {Ooh, a {thing}. That could be a fun prop.} glare {Careful with that {thing}: screens can glare.} other {Nice {thing} back there. Good depth.}}"
+      },
+      "thing": {
+        "plant": "plant",
+        "chair": "chair",
+        "couch": "couch",
+        "bed": "bed",
+        "bench": "bench",
+        "table": "table",
+        "screen": "screen",
+        "book": "book",
+        "cup": "cup",
+        "bottle": "bottle",
+        "vase": "vase",
+        "clock": "clock",
+        "bag": "bag",
+        "umbrella": "umbrella",
+        "teddy": "teddy bear",
+        "phone": "phone",
+        "ball": "ball",
+        "skateboard": "skateboard",
+        "bike": "bike",
+        "car": "car",
+        "dog": "dog",
+        "cat": "cat",
+        "bird": "bird"
+      },
+      "sticker": {
+        "nailed": "Nailed it!",
+        "take": "Take {take, number}",
+        "cut": "Cut!",
+        "rolling": "Rolling"
+      },
+      "cut": {
+        "title": "Director's cut",
+        "score": "Director's score: {score, number} out of 100",
+        "looping": "Best moment, on loop",
+        "later": "Gemini reviews the whole take once you keep it.",
+        "again": "Go again",
+        "keep": "Keep it",
+        "ship": "Nothing to fix. Ship it!",
+        "praise": {
+          "framing": "Framing was spot-on!",
+          "steady": "Rock-steady camera. Beautiful.",
+          "light": "Lovely light on you!",
+          "energy": "Great energy!",
+          "pose": "You nailed the pose!",
+          "effort": "Love the commitment!"
+        },
+        "tip": {
+          "longer": "Hold it a beat longer next time.",
+          "too-dark": "Find a little more light and it'll really pop.",
+          "too-bright": "Step out of the glare a little.",
+          "backlit": "Turn toward the light so we see your face.",
+          "steady": "Tuck your elbows in for a steadier shot.",
+          "framing": "Stay inside the outline.",
+          "energy": "Try it with a bit more energy, like you're talking to the back row!",
+          "angle": "Mind the phone's angle: keep the horizon level.",
+          "pose": "Match the outline a little closer."
+        }
+      },
+      "screen": {
+        "failed": "Screen sharing isn't available here.",
+        "sharing": "Director is looking at your screen"
+      },
+      "camera": {
+        "title": "Let's get the camera on",
+        "retry": "Try again"
+      },
+      "wrap": {
+        "title": "That's a wrap!",
+        "body": "I cut your takes together, best moments first. Make any last changes, then tap Next."
+      }
     }
   }
 };

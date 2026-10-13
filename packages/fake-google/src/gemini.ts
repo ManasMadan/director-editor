@@ -7,8 +7,10 @@
  * - a shot plan: the plan for the short at the request's YouTube `file_uri` (./plans.ts);
  * - a scene check: walks the member to the shot's landmark over a few checks, then says
  *   they're in place (per shot, so each shot starts over). "Left" is as the member sees
- *   their screen, and the box is in the camera's own frame: with the front camera, whose
- *   preview is a mirror, a landmark to their left is on the frame's right;
+ *   their screen. It can't see the frame, so it never says where the landmark is in it
+ *   (`landmark` is null): a made-up box would have the camera screen circle a mirror on a
+ *   blank wall. The camera screen finds the landmark itself when its on-device detector
+ *   knows it, and real Gemini answers with the box from the frame;
  * - a take review: keeps the take from just after its start for the shot's length, with
  *   a score and feedback named after the shot; a photo has no part to keep.
  */
@@ -117,27 +119,19 @@ function sceneCheck(shot: z.infer<typeof shotText> | null, seen: SceneSteps) {
   const key = shot?.title ?? "";
   const count = (seen.get(key) ?? 0) + 1;
   seen.set(key, count);
-  const width = 0.28;
-  const mirrored = shot?.camera === "front";
-  const box = (x: number) => ({ x: mirrored ? 1 - x - width : x, y: 0.18, width, height: 0.62 });
+  const walking = { inPlace: false, direction: "left", landmark: null, lighting: "good" };
   if (landmark && count === 1) {
     return {
-      inPlace: false,
+      ...walking,
       instruction: `Move about five meters left, toward the ${landmark}.`,
-      direction: "left",
       distanceMeters: 5,
-      landmark: { label: landmark, box: box(0.02) },
-      lighting: "good",
     };
   }
   if (landmark && count === 2) {
     return {
-      inPlace: false,
+      ...walking,
       instruction: `A couple more steps left; the ${landmark} is right there.`,
-      direction: "left",
       distanceMeters: 1.5,
-      landmark: { label: landmark, box: box(0.18) },
-      lighting: "good",
     };
   }
   // Arrived: the next check (the next time this shot is filmed) walks there again.
@@ -149,7 +143,7 @@ function sceneCheck(shot: z.infer<typeof shotText> | null, seen: SceneSteps) {
       : "Anywhere works here. Good light.",
     direction: "none",
     distanceMeters: null,
-    landmark: landmark ? { label: landmark, box: box(0.36) } : null,
+    landmark: null,
     lighting: "good",
   };
 }

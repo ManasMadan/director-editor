@@ -1,0 +1,97 @@
+/*
+ * Director Live's motion and its marker hand. The hand (Gochi Hand, OFL) is self-hosted
+ * from npm, so the camera screen loads no third-party font; the doodles' canvas reads it
+ * through --font-hand once it has loaded.
+ */
+:root {
+  --font-hand: "Gochi Hand", "Marker Felt", "Comic Sans MS", cursive;
+}
+
+/* The Live dot and the aurora: a slow inhale and exhale. */
+@keyframes live-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+/* The aurora's colours drift round the viewport. */
+@keyframes live-drift {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* A countdown number: lands big, settles, and the ring behind it ripples out. */
+@keyframes live-count {
+  0% {
+    opacity: 0;
+    transform: scale(1.6) rotate(-6deg);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(0.94) rotate(2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes live-ripple {
+  from {
+    opacity: 0.7;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.2);
+  }
+}
+
+/* A new line from Director rises into place. */
+@keyframes live-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The voice bars while Director speaks or hears. */
+@keyframes live-bar {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+/* A step changing while recording: the viewport's edge flashes once, on the beat. */
+@keyframes live-beat {
+  from {
+    opacity: 0.9;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Unlayered, so it wins over Tailwind's utilities (which sit in a layer) without !important. */
+@media (prefers-reduced-motion: reduce) {
+  .live-motion,
+  .live-motion * {
+    animation: none;
+    transition: none;
+  }
+}

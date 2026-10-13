@@ -1,9 +1,11 @@
 /**
- * Director's doodles on the viewfinder, drawn on a canvas like a director's marker on a
- * monitor: arrows that say which way to walk, turn or move the phone, the spot to stand
- * on beside the scene's landmark, corner marks for the framing and the body to match.
- * Every line wobbles a little, the same way each frame (a seeded jitter), so it looks
- * hand-drawn but holds still; arrows bob along their way so they read as "go this way".
+ * Director's doodles on the viewfinder, drawn like a director's marker on a monitor
+ * (the look itself is lib/sketch.ts): arrows that say which way to walk, turn or move the
+ * phone, the spot to stand on beside the scene's landmark, the body to step into, lassos
+ * round what's worth using, a horizon to level, and stickers when the member gets it
+ * right. Lines boil like hand-drawn animation, arrows bob along their way so they read as
+ * "go this way", and everything tracked glides on springs (lib/spring.ts) instead of
+ * jumping with each detection.
  *
  * Positions are fractions of the 9:16 viewfinder. The plan's outline and Gemini's boxes
  * are in the camera's own frame; the front camera's preview is a mirror, so those flip
@@ -13,25 +15,24 @@
 import type { CameraMove, FrameBox, SceneCheck, Shot } from "@repo/contracts/api";
 import type { FramingHint } from "./framing";
 import { BONES, type Body, type Point } from "./pose";
-
-/** A small deterministic random sequence: the same seed draws the same wobble. */
-function wobble(seed: number) {
-  let state = Math.trunc(seed * 1_000_003) % 2_147_483_647 || 1;
-  return () => {
-    state = (state * 16_807) % 2_147_483_647;
-    return state / 2_147_483_647 - 0.5;
-  };
-}
-
-export interface Pen {
-  ctx: CanvasRenderingContext2D;
-  width: number;
-  height: number;
-}
-
-function at(pen: Pen, p: Point): Point {
-  return { x: p.x * pen.width, y: p.y * pen.height };
-}
+import {
+  at,
+  boilFrame,
+  fadeOf,
+  ink,
+  type Pen,
+  popScale,
+  type Stroke,
+  scaleOf,
+  sketchClapper,
+  sketchHorizon,
+  sketchLasso,
+  sketchSparkles,
+  sketchStar,
+  sketchTag,
+  wobble,
+} from "./sketch";
+import type { Glider } from "./spring";
 
 const clamp = (value: number, low = 0.06, high = 0.94) => Math.max(low, Math.min(high, value));
 
@@ -208,208 +209,44 @@ export function bob(arrow: Arrow, time: number): Arrow {
   return { from: move(arrow.from), to: move(arrow.to), bend: arrow.bend };
 }
 
-interface Stroke {
-  color: string;
-  width: number;
-  seed: number;
-  /** Marching dashes: the dash length in pixels, and the time they march by. */
-  dash?: number;
-  time?: number;
-}
-
 export interface DoodleColors {
   /** The outline once the member matches it, and until they do. */
   locked: string;
   waiting: string;
-  /** Moves of the phone, and labels. */
+  /** The marker: moves of the phone, the walk. */
   ink: string;
-  /** The shadow under every line and label's backing, for any picture behind. */
+  /** The soft dark edge under every line, and the writing on tags. */
   shade: string;
+  /** Stickers and highlights. */
+  pop: string;
+  /** The tags' label stock. */
+  paper: string;
+  /** "Cut!" */
+  record: string;
 }
 
-function begin(pen: Pen, stroke: Stroke, shade: string) {
-  const { ctx } = pen;
-  ctx.strokeStyle = stroke.color;
-  ctx.fillStyle = stroke.color;
-  ctx.lineWidth = stroke.width * Math.max(1, pen.width / 400);
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.shadowColor = shade;
-  ctx.shadowBlur = 8;
-  const dash = stroke.dash ?? 0;
-  ctx.setLineDash(dash > 0 ? [dash, dash * 0.8] : []);
-  ctx.lineDashOffset = dash > 0 ? -(stroke.time ?? 0) * 40 : 0;
+export type StickerKind = "star" | "nailed" | "clap" | "cut";
+
+/** A sticker slapped on the frame for a moment: a cheer, the slate, the call to cut. */
+export interface Sticker {
+  id: number;
+  kind: StickerKind;
+  /** When it landed, in seconds (performance.now() / 1000). */
+  born: number;
+  at: Point;
+  label: string;
 }
 
-/** A marker line along the arrow's curve, wobbling as a hand would. */
-function sketchCurve(pen: Pen, arrow: Arrow, stroke: Stroke, shade: string) {
-  const from = at(pen, arrow.from);
-  const to = at(pen, arrow.to);
-  const control = at(pen, controlOf(arrow));
-  const jitter = Math.min(5, Math.hypot(to.x - from.x, to.y - from.y) * 0.015);
-  const random = wobble(stroke.seed + arrow.from.x * 7 + arrow.from.y * 13 + arrow.to.x * 17);
-  begin(pen, stroke, shade);
-  pen.ctx.beginPath();
-  pen.ctx.moveTo(from.x + random() * jitter, from.y + random() * jitter);
-  pen.ctx.quadraticCurveTo(
-    control.x + random() * jitter * 2,
-    control.y + random() * jitter * 2,
-    to.x,
-    to.y,
-  );
-  pen.ctx.stroke();
-}
+const STICKER_LIFE: Record<StickerKind, number> = { star: 1.4, nailed: 1.9, clap: 1.4, cut: 1.1 };
 
-function sketchLine(pen: Pen, a: Point, b: Point, stroke: Stroke, shade: string) {
-  sketchCurve(pen, { from: a, to: b, bend: 0 }, stroke, shade);
-}
+export const stickerAlive = (sticker: Sticker, now: number) =>
+  now - sticker.born < STICKER_LIFE[sticker.kind];
 
-/** An arrow: the curve, then a filled head along the curve's last direction. */
-function sketchArrow(pen: Pen, arrow: Arrow, stroke: Stroke, shade: string) {
-  sketchCurve(pen, arrow, stroke, shade);
-  const tip = at(pen, arrow.to);
-  const control = at(pen, controlOf(arrow));
-  const angle = Math.atan2(tip.y - control.y, tip.x - control.x);
-  const size = Math.max(16, pen.width * 0.07);
-  const { ctx } = pen;
-  begin(pen, { ...stroke, dash: 0 }, shade);
-  ctx.beginPath();
-  ctx.moveTo(tip.x + Math.cos(angle) * size * 0.35, tip.y + Math.sin(angle) * size * 0.35);
-  ctx.lineTo(tip.x - Math.cos(angle - 0.55) * size, tip.y - Math.sin(angle - 0.55) * size);
-  ctx.lineTo(tip.x - Math.cos(angle + 0.55) * size, tip.y - Math.sin(angle + 0.55) * size);
-  ctx.closePath();
-  ctx.fill();
-}
-
-/** Corner marks, like a camera's framing guide, for the box the subject should fill. */
-function sketchCorners(pen: Pen, box: FrameBox, stroke: Stroke, shade: string) {
-  const arm = Math.min(box.width, box.height * (pen.height / pen.width)) * 0.22;
-  const armY = (arm * pen.width) / pen.height;
-  const right = box.x + box.width;
-  const bottom = box.y + box.height;
-  const corners: [Point, Point, Point][] = [
-    [
-      { x: box.x, y: box.y + armY },
-      { x: box.x, y: box.y },
-      { x: box.x + arm, y: box.y },
-    ],
-    [
-      { x: right - arm, y: box.y },
-      { x: right, y: box.y },
-      { x: right, y: box.y + armY },
-    ],
-    [
-      { x: right, y: bottom - armY },
-      { x: right, y: bottom },
-      { x: right - arm, y: bottom },
-    ],
-    [
-      { x: box.x + arm, y: bottom },
-      { x: box.x, y: bottom },
-      { x: box.x, y: bottom - armY },
-    ],
-  ];
-  corners.forEach(([a, corner, b], index) => {
-    sketchLine(pen, a, corner, { ...stroke, seed: stroke.seed + index }, shade);
-    sketchLine(pen, corner, b, { ...stroke, seed: stroke.seed + index + 4 }, shade);
-  });
-}
-
-/** A dashed loop round the box: the landmark Gemini saw. */
-function sketchRing(pen: Pen, box: FrameBox, stroke: Stroke, shade: string) {
-  const centre = at(pen, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
-  begin(pen, stroke, shade);
-  pen.ctx.beginPath();
-  pen.ctx.ellipse(
-    centre.x,
-    centre.y,
-    (box.width * pen.width) / 2 + 6,
-    (box.height * pen.height) / 2 + 6,
-    -0.04,
-    0,
-    Math.PI * 2,
-  );
-  pen.ctx.stroke();
-}
-
-/** A stick figure through the body's joints, with a head over the nose. */
-function sketchBody(pen: Pen, body: Body, stroke: Stroke, shade: string) {
-  BONES.forEach(([from, to], index) => {
-    const a = body[from];
-    const b = body[to];
-    if (a && b) {
-      sketchLine(pen, a, b, { ...stroke, seed: index + 3 }, shade);
-    }
-  });
-  if (body.nose) {
-    const centre = at(pen, body.nose);
-    begin(pen, stroke, shade);
-    pen.ctx.beginPath();
-    pen.ctx.arc(centre.x, centre.y, Math.max(10, pen.width * 0.05), 0, Math.PI * 2);
-    pen.ctx.stroke();
-  }
-}
-
-/** The spot to stand on: a ring on the floor with a cross, pulsing gently. */
-function sketchSpot(pen: Pen, spot: Point, stroke: Stroke, shade: string) {
-  const centre = at(pen, spot);
-  const pulse = 1 + Math.sin((stroke.time ?? 0) * 4) * 0.08;
-  const rx = pen.width * 0.09 * pulse;
-  begin(pen, { ...stroke, dash: 0 }, shade);
-  const { ctx } = pen;
-  ctx.beginPath();
-  ctx.ellipse(centre.x, centre.y, rx, rx * 0.38, 0, 0, Math.PI * 2);
-  ctx.stroke();
-  const cross = rx * 0.32;
-  ctx.beginPath();
-  ctx.moveTo(centre.x - cross, centre.y - cross * 0.5);
-  ctx.lineTo(centre.x + cross, centre.y + cross * 0.5);
-  ctx.moveTo(centre.x + cross, centre.y - cross * 0.5);
-  ctx.lineTo(centre.x - cross, centre.y + cross * 0.5);
-  ctx.stroke();
-}
-
-/** A circling arrow round the frame's lower middle: walk the camera round the subject. */
-function sketchOrbit(pen: Pen, stroke: Stroke, shade: string) {
-  const centre = at(pen, { x: 0.5, y: 0.6 });
-  const rx = pen.width * 0.34;
-  const ry = pen.height * 0.08;
-  const end = Math.PI * 1.8;
-  begin(pen, { ...stroke, dash: stroke.dash ?? 16 }, shade);
-  pen.ctx.beginPath();
-  pen.ctx.ellipse(centre.x, centre.y, rx, ry, 0, 0.2, end);
-  pen.ctx.stroke();
-  const tip = { x: 0.5 + 0.34 * Math.cos(end), y: 0.6 + 0.08 * Math.sin(end) };
-  sketchArrow(
-    pen,
-    { from: { x: tip.x - 0.06, y: tip.y - 0.004 }, to: tip, bend: 0 },
-    stroke,
-    shade,
-  );
-}
-
-/** A label on a dark tag, centred on `point` (screen space, so it always reads right). */
-function sketchLabel(pen: Pen, text: string, point: Point, colors: DoodleColors, ink = colors.ink) {
-  const { ctx } = pen;
-  const size = Math.max(13, Math.round(pen.width * 0.042));
-  ctx.save();
-  ctx.font = `700 ${size}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.setLineDash([]);
-  ctx.shadowBlur = 0;
-  const width = ctx.measureText(text).width + size;
-  const x = Math.max(width / 2 + 4, Math.min(pen.width - width / 2 - 4, point.x * pen.width));
-  const y = point.y * pen.height;
-  ctx.globalAlpha = 0.72;
-  ctx.fillStyle = colors.shade;
-  ctx.beginPath();
-  ctx.roundRect(x - width / 2, y - size * 0.85, width, size * 1.7, size * 0.85);
-  ctx.fill();
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = ink;
-  ctx.fillText(text, x, y);
-  ctx.restore();
+/** Something worth pointing out (lib/things.ts), named, in the viewfinder's unmirrored space. */
+interface Highlight {
+  key: string;
+  label: string;
+  box: FrameBox;
 }
 
 /** The words the doodles carry, in the member's language. */
@@ -436,28 +273,203 @@ export interface DoodleScene {
   scene: SceneCheck | null;
   /** While recording: the step's camera move. */
   move: CameraMove | null;
+  recording: boolean;
+  /** Whether to draw where the subject goes (not while Director looks at a shared screen). */
+  subject: boolean;
+  /** Reduced motion: the lines hold still and the arrows stop bobbing. */
+  still: boolean;
+  /** While setting up on a phone: how far it leans off the plan's angle, and whether it's level. */
+  horizon: { roll: number; level: boolean } | null;
+  highlights: readonly Highlight[];
+  stickers: readonly Sticker[];
   labels: DoodleLabels;
 }
 
-/** Where the subject goes: corner marks, the body to match, and arrows to fit the frame. */
-function drawSubject(pen: Pen, scene: DoodleScene, colors: DoodleColors, time: number) {
+/** The scene with every tracked position glided towards its latest reading (lib/spring.ts). */
+export function glideScene(scene: DoodleScene, glider: Glider): DoodleScene {
+  const box = (key: string, b: FrameBox): FrameBox => {
+    const [x = b.x, y = b.y, width = b.width, height = b.height] = glider.glide(key, [
+      b.x,
+      b.y,
+      b.width,
+      b.height,
+    ]);
+    return { x, y, width, height };
+  };
+  const person = scene.person;
+  const [px = 0, py = 0] = person ? glider.glide("person", [person.x, person.y]) : [];
+  const check = scene.scene;
+  const landmark = check?.landmark;
+  return {
+    ...scene,
+    person: person ? { x: px, y: py } : null,
+    scene:
+      check && landmark
+        ? { ...check, landmark: { ...landmark, box: box("landmark", landmark.box) } }
+        : check,
+    highlights: scene.highlights.map((each) => ({
+      ...each,
+      box: box(`thing:${each.key}`, each.box),
+    })),
+  };
+}
+
+/** A marker line along the arrow's curve, wobbling as a hand would, boiling as it's drawn. */
+function sketchCurve(pen: Pen, arrow: Arrow, stroke: Stroke, shade: string) {
+  ink(pen, stroke, shade, (ctx) => {
+    const from = at(pen, arrow.from);
+    const to = at(pen, arrow.to);
+    const control = at(pen, controlOf(arrow));
+    const jitter = Math.min(6 * scaleOf(pen), Math.hypot(to.x - from.x, to.y - from.y) * 0.02);
+    const random = wobble(
+      stroke.seed + arrow.from.x * 7 + arrow.from.y * 13 + arrow.to.x * 17 + pen.boil * 101,
+    );
+    ctx.moveTo(from.x + random() * jitter, from.y + random() * jitter);
+    ctx.quadraticCurveTo(
+      control.x + random() * jitter * 2,
+      control.y + random() * jitter * 2,
+      to.x,
+      to.y,
+    );
+  });
+}
+
+function sketchLine(pen: Pen, a: Point, b: Point, stroke: Stroke, shade: string) {
+  sketchCurve(pen, { from: a, to: b, bend: 0 }, stroke, shade);
+}
+
+/** An arrow: the curve, then an open chevron along the curve's last direction. */
+function sketchArrow(pen: Pen, arrow: Arrow, stroke: Stroke, shade: string) {
+  sketchCurve(pen, arrow, stroke, shade);
+  const tip = at(pen, arrow.to);
+  const control = at(pen, controlOf(arrow));
+  const angle = Math.atan2(tip.y - control.y, tip.x - control.x);
+  const size = Math.max(18, pen.width * 0.075);
+  ink(pen, { ...stroke, dash: 0 }, shade, (ctx) => {
+    ctx.moveTo(tip.x - Math.cos(angle - 0.6) * size, tip.y - Math.sin(angle - 0.6) * size);
+    ctx.lineTo(tip.x, tip.y);
+    ctx.lineTo(tip.x - Math.cos(angle + 0.6) * size, tip.y - Math.sin(angle + 0.6) * size);
+  });
+}
+
+/**
+ * The body to step into: a soft ghost of it (fat translucent limbs and head) with a
+ * stick figure over it, so it reads as "stand like this" from across a room.
+ */
+function sketchSilhouette(pen: Pen, body: Body, stroke: Stroke, shade: string, ghost: boolean) {
+  const { ctx } = pen;
+  const head = Math.max(12, pen.width * 0.06);
+  if (ghost) {
+    ctx.save();
+    ctx.globalAlpha *= 0.2;
+    ctx.strokeStyle = stroke.color;
+    ctx.fillStyle = stroke.color;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = pen.width * 0.09;
+    ctx.beginPath();
+    for (const [from, to] of BONES) {
+      const a = body[from];
+      const b = body[to];
+      if (a && b) {
+        const pa = at(pen, a);
+        const pb = at(pen, b);
+        ctx.moveTo(pa.x, pa.y);
+        ctx.lineTo(pb.x, pb.y);
+      }
+    }
+    ctx.stroke();
+    if (body.nose) {
+      const centre = at(pen, body.nose);
+      ctx.beginPath();
+      ctx.arc(centre.x, centre.y, head * 1.15, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  BONES.forEach(([from, to], index) => {
+    const a = body[from];
+    const b = body[to];
+    if (a && b) {
+      sketchLine(pen, a, b, { ...stroke, seed: index + 3 }, shade);
+    }
+  });
+  if (body.nose) {
+    const centre = at(pen, body.nose);
+    const random = wobble(stroke.seed + pen.boil * 7);
+    ink(pen, stroke, shade, (c) => {
+      c.ellipse(
+        centre.x,
+        centre.y,
+        head * (1 + random() * 0.08),
+        head * (1 + random() * 0.08),
+        random(),
+        0,
+        Math.PI * 2,
+      );
+    });
+  }
+}
+
+/** The spot to stand on: a ring on the floor with a cross, pulsing gently. */
+function sketchSpot(pen: Pen, spot: Point, stroke: Stroke, shade: string) {
+  const centre = at(pen, spot);
+  const pulse = 1 + Math.sin((stroke.time ?? 0) * 4) * 0.08;
+  const rx = pen.width * 0.09 * pulse;
+  ink(pen, { ...stroke, dash: 0 }, shade, (ctx) => {
+    ctx.ellipse(centre.x, centre.y, rx, rx * 0.38, 0, 0, Math.PI * 2);
+    const cross = rx * 0.32;
+    ctx.moveTo(centre.x - cross, centre.y - cross * 0.5);
+    ctx.lineTo(centre.x + cross, centre.y + cross * 0.5);
+    ctx.moveTo(centre.x + cross, centre.y - cross * 0.5);
+    ctx.lineTo(centre.x - cross, centre.y + cross * 0.5);
+  });
+}
+
+/** A circling arrow round the frame's lower middle: walk the camera round the subject. */
+function sketchOrbit(pen: Pen, stroke: Stroke, shade: string) {
+  const centre = at(pen, { x: 0.5, y: 0.6 });
+  const end = Math.PI * 1.8;
+  ink(pen, { ...stroke, dash: stroke.dash ?? 16 }, shade, (ctx) => {
+    ctx.ellipse(centre.x, centre.y, pen.width * 0.34, pen.height * 0.08, 0, 0.2, end);
+  });
+  const tip = { x: 0.5 + 0.34 * Math.cos(end), y: 0.6 + 0.08 * Math.sin(end) };
+  sketchArrow(
+    pen,
+    { from: { x: tip.x - 0.06, y: tip.y - 0.004 }, to: tip, bend: 0 },
+    stroke,
+    shade,
+  );
+}
+
+interface Drawing {
+  scene: DoodleScene;
+  colors: DoodleColors;
+  time: number;
+}
+
+const tagColors = (colors: DoodleColors) => ({
+  paper: colors.paper,
+  ink: colors.shade,
+  shade: colors.shade,
+});
+
+/** Where the subject goes: the body to step into (or a lasso), and arrows to fit the frame. */
+function drawSubject(pen: Pen, { scene, colors, time }: Drawing) {
   const color = scene.matched ? colors.locked : colors.waiting;
   const box = flipBox(scene.shot.framing.subject, scene.mirrored);
-  sketchCorners(pen, box, { color, width: 4, seed: 2 }, colors.shade);
-  // A body only when the plan has one to match: a shot of shoes is just its box.
   if (Object.keys(scene.target).length > 0) {
-    sketchBody(
-      pen,
-      flipBody(scene.target, scene.mirrored),
-      { color, width: 3, seed: 3 },
-      colors.shade,
-    );
+    const body = flipBody(scene.target, scene.mirrored);
+    sketchSilhouette(pen, body, { color, width: 4, seed: 3 }, colors.shade, !scene.recording);
+  } else {
+    // A shot of shoes is just where they go.
+    sketchLasso(pen, box, { color, width: 4, seed: 2, dash: 14, time }, colors.shade);
   }
   framingArrows(scene.framing, box).forEach((arrow, index) => {
     sketchArrow(
       pen,
-      bob(arrow, time),
-      { color: colors.waiting, width: 4, seed: 20 + index },
+      bob(arrow, scene.still ? 0 : time),
+      { color: colors.waiting, width: 5, seed: 20 + index },
       colors.shade,
     );
   });
@@ -471,35 +483,49 @@ interface Walk {
   meters: string | null;
 }
 
-/** The walk to a landmark: its ring and name, the spot beside it, and the arrow there. */
+/** The walk to a landmark: its lasso and name, the spot beside it, and the arrow there. */
 function drawToLandmark(
   pen: Pen,
   landmark: NonNullable<SceneCheck["landmark"]>,
   walk: Walk,
-  { scene, colors, time }: { scene: DoodleScene; colors: DoodleColors; time: number },
+  { scene, colors, time }: Drawing,
 ) {
   const box = flipBox(landmark.box, scene.mirrored);
-  sketchRing(pen, box, { color: colors.locked, width: 3, seed: 5, dash: 10, time }, colors.shade);
+  sketchLasso(pen, box, { color: colors.locked, width: 4, seed: 5, dash: 12, time }, colors.shade);
   const middle = clamp(box.y + box.height * 0.35, OPEN_TOP, OPEN_BOTTOM);
-  sketchLabel(pen, landmark.label, { x: box.x + box.width / 2, y: middle }, colors, colors.locked);
+  sketchTag(pen, landmark.label, { x: box.x + box.width / 2, y: middle }, tagColors(colors), {
+    tone: colors.locked,
+    seed: 5,
+  });
   const spot = spotBeside(box);
-  sketchSpot(pen, spot, { color: walk.color, width: 4, seed: 7, time }, colors.shade);
-  sketchLabel(pen, scene.labels.spot, { x: spot.x, y: spot.y + 0.045 }, colors, walk.color);
+  sketchSpot(pen, spot, { color: walk.color, width: 5, seed: 7, time }, colors.shade);
+  sketchTag(pen, scene.labels.spot, { x: spot.x, y: spot.y + 0.05 }, tagColors(colors), {
+    tone: walk.color,
+    seed: 6,
+  });
   if (walk.check.inPlace) {
     return;
   }
   const from = walkStart(walk.feet, spot, walk.check.direction);
   // Bowed upwards, whichever way it goes, like a hand-drawn "go there".
-  const arrow = bob({ from, to: spot, bend: from.x > spot.x ? 0.06 : -0.06 }, time);
-  sketchArrow(pen, arrow, { color: walk.color, width: 6, seed: 9, dash: 18, time }, colors.shade);
+  const arrow = bob(
+    { from, to: spot, bend: from.x > spot.x ? 0.06 : -0.06 },
+    scene.still ? 0 : time,
+  );
+  sketchArrow(pen, arrow, { color: walk.color, width: 7, seed: 9, dash: 18, time }, colors.shade);
   if (walk.meters) {
     const top = controlOf(arrow);
-    sketchLabel(pen, walk.meters, { x: top.x, y: top.y - 0.04 }, colors, walk.color);
+    sketchTag(pen, walk.meters, { x: top.x, y: top.y - 0.045 }, tagColors(colors), {
+      tone: walk.color,
+      seed: 8,
+      scale: 0.85,
+    });
   }
 }
 
 /** Getting to the spot: to the landmark when Gemini sees it, else the way it said to go. */
-function drawWalk(pen: Pen, scene: DoodleScene, colors: DoodleColors, time: number) {
+function drawWalk(pen: Pen, drawing: Drawing) {
+  const { scene, colors, time } = drawing;
   const check = scene.scene;
   if (!check) {
     return;
@@ -512,7 +538,7 @@ function drawWalk(pen: Pen, scene: DoodleScene, colors: DoodleColors, time: numb
     meters: scene.labels.meters,
   };
   if (check.landmark) {
-    drawToLandmark(pen, check.landmark, walk, { scene, colors, time });
+    drawToLandmark(pen, check.landmark, walk, drawing);
     return;
   }
   // From the member's feet, lifted into the open band so no card hides the arrow.
@@ -522,14 +548,18 @@ function drawWalk(pen: Pen, scene: DoodleScene, colors: DoodleColors, time: numb
     return;
   }
   const stroke = { color: walk.color, width: 7, seed: 9, dash: 18, time };
-  sketchArrow(pen, bob(arrow, time), stroke, colors.shade);
+  sketchArrow(pen, bob(arrow, scene.still ? 0 : time), stroke, colors.shade);
   if (walk.meters) {
-    sketchLabel(pen, walk.meters, { x: arrow.to.x, y: arrow.to.y - 0.05 }, colors, walk.color);
+    sketchTag(pen, walk.meters, { x: arrow.to.x, y: arrow.to.y - 0.05 }, tagColors(colors), {
+      tone: walk.color,
+      seed: 8,
+      scale: 0.85,
+    });
   }
 }
 
 /** While recording: which way to move the phone now. */
-function drawMove(pen: Pen, scene: DoodleScene, colors: DoodleColors, time: number) {
+function drawMove(pen: Pen, { scene, colors, time }: Drawing) {
   const stroke = { color: colors.ink, width: 7, seed: 11, time };
   if (scene.move === "orbit") {
     sketchOrbit(pen, stroke, colors.shade);
@@ -538,17 +568,120 @@ function drawMove(pen: Pen, scene: DoodleScene, colors: DoodleColors, time: numb
     if (!arrow) {
       return;
     }
-    sketchArrow(pen, bob(arrow, time), stroke, colors.shade);
+    sketchArrow(pen, bob(arrow, scene.still ? 0 : time), stroke, colors.shade);
   }
   if (scene.labels.move) {
-    sketchLabel(pen, scene.labels.move, { x: 0.5, y: 0.74 }, colors);
+    sketchTag(pen, scene.labels.move, { x: 0.5, y: 0.74 }, tagColors(colors), {
+      tone: colors.ink,
+      seed: 12,
+    });
   }
 }
 
-/** Everything Director draws over the camera, for one frame `time` seconds in. */
-export function drawDoodles(pen: Pen, scene: DoodleScene, colors: DoodleColors, time: number) {
-  pen.ctx.clearRect(0, 0, pen.width, pen.height);
-  drawSubject(pen, scene, colors, time);
-  drawWalk(pen, scene, colors, time);
-  drawMove(pen, scene, colors, time);
+/** What Director points out in the frame: a lasso round each, and its name on a tag. */
+function drawHighlights(pen: Pen, { scene, colors, time }: Drawing) {
+  scene.highlights.forEach((highlight, index) => {
+    const box = flipBox(highlight.box, scene.mirrored);
+    sketchLasso(
+      pen,
+      box,
+      { color: colors.pop, width: 3.5, seed: 60 + index * 13, dash: 0, time },
+      colors.shade,
+    );
+    sketchTag(
+      pen,
+      highlight.label,
+      { x: box.x + box.width / 2, y: Math.max(0.05, box.y - 0.025) },
+      tagColors(colors),
+      {
+        tone: colors.pop,
+        seed: 61 + index,
+        scale: 0.8,
+      },
+    );
+  });
+}
+
+/** The stickers landing on the frame, each popping in and fading out. */
+function drawStickers(pen: Pen, { scene, colors, time }: Drawing) {
+  const { ctx } = pen;
+  for (const sticker of scene.stickers) {
+    const age = time - sticker.born;
+    const alpha = fadeOf(age, STICKER_LIFE[sticker.kind]);
+    if (alpha <= 0 || age < 0) {
+      continue;
+    }
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    const star = { color: colors.pop, shade: colors.shade, age, seed: sticker.id };
+    switch (sticker.kind) {
+      case "star":
+        sketchStar(pen, sticker.at, { ...star, radius: 0.07 });
+        sketchSparkles(pen, sticker.at, {
+          color: colors.pop,
+          shade: colors.shade,
+          age,
+          reach: 0.07,
+        });
+        break;
+      case "nailed":
+        sketchSparkles(pen, sticker.at, {
+          color: colors.pop,
+          shade: colors.shade,
+          age,
+          reach: 0.1,
+        });
+        sketchStar(
+          pen,
+          { x: sticker.at.x + 0.22, y: sticker.at.y - 0.05 },
+          { ...star, radius: 0.06 },
+        );
+        sketchTag(pen, sticker.label, sticker.at, tagColors(colors), {
+          tone: colors.pop,
+          seed: 70,
+          scale: 1.3 * tagPop(age),
+        });
+        break;
+      case "clap":
+        sketchClapper(pen, sticker.at, {
+          label: sticker.label,
+          colors: { ...tagColors(colors), ink: colors.shade, pop: colors.paper },
+          age,
+        });
+        break;
+      case "cut":
+        sketchTag(pen, sticker.label, sticker.at, tagColors(colors), {
+          tone: colors.record,
+          seed: 71,
+          scale: 1.4 * tagPop(age),
+        });
+        break;
+    }
+    ctx.restore();
+  }
+}
+
+/** A tag can't be drawn at size zero: the first frames of a pop start just above it. */
+const tagPop = (age: number) => Math.max(0.05, popScale(age));
+
+/** Everything Director draws over the camera, at `time` seconds (performance.now() / 1000). */
+export function drawDoodles(
+  pen: Omit<Pen, "boil">,
+  scene: DoodleScene,
+  colors: DoodleColors,
+  time: number,
+) {
+  const drawing: Drawing = { scene, colors, time };
+  const boiling: Pen = { ...pen, boil: boilFrame(time, scene.still) };
+  boiling.ctx.clearRect(0, 0, pen.width, pen.height);
+  if (scene.horizon) {
+    sketchHorizon(boiling, { ...scene.horizon, colors, seed: 90 });
+  }
+  if (scene.subject) {
+    drawSubject(boiling, drawing);
+  }
+  drawHighlights(boiling, drawing);
+  drawWalk(boiling, drawing);
+  drawMove(boiling, drawing);
+  drawStickers(boiling, drawing);
 }

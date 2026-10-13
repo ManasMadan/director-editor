@@ -10,7 +10,7 @@ import { useCamera } from "./use-camera";
 import { useCountdown } from "./use-countdown";
 import { useTakeRecorder } from "./use-take-recorder";
 
-export type Phase = "setup" | "countdown" | "recording" | "preview" | "sending";
+type Phase = "setup" | "countdown" | "recording" | "preview" | "sending";
 
 /** A take runs a moment past the shot's length, so its best part has room either side. */
 const OVERRUN_SECONDS = 1.5;
@@ -30,11 +30,14 @@ export interface StudioShot {
   audio: AudioMode;
 }
 
-/** Where to go once a take is kept: the next shot, or the takes once all are in. */
+/**
+ * Where to go once a take is kept: the next shot, or, once all are in, the editor with
+ * Director's cut of them, opened as a wrap.
+ */
 function nextPage({ videoId, index, count, audio }: Omit<StudioShot, "shot">) {
   return index + 1 < count
     ? (`/director/${videoId}/shoot?shot=${index + 1}&audio=${audio}` as const)
-    : (`/director/${videoId}/review?audio=${audio}` as const);
+    : (`/director/${videoId}/review?audio=${audio}&wrap=1` as const);
 }
 
 /**
@@ -46,6 +49,7 @@ function useCapture(
   shot: Shot,
   camera: ReturnType<typeof useCamera>,
   recorder: ReturnType<typeof useTakeRecorder>,
+  countdownFrom: number,
 ) {
   const [phase, setPhase] = useState<Phase>("setup");
   const [photo, setPhoto] = useState<Blob | null>(null);
@@ -66,8 +70,11 @@ function useCapture(
       setPhase("setup");
     }
   }, [shot, camera.video, recorder]);
-  const countdown = useCountdown(() => void capture());
+  const countdown = useCountdown(() => void capture(), countdownFrom);
   const record = () => {
+    if (phase !== "setup") {
+      return;
+    }
     setFailed(false);
     setPhase("countdown");
     countdown.start();
@@ -79,7 +86,7 @@ function useCapture(
  * One shot's take, start to finish: setup (guides on), a countdown, recording (or the
  * photo), the preview, then sending it to Director and moving on.
  */
-export function useStudio(studio: StudioShot) {
+export function useStudio(studio: StudioShot, countdownFrom: number) {
   const { shot } = studio;
   const router = useRouter();
   const micOn = studio.audio === "voice" && shot.kind === "video";
@@ -90,6 +97,7 @@ export function useStudio(studio: StudioShot) {
     shot,
     camera,
     recorder,
+    countdownFrom,
   );
 
   useEffect(() => {

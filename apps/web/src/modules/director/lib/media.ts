@@ -36,8 +36,17 @@ export function openCamera(camera: Shot["camera"], withSound: boolean): Promise<
       height: { ideal: 1920 },
       aspectRatio: { ideal: 9 / 16 },
     },
-    audio: withSound,
+    // The browser's own clean-up, so a take (and what Director hears) is the member's
+    // voice and not the room.
+    audio: withSound
+      ? { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      : false,
   });
+}
+
+/** The member's screen (or a window or tab of it), to show Director. */
+export function openScreen(): Promise<MediaStream> {
+  return navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
 }
 
 export function stopStream(stream: MediaStream | null) {

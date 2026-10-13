@@ -1206,6 +1206,156 @@
         "classic": "Clásico",
         "off": "Sin subtítulos"
       }
+    },
+    "live": {
+      "live": "En directo",
+      "paused": "En pausa",
+      "onDevice": "En el dispositivo",
+      "onDeviceHint": "Gemini no responde: Director te guía con lo que ve la cámara.",
+      "status": "Toma {take, number} • {size}",
+      "size": {
+        "close-up": "Primer plano",
+        "medium": "Plano medio",
+        "full-body": "Plano entero",
+        "wide": "Plano general"
+      },
+      "ready": {
+        "label": "Todo listo",
+        "spot": "Lugar",
+        "frame": "Encuadre",
+        "angle": "Ángulo",
+        "light": "Luz",
+        "done": "{done, number} de {total, number} listos"
+      },
+      "dock": {
+        "label": "Controles de la cámara",
+        "share": "Enseñar tu pantalla a Director",
+        "stopShare": "Volver a la cámara",
+        "listen": "Hablar con Director",
+        "stopListen": "Dejar de escuchar",
+        "pause": "Pausar a Director",
+        "resume": "Reanudar a Director",
+        "end": "Terminar la sesión",
+        "flip": "Girar la cámara",
+        "speak": "Voz de Director",
+        "timer": "Cuenta atrás: {seconds, number} segundos",
+        "timerAutoHint": "Director la elige según cómo empiezan tus tomas",
+        "sharingNoRecord": "Vuelve a la cámara para grabar.",
+        "timerAutoValue": "Auto {seconds, number} s",
+        "timerValue": "{seconds, number} s"
+      },
+      "listening": "Escuchando…",
+      "voice": {
+        "unsupported": "Este navegador no puede oírte. Prueba con Chrome o Safari.",
+        "blocked": "Director no puede oírte. Permite el micrófono en la configuración del navegador.",
+        "words": {
+          "action": "accion|graba|grabando|vamos|listo|lista|empieza|empezamos",
+          "cut": "corten|corta|corte|para|ya esta|listo ya",
+          "again": "otra vez|otra|repetir|repite la toma|de nuevo|desde el principio",
+          "keep": "me quedo|quedatela|usala|perfecto|siguiente|esa es",
+          "flip": "gira|girar|cambia la camara|gira la camara|da la vuelta",
+          "repeat": "repite|como|que has dicho|perdona|otra vez que",
+          "help": "ayuda|donde|adonde voy|y ahora|que hago",
+          "quiet": "silencio|calla|callate|shh|sin voz",
+          "talk": "habla|hablame|con voz|activa la voz"
+        }
+      },
+      "say": {
+        "first": "¡Hola, soy tu director! Empezamos con: {title}. {scene}. Vamos a hacerlo precioso.",
+        "back": "¡Bienvenido de nuevo! {title}. {scene}.",
+        "backLight": "¡Bienvenido de nuevo! La última vez {problem, select, dark {había poca luz} bright {había demasiada luz} other {tenías la luz detrás}}, así que busquemos un buen sitio. {title}.",
+        "backThing": "¡Bienvenido de nuevo! ¿Traes otra vez tu {thing}? Quedó genial la última vez. {title}.",
+        "next": "¡Seguimos! {title}. {scene}.",
+        "offline": "Gemini no responde, así que te guío con lo que ve la cámara.",
+        "ready": "¡Ese es el plano! Di acción, levanta la mano o pulsa grabar.",
+        "inPlace": "¡Buen sitio! Justo ahí.",
+        "matched": "¡Pose lograda! Mantenla.",
+        "match": "Ahora imita la silueta.",
+        "rolling": "Silencio en el set. Grabamos en {seconds, number}.",
+        "count": "{seconds, number}",
+        "action": "¡Acción!",
+        "cut": "¡Corten!",
+        "backToOne": "A posiciones. ¡Otra vez!",
+        "wrap": "¡Y se acabó el rodaje! Vamos a ver lo que hemos hecho.",
+        "heard": "Entendido.",
+        "light": {
+          "too-dark": "Aquí está un poco oscuro. Ponte frente a una ventana o enciende una lámpara.",
+          "too-bright": "Hay mucha luz. Apártate un poco del sol.",
+          "backlit": "Tienes la luz detrás. Gírate para que te dé en la cara."
+        },
+        "thing": "{role, select, pet {¡Veo un {thing}! ¿Coprotagonista?} prop {Anda, un {thing}. Puede ser un buen accesorio.} glare {Cuidado con esa {thing}: las pantallas dan reflejos.} other {Bonito {thing} al fondo. Da profundidad.}}"
+      },
+      "thing": {
+        "plant": "planta",
+        "chair": "silla",
+        "couch": "sofá",
+        "bed": "cama",
+        "bench": "banco",
+        "table": "mesa",
+        "screen": "pantalla",
+        "book": "libro",
+        "cup": "taza",
+        "bottle": "botella",
+        "vase": "jarrón",
+        "clock": "reloj",
+        "bag": "bolso",
+        "umbrella": "paraguas",
+        "teddy": "peluche",
+        "phone": "móvil",
+        "ball": "pelota",
+        "skateboard": "monopatín",
+        "bike": "bici",
+        "car": "coche",
+        "dog": "perro",
+        "cat": "gato",
+        "bird": "pájaro"
+      },
+      "sticker": {
+        "nailed": "¡Clavado!",
+        "take": "Toma {take, number}",
+        "cut": "¡Corten!",
+        "rolling": "Grabando"
+      },
+      "cut": {
+        "title": "El montaje del director",
+        "score": "Nota de Director: {score, number} sobre 100",
+        "looping": "El mejor momento, en bucle",
+        "later": "Gemini revisa la toma entera cuando te la quedas.",
+        "again": "Otra vez",
+        "keep": "Me la quedo",
+        "ship": "Nada que corregir. ¡Publícalo!",
+        "praise": {
+          "framing": "¡El encuadre, perfecto!",
+          "steady": "Cámara firme como una roca. Precioso.",
+          "light": "¡Qué luz tan bonita!",
+          "energy": "¡Muy buena energía!",
+          "pose": "¡Has clavado la pose!",
+          "effort": "¡Me encanta tu entrega!"
+        },
+        "tip": {
+          "longer": "La próxima vez aguanta un momento más.",
+          "too-dark": "Busca un poco más de luz y lucirá mucho más.",
+          "too-bright": "Sal un poco del deslumbramiento.",
+          "backlit": "Gírate hacia la luz para que te veamos la cara.",
+          "steady": "Pega los codos al cuerpo para que no se mueva.",
+          "framing": "Quédate dentro de la silueta.",
+          "energy": "Prueba con más energía, ¡como si hablaras a la última fila!",
+          "angle": "Cuida el ángulo del teléfono: mantén el horizonte recto.",
+          "pose": "Imita la silueta un poco mejor."
+        }
+      },
+      "screen": {
+        "failed": "Aquí no se puede compartir la pantalla.",
+        "sharing": "Director está mirando tu pantalla"
+      },
+      "camera": {
+        "title": "Vamos a encender la cámara",
+        "retry": "Inténtalo de nuevo"
+      },
+      "wrap": {
+        "title": "¡Y se acabó el rodaje!",
+        "body": "He montado tus tomas con los mejores momentos. Haz los últimos cambios y pulsa Siguiente."
+      }
     }
   }
 }

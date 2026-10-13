@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { type DoodleScene, drawDoodles } from "../lib/doodle";
+import { type DoodleScene, drawDoodles, glideScene } from "../lib/doodle";
 import { token } from "../lib/ink";
+import { Glider } from "../lib/spring";
 
 /**
  * Director's doodles over the viewfinder (lib/doodle.ts), redrawn every frame so the
- * arrows move. The canvas is never mirrored: the doodles flip camera-frame positions
- * themselves, so their arrows and labels read the right way round.
+ * lines boil and the arrows move, with every tracked position gliding on a spring. The
+ * canvas is never mirrored: the doodles flip camera-frame positions themselves, so their
+ * arrows and labels read the right way round.
  */
 export function DoodleLayer({ scene }: { scene: DoodleScene }) {
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -27,8 +29,14 @@ export function DoodleLayer({ scene }: { scene: DoodleScene }) {
       waiting: token("--guide-warn"),
       ink: token("--studio-foreground"),
       shade: token("--studio"),
+      pop: token("--doodle-pop"),
+      paper: token("--doodle-paper"),
+      record: token("--record"),
     };
-    const begun = performance.now();
+    const font = token("--font-hand");
+    // The canvas draws text in a font only once it has loaded; until then, the fallback.
+    void document.fonts?.load(`24px ${font}`);
+    const glider = new Glider();
     let frame = 0;
     const draw = (now: number) => {
       const ratio = window.devicePixelRatio || 1;
@@ -38,7 +46,9 @@ export function DoodleLayer({ scene }: { scene: DoodleScene }) {
         element.width = width;
         element.height = height;
       }
-      drawDoodles({ ctx, width, height }, latest.current, colors, (now - begun) / 1000);
+      const time = now / 1000;
+      glider.frame(time);
+      drawDoodles({ ctx, width, height, font }, glideScene(latest.current, glider), colors, time);
       frame = requestAnimationFrame(draw);
     };
     frame = requestAnimationFrame(draw);

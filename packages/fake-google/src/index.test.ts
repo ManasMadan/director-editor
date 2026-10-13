@@ -111,20 +111,8 @@ describe("the mock Gemini", () => {
       [true, "none"],
       [false, "left"],
     ]);
-    expect(checks[0]?.landmark?.box.x).toBe(0.02);
-    // The front camera's preview is a mirror: a tree to the member's left is on the
-    // frame's right.
-    const selfie = zSceneCheck.parse(
-      argsOf(
-        (
-          await gemini(
-            ask("inPlace", [shotPart({ ...shot, title: "Selfie", camera: "front" }), frame]),
-          )
-        ).json,
-      ),
-    );
-    expect(selfie).toMatchObject({ direction: "left" });
-    expect(selfie.landmark?.box.x).toBeCloseTo(0.7);
+    // It can't see the frame, so it never claims where the landmark is in it.
+    expect(checks.every((check) => check.landmark === null)).toBe(true);
     const anywhere = zSceneCheck.parse(
       argsOf(
         (await gemini(ask("inPlace", [shotPart({ title: "Free", sceneLandmark: null })]))).json,

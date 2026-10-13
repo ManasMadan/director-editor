@@ -58,21 +58,66 @@ If the Expo app's bundler won't start (`bun dev:full` stops with it), run the re
 | `/director/[videoId]/shoot?shot=n&audio=voice\|original` | the camera, one shot at a time |
 | `/director/[videoId]/review` | every shot's newest take and its review; "Make my short" stitches and downloads |
 
-On the camera screen:
+The camera screen is **Director Live**: the camera in a floating capsule over a blurred,
+dark copy of itself, an aurora behind it that breathes while Director talks or listens, a
+frosted dock (show your screen, talk, the shutter, pause, end) and a few status pills.
+Controls fade after a few seconds untouched; any touch brings them back.
 
-- **Script**: the teleprompter lights the line to say and sweeps it in time with the take.
-- **Framing**: the shot's subject box and a stick figure are drawn on the viewfinder; with a
-  person in the shot, MediaPipe's pose landmarker (in the browser) finds them and the hint
-  says to step left or right, closer or back.
-- **Scene**: "Stand near a tree", spoken and written. Every five seconds before recording,
-  one frame goes to Gemini, which answers with a direction ("Move about five meters left,
-  to the tree") and where the landmark is, drawn as a doodle around it.
-- **Phone angle**: a bubble level from the phone's tilt (DeviceOrientation), solid green
-  inside the plan's tolerance. A computer has no tilt sensor; it says so.
-- **Pose**: the target body is drawn in amber and turns green when the member's matches it
-  (the joints' shape, wherever they stand and however large).
-- **Voice**: directions are read out with the browser's speech synthesis, except while the
-  microphone records a take (a take with your voice shouldn't have Director's in it).
+- **One voice.** Everything that could say something (Gemini's scene check, the phone's
+  own light and shake readings, the framing, the angle, the pose, what's in the frame,
+  the steps) offers a cue to `lib/cues.ts`, which picks the one that matters most, waits
+  a breath between lines, never repeats a line inside its cooldown, and gives the member
+  the floor when they talk. The line is shown as a caption and, with the voice on, said
+  aloud. A set's calls punctuate it: "Quiet on set. Rolling in 3", "Action!", "Cut!",
+  "Back to one", "Moving on", "That's a wrap".
+- **Reacts as the camera moves.** The phone samples a tiny copy of the frame four times
+  a second (`lib/frame-stats.ts`): light, backlight and shake answer at once, and a
+  frame that looks somewhere new asks Gemini for a scene check straight away instead of
+  waiting for the next one.
+- **Points things out.** MediaPipe's object detector (EfficientDet-Lite0, in the browser)
+  finds props, backdrops, pets and screens (`lib/things.ts`); the best few get a lasso
+  and a name, and Director says what they're good for. The shot's landmark comes first.
+- **Doodles, not boxes** (`lib/sketch.ts`, `lib/doodle.ts`): a fat marker line with a
+  dark edge, boiling like hand-drawn animation; a ghost silhouette to step into; lassos;
+  a horizon to level; stickers when it comes together (a star when the pose locks,
+  "Nailed it!" when the ready check is all green, the clapperboard for each take).
+  Everything tracked glides on a critically damped spring (`lib/spring.ts`), so nothing
+  jitters. Reduced motion stops the boil and the bob.
+- **The ready check**: spot, frame, angle, light, each green, amber, or left out when the
+  shot or device can't judge it (`lib/readiness.ts`).
+- **Talk to it.** The browser's speech recogniser listens (Chrome, Safari): "action",
+  "cut", "go again", "keep it", "flip", "repeat", "quiet", in the member's language
+  (`director.live.voice.words`). Talking over Director stops it. What the microphone
+  hears of Director's own voice, and phrases the recogniser doubts, are ignored
+  (`lib/intents.ts`). It stops listening while a take records the member's voice.
+- **Hands-free.** Hold a hand above your head for a moment to roll.
+- **Flip and share.** The flip button swaps cameras; the dock can show Director the
+  screen instead (no recording then), and Director brainstorms from the shot's plan.
+- **The Director's Cut.** The moment a take ends, `lib/cut.ts` picks its steadiest
+  stretch of the shot's length to loop, scores it, and gives one piece of praise and one
+  thing to try (energy from the voice's level, shake, light, framing, a late start),
+  said aloud a beat after "Cut!". Gemini's full review follows once the take is kept.
+- **It remembers** (`lib/memory.ts`): voice and listening on or off, the countdown
+  (or, on Auto, a longer one once most takes start late), the light problems and props
+  that keep coming up, sessions and scores. The greeting is about last time.
+- **The wrap.** Keeping the last shot opens the editor on Director's cut of the takes,
+  playing, with "That's a wrap!", for any last changes.
+- **Never stuck.** Two failed scene checks in a row (no allowance, rate-limited, Gemini
+  down) switch Director to on-device guidance for the shot, with an "On-device" badge;
+  a detector that can't load just leaves its guide out.
+- **Phone angle**: a horizon doodle from the phone's tilt (DeviceOrientation), solid green
+  inside the plan's tolerance. A computer has no tilt sensor, so the angle check is left
+  out there. The screen is kept awake while it's open (Wake Lock), and phones buzz on the
+  beats (Vibration).
+
+The seams, each documented in its file:
+
+| Concern | Now | Later | Where |
+|---|---|---|---|
+| What Director remembers | this browser's storage | an API procedure, a row per member | `MemoryStore` in `apps/web/src/modules/director/lib/memory.ts` |
+| Director's voice | the browser's speech synthesis | a streamed voice (Gemini Live's native audio) | `say`, `hush`, `saying` in `lib/speech.ts` |
+| Hearing the member | the browser's speech recogniser | a streamed transcript from the same live session | `useListening` in `hooks/use-listening.ts` |
+| Looking at the scene | a Gemini call per frame (`checkScene`) | a live session streaming frames | `useSceneGuide` in `hooks/use-scene-guide.ts` |
 
 With "use the original audio", the take records no sound and the original plays while
 filming; the finished short is silent, for the original sound to be added when posting
