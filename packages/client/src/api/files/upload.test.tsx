@@ -1,9 +1,12 @@
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { ORPCError } from "@orpc/client";
 import type { FileInfo } from "@repo/contracts/api";
 import { fileIdSchema } from "@repo/contracts/ids";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn, until } from "../../../test/stand-in";
+import { errorCode } from "../../errors";
+import { useFileDownloadUrl } from "./download-url";
 import { useFileQuery } from "./get";
 import { checkUpload, UploadFailedError, useUploadFileMutation } from "./upload";
 
@@ -141,5 +144,32 @@ describe("a file's status", () => {
       unmount();
       vi.useRealTimers();
     }
+  });
+});
+
+describe("a file's download URL", () => {
+  it("is asked for each time it's read, never cached, as it expires", async () => {
+    let issued = 0;
+    const api = standIn((os) => ({
+      files: {
+        downloadUrl: os.files.downloadUrl.handler(({ input }) => {
+          if (input.fileId !== id(1)) {
+            throw new ORPCError("FILE_NOT_FOUND");
+          }
+          issued++;
+          return { url: `https://files.test/${input.fileId}?v=${issued}`, expiresAt: new Date(0) };
+        }),
+      },
+    }));
+    const { result } = renderHook(() => useFileDownloadUrl(), api);
+    await expect(result.current(id(1))).resolves.toEqual({
+      url: `https://files.test/${id(1)}?v=1`,
+      expiresAt: new Date(0),
+    });
+    await expect(result.current(id(1))).resolves.toMatchObject({
+      url: `https://files.test/${id(1)}?v=2`,
+    });
+    expect(errorCode(await result.current(id(2)).catch((e: unknown) => e))).toBe("FILE_NOT_FOUND");
+    expect(api.calls).toEqual(["files/downloadUrl", "files/downloadUrl", "files/downloadUrl"]);
   });
 });
