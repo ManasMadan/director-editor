@@ -1,5 +1,6 @@
 "use client";
 
+import { required } from "@repo/contracts/objects";
 import { Spinner } from "@repo/ui/components/spinner";
 import { cn } from "@repo/ui/lib/utils";
 import { Plus } from "lucide-react";
@@ -209,10 +210,7 @@ const ClipTrack = memo(function ClipTrack({
 function useHalfWidth(element: React.RefObject<HTMLDivElement | null>) {
   const [half, setHalf] = useState(0);
   useEffect(() => {
-    const target = element.current;
-    if (!target) {
-      return;
-    }
+    const target = required(element.current, "the timeline's scroller");
     const observer = new ResizeObserver(() => setHalf(target.clientWidth / 2));
     observer.observe(target);
     return () => observer.disconnect();

@@ -5,6 +5,7 @@ import { latestTakes } from "@repo/client/api/director/latest";
 import { useDirectorPlanQuery } from "@repo/client/api/director/plan";
 import { useDirectorTakesQuery } from "@repo/client/api/director/takes";
 import type { ShotPlan } from "@repo/contracts/api";
+import { required } from "@repo/contracts/objects";
 import { buttonVariants } from "@repo/ui/components/button";
 import { Spinner } from "@repo/ui/components/spinner";
 import { ChevronRight, Pause, Play, Redo2, Undo2, X } from "lucide-react";
@@ -42,12 +43,15 @@ import { captionInk } from "../lib/ink";
 import { OUTPUT_HEIGHT, type Segment, stitch } from "../lib/stitch";
 import { timecode } from "../lib/track";
 
+/** A clip's take once it's in memory (not while it loads, nor when it couldn't be). */
+function loadedTake(media: Map<number, MediaState>, index: number) {
+  const state = media.get(index);
+  return typeof state === "object" ? state : undefined;
+}
+
 function segmentsOf(clips: readonly Clip[], media: Map<number, MediaState>): Segment[] {
   return clips.map((clip) => {
-    const take = media.get(clip.index);
-    if (typeof take !== "object") {
-      throw new Error("a take isn't loaded yet");
-    }
+    const take = required(loadedTake(media, clip.index), "a loaded take");
     return clip.shot.kind === "video"
       ? { kind: "video", source: take.blob, startSeconds: clip.from, endSeconds: clip.to }
       : { kind: "photo", source: take.blob, seconds: clip.seconds };
@@ -260,7 +264,7 @@ function useEditor(videoId: string, plan: ShotPlan, audio: AudioMode) {
   const [selectedClip, setSelectedClip] = useState<number | null>(null);
   const [selectedLine, setSelectedLine] = useState<string | null>(null);
   const [tool, setTool] = useState<Tool | null>(null);
-  const loaded = clips.every((clip) => typeof media.get(clip.index) === "object");
+  const loaded = clips.every((clip) => loadedTake(media, clip.index));
   return {
     takes,
     clips,
@@ -273,7 +277,8 @@ function useEditor(videoId: string, plan: ShotPlan, audio: AudioMode) {
     setTool,
     ready: complete(clips) && loaded,
     left: clips.filter((clip) => clip.state === "missing").length,
-    focus: clips[selectedClip ?? -1] ?? clipAt(clips, playback.time),
+    // A plan has a shot at least, so there's always a clip under the playhead.
+    focus: required(clips[selectedClip ?? -1] ?? clipAt(clips, playback.time), "a clip"),
     selectedClip,
     selectedLine,
     selectClip: (clip: Clip) => {
@@ -336,7 +341,7 @@ function Panel({
       />
     );
   }
-  return focus ? <ClipPanel videoId={videoId} clip={focus} audio={audio} /> : null;
+  return <ClipPanel videoId={videoId} clip={focus} audio={audio} />;
 }
 
 function soundLabel(audio: AudioMode, on: boolean) {
@@ -416,10 +421,8 @@ function Workbench({
       <EditTools
         tool={editor.tool}
         onTool={editor.setTool}
-        onRetake={
-          focus
-            ? () => router.push(`/director/${videoId}/shoot?shot=${focus.index}&audio=${audio}`)
-            : null
+        onRetake={() =>
+          router.push(`/director/${videoId}/shoot?shot=${focus.index}&audio=${audio}`)
         }
       />
     </>
