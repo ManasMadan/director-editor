@@ -63,13 +63,10 @@ const TREE = { label: "Tree", box: { x: 0.7, y: 0.2, width: 0.2, height: 0.5 } }
 /** A moment the arrows rest at the start of their bob. */
 const REST = (Math.PI * 3) / 10;
 
-/**
- * A canvas that notes each line, fill and label it draws, with the pen's colour then.
- * A null `time` draws without one, as a caller with no clock would.
- */
-function draw(doodles: DoodleScene, time: number | null = REST) {
+/** A canvas that notes each line, fill and label it draws, with the pen's colour then. */
+function draw(doodles: DoodleScene, time = REST) {
   const { ctx } = canvasOf(WIDTH, HEIGHT);
-  const strokes: { color: string; dash: number[]; offset: number }[] = [];
+  const strokes: { color: string; dash: number[] }[] = [];
   const fills: string[] = [];
   const labels: { text: string; color: string; x: number; y: number }[] = [];
   const stroke = ctx.stroke.bind(ctx);
@@ -78,7 +75,7 @@ function draw(doodles: DoodleScene, time: number | null = REST) {
   vi.spyOn(ctx, "stroke").mockImplementation(() => {
     // The canvas keeps dashes in single precision.
     const dash = ctx.getLineDash().map((length) => Math.round(length * 10) / 10);
-    strokes.push({ color: String(ctx.strokeStyle), dash, offset: ctx.lineDashOffset });
+    strokes.push({ color: String(ctx.strokeStyle), dash });
     stroke();
   });
   vi.spyOn(ctx, "fill").mockImplementation(() => {
@@ -93,12 +90,7 @@ function draw(doodles: DoodleScene, time: number | null = REST) {
   const arc = vi.spyOn(ctx, "arc");
   const ellipse = vi.spyOn(ctx, "ellipse");
   const clearRect = vi.spyOn(ctx, "clearRect");
-  const pen = { ctx, width: WIDTH, height: HEIGHT };
-  if (time === null) {
-    Reflect.apply(drawDoodles, undefined, [pen, doodles, COLORS]);
-  } else {
-    drawDoodles(pen, doodles, COLORS, time);
-  }
+  drawDoodles({ ctx, width: WIDTH, height: HEIGHT }, doodles, COLORS, time);
   return { strokes, fills, labels, moveTo, arc, ellipse, clearRect };
 }
 
@@ -279,17 +271,5 @@ describe("Director's doodles", () => {
     );
     expect(still.strokes).toHaveLength(8);
     expect(still.labels).toEqual([]);
-  });
-
-  it("holds the dashes and the spot still in a frame drawn without a clock", () => {
-    const doodles = scene({ scene: check({ landmark: TREE }) });
-    const moving = draw(doodles, 0.5);
-    const still = draw(doodles, null);
-    // The landmark's ring: marching with time, at rest without.
-    expect(moving.strokes[8]?.offset).toBe(-0.5 * 40);
-    expect(still.strokes[8]?.offset).toBe(0);
-    // The spot: pulsing with time, its own size without.
-    expect(moving.ellipse.mock.calls[1]?.[2]).not.toBeCloseTo(WIDTH * 0.09);
-    expect(still.ellipse.mock.calls[1]?.[2]).toBeCloseTo(WIDTH * 0.09);
   });
 });

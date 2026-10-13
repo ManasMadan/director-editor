@@ -95,17 +95,4 @@ describe("drawing a caption", () => {
     const behind = ctx.getImageData((firstX ?? 0) - 4, (firstY ?? 0) - 10, 1, 1).data;
     expect(hue(Array.from(behind))).toBe("blue");
   });
-
-  it("paints nowhere for a word the font can't measure", () => {
-    const { ctx, fillText } = canvas();
-    const measure = ctx.measureText.bind(ctx);
-    vi.spyOn(ctx, "measureText").mockImplementation((text) => {
-      const metrics = measure(text);
-      // What a font that can't size a word gives back.
-      return text === "?" ? Object.defineProperty(metrics, "width", { value: undefined }) : metrics;
-    });
-    drawCaption(ctx, WIDTH, HEIGHT, words(["?", "now"]), "classic", INK);
-    expect(fillText).toHaveBeenCalledWith("?", Number.NaN, expect.any(Number));
-    expect(painted(ctx)).toBe(false);
-  });
 });

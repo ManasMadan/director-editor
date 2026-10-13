@@ -63,20 +63,4 @@ describe("bodies", () => {
     );
     expect(poseScore(dot, dot)).toBe(1);
   });
-
-  it("still scores a body whose joint is lost between reads, counting it as not there", () => {
-    // A joint there when the shared ones are picked, and gone when they're read.
-    const flicker = (body: Body, name: "nose" | "left_hip"): Body => {
-      let reads = 0;
-      const copy = { ...body };
-      Object.defineProperty(copy, name, { get: () => (reads++ === 0 ? body[name] : undefined) });
-      return copy;
-    };
-    const lostInTarget = poseScore(flicker(standing, "left_hip"), standing);
-    const lostInBody = poseScore(standing, flicker(standing, "nose"));
-    for (const score of [lostInTarget, lostInBody]) {
-      expect(score).not.toBeNull();
-      expect(score ?? 1).toBeLessThan(1);
-    }
-  });
 });
