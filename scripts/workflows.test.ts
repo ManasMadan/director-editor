@@ -1044,3 +1044,24 @@ describe("a job acting as the GitHub App", () => {
     expect(unguarded).toEqual([]);
   });
 });
+
+describe("a job with service containers", () => {
+  // Harden-Runner can restart Docker after the services start, which stops them for good:
+  // the job then fails on a refused connection with nothing wrong in the code.
+  it("starts them again if they stopped, and waits until they're healthy, before using them", () => {
+    const files = readdirSync(join(ROOT, ".github/workflows")).filter((f) => f.endsWith(".yml"));
+    const missing = files.flatMap((file) =>
+      Object.entries(workflow(file).jobs)
+        .filter(([, job]) => "services" in job)
+        .filter(([, job]) => {
+          const uses = (job.steps ?? []).map((step) => step.uses ?? "");
+          const up = uses.indexOf("./.github/actions/services-up");
+          return (
+            up === -1 || up !== uses.findIndex((use) => use.startsWith("actions/checkout@")) + 1
+          );
+        })
+        .map(([id]) => `${file}:${id}`),
+    );
+    expect(missing).toEqual([]);
+  });
+});

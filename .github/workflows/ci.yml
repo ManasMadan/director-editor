@@ -230,6 +230,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
+      - uses: ./.github/actions/services-up
       # ClamAV's signatures (hundreds of MB from a rate-limited CDN), kept for a day: with
       # them in place clamd starts at once, and its updater fetches only what's newer.
       - name: The day, for the signatures' cache key
@@ -370,6 +371,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
+      - uses: ./.github/actions/services-up
       # ClamAV's signatures (hundreds of MB from a rate-limited CDN), kept for a day: with
       # them in place clamd starts at once, and its updater fetches only what's newer.
       - name: The day, for the signatures' cache key
@@ -484,6 +486,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
+      - uses: ./.github/actions/services-up
       - uses: ./.github/actions/setup
         with: { python: "true" }
       - run: uv run ruff check .
@@ -765,6 +768,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
+      - uses: ./.github/actions/services-up
       - uses: ./.github/actions/free-disk
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       # Reads the layers deploy.yml caches on master for this image (amd64, like this
@@ -851,6 +855,7 @@ jobs:
         with: { egress-policy: audit }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
+      - uses: ./.github/actions/services-up
       - uses: ./.github/actions/setup
         with: { python: "true" }
       - name: Bootstrap database roles
