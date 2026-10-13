@@ -156,6 +156,10 @@ and billing until the Stripe variables are (docs/files-and-billing.md), even wit
   e2e suites' Chromium, and sign in as a seeded user (docs/database.md). Snapshots go
   to `.playwright-cli/`, which git ignores. A flow that must keep working becomes an
   e2e spec (the write-tests skill).
+- Database: Prisma's own skills, `prisma-cli`, `prisma-client-api` and
+  `prisma-orm-setup` (copied in by Prisma's installer, recorded in `skills-lock.json`;
+  never edit them). The database is our own Postgres: ignore their advice about
+  Prisma's hosted services.
 - `.mcp.json`: Postgres on the local `app` database (`scripts/mcp-postgres.ts`). It
   connects as `app_readonly`, a role that exists only in the local database
   (`infra/postgres/init/02-readonly-role.sql`): read-only, and past row-level security,

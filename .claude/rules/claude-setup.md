@@ -86,6 +86,15 @@ paths:
   `playwright-core`, and `session-start.ts` puts `.claude/bin` on the PATH of Claude's
   shell (through `CLAUDE_ENV_FILE`). `settings.json` allows `playwright-cli` and
   `npx playwright trace`.
+- Prisma's skills: `.claude/skills/prisma-cli`, `prisma-client-api` and
+  `prisma-orm-setup`, copied in by Prisma's installer (`bunx skills@1.5.14 add
+  prisma/skills --agent claude-code --skill <name>`), which records each one's source
+  and hash in `skills-lock.json`; never edit them, `bunx skills@1.5.14 update` refreshes
+  them. Its other skills stay out: `prisma-compute` and `prisma-postgres-setup` are for
+  Prisma's hosted services (the database here is our own Postgres), `prisma-mongodb-upgrade`
+  is for MongoDB, `prisma-upgrade-v7` for a move this repository has made,
+  `prisma-driver-adapter-implementation` for writing an adapter rather than using one,
+  and `prisma-database-setup` and `prisma-postgres` are old names for the setup skills.
 - Keep in sync in the same change: a new skill goes in `docs/README.md`'s runbook list;
   a new agent, rule area or MCP server in `CLAUDE.md`'s "Claude Code setup"; a new
   command in `CLAUDE.md`'s table. Every app and `packages/db` has a `CLAUDE.md` with its
