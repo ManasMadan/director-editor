@@ -34,7 +34,7 @@ function Player({ videoId }: { videoId: string | undefined }) {
   const shorts = useMemo(() => playlist(requested.data, items ?? []), [requested.data, items]);
   // Read when a slide comes on screen; kept in a ref so the slides' observers don't
   // restart every time the feed's state changes.
-  const latest = useRef({ last: "", more: () => undefined });
+  const latest = useRef<{ last: string; more?: () => void }>({ last: "" });
   useEffect(() => {
     latest.current = {
       last: shorts.at(-1)?.videoId ?? "",
@@ -50,7 +50,7 @@ function Player({ videoId }: { videoId: string | undefined }) {
     // The address follows the short on screen, as on YouTube, without a navigation.
     window.history.replaceState(null, "", `/shorts/${id}`);
     if (id === latest.current.last) {
-      latest.current.more();
+      latest.current.more?.();
     }
   }, []);
 
