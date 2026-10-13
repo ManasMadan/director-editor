@@ -14,6 +14,7 @@ import type { CDPSession, Page, Request, Route } from "playwright";
 import type { BrowserCommand } from "vitest/node";
 // The API's own token format (a relative import: nest-common's entry pulls in Nest).
 import { createSignedTokens } from "../../../packages/nest-common/src/signed-token";
+import { createStorage } from "../../../packages/nest-common/src/storage";
 import { API, REDIS_URL, SITE, services } from "./services";
 import { FAKE_TURNSTILE } from "./turnstile";
 
@@ -414,8 +415,59 @@ const fakeStripe: BrowserCommand<[path: string, method?: string]> = async (
   return response.json();
 };
 
+/**
+ * What apps/worker does with an upload once it has checked it (it isn't running here):
+ * accepted, the bytes leave quarantine and the file is ready; refused, it says why.
+ */
+const checkUpload: BrowserCommand<[fileId: string, rejectReason?: string]> = async (
+  _context,
+  fileId,
+  rejectReason,
+) => {
+  if (rejectReason) {
+    await sqlRows(
+      "UPDATE files.file SET status = 'rejected', reject_reason = $2, updated_at = now() WHERE id = $1",
+      [fileId, rejectReason],
+    );
+    return;
+  }
+  const storage = createStorage({
+    S3_BUCKET: process.env.S3_BUCKET ?? "uploads",
+    S3_REGION: process.env.S3_REGION ?? "us-east-1",
+    S3_ENDPOINT: process.env.S3_ENDPOINT,
+    S3_ACCESS_KEY_ID: process.env.S3_ACCESS_KEY_ID,
+    S3_SECRET_ACCESS_KEY: process.env.S3_SECRET_ACCESS_KEY,
+    S3_FORCE_PATH_STYLE: true,
+  });
+  await storage?.move(`quarantine/${fileId}`, `files/${fileId}`);
+  await sqlRows(
+    `UPDATE files.file SET status = 'ready', content_type = declared_type, size = declared_size,
+       ready_at = now(), updated_at = now() WHERE id = $1`,
+    [fileId],
+  );
+};
+
+/**
+ * What the AI stand-in's Director answers for the short `videoId` (test/fake-ai.ts): its
+ * plan (merged over an id and timestamps), the member's takes, and the scene check.
+ */
+const fakeDirector: BrowserCommand<
+  [videoId: string, state: { plan?: object; takes?: object[]; scene?: object }]
+> = async (_context, videoId, state) => {
+  const response = await fetch(`${(await services()).aiUrl}/__fake/director/${videoId}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(state),
+  });
+  if (!response.ok) {
+    throw new Error(`the AI stand-in answered ${response.status}`);
+  }
+};
+
 export const commands = {
   answeredRequests,
+  checkUpload,
+  fakeDirector,
   fakeStripe,
   publishRealtime,
   editSession,
@@ -441,6 +493,11 @@ declare module "vitest/browser" {
   interface BrowserCommands {
     answeredRequests(part: string): Promise<number>;
     fakeStripe<T = unknown>(path: string, method?: string): Promise<T>;
+    checkUpload(fileId: string, rejectReason?: string): Promise<void>;
+    fakeDirector(
+      videoId: string,
+      state: { plan?: object; takes?: object[]; scene?: object },
+    ): Promise<void>;
     publishRealtime(channel: string, message: { type: string }): Promise<void>;
     storageCors(): Promise<void>;
     refuseNextPut(part: string, status: number): Promise<void>;

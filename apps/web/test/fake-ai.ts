@@ -6,7 +6,8 @@
  *
  * Tests steer it through what they type: a document titled "… [ready]" or "… [failed]"
  * is in that state, and a question with "[budget]" or "[broken]" is refused or breaks
- * mid-answer.
+ * mid-answer. Director's plans, takes and scene checks are what a test sets for its short
+ * (`PUT /__fake/director/<videoId>`, the `fakeDirector` command).
  */
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -77,8 +78,21 @@ function streamAnswer(question: string, response: ServerResponse) {
   return response.end();
 }
 
+/** What Director answers for one short: set by the test, takes added as they're sent. */
+interface DirectorShort {
+  plan?: Record<string, unknown>;
+  takes: Record<string, unknown>[];
+  scene?: Record<string, unknown>;
+}
+
 export async function startFakeAi() {
   const documents: Doc[] = [];
+  const shorts = new Map<string, DirectorShort>();
+  const short = (videoId: string) => {
+    const found = shorts.get(videoId) ?? { takes: [] };
+    shorts.set(videoId, found);
+    return found;
+  };
   const server = createServer(async (request, response) => {
     const reply = (status: number, payload?: unknown) => {
       response.writeHead(status, { "content-type": "application/json" });
@@ -116,6 +130,10 @@ export async function startFakeAi() {
     if (handle) {
       return handle();
     }
+    const director = directorRoute(route, input, short);
+    if (director) {
+      return reply(director.status, director.body);
+    }
     const remove = /^DELETE \/v1\/documents\/([0-9a-f-]{36})$/.exec(route);
     if (remove) {
       const index = documents.findIndex((doc) => doc.id === remove[1] && doc.org === org);
@@ -133,4 +151,67 @@ export async function startFakeAi() {
     secret: `web-tests-ai-${randomUUID()}`,
     close: () => new Promise((resolve) => server.close(resolve)),
   };
+}
+
+const now = () => new Date().toISOString();
+
+/** Director's routes (apps/ai/app/director.py), answered from what the test set. */
+function directorRoute(
+  route: string,
+  input: Record<string, unknown>,
+  short: (videoId: string) => DirectorShort,
+): { status: number; body?: unknown } | null {
+  const notFound = (code: string) => ({
+    status: 404,
+    body: { defined: true, code, status: 404, message: code, data: { params: {} } },
+  });
+  const set = /^PUT \/__fake\/director\/([\w-]{11})$/.exec(route);
+  if (set?.[1]) {
+    Object.assign(short(set[1]), input);
+    return { status: 204 };
+  }
+  const plan = /^GET \/v1\/director\/plans\/([\w-]{11})$/.exec(route);
+  if (plan?.[1]) {
+    const found = short(plan[1]).plan;
+    return found
+      ? {
+          status: 200,
+          body: {
+            id: randomUUID(),
+            videoId: plan[1],
+            error: null,
+            model: "stand-in",
+            createdAt: now(),
+            updatedAt: now(),
+            ...found,
+          },
+        }
+      : notFound("DIRECTOR_PLAN_NOT_FOUND");
+  }
+  const takes = /^GET \/v1\/director\/plans\/([\w-]{11})\/takes$/.exec(route);
+  if (takes?.[1]) {
+    return { status: 200, body: short(takes[1]).takes };
+  }
+  if (route === "POST /v1/director/scene-checks") {
+    const scene = short(String(input.videoId)).scene;
+    return scene ? { status: 200, body: scene } : notFound("DIRECTOR_PLAN_NOT_FOUND");
+  }
+  if (route === "POST /v1/director/takes") {
+    const take = {
+      id: randomUUID(),
+      shotIndex: input.shotIndex,
+      fileId: input.fileId,
+      kind: input.kind,
+      status: "pending",
+      error: null,
+      bestStartMs: null,
+      bestEndMs: null,
+      score: null,
+      feedback: null,
+      createdAt: now(),
+    };
+    short(String(input.videoId)).takes.unshift(take);
+    return { status: 201, body: take };
+  }
+  return null;
 }

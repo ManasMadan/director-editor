@@ -162,6 +162,7 @@ async function start(): Promise<Services> {
   return {
     databaseUrl: database.urlFor("postgres"),
     stripeUrl: stripe.url,
+    aiUrl: ai.url,
     async close() {
       await Promise.all(
         children.map(
