@@ -8,16 +8,19 @@ import { soundPeaks, videoFrames } from "@/modules/director/lib/thumbnails";
 import { deferred, id, renderHook, shot, standIn } from "./support";
 
 // Decoding a take's frames and sound is the browser's work, tested with lib/thumbnails.
-vi.mock("@/modules/director/lib/thumbnails", () => ({
-  videoFrames: vi.fn(async (url: string, times: number[]) =>
-    times.map((seconds) => ({ seconds, src: `${url}#t=${seconds}` })),
-  ),
-  soundPeaks: vi.fn(async () => [0.5, 1]),
-}));
+// A spy (not a factory) keeps the real module loaded, so its coverage from those tests
+// isn't zeroed when the reports merge.
+vi.mock("@/modules/director/lib/thumbnails", { spy: true });
 
 beforeEach(() => {
-  vi.mocked(videoFrames).mockClear();
-  vi.mocked(soundPeaks).mockClear();
+  vi.mocked(videoFrames)
+    .mockClear()
+    .mockImplementation(async (url, times) =>
+      times.map((seconds) => ({ seconds, src: `${url}#t=${seconds}` })),
+    );
+  vi.mocked(soundPeaks)
+    .mockClear()
+    .mockImplementation(async () => [0.5, 1]);
 });
 
 afterEach(() => {
