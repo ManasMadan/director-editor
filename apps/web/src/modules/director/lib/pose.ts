@@ -65,15 +65,18 @@ export const BONES: readonly [KeypointName, KeypointName][] = [
   ["right_knee", "right_ankle"],
 ];
 
-/** Joints centred on their middle and scaled to a unit spread, so size and place don't count. */
-function normalized(points: Point[]): Point[] {
+/**
+ * Centres a joint on the joints' middle and scales it to their unit spread, so size and
+ * place don't count.
+ */
+function normalizer(points: Point[]): (p: Point) => Point {
   const cx = points.reduce((sum, p) => sum + p.x, 0) / points.length;
   const cy = points.reduce((sum, p) => sum + p.y, 0) / points.length;
   const spread = Math.sqrt(
     points.reduce((sum, p) => sum + (p.x - cx) ** 2 + (p.y - cy) ** 2, 0) / points.length,
   );
   const scale = spread || 1;
-  return points.map((p) => ({ x: (p.x - cx) / scale, y: (p.y - cy) / scale }));
+  return (p) => ({ x: (p.x - cx) / scale, y: (p.y - cy) / scale });
 }
 
 /** At least this many joints in common before a pose can be judged. */
@@ -89,14 +92,21 @@ export const POSE_MATCH = 0.75;
  * aren't enough joints in common to say.
  */
 export function poseScore(target: Body, body: Body): number | null {
-  const shared = keypointNames.filter((name) => target[name] && body[name]);
+  const shared = keypointNames.flatMap((name) => {
+    const want = target[name];
+    const got = body[name];
+    return want && got ? [{ want, got }] : [];
+  });
   if (shared.length < MIN_SHARED) {
     return null;
   }
-  const a = normalized(shared.flatMap((name) => target[name] ?? []));
-  const b = normalized(shared.flatMap((name) => body[name] ?? []));
+  const fromTarget = normalizer(shared.map((joint) => joint.want));
+  const fromBody = normalizer(shared.map((joint) => joint.got));
   const distance =
-    a.reduce((sum, p, i) => sum + Math.hypot(p.x - (b[i]?.x ?? 0), p.y - (b[i]?.y ?? 0)), 0) /
-    a.length;
+    shared.reduce((sum, joint) => {
+      const a = fromTarget(joint.want);
+      const b = fromBody(joint.got);
+      return sum + Math.hypot(a.x - b.x, a.y - b.y);
+    }, 0) / shared.length;
   return Math.max(0, 1 - distance / FAR);
 }

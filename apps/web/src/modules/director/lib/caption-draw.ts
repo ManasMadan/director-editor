@@ -64,16 +64,15 @@ export function drawCaption(
   const rowHeight = size * look.lineHeight;
   const top = height * CENTRE_Y - (rows.length * rowHeight) / 2;
   rows.forEach((row, index) => {
-    const widths = row.map((word) => ctx.measureText(word.text).width);
-    const rowWidth = widths.reduce((sum, w) => sum + w, 0) + space * (row.length - 1);
+    const measured = row.map((word) => ({ word, w: ctx.measureText(word.text).width }));
+    const rowWidth = measured.reduce((sum, { w }) => sum + w, 0) + space * (row.length - 1);
     const y = top + rowHeight * (index + 0.5);
     let x = (width - rowWidth) / 2;
     if (style === "classic") {
       ctx.fillStyle = ink.box;
       roundRect(ctx, x - size * 0.35, y - rowHeight / 2, rowWidth + size * 0.7, rowHeight);
     }
-    row.forEach((word, at) => {
-      const w = widths[at] ?? 0;
+    measured.forEach(({ word, w }) => {
       if (style === "pop" && word.state === "now") {
         ctx.fillStyle = ink.highlight;
         roundRect(ctx, x - size * 0.15, y - size * 0.62, w + size * 0.3, size * 1.24);

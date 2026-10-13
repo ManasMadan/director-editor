@@ -214,7 +214,7 @@ interface Stroke {
   seed: number;
   /** Marching dashes: the dash length in pixels, and the time they march by. */
   dash?: number;
-  time?: number;
+  time: number;
 }
 
 export interface DoodleColors {
@@ -238,7 +238,7 @@ function begin(pen: Pen, stroke: Stroke, shade: string) {
   ctx.shadowBlur = 8;
   const dash = stroke.dash ?? 0;
   ctx.setLineDash(dash > 0 ? [dash, dash * 0.8] : []);
-  ctx.lineDashOffset = dash > 0 ? -(stroke.time ?? 0) * 40 : 0;
+  ctx.lineDashOffset = dash > 0 ? -stroke.time * 40 : 0;
 }
 
 /** A marker line along the arrow's curve, wobbling as a hand would. */
@@ -353,7 +353,7 @@ function sketchBody(pen: Pen, body: Body, stroke: Stroke, shade: string) {
 /** The spot to stand on: a ring on the floor with a cross, pulsing gently. */
 function sketchSpot(pen: Pen, spot: Point, stroke: Stroke, shade: string) {
   const centre = at(pen, spot);
-  const pulse = 1 + Math.sin((stroke.time ?? 0) * 4) * 0.08;
+  const pulse = 1 + Math.sin(stroke.time * 4) * 0.08;
   const rx = pen.width * 0.09 * pulse;
   begin(pen, { ...stroke, dash: 0 }, shade);
   const { ctx } = pen;
@@ -443,13 +443,13 @@ export interface DoodleScene {
 function drawSubject(pen: Pen, scene: DoodleScene, colors: DoodleColors, time: number) {
   const color = scene.matched ? colors.locked : colors.waiting;
   const box = flipBox(scene.shot.framing.subject, scene.mirrored);
-  sketchCorners(pen, box, { color, width: 4, seed: 2 }, colors.shade);
+  sketchCorners(pen, box, { color, width: 4, seed: 2, time }, colors.shade);
   // A body only when the plan has one to match: a shot of shoes is just its box.
   if (Object.keys(scene.target).length > 0) {
     sketchBody(
       pen,
       flipBody(scene.target, scene.mirrored),
-      { color, width: 3, seed: 3 },
+      { color, width: 3, seed: 3, time },
       colors.shade,
     );
   }
@@ -457,7 +457,7 @@ function drawSubject(pen: Pen, scene: DoodleScene, colors: DoodleColors, time: n
     sketchArrow(
       pen,
       bob(arrow, time),
-      { color: colors.waiting, width: 4, seed: 20 + index },
+      { color: colors.waiting, width: 4, seed: 20 + index, time },
       colors.shade,
     );
   });
