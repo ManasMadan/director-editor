@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { enableTwoFactor, expect, newDevice, signIn, signOut, signUp, test, totp } from "./support";
 
 test("turn on two-step verification, then sign in with an authenticator code", async ({
@@ -30,6 +31,18 @@ test("a wrong authenticator code is rejected", async ({ page, browser }) => {
   await laptop.context.close();
 });
 
+/**
+ * The two-factor page's switch to a backup code. The page can render once more as it
+ * settles, putting the switch back: click until the field is there (once it is, the button
+ * reads otherwise, so it isn't clicked again).
+ */
+async function switchToBackupCode(page: Page) {
+  await expect(async () => {
+    await page.getByRole("button", { name: "Use a backup code instead" }).click();
+    await expect(page.getByLabel("Backup code")).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
+}
+
 test("a backup code works once", async ({ page, browser }) => {
   const user = await signUp(page);
   const { backupCodes } = await enableTwoFactor(page, user);
@@ -37,14 +50,14 @@ test("a backup code works once", async ({ page, browser }) => {
 
   const first = await newDevice(browser);
   await signIn(first.page, user, { expectUrl: /\/two-factor/ });
-  await first.page.getByRole("button", { name: "Use a backup code instead" }).click();
+  await switchToBackupCode(first.page);
   await first.page.getByLabel("Backup code").fill(code);
   await first.page.getByRole("button", { name: "Continue" }).click();
   await expect(first.page).toHaveURL(/\/dashboard/);
 
   const second = await newDevice(browser);
   await signIn(second.page, user, { expectUrl: /\/two-factor/ });
-  await second.page.getByRole("button", { name: "Use a backup code instead" }).click();
+  await switchToBackupCode(second.page);
   await second.page.getByLabel("Backup code").fill(code);
   await second.page.getByRole("button", { name: "Continue" }).click();
   await expect(

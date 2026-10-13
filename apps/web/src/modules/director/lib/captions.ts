@@ -4,6 +4,7 @@
  * lit as it is said, the way short-form captions read).
  */
 import type { Shot } from "@repo/contracts/api";
+import { HOUR_S, MINUTE_S } from "@repo/contracts/time";
 
 export type CaptionLine = Shot["script"][number];
 
@@ -18,9 +19,9 @@ export interface CaptionWord {
 
 function timestamp(seconds: number) {
   const whole = Math.max(0, seconds);
-  const hours = Math.floor(whole / 3600);
-  const minutes = Math.floor((whole % 3600) / 60);
-  const rest = (whole % 60).toFixed(3).padStart(6, "0");
+  const hours = Math.floor(whole / HOUR_S);
+  const minutes = Math.floor((whole % HOUR_S) / MINUTE_S);
+  const rest = (whole % MINUTE_S).toFixed(3).padStart(6, "0");
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${rest}`;
 }
 
