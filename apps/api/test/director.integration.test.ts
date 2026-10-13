@@ -33,8 +33,8 @@ const youtubeCalls: URL[] = [];
 const aiCalls: { route: string; org: string; user: string; body: unknown }[] = [];
 /** The presigned read the AI service was last handed for a take. */
 let lastSourceUrl = "";
-/** What YouTube does next: answer, run out of quota, or have comments off. */
-let youtubeMode: "ok" | "quota" | "comments-off" = "ok";
+/** What YouTube does next: answer, run out of quota, have comments off, or answer garbage. */
+let youtubeMode: "ok" | "quota" | "comments-off" | "garbled" = "ok";
 
 function video(id: string, duration: string) {
   return {
@@ -70,6 +70,9 @@ function youtubeRoute(request: IncomingMessage, response: ServerResponse) {
   }
   if (youtubeMode === "quota") {
     return send(response, 403, { error: { code: 403, errors: [{ reason: "quotaExceeded" }] } });
+  }
+  if (youtubeMode === "garbled") {
+    return send(response, 200, { items: "not a list" });
   }
   if (url.pathname === "/search") {
     const page = url.searchParams.get("pageToken");
@@ -413,6 +416,24 @@ describe("the Shorts feed", () => {
     await expectError(session.rpc.shorts.feed({ topic: "dance" }), "UPSTREAM_UNAVAILABLE");
   });
 
+  it("fails as a bug, not as YouTube being down, when YouTube's answer isn't its format", async () => {
+    const { session } = await signedIn();
+    youtubeMode = "garbled";
+    await expectError(session.rpc.shorts.feed({ topic: "dance" }), "INTERNAL");
+  });
+
+  it("orders the topic of everything by views, and the trends by relevance", async () => {
+    const { session } = await signedIn();
+    await session.rpc.shorts.feed({ topic: "all" });
+    expect(
+      youtubeCalls.findLast((url) => url.pathname === "/search")?.searchParams.get("order"),
+    ).toBe("viewCount");
+    await session.rpc.shorts.feed({ topic: "pets" });
+    expect(
+      youtubeCalls.findLast((url) => url.pathname === "/search")?.searchParams.get("order"),
+    ).toBe("relevance");
+  });
+
   it("keeps each member's likes and saves, in their workspace only", async () => {
     const { session } = await signedIn();
     await expect(session.rpc.shorts.reactions({ videoId: VIDEO })).resolves.toEqual({
@@ -555,6 +576,32 @@ describe("Director", () => {
       "FILE_NOT_FOUND",
     );
     await expect(other.session.rpc.director.takes({ videoId: VIDEO })).resolves.toEqual([]);
+  });
+
+  it("refuses a take whose file was stored as a type no take is, before the AI service hears of it", async () => {
+    const { session } = await signedIn();
+    const { file } = await session.rpc.files.createUpload({
+      purpose: "director-take-photo",
+      filename: "shot-3.png",
+      contentType: "image/png",
+      size: 500,
+    });
+    // The worker stores a photo as JPEG; a ready one that isn't is no take's file.
+    await sql(
+      "UPDATE files.file SET status = 'ready', content_type = 'image/png', size = 500, ready_at = now() WHERE id = $1",
+      [file.id],
+    );
+    const before = aiCalls.length;
+    await expectError(
+      session.rpc.director.addTake({
+        videoId: VIDEO,
+        shotIndex: 0,
+        kind: "photo",
+        fileId: file.id,
+      }),
+      "FILE_NOT_FOUND",
+    );
+    expect(aiCalls.length).toBe(before);
   });
 
   it("gives a short-lived URL to the member's own ready file, and nobody else's", async () => {

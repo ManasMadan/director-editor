@@ -73,6 +73,12 @@ describe("features off", () => {
     expect(error.data?.params).toEqual({ feature: "ai" });
   });
 
+  it("answers FEATURE_DISABLED for the Shorts feed without a YouTube key", async () => {
+    const session = await signedIn();
+    const error = await expectError(session.rpc.shorts.feed({ topic: "all" }), "FEATURE_DISABLED");
+    expect(error.data?.params).toEqual({ feature: "director" });
+  });
+
   it("without billing, every workspace has everything and there's nothing to pay", async () => {
     const session = await signedIn();
     expect(await session.rpc.billing.overview()).toMatchObject({
