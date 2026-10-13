@@ -88,8 +88,9 @@ function parseDuration(value: string): number | null {
   if (!match) {
     return null;
   }
-  const [days, hours, minutes, seconds] = match.slice(1).map((part) => Number(part ?? 0));
-  return (((days ?? 0) * 24 + (hours ?? 0)) * 60 + (minutes ?? 0)) * 60 + (seconds ?? 0);
+  // Days, hours, minutes and seconds are groups 1 to 4; one that's left out is 0.
+  const part = (group: number) => Number(match[group] ?? 0);
+  return ((part(1) * 24 + part(2)) * 60 + part(3)) * 60 + part(4);
 }
 
 const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com"]);
