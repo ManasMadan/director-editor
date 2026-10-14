@@ -36,9 +36,8 @@ export function DoodleLayer({ scene }: { scene: DoodleScene }) {
     // The marker hand (live.css); a page without it writes in the system's cursive.
     const font = token("--font-hand") || "cursive";
     // The canvas draws text in a font only once it has loaded; until then, the fallback.
-    document.fonts.load(`24px ${font}`).catch(() => {
-      // A font that can't load leaves the fallback, which still reads.
-    });
+    // A font that can't load leaves the fallback, which still reads; the browser says why.
+    document.fonts.load(`24px ${font}`).catch(reportError);
     const glider = new Glider();
     let frame = 0;
     const draw = (now: number) => {

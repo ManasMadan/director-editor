@@ -19,7 +19,7 @@ export function voiceFor<Voice extends Pick<SpeechSynthesisVoice, "lang" | "name
   voices: readonly Voice[],
   locale: string,
 ): Voice | null {
-  const language = locale.toLowerCase().split("-")[0] ?? locale;
+  const language = locale.toLowerCase().replace(/-.*/, "");
   const matching = voices.filter((voice) => voice.lang.toLowerCase().startsWith(language));
   const rank = (voice: Voice) => {
     const natural = NATURAL.findIndex((pattern) => pattern.test(voice.name));
@@ -47,10 +47,8 @@ export function say(text: string, locale: string) {
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = locale;
-  const voice = voiceFor(window.speechSynthesis.getVoices(), locale);
-  if (voice) {
-    utterance.voice = voice;
-  }
+  // None for the language: the browser's own default.
+  utterance.voice = voiceFor(window.speechSynthesis.getVoices(), locale);
   // A touch quicker and brighter than the default: an upbeat director, not a narrator.
   utterance.rate = 1.06;
   utterance.pitch = 1.05;

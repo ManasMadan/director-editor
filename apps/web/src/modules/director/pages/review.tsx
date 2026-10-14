@@ -574,10 +574,10 @@ function Review({
 }
 
 /** The editor: the member's takes on a timeline, Director's review of each, and the short. */
-export function ReviewPage(props: { videoId: string; audio: string | undefined; wrap?: boolean }) {
+export function ReviewPage(props: { videoId: string; audio: string | undefined; wrap: boolean }) {
   return (
     <DirectorGate>
-      <Review {...props} wrap={props.wrap ?? false} />
+      <Review {...props} />
     </DirectorGate>
   );
 }

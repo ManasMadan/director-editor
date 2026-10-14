@@ -103,7 +103,8 @@ function useWords(greeting: string): Words {
 
 /** Whether Director is speaking right now (for the glow and the Live pill). */
 export function useSpeaking() {
-  return useSyncExternalStore(onSaying, saying, () => null) !== null;
+  // On a server nothing is being said, which `saying` already answers.
+  return useSyncExternalStore(onSaying, saying, saying) !== null;
 }
 
 /**

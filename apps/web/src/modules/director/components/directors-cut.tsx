@@ -5,7 +5,7 @@ import { Spinner } from "@repo/ui/components/spinner";
 import { cn } from "@repo/ui/lib/utils";
 import { Check, RotateCcw } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { useObjectUrl } from "../hooks/use-object-url";
 import { webVtt } from "../lib/captions";
 import type { Cut } from "../lib/cut";
@@ -29,41 +29,31 @@ function CutLoop({
   const captions = useObjectUrl(
     useMemo(() => new Blob([webVtt(script)], { type: "text/vtt" }), [script]),
   );
-  const video = useRef<HTMLVideoElement>(null);
-  useEffect(() => {
-    const element = video.current;
-    if (!element) {
-      return;
+  const toStart = (element: HTMLVideoElement) => {
+    element.currentTime = cut.startSeconds;
+  };
+  const loop = (element: HTMLVideoElement) => {
+    if (element.currentTime >= cut.endSeconds || element.currentTime < cut.startSeconds - 0.1) {
+      toStart(element);
     }
-    const toStart = () => {
-      element.currentTime = cut.startSeconds;
-    };
-    const loop = () => {
-      if (element.currentTime >= cut.endSeconds || element.currentTime < cut.startSeconds - 0.1) {
-        toStart();
-      }
-    };
-    element.addEventListener("loadedmetadata", toStart);
-    element.addEventListener("timeupdate", loop);
-    element.addEventListener("ended", toStart);
+  };
+  const start = (element: HTMLVideoElement) => {
+    toStart(element);
     // Autoplay with sound can be refused; the loop then plays silently rather than not at all.
     element.play().catch(() => {
       element.muted = true;
-      void element.play().catch(() => undefined);
+      // Not even silently: the browser says why.
+      element.play().catch(reportError);
     });
-    return () => {
-      element.removeEventListener("loadedmetadata", toStart);
-      element.removeEventListener("timeupdate", loop);
-      element.removeEventListener("ended", toStart);
-    };
-  }, [cut]);
+  };
   return (
     <video
-      ref={video}
       src={url ?? undefined}
       aria-label={label}
-      autoPlay
       playsInline
+      onLoadedMetadata={(event) => start(event.currentTarget)}
+      onTimeUpdate={(event) => loop(event.currentTarget)}
+      onEnded={(event) => toStart(event.currentTarget)}
       className="absolute inset-0 size-full bg-studio object-cover"
     >
       <track kind="captions" src={captions ?? undefined} srcLang={lang} label={label} default />

@@ -39,10 +39,9 @@ function useCopy() {
       .then(({ default: messages }) =>
         setCopy({ ...messages.errorPage, retry: messages.common.retry }),
       )
-      .catch(() => {
-        // Nothing more to fetch with: the reference still shows, for support.
-        setCopy(null);
-      });
+      // Nothing more to fetch with: the reference still shows, for support, and the
+      // browser reports why.
+      .catch(reportError);
   }, []);
   return { locale, copy };
 }

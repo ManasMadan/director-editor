@@ -56,26 +56,25 @@ export function at(pen: Pick<Pen, "width" | "height">, p: Point): Point {
  * The points of a lasso round a box, the way a hand circles something: a little more
  * than one turn, starting top-left, slightly lumpy, the end overshooting the start.
  */
-export function lassoPoints(box: FrameBox, seed: number, steps = 56): Point[] {
+export function lassoPoints(box: FrameBox, seed: number, steps = 56): [Point, ...Point[]] {
   const random = wobble(seed);
-  const phase = [random() * 6, random() * 6];
+  const third = random() * 6;
+  const fifth = random() * 6;
   const start = -2.3 + random() * 0.4;
   const turns = 1.12;
   const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-  return Array.from({ length: steps + 1 }, (_, index) => {
+  const point = (index: number): Point => {
     const t = index / steps;
     const angle = start + t * turns * Math.PI * 2;
-    const lump =
-      1 +
-      0.045 * Math.sin(3 * angle + (phase[0] ?? 0)) +
-      0.03 * Math.sin(5 * angle + (phase[1] ?? 0));
+    const lump = 1 + 0.045 * Math.sin(3 * angle + third) + 0.03 * Math.sin(5 * angle + fifth);
     // A slight spiral, so the overshoot runs beside the start rather than over it.
     const grow = lump * (1 + t * 0.06);
     return {
       x: centre.x + Math.cos(angle) * (box.width / 2) * 1.08 * grow,
       y: centre.y + Math.sin(angle) * (box.height / 2) * 1.08 * grow,
     };
-  });
+  };
+  return [point(0), ...Array.from({ length: steps }, (_, index) => point(index + 1))];
 }
 
 /** A sticker's size as it pops in (overshooting, then settling), from its age in seconds. */
@@ -117,7 +116,6 @@ export function ink(
   stroke: Stroke,
   shade: string,
   build: (ctx: CanvasRenderingContext2D) => void,
-  fill = false,
 ) {
   const { ctx } = pen;
   const scale = scaleOf(pen);
@@ -140,23 +138,24 @@ export function ink(
   ctx.lineWidth = stroke.width * scale;
   ctx.beginPath();
   build(ctx);
-  if (fill) {
-    ctx.fill();
-  }
   ctx.stroke();
   ctx.restore();
 }
 
-/** A path through `points` (frame fractions), smoothed through their midpoints. */
-function tracePoints(pen: Pen, ctx: CanvasRenderingContext2D, points: readonly Point[]) {
-  const pixels = points.map((p) => at(pen, p));
-  const [first, ...rest] = pixels;
-  if (!first) {
-    return;
-  }
+/**
+ * A path through `points` (frame fractions), curving through the midpoints between them
+ * and ending on the last.
+ */
+function tracePoints(
+  pen: Pen,
+  ctx: CanvasRenderingContext2D,
+  [start, ...rest]: readonly [Point, ...Point[]],
+) {
+  const first = at(pen, start);
   ctx.moveTo(first.x, first.y);
-  rest.forEach((point, index) => {
-    const next = rest[index + 1];
+  const pixels = rest.map((p) => at(pen, p));
+  pixels.forEach((point, index) => {
+    const next = pixels[index + 1];
     if (next) {
       ctx.quadraticCurveTo(point.x, point.y, (point.x + next.x) / 2, (point.y + next.y) / 2);
     } else {

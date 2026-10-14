@@ -9,10 +9,7 @@ export type ListenState = "off" | "unsupported" | "blocked" | "listening";
 /** A pause before listening again once the recogniser stops by itself (it does, on silence). */
 const RESTART_MS = 300;
 
-const recognizerClass = () =>
-  typeof window === "undefined"
-    ? undefined
-    : (window.SpeechRecognition ?? window.webkitSpeechRecognition);
+const recognizerClass = () => window.SpeechRecognition ?? window.webkitSpeechRecognition;
 
 interface Heard {
   /** The member said something final: what, and how sure the recogniser is. */
@@ -25,12 +22,8 @@ interface Heard {
 function readResults(event: SpeechRecognitionEvent) {
   let interim = "";
   const finals: { text: string; confidence: number }[] = [];
-  for (let index = event.resultIndex; index < event.results.length; index += 1) {
-    const result = event.results[index];
-    const best = result?.[0];
-    if (!(result && best)) {
-      continue;
-    }
+  for (const result of Array.from(event.results).slice(event.resultIndex)) {
+    const best = result.item(0);
     if (result.isFinal) {
       finals.push({ text: best.transcript, confidence: best.confidence });
     } else {
@@ -48,9 +41,8 @@ function readResults(event: SpeechRecognitionEvent) {
  * work.
  */
 export function useListening(enabled: boolean, locale: string, heard: Heard) {
-  const [state, setState] = useState<ListenState>(() =>
-    recognizerClass() ? "off" : "unsupported",
-  );
+  // Off until the effect, in the browser, knows whether there's a recogniser at all.
+  const [state, setState] = useState<ListenState>("off");
   const [words, setWords] = useState("");
   const latest = useRef(heard);
   useEffect(() => {

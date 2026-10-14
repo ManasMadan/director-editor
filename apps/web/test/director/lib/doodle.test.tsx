@@ -146,6 +146,14 @@ describe("Director's doodles", () => {
     expect(drawn.strokes).toContain(COLORS.locked);
   });
 
+  it("draws the ghost of a body without a head when the plan gives none", () => {
+    const drawn = draw(
+      scene({ target: { left_hip: { x: 0.3, y: 0.6 }, right_hip: { x: 0.2, y: 0.6 } } }),
+    );
+    expect(drawn.arc).not.toHaveBeenCalled();
+    expect(drawn.strokes).toContain(COLORS.waiting);
+  });
+
   it("lassos where a shot without a body goes, and draws nothing of it while sharing", () => {
     const shoes = draw(scene());
     expect(shoes.strokes).toContain(COLORS.waiting);

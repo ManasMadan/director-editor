@@ -412,9 +412,9 @@ function sketchSilhouette(pen: Pen, body: Body, stroke: Stroke, shade: string, g
 }
 
 /** The spot to stand on: a ring on the floor with a cross, pulsing gently. */
-function sketchSpot(pen: Pen, spot: Point, stroke: Stroke, shade: string) {
+function sketchSpot(pen: Pen, spot: Point, stroke: Stroke & { time: number }, shade: string) {
   const centre = at(pen, spot);
-  const pulse = 1 + Math.sin((stroke.time ?? 0) * 4) * 0.08;
+  const pulse = 1 + Math.sin(stroke.time * 4) * 0.08;
   const rx = pen.width * 0.09 * pulse;
   ink(pen, { ...stroke, dash: 0 }, shade, (ctx) => {
     ctx.ellipse(centre.x, centre.y, rx, rx * 0.38, 0, 0, Math.PI * 2);
@@ -445,7 +445,10 @@ function sketchOrbit(pen: Pen, stroke: Stroke, shade: string) {
 interface Drawing {
   scene: DoodleScene;
   colors: DoodleColors;
+  /** What moves the marks (the bob, the pulse, the marching dashes): still with reduced motion. */
   time: number;
+  /** The clock itself, which stickers age by. */
+  now: number;
 }
 
 const tagColors = (colors: DoodleColors) => ({
@@ -468,7 +471,7 @@ function drawSubject(pen: Pen, { scene, colors, time }: Drawing) {
   framingArrows(scene.framing, box).forEach((arrow, index) => {
     sketchArrow(
       pen,
-      bob(arrow, scene.still ? 0 : time),
+      bob(arrow, time),
       { color: colors.waiting, width: 5, seed: 20 + index },
       colors.shade,
     );
@@ -508,10 +511,7 @@ function drawToLandmark(
   }
   const from = walkStart(walk.feet, spot, walk.check.direction);
   // Bowed upwards, whichever way it goes, like a hand-drawn "go there".
-  const arrow = bob(
-    { from, to: spot, bend: from.x > spot.x ? 0.06 : -0.06 },
-    scene.still ? 0 : time,
-  );
+  const arrow = bob({ from, to: spot, bend: from.x > spot.x ? 0.06 : -0.06 }, time);
   sketchArrow(pen, arrow, { color: walk.color, width: 7, seed: 9, dash: 18, time }, colors.shade);
   if (walk.meters) {
     const top = controlOf(arrow);
@@ -548,7 +548,7 @@ function drawWalk(pen: Pen, drawing: Drawing) {
     return;
   }
   const stroke = { color: walk.color, width: 7, seed: 9, dash: 18, time };
-  sketchArrow(pen, bob(arrow, scene.still ? 0 : time), stroke, colors.shade);
+  sketchArrow(pen, bob(arrow, time), stroke, colors.shade);
   if (walk.meters) {
     sketchTag(pen, walk.meters, { x: arrow.to.x, y: arrow.to.y - 0.05 }, tagColors(colors), {
       tone: walk.color,
@@ -568,7 +568,7 @@ function drawMove(pen: Pen, { scene, colors, time }: Drawing) {
     if (!arrow) {
       return;
     }
-    sketchArrow(pen, bob(arrow, scene.still ? 0 : time), stroke, colors.shade);
+    sketchArrow(pen, bob(arrow, time), stroke, colors.shade);
   }
   if (scene.labels.move) {
     sketchTag(pen, scene.labels.move, { x: 0.5, y: 0.74 }, tagColors(colors), {
@@ -603,10 +603,10 @@ function drawHighlights(pen: Pen, { scene, colors, time }: Drawing) {
 }
 
 /** The stickers landing on the frame, each popping in and fading out. */
-function drawStickers(pen: Pen, { scene, colors, time }: Drawing) {
+function drawStickers(pen: Pen, { scene, colors, now }: Drawing) {
   const { ctx } = pen;
   for (const sticker of scene.stickers) {
-    const age = time - sticker.born;
+    const age = now - sticker.born;
     const alpha = fadeOf(age, STICKER_LIFE[sticker.kind]);
     if (alpha <= 0 || age < 0) {
       continue;
@@ -671,7 +671,8 @@ export function drawDoodles(
   colors: DoodleColors,
   time: number,
 ) {
-  const drawing: Drawing = { scene, colors, time };
+  // Reduced motion: every mark holds still (stickers still come and go, by the clock).
+  const drawing: Drawing = { scene, colors, time: scene.still ? 0 : time, now: time };
   const boiling: Pen = { ...pen, boil: boilFrame(time, scene.still) };
   boiling.ctx.clearRect(0, 0, pen.width, pen.height);
   if (scene.horizon) {

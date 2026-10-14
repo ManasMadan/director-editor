@@ -68,8 +68,8 @@ const nextTask = () =>
  * Waits for `check` to pass, like `expect.poll`, but without moving fake timers (under
  * `vi.useFakeTimers()` each of expect.poll's tries does): the test moves the clock itself.
  */
-export async function until(check: () => void) {
-  const deadline = Date.now() + 5_000;
+export async function until(check: () => void, timeout = 5_000) {
+  const deadline = Date.now() + timeout;
   for (;;) {
     try {
       check();
@@ -357,7 +357,8 @@ export class FakeRecognizer {
   }
   /** The member says `text`: still being heard (`final: false`) or a finished phrase. */
   hear(text: string, { final = true, confidence = 0.9 } = {}) {
-    const result = Object.assign([{ transcript: text, confidence }], { isFinal: final });
+    const best = { transcript: text, confidence };
+    const result = Object.assign([best], { isFinal: final, item: () => best });
     this.onresult?.({ resultIndex: 0, results: [result] } as unknown as SpeechRecognitionEvent);
   }
   fail(error: string) {

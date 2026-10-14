@@ -95,4 +95,17 @@ describe("the Director's Cut", () => {
       lateStart: false,
     });
   });
+
+  it("judges the light most of the take had", () => {
+    const mostlyGood = directorsCut(
+      take(4, (time) => ({ light: time > 3.5 ? "backlit" : "good" })),
+      { ...video, framed: null },
+    );
+    expect(mostlyGood.tip).toBeNull();
+    const mostlyDark = directorsCut(
+      take(4, (time) => ({ light: time > 0.5 ? "too-dark" : "good" })),
+      { ...video, length: 4 },
+    );
+    expect(mostlyDark.tip).toBe("too-dark");
+  });
 });

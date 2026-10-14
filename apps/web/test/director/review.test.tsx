@@ -7,6 +7,7 @@ import type { UploadPurpose } from "@repo/contracts/files";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { commands, userEvent } from "vitest/browser";
 import { ReviewPage } from "@/modules/director";
+import { FRESH } from "@/modules/director/lib/memory";
 import { currentUrl, renderPage } from "../render";
 import { api, signUp } from "../users";
 import { newVideoId, photo, planShot, readyPlan, recordVideo, shotPlan, take } from "./support";
@@ -75,6 +76,20 @@ describe("the editor before it can open", () => {
       .toContain("That's a wrap! Let's see what we made.");
     await userEvent.click(wrap);
     await expect.element(wrap).not.toBeInTheDocument();
+  });
+
+  it("calls the wrap silently for a member who turned Director's voice off", async () => {
+    const speak = vi.spyOn(window.speechSynthesis, "speak").mockImplementation(() => undefined);
+    const user = await signUp();
+    window.localStorage.setItem(
+      `director.memory.${user.id}`,
+      JSON.stringify({ ...FRESH, speak: false }),
+    );
+    const videoId = newVideoId();
+    await readyPlan(videoId, shotPlan());
+    const page = await openEditor(videoId, "voice", true);
+    await expect.element(page.getByRole("button", { name: /That's a wrap!/ })).toBeVisible();
+    expect(speak).not.toHaveBeenCalled();
   });
 
   it("says when the takes can't be read", async () => {

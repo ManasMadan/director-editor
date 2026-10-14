@@ -2,7 +2,7 @@
 
 import { cn } from "@repo/ui/lib/utils";
 import { useTranslations } from "next-intl";
-import { type ReactNode, useEffect, useRef } from "react";
+import type { ReactNode } from "react";
 
 /**
  * The night the camera floats in: the live picture itself, blurred far out of focus and
@@ -10,16 +10,14 @@ import { type ReactNode, useEffect, useRef } from "react";
  * window's light does round a frame.
  */
 export function LiveBackdrop({ stream }: { stream: MediaStream | null }) {
-  const video = useRef<HTMLVideoElement>(null);
-  useEffect(() => {
-    if (video.current) {
-      video.current.srcObject = stream;
-    }
-  }, [stream]);
   return (
     <div aria-hidden className="fixed inset-0 overflow-hidden bg-live-deep">
       <video
-        ref={video}
+        ref={(element) => {
+          if (element) {
+            element.srcObject = stream;
+          }
+        }}
         autoPlay
         muted
         playsInline

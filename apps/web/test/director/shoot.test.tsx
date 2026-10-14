@@ -413,7 +413,7 @@ describe("Director Live", () => {
     await expect.element(page.getByText("let's", { exact: true })).toBeVisible();
     // A phrase the recogniser doubts, or that isn't a request, does nothing.
     ears().hear("action", { confidence: 0.1 });
-    ears().hear("what a lovely day");
+    ears().hear("lovely day out");
     ears().hear("flip the camera");
     await expect.poll(() => camera.opened).toHaveLength(2);
     expect(camera.opened[1]).toMatchObject({ video: { facingMode: "user" } });
@@ -426,6 +426,9 @@ describe("Director Live", () => {
       .element(page.getByRole("button", { name: "Director's voice" }))
       .toHaveAttribute("aria-pressed", "true");
     ears().hear("repeat");
+    ears().hear("where do i go");
+    // Nothing to keep yet.
+    ears().hear("keep it");
     ears().hear("action");
     await expect
       .element(page.getByRole("button", { name: "Stop" }), { timeout: 10_000 })
@@ -457,10 +460,20 @@ describe("Director Live", () => {
   it("says where the browser can't hear, and leaves its talk button off", async () => {
     canvasCamera();
     vi.stubGlobal("webkitSpeechRecognition", undefined);
-    const { page } = await openShoot({ shots: [walkIn] }, { shot: "0", audio: "voice" });
-    await expect
-      .element(page.getByRole("button", { name: /can't hear you/ }).first())
-      .toBeDisabled();
+    const share = Object.getOwnPropertyDescriptor(MediaDevices.prototype, "getDisplayMedia");
+    Reflect.deleteProperty(MediaDevices.prototype, "getDisplayMedia");
+    try {
+      const { page } = await openShoot({ shots: [walkIn] }, { shot: "0", audio: "voice" });
+      await expect
+        .element(page.getByRole("button", { name: /can't hear you/ }).first())
+        .toBeDisabled();
+      // And no screen to share in a browser that can't.
+      expect(page.getByRole("button", { name: "Show Director your screen" }).query()).toBeNull();
+    } finally {
+      if (share) {
+        Object.defineProperty(MediaDevices.prototype, "getDisplayMedia", share);
+      }
+    }
   });
 
   it("pauses, and shows Director the screen instead of the camera", async () => {
@@ -479,6 +492,9 @@ describe("Director Live", () => {
 
     await press(page, "Show Director your screen");
     await expect.element(page.getByText("Director is looking at your screen")).toBeVisible();
+    // A shared screen is for showing Director, not filming: "action" does nothing.
+    FakeRecognizer.last?.hear("action");
+    expect(page.getByText("3", { exact: true }).query()).toBeNull();
     await expect
       .element(page.getByRole("button", { name: "Switch back to the camera to record." }))
       .toBeDisabled();
@@ -520,6 +536,8 @@ describe("Director Live", () => {
 describe("sending a take", { tags: ["files"] }, () => {
   it("records the member's voice with the teleprompter, goes again, and keeps the take", async () => {
     await commands.storageCors();
+    // A plant in the frame: it's remembered with the take kept.
+    thingsModel("plant");
     const said = speech();
     canvasCamera();
     const { page, videoId, user } = await openShoot(
@@ -543,9 +561,15 @@ describe("sending a take", { tags: ["files"] }, () => {
 
     await record(page);
     await userEvent.click(page.getByRole("button", { name: "Stop" }));
-    await userEvent.click(page.getByRole("button", { name: "Keep it" }));
+    // Kept by saying so.
+    await expect.element(page.getByLabelText("Best moment, on loop")).toBeVisible();
+    await expect.poll(() => FakeRecognizer.last?.started).toBeGreaterThan(0);
+    FakeRecognizer.last?.hear("keep it");
     await commands.checkUpload(await lastUpload(user));
     await expect.poll(currentUrl).toBe(`/director/${videoId}/shoot?shot=1&audio=voice`);
+    // Director remembers the take, and the plant that was in it.
+    const memory = JSON.parse(window.localStorage.getItem(`director.memory.${user.id}`) ?? "{}");
+    expect(memory).toMatchObject({ takesKept: 1, retakes: 1, things: { plant: 1 } });
   });
 
   it("takes the last shot's photo, and wraps into the edit", async () => {

@@ -101,4 +101,12 @@ describe("Director's memory", () => {
     expect(mine.load()).toBe(FRESH);
     expect(() => mine.save(FRESH)).not.toThrow();
   });
+
+  it("names the light problem that came up most, of several", () => {
+    let memory = FRESH;
+    for (const light of ["backlit", "too-dark", "too-dark", "backlit", "too-dark"] as const) {
+      memory = keep(memory, { light });
+    }
+    expect(usualLight(memory)).toBe("too-dark");
+  });
 });

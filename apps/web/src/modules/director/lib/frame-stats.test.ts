@@ -28,10 +28,12 @@ function sample(centre: number, edges = centre) {
 
 describe("frame stats", () => {
   it("weighs green most, as the eye does", () => {
-    const [red, green, blue] = lumaOf([255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 9]);
+    const [red, green, blue] = lumaOf(
+      new Uint8ClampedArray([255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 9]),
+    );
     expect(green).toBeGreaterThan(red ?? 0);
     expect(red).toBeGreaterThan(blue ?? 0);
-    expect(lumaOf([255, 255, 255, 255])[0]).toBeCloseTo(1);
+    expect(lumaOf(new Uint8ClampedArray([255, 255, 255, 255]))[0]).toBeCloseTo(1);
   });
 
   it("tells good light from too dark, too bright and a light behind the subject", () => {

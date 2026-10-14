@@ -133,6 +133,9 @@ describe("useStudio", () => {
     await until(() =>
       expect([hook.current.phase, hook.current.countdown]).toEqual(["countdown", 3]),
     );
+    // A second press (or "action") mid-countdown doesn't start it over.
+    hook.current.actions.record();
+    expect(hook.current.countdown).toBe(3);
     await ticking(() => expect(hook.current.phase).toBe("recording"));
     expect(FakeRecorder.last?.stream).toBe(hook.current.camera.stream);
     await ticking(() => expect(hook.current.seconds).toBeGreaterThanOrEqual(2));

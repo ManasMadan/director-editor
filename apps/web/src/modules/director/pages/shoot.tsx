@@ -206,8 +206,8 @@ function Viewport({ session, props }: { session: Session; props: StudioShot }) {
           script={props.shot.script}
           sending={studio.phase === "sending"}
           error={studio.submit.error ? errorMessage(studio.submit.error) : null}
-          onAgain={session.actions.retake}
-          onKeep={session.actions.use}
+          onAgain={() => session.actions.retake(cut)}
+          onKeep={() => session.actions.use(cut)}
         />
       ) : (
         <ViewportFoot session={session} shot={props.shot} voice={props.audio === "voice"} />

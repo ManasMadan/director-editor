@@ -4,6 +4,7 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
+import { CaptionLayer } from "@/modules/director/components/caption-layer";
 import { DirectorsCut } from "@/modules/director/components/directors-cut";
 import { DoodleLayer } from "@/modules/director/components/doodle-layer";
 import type { Cut } from "@/modules/director/lib/cut";
@@ -100,6 +101,33 @@ describe("the doodles", () => {
 });
 
 const script = [{ startSeconds: 0, endSeconds: 5, text: "Coffee first." }];
+
+describe("the captions over a video", () => {
+  const lines = [{ key: "0", startSeconds: 0, endSeconds: 5, text: "Coffee first." }];
+
+  it("are drawn at the canvas's size, even on a screen with no pixel ratio", async () => {
+    noPixelRatio();
+    await renderPage(
+      <Viewfinder>
+        <CaptionLayer lines={lines} style="pop" clock={() => 1} />
+      </Viewfinder>,
+    );
+    await expect.poll(() => canvas().width).toBe(180);
+    await expect.poll(drawn).toBe(true);
+  });
+
+  it("leave the video alone where the browser has no 2D canvas", async () => {
+    const getContext = no2dCanvas();
+    await renderPage(
+      <Viewfinder>
+        <CaptionLayer lines={lines} style="pop" clock={() => 1} />
+      </Viewfinder>,
+    );
+    await expect.poll(() => getContext.mock.calls.length).toBeGreaterThan(0);
+    await frames();
+    expect(canvas().width).toBe(300);
+  });
+});
 
 const cut = (overrides: Partial<Cut> = {}): Cut => ({
   startSeconds: 0.2,

@@ -44,7 +44,7 @@ export function useIdle(enabled: boolean) {
  */
 export function useWakeLock() {
   useEffect(() => {
-    if (typeof navigator === "undefined" || !("wakeLock" in navigator)) {
+    if (!("wakeLock" in navigator)) {
       return;
     }
     let lock: WakeLockSentinel | null = null;
@@ -75,7 +75,7 @@ export function useWakeLock() {
 
 /** A short buzz on phones that can (Android): a beat felt as well as seen. */
 export function buzz(pattern: number | number[]) {
-  if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+  if ("vibrate" in navigator) {
     navigator.vibrate(pattern);
   }
 }

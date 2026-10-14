@@ -41,4 +41,8 @@ describe("springs", () => {
     sparse.length = 4;
     expect(glider.glide("box", sparse)[3]).toBeCloseTo(0.2);
   });
+
+  it("starts a value where it is, even before the first frame", () => {
+    expect(new Glider().glide("early", [0.4])).toEqual([0.4]);
+  });
 });

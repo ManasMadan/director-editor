@@ -10,7 +10,7 @@ import type { DoodleScene } from "../lib/doodle";
 import { intentOf, type Vocabulary } from "../lib/intents";
 import { type Countdown, countdownOf } from "../lib/memory";
 import { isReady, readinessOf } from "../lib/readiness";
-import { grounded, thingFor } from "../lib/things";
+import { grounded, type Thing, thingFor } from "../lib/things";
 import { tiltHint, tiltInRange, tiltOffset } from "../lib/tilt";
 import { activeStep } from "../lib/timeline";
 import { useBodyGuides } from "./use-body-guides";
@@ -230,7 +230,10 @@ function useLatest<T>(value: T) {
   return ref;
 }
 
-type SetupAtStart = Pick<Setup, "framed" | "angled" | "posed">;
+interface SetupAtStart extends Pick<Setup, "framed" | "angled" | "posed"> {
+  /** What was in frame: remembered with the take if it's kept (the detector rests meanwhile). */
+  things: Thing[];
+}
 
 /**
  * The Director's Cut of each take, worked out the moment it's recorded from what the
@@ -239,7 +242,7 @@ type SetupAtStart = Pick<Setup, "framed" | "angled" | "posed">;
 function useTakeReview(shot: Shot, studio: Studio, seen: Perceiving) {
   const [cut, setCut] = useState<Cut | null>(null);
   const latest = useLatest(seen);
-  const setup = useRef<SetupAtStart>({ framed: null, angled: null, posed: null });
+  const setup = useRef<SetupAtStart>({ framed: null, angled: null, posed: null, things: [] });
   const { phase, take } = studio;
   useEffect(() => {
     const now = latest.current;
@@ -248,6 +251,7 @@ function useTakeReview(shot: Shot, studio: Studio, seen: Perceiving) {
         framed: now.guides.framing === null ? null : now.guides.framing === "in-frame",
         angled: now.level,
         posed: now.guides.tracksBody ? now.guides.matched : null,
+        things: now.things.map((thing) => thing.thing),
       };
     }
     if (phase === "setup") {
@@ -262,7 +266,7 @@ function useTakeReview(shot: Shot, studio: Studio, seen: Perceiving) {
       );
     }
   }, [phase, take, shot, latest]);
-  return cut;
+  return { cut, inFrame: () => setup.current.things };
 }
 
 interface Calls {
@@ -332,7 +336,7 @@ function useSetCalls({ studio, seen, cut, take, announce, add }: Calls) {
 function sessionActions({
   studio,
   seen,
-  cut,
+  inFrame,
   director,
   remember,
   setAttempts,
@@ -341,7 +345,7 @@ function sessionActions({
 }: {
   studio: Studio;
   seen: Perceiving;
-  cut: Cut | null;
+  inFrame: () => Thing[];
   director: ReturnType<typeof useLiveDirector>;
   remember: ReturnType<typeof useMemory>["record"];
   setAttempts: (update: (now: number) => number) => void;
@@ -356,19 +360,21 @@ function sessionActions({
         studio.actions.record();
       }
     },
-    retake: () => {
-      remember({ type: "retake", lateStart: cut?.lateStart ?? false });
+    /** Go again after `review`, the Director's Cut of the take being redone. */
+    retake: (review: Cut) => {
+      remember({ type: "retake", lateStart: review.lateStart });
       setAttempts((now) => Math.max(1, now) + 1);
       director.announce(t("say.backToOne"));
       studio.actions.retake();
     },
-    use: () => {
+    /** Keep the take `review` is the Director's Cut of. */
+    use: (review: Cut) => {
       remember({
         type: "kept",
-        score: cut?.score ?? 0,
-        lateStart: cut?.lateStart ?? false,
+        score: review.score,
+        lateStart: review.lateStart,
         light: seen.vision.light,
-        things: seen.things.map((thing) => thing.thing),
+        things: inFrame(),
       });
       studio.actions.use();
     },
@@ -376,6 +382,34 @@ function sessionActions({
     listen: (on: boolean) => remember({ type: "prefer", listen: on }),
     countdown: (seconds: Countdown | null) => remember({ type: "prefer", countdown: seconds }),
     pause: setPaused,
+  };
+}
+
+/** What each spoken request does, at the moment it's said. */
+function voiceActions({
+  studio,
+  actions,
+  director,
+  reviewing,
+}: {
+  studio: Studio;
+  actions: ReturnType<typeof sessionActions>;
+  director: ReturnType<typeof useLiveDirector>;
+  reviewing: Cut | null;
+}) {
+  return {
+    action: () => studio.phase === "setup" && actions.record(),
+    cut: () => studio.phase === "recording" && studio.actions.stop(),
+    again: () => reviewing && actions.retake(reviewing),
+    keep: () => reviewing && actions.use(reviewing),
+    // Flipping reopens the camera: never while the member is showing a screen.
+    flip: () => studio.camera.source === "camera" && studio.camera.flip(),
+    repeat: director.repeat,
+    quiet: () => actions.speak(false),
+    talk: () => {
+      actions.speak(true);
+      actions.pause(false);
+    },
   };
 }
 
@@ -403,7 +437,7 @@ export function useSession(props: StudioShot) {
   });
   const [attempts, setAttempts] = useState(0);
   const take = useTakeNumber(videoId, index, attempts);
-  const cut = useTakeReview(shot, studio, seen);
+  const { cut, inFrame } = useTakeReview(shot, studio, seen);
   useSetCalls({ studio, seen, cut, take, announce: director.announce, add });
   useEffect(() => remember({ type: "opened" }), [remember]);
   useWakeLock();
@@ -411,29 +445,18 @@ export function useSession(props: StudioShot) {
   const actions = sessionActions({
     studio,
     seen,
-    cut,
+    inFrame,
     director,
     remember,
     setAttempts,
     setPaused,
     t,
   });
+  // The take on screen, ready to keep or redo (not while it's being sent).
+  const reviewing = studio.phase === "preview" ? cut : null;
   const voice = useVoice(
     { studio, listen: memory.listen, paused },
-    {
-      action: () => studio.phase === "setup" && actions.record(),
-      cut: () => studio.phase === "recording" && studio.actions.stop(),
-      again: () => studio.phase === "preview" && actions.retake(),
-      keep: () => studio.phase === "preview" && actions.use(),
-      // Flipping reopens the camera: never while the member is showing a screen.
-      flip: () => studio.camera.source === "camera" && studio.camera.flip(),
-      repeat: director.repeat,
-      quiet: () => actions.speak(false),
-      talk: () => {
-        actions.speak(true);
-        setPaused(false);
-      },
-    },
+    voiceActions({ studio, actions, director, reviewing }),
     director.interrupt,
   );
   const scene = useDoodleScene(shot, studio, seen, { stickers, paused });

@@ -26,23 +26,27 @@ export const NEW_PLACE = 0.16;
 export type Light = SceneCheck["lighting"];
 
 /** Each pixel's brightness (Rec. 709 luma, 0 to 1) from RGBA bytes. */
-export function lumaOf(rgba: ArrayLike<number>): Float32Array {
+export function lumaOf(rgba: Uint8ClampedArray): Float32Array {
+  // Read through a view: it says where each byte is, with no gaps to guess around.
+  const bytes = new DataView(rgba.buffer, rgba.byteOffset, rgba.byteLength);
   const luma = new Float32Array(Math.floor(rgba.length / 4));
   for (let pixel = 0; pixel < luma.length; pixel += 1) {
     const at = pixel * 4;
     luma[pixel] =
-      (0.2126 * (rgba[at] ?? 0) + 0.7152 * (rgba[at + 1] ?? 0) + 0.0722 * (rgba[at + 2] ?? 0)) /
+      (0.2126 * bytes.getUint8(at) +
+        0.7152 * bytes.getUint8(at + 1) +
+        0.0722 * bytes.getUint8(at + 2)) /
       255;
   }
   return luma;
 }
 
-function mean(values: ArrayLike<number>, pick: (index: number) => boolean = () => true) {
+function mean(values: Float32Array, pick: (index: number) => boolean = () => true) {
   let sum = 0;
   let count = 0;
-  for (let index = 0; index < values.length; index += 1) {
+  for (const [index, value] of values.entries()) {
     if (pick(index)) {
-      sum += values[index] ?? 0;
+      sum += value;
       count += 1;
     }
   }
@@ -74,11 +78,11 @@ export function difference(a: Float32Array, b: Float32Array): number {
   if (a.length !== b.length || a.length === 0) {
     return 1;
   }
-  let sum = 0;
-  for (let index = 0; index < a.length; index += 1) {
-    sum += Math.abs((a[index] ?? 0) - (b[index] ?? 0));
-  }
-  return sum / a.length;
+  // Pixel by pixel. `b`'s pixel comes out of a one-pixel view of it: indexing a typed
+  // array is typed as possibly missing, though the lengths match.
+  const pixelOf = (index: number, fallback: number) =>
+    b.subarray(index, index + 1).reduce((_, pixel) => pixel, fallback);
+  return mean(a.map((value, index) => Math.abs(value - pixelOf(index, value))));
 }
 
 /**

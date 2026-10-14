@@ -65,25 +65,16 @@ function mean(values: readonly number[]) {
   return values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+/** The light most of the samples saw (good, with none to go by). */
 function mostCommon(lights: readonly Light[]): Light {
-  const counts = new Map<Light, number>();
-  for (const light of lights) {
-    counts.set(light, (counts.get(light) ?? 0) + 1);
-  }
-  let best: Light = "good";
-  let most = 0;
-  for (const [light, count] of counts) {
-    if (count > most) {
-      best = light;
-      most = count;
-    }
-  }
-  return best;
+  const count = (light: Light) => lights.filter((each) => each === light).length;
+  const [most] = [...new Set(lights)].sort((a, b) => count(b) - count(a));
+  return most ?? "good";
 }
 
 /** The steadiest, best-lit stretch of `length` seconds (the earliest of equals). */
 function bestWindow(samples: readonly Sample[], length: number) {
-  const duration = samples.at(-1)?.seconds ?? 0;
+  const duration = Math.max(...samples.map((sample) => sample.seconds));
   const window = Math.min(length, duration);
   let best = { start: 0, cost: Number.POSITIVE_INFINITY };
   for (const sample of samples) {

@@ -1,8 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import ErrorPage from "@/app/error";
 import GlobalError from "@/app/global-error";
 import { renderPage } from "../render";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("error pages", () => {
   it("shows the reference support needs, and tries again", async () => {
@@ -27,6 +31,13 @@ describe("error pages", () => {
     const page = await renderPage(<GlobalError error={new Error("boom")} reset={vi.fn()} />);
     await expect.element(page.getByRole("heading", { name: "Something went wrong" })).toBeVisible();
     expect(document.querySelector("p.font-mono")).toBeNull();
+  });
+
+  it("speaks the browser's language", async () => {
+    vi.spyOn(navigator, "languages", "get").mockReturnValue(["es-ES"]);
+    const page = await renderPage(<GlobalError error={new Error("boom")} reset={vi.fn()} />);
+    await expect.poll(() => document.documentElement.lang).toBe("es");
+    await expect.element(page.getByRole("heading", { name: "Algo salió mal" })).toBeVisible();
   });
 
   it("recovers from a broken root layout without any providers", async () => {

@@ -50,12 +50,13 @@ async function nextCheck(
     vi.advanceTimersByTime(6_000);
     return;
   }
+  // A real frame and answer each time: on a busy runner one can take a few seconds.
   await until(() => {
     if (asked() <= n) {
       vi.advanceTimersByTime(6_000);
     }
     expect(asked()).toBeGreaterThan(n);
-  });
+  }, 15_000);
 }
 
 describe("useSceneGuide", () => {

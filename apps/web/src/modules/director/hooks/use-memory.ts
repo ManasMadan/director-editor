@@ -5,7 +5,8 @@ import { authClient } from "@/lib/auth-client";
 import { browserMemory, FRESH, type Memory, type MemoryEvent, remember } from "../lib/memory";
 
 interface Held {
-  owner: string | null;
+  /** Whose memory this is: undefined before the first render has looked. */
+  owner: string | null | undefined;
   /** What Director knew when the screen opened: the greeting is about last time, not now. */
   before: Memory;
   memory: Memory;
@@ -20,7 +21,7 @@ export function useMemory() {
   const { data } = authClient.useSession();
   const owner = data?.user.id ?? null;
   const store = useMemo(() => (owner ? browserMemory(owner) : null), [owner]);
-  const [held, setHeld] = useState<Held>({ owner: null, before: FRESH, memory: FRESH });
+  const [held, setHeld] = useState<Held>({ owner: undefined, before: FRESH, memory: FRESH });
   // A different member (or the session arriving) means a different memory.
   if (held.owner !== owner) {
     const loaded = store?.load() ?? FRESH;

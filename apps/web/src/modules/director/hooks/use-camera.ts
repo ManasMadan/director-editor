@@ -9,26 +9,25 @@ export type Source = "camera" | "screen";
 
 /** Showing Director the screen: `share` is null where the browser can't share one. */
 function useScreenShare(
-  use: (opened: MediaStream) => boolean,
+  use: (opened: MediaStream, source: Source) => void,
   backToCamera: () => Promise<void>,
-  setSource: (source: Source) => void,
 ) {
   const [failed, setFailed] = useState(false);
   const share = useCallback(async () => {
     setFailed(false);
     try {
       const screen = await openScreen();
-      if (use(screen)) {
-        setSource("screen");
-        // The browser's own "Stop sharing" ends the track: back to the camera.
-        screen.getVideoTracks()[0]?.addEventListener("ended", () => void backToCamera());
+      use(screen, "screen");
+      // The browser's own "Stop sharing" ends the track: back to the camera.
+      for (const track of screen.getVideoTracks()) {
+        track.addEventListener("ended", () => void backToCamera());
       }
     } catch (error) {
       // Cancelling the browser's picker is a choice, not a failure.
       const cancelled = error instanceof DOMException && error.name === "NotAllowedError";
       setFailed(!cancelled);
     }
-  }, [use, backToCamera, setSource]);
+  }, [use, backToCamera]);
   const supported =
     typeof navigator !== "undefined" &&
     typeof navigator.mediaDevices?.getDisplayMedia === "function";
@@ -54,24 +53,22 @@ export function useCamera(camera: Shot["camera"], withSound: boolean) {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [state, setState] = useState<CameraState>("starting");
 
-  const use = useCallback((opened: MediaStream) => {
+  const use = useCallback((opened: MediaStream, from: Source) => {
     if (!mounted.current) {
       stopStream(opened);
-      return false;
+      return;
     }
     stopStream(current.current);
     current.current = opened;
     setStream(opened);
+    setSource(from);
     setState("live");
-    return true;
   }, []);
 
   const start = useCallback(async () => {
     setState("starting");
     try {
-      if (use(await openCamera(facing, withSound))) {
-        setSource("camera");
-      }
+      use(await openCamera(facing, withSound), "camera");
     } catch (error) {
       if (mounted.current) {
         const denied = error instanceof DOMException && error.name === "NotAllowedError";
@@ -96,7 +93,7 @@ export function useCamera(camera: Shot["camera"], withSound: boolean) {
     }
   }, [stream]);
 
-  const screen = useScreenShare(use, start, setSource);
+  const screen = useScreenShare(use, start);
   return {
     video,
     stream,
