@@ -25,6 +25,7 @@ import {
   fakeRecognizer,
   renderHook,
   shot,
+  until,
 } from "./support";
 
 vi.mock("@/modules/director/lib/object-detector", () => ({ createThingDetector: vi.fn() }));
@@ -87,19 +88,24 @@ describe("useVision", () => {
   });
 
   it("looks at nothing with no frame, no camera, or the page hidden, and nothing while inactive", async () => {
+    const live = await liveVideo();
+    // The looks on the test's clock: each `look()` is four of them, a second's worth.
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const look = () => vi.advanceTimersByTime(1_000);
     const video: { current: HTMLVideoElement | null } = { current: null };
     const hook = await renderHook(() => useVision(video, null, { active: true, recording: false }));
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    look();
     expect(hook.current.moved).toBe(0);
     video.current = cameraVideo({ readyState: 1 });
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    look();
     expect(hook.current.moved).toBe(0);
-    video.current = await liveVideo();
+    video.current = live;
     const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    look();
     expect(hook.current.moved).toBe(0);
     hidden.mockRestore();
-    await expect.poll(() => hook.current.moved).toBeGreaterThan(0);
+    look();
+    await until(() => expect(hook.current.moved).toBeGreaterThan(0));
     const idle = await renderHook(() =>
       useVision(video, null, { active: false, recording: false }),
     );
@@ -176,9 +182,10 @@ describe("useListening", () => {
     expect(hook.current.state).toBe("listening");
     ears.fail("service-not-allowed");
     await expect.poll(() => hook.current.state).toBe("blocked");
-    // Refused: it doesn't start again on its own.
+    // Refused: it doesn't start again on its own, however long it waits.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     ears.stop();
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    vi.advanceTimersByTime(10_000);
     expect(ears.started).toBe(1);
   });
 
