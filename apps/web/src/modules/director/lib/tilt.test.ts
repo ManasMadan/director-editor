@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { tiltFromOrientation, tiltInRange, tiltOffset } from "./tilt";
+import { tiltFromOrientation, tiltHint, tiltInRange, tiltOffset } from "./tilt";
 
 const target = { pitch: -60, roll: 0, tolerance: 10, height: "shoulder" } as const;
 
@@ -25,5 +25,12 @@ describe("the phone's tilt", () => {
     expect(tiltInRange(tilt, target)).toBe(true);
     expect(tiltInRange(tiltFromOrientation(60, 0, "back"), target)).toBe(false);
     expect(tiltInRange(tiltFromOrientation(30, 20, "back"), target)).toBe(false);
+  });
+
+  it("says which way to fix the axis that's furthest off", () => {
+    expect(tiltHint({ pitch: 12, roll: 3 })).toBe("tipUp");
+    expect(tiltHint({ pitch: -12, roll: 3 })).toBe("tipDown");
+    expect(tiltHint({ pitch: 2, roll: 9 })).toBe("leanRight");
+    expect(tiltHint({ pitch: 2, roll: -9 })).toBe("leanLeft");
   });
 });

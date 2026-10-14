@@ -1,11 +1,13 @@
 /**
- * What Director draws on canvases over a picture: the doodles over the camera, and a
- * take's captions over its preview, each redrawn every frame at the canvas's own size.
+ * What Director shows over a picture: the doodles over the camera, redrawn every frame at
+ * the canvas's own size, and the Director's Cut over a take just recorded.
  */
-import { useLayoutEffect, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
+import { CaptionLayer } from "@/modules/director/components/caption-layer";
+import { DirectorsCut } from "@/modules/director/components/directors-cut";
 import { DoodleLayer } from "@/modules/director/components/doodle-layer";
-import { TakePreview } from "@/modules/director/components/take-preview";
+import type { Cut } from "@/modules/director/lib/cut";
 import type { DoodleScene } from "@/modules/director/lib/doodle";
 import { renderPage } from "../render";
 import { photo, planShot, recordVideo } from "./support";
@@ -58,6 +60,12 @@ const scene: DoodleScene = {
   framing: null,
   scene: null,
   move: null,
+  recording: false,
+  subject: true,
+  still: false,
+  horizon: null,
+  highlights: [],
+  stickers: [],
   labels: { spot: "Stand here", meters: null, move: null },
 };
 
@@ -94,79 +102,117 @@ describe("the doodles", () => {
 
 const script = [{ startSeconds: 0, endSeconds: 5, text: "Coffee first." }];
 
-describe("a take's preview", () => {
-  it("plays the video take with its script captioned over it", async () => {
+describe("the captions over a video", () => {
+  const lines = [{ key: "0", startSeconds: 0, endSeconds: 5, text: "Coffee first." }];
+
+  it("are drawn at the canvas's size, even on a screen with no pixel ratio", async () => {
     noPixelRatio();
-    const take = await recordVideo(0.5);
-    const page = await renderPage(
+    await renderPage(
       <Viewfinder>
-        <TakePreview take={take} label="Your take" script={script} lang="en" />
+        <CaptionLayer lines={lines} style="pop" clock={() => 1} />
       </Viewfinder>,
     );
-    const video = page.getByLabelText("Your take");
-    await expect.element(video).toHaveAttribute("src", expect.stringMatching(/^blob:/));
-    const track = video.element().querySelector("track");
-    await expect.poll(() => track?.getAttribute("src")).toMatch(/^blob:/);
-    expect(track?.getAttribute("srclang")).toBe("en");
     await expect.poll(() => canvas().width).toBe(180);
     await expect.poll(drawn).toBe(true);
   });
 
-  it("shows a photo take as the picture", async () => {
-    const page = await renderPage(
-      <TakePreview take={await photo()} label="Your take" script={script} lang="en" />,
-    );
-    await expect
-      .element(page.getByRole("img", { name: "Your take" }))
-      .toHaveAttribute("src", expect.stringMatching(/^blob:/));
-    expect(canvas()).toBeNull();
-  });
-
-  it("shows the take without captions where the browser has no 2D canvas", async () => {
-    const take = await recordVideo(0.3);
+  it("leave the video alone where the browser has no 2D canvas", async () => {
     const getContext = no2dCanvas();
-    const page = await renderPage(
-      <TakePreview take={take} label="Your take" script={script} lang="en" />,
+    await renderPage(
+      <Viewfinder>
+        <CaptionLayer lines={lines} style="pop" clock={() => 1} />
+      </Viewfinder>,
     );
-    await expect.element(page.getByLabelText("Your take")).toBeInTheDocument();
     await expect.poll(() => getContext.mock.calls.length).toBeGreaterThan(0);
     await frames();
     expect(canvas().width).toBe(300);
   });
+});
 
-  it("keeps drawing safely while the preview is taken down", async () => {
+const cut = (overrides: Partial<Cut> = {}): Cut => ({
+  startSeconds: 0.2,
+  endSeconds: 0.4,
+  score: 87,
+  praise: "framing",
+  tip: "energy",
+  lateStart: false,
+  ...overrides,
+});
+
+const actions = () => ({ onAgain: vi.fn(), onKeep: vi.fn() });
+
+describe("the Director's Cut", () => {
+  it("loops the take's best stretch, captioned, with the score, the praise and the tip", async () => {
+    const take = await recordVideo(0.6, true);
+    const choose = actions();
+    const page = await renderPage(
+      <DirectorsCut
+        take={take}
+        cut={cut()}
+        script={script}
+        sending={false}
+        error={null}
+        {...choose}
+      />,
+    );
+    const video = page.getByLabelText("Best moment, on loop");
+    await expect.element(video).toHaveAttribute("src", expect.stringMatching(/^blob:/));
+    await expect
+      .poll(() => video.element().querySelector("track")?.getAttribute("src"))
+      .toMatch(/^blob:/);
+    await expect
+      .element(page.getByRole("img", { name: "Director's score: 87 out of 100" }))
+      .toBeInTheDocument();
+    await expect.element(page.getByText("Framing was spot-on!")).toBeInTheDocument();
+    await expect.element(page.getByText(/more energy/)).toBeInTheDocument();
+    // Round the loop: past its end it goes back to its start.
+    const element = video.element() as HTMLVideoElement;
+    await expect.poll(() => element.readyState).toBeGreaterThan(0);
+    element.currentTime = 0.5;
+    element.dispatchEvent(new Event("timeupdate"));
+    await expect.poll(() => element.currentTime).toBeCloseTo(0.2, 1);
+    element.dispatchEvent(new Event("ended"));
+    await userEvent.click(page.getByRole("button", { name: "Go again" }));
+    await userEvent.click(page.getByRole("button", { name: "Keep it" }));
+    expect([choose.onAgain.mock.calls.length, choose.onKeep.mock.calls.length]).toEqual([1, 1]);
+  });
+
+  it("plays silently where the browser won't play the sound by itself", async () => {
     const take = await recordVideo(0.3);
-    const errors: unknown[] = [];
-    const onError = (event: ErrorEvent) => errors.push(event.error);
-    window.addEventListener("error", onError);
-    let hide: () => void = () => undefined;
-    function Preview() {
-      const [shown, setShown] = useState(true);
-      hide = () => setShown(false);
-      // The commit takes a frame's time, so the captions' next frame comes before React
-      // has stopped them: the take's video is already gone when they read its time.
-      useLayoutEffect(() => {
-        if (!shown) {
-          const until = performance.now() + 50;
-          while (performance.now() < until) {
-            // Busy, as a slow phone is.
-          }
-        }
-      }, [shown]);
-      return shown ? (
-        <Viewfinder>
-          <TakePreview take={take} label="Your take" script={script} lang="en" />
-        </Viewfinder>
-      ) : null;
-    }
-    const page = await renderPage(<Preview />);
-    await expect.element(page.getByLabelText("Your take")).toBeInTheDocument();
-    // The captions are drawing, frame after frame.
-    await expect.poll(() => canvas().width).toBe(180);
-    hide();
-    await expect.element(page.getByLabelText("Your take")).not.toBeInTheDocument();
-    await frames();
-    window.removeEventListener("error", onError);
-    expect(errors).toEqual([]);
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockRejectedValueOnce(new DOMException("No sound yet", "NotAllowedError"))
+      .mockResolvedValue(undefined);
+    await renderPage(
+      <DirectorsCut
+        take={take}
+        cut={cut()}
+        script={script}
+        sending={false}
+        error={null}
+        {...actions()}
+      />,
+    );
+    await expect.poll(() => play.mock.calls.length).toBe(2);
+    expect((document.querySelector("video") as HTMLVideoElement).muted).toBe(true);
+  });
+
+  it("shows a photo, with nothing to fix, and waits while it's sent", async () => {
+    const page = await renderPage(
+      <DirectorsCut
+        take={await photo()}
+        cut={cut({ tip: null, praise: "light" })}
+        script={script}
+        sending
+        error="Couldn't send it."
+        {...actions()}
+      />,
+    );
+    await expect
+      .element(page.getByRole("img", { name: "Director's cut" }))
+      .toHaveAttribute("src", expect.stringMatching(/^blob:/));
+    await expect.element(page.getByText("Nothing to fix. Ship it!")).toBeInTheDocument();
+    await expect.element(page.getByRole("alert")).toHaveTextContent("Couldn't send it.");
+    await expect.element(page.getByRole("button", { name: /Keep it/ })).toBeDisabled();
   });
 });

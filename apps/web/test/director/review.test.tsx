@@ -7,6 +7,7 @@ import type { UploadPurpose } from "@repo/contracts/files";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { commands, userEvent } from "vitest/browser";
 import { ReviewPage } from "@/modules/director";
+import { FRESH } from "@/modules/director/lib/memory";
 import { currentUrl, renderPage } from "../render";
 import { api, signUp } from "../users";
 import { newVideoId, photo, planShot, readyPlan, recordVideo, shotPlan, take } from "./support";
@@ -25,8 +26,8 @@ async function uploaded(purpose: UploadPurpose, blob: Blob) {
   return id;
 }
 
-async function openEditor(videoId: string, audio: string | undefined) {
-  return renderPage(<ReviewPage videoId={videoId} audio={audio} />, {
+async function openEditor(videoId: string, audio: string | undefined, wrap = false) {
+  return renderPage(<ReviewPage videoId={videoId} audio={audio} wrap={wrap} />, {
     url: `/director/${videoId}/review`,
   });
 }
@@ -60,6 +61,35 @@ describe("the editor before it can open", () => {
     await expect
       .element(page.getByRole("link", { name: "Back" }))
       .toHaveAttribute("href", `/director/${videoId}`);
+  });
+
+  it("calls the wrap on arriving from the last shot, aloud, until it's tapped away", async () => {
+    const speak = vi.spyOn(window.speechSynthesis, "speak").mockImplementation(() => undefined);
+    await signUp();
+    const videoId = newVideoId();
+    await readyPlan(videoId, shotPlan());
+    const page = await openEditor(videoId, "voice", true);
+    const wrap = page.getByRole("button", { name: /That's a wrap!/ });
+    await expect.element(wrap).toBeVisible();
+    await expect
+      .poll(() => speak.mock.calls.map(([utterance]) => utterance.text))
+      .toContain("That's a wrap! Let's see what we made.");
+    await userEvent.click(wrap);
+    await expect.element(wrap).not.toBeInTheDocument();
+  });
+
+  it("calls the wrap silently for a member who turned Director's voice off", async () => {
+    const speak = vi.spyOn(window.speechSynthesis, "speak").mockImplementation(() => undefined);
+    const user = await signUp();
+    window.localStorage.setItem(
+      `director.memory.${user.id}`,
+      JSON.stringify({ ...FRESH, speak: false }),
+    );
+    const videoId = newVideoId();
+    await readyPlan(videoId, shotPlan());
+    const page = await openEditor(videoId, "voice", true);
+    await expect.element(page.getByRole("button", { name: /That's a wrap!/ })).toBeVisible();
+    expect(speak).not.toHaveBeenCalled();
   });
 
   it("says when the takes can't be read", async () => {
@@ -263,6 +293,30 @@ describe("the editor", { tags: ["files"] }, () => {
       .element(page.getByRole("heading", { name: "Your short is ready" }))
       .not.toBeInTheDocument();
     await expect.element(next).toBeEnabled();
+  });
+
+  it("plays Director's cut as the wrap opens the editor", async () => {
+    await commands.storageCors();
+    await signUp();
+    const videoId = newVideoId();
+    await readyPlan(
+      videoId,
+      shotPlan({ shots: [planShot({ kind: "photo", title: "Smile", durationSeconds: 1 })] }),
+    );
+    await commands.fakeDirector(videoId, {
+      takes: [
+        take({
+          fileId: await uploaded("director-take-photo", await photo()),
+          kind: "photo",
+        }),
+      ],
+    });
+    const page = await openEditor(videoId, "voice", true);
+    await expect.element(page.getByRole("button", { name: "Pause" })).toBeVisible();
+    // The wrap steps aside by itself once it's been read.
+    await expect
+      .element(page.getByRole("button", { name: /That's a wrap!/ }), { timeout: 8_000 })
+      .not.toBeInTheDocument();
   });
 
   it("keeps the member's voice in an MP4, where the browser records one", async () => {

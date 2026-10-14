@@ -7,7 +7,7 @@ import { useBillingOverviewQuery } from "@repo/client/api/billing/overview";
 import { usePortalMutation } from "@repo/client/api/billing/portal";
 import type { BillingOverview } from "@repo/contracts/api";
 import { formatMoney } from "@repo/contracts/money";
-import { loosely } from "@repo/i18n";
+import { loosely } from "@repo/i18n/loosely";
 import { Alert, AlertDescription } from "@repo/ui/components/alert";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";

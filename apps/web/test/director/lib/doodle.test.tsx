@@ -1,10 +1,15 @@
+/**
+ * Director's doodles drawn on a real canvas: which marks, words and stickers each moment
+ * puts on the frame, in which colours. The look itself (the wobble, the boil) is checked
+ * by its geometry in the unit tests beside lib/sketch.ts.
+ */
 import type { SceneCheck, Shot } from "@repo/contracts/api";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type DoodleColors,
   type DoodleScene,
   drawDoodles,
-  OPEN_BOTTOM,
+  type Sticker,
 } from "@/modules/director/lib/doodle";
 import { canvasOf } from "./footage";
 
@@ -15,6 +20,9 @@ const COLORS: DoodleColors = {
   waiting: "#ffff00",
   ink: "#ffffff",
   shade: "#000000",
+  pop: "#ffcc00",
+  paper: "#fafafa",
+  record: "#ff0000",
 };
 const SUBJECT = { x: 0.1, y: 0.2, width: 0.3, height: 0.6 };
 
@@ -44,6 +52,12 @@ const scene = (overrides: Partial<DoodleScene> = {}): DoodleScene => ({
   framing: null,
   scene: null,
   move: null,
+  recording: false,
+  subject: true,
+  still: false,
+  horizon: null,
+  highlights: [],
+  stickers: [],
   labels: { spot: "Stand here", meters: null, move: null },
   ...overrides,
 });
@@ -59,23 +73,32 @@ const check = (overrides: Partial<SceneCheck> = {}): SceneCheck => ({
 });
 
 const TREE = { label: "Tree", box: { x: 0.7, y: 0.2, width: 0.2, height: 0.5 } };
+const BODY = {
+  nose: { x: 0.25, y: 0.25 },
+  left_shoulder: { x: 0.3, y: 0.35 },
+  right_shoulder: { x: 0.2, y: 0.35 },
+  left_elbow: { x: 0.33, y: 0.45 },
+};
 
-/** A moment the arrows rest at the start of their bob. */
-const REST = (Math.PI * 3) / 10;
+const sticker = (kind: Sticker["kind"], born: number, label = ""): Sticker => ({
+  id: 1,
+  kind,
+  born,
+  at: { x: 0.5, y: 0.4 },
+  label,
+});
 
-/** A canvas that notes each line, fill and label it draws, with the pen's colour then. */
-function draw(doodles: DoodleScene, time = REST) {
+/** A canvas that notes each line's colour, each fill's, and each word it writes. */
+function draw(doodles: DoodleScene, time = 1) {
   const { ctx } = canvasOf(WIDTH, HEIGHT);
-  const strokes: { color: string; dash: number[] }[] = [];
+  const strokes: string[] = [];
   const fills: string[] = [];
-  const labels: { text: string; color: string; x: number; y: number }[] = [];
+  const words: { text: string; color: string }[] = [];
   const stroke = ctx.stroke.bind(ctx);
   const fill = ctx.fill.bind(ctx);
   const fillText = ctx.fillText.bind(ctx);
   vi.spyOn(ctx, "stroke").mockImplementation(() => {
-    // The canvas keeps dashes in single precision.
-    const dash = ctx.getLineDash().map((length) => Math.round(length * 10) / 10);
-    strokes.push({ color: String(ctx.strokeStyle), dash });
+    strokes.push(String(ctx.strokeStyle));
     stroke();
   });
   vi.spyOn(ctx, "fill").mockImplementation(() => {
@@ -83,67 +106,62 @@ function draw(doodles: DoodleScene, time = REST) {
     fill();
   });
   vi.spyOn(ctx, "fillText").mockImplementation((text, x, y) => {
-    labels.push({ text, color: String(ctx.fillStyle), x, y });
+    words.push({ text, color: String(ctx.fillStyle) });
     fillText(text, x, y);
   });
-  const moveTo = vi.spyOn(ctx, "moveTo");
-  const arc = vi.spyOn(ctx, "arc");
-  const ellipse = vi.spyOn(ctx, "ellipse");
   const clearRect = vi.spyOn(ctx, "clearRect");
-  drawDoodles({ ctx, width: WIDTH, height: HEIGHT }, doodles, COLORS, time);
-  return { strokes, fills, labels, moveTo, arc, ellipse, clearRect };
+  const arc = vi.spyOn(ctx, "arc");
+  drawDoodles({ ctx, width: WIDTH, height: HEIGHT, font: "sans-serif" }, doodles, COLORS, time);
+  return { strokes, fills, words, clearRect, arc, ctx };
 }
 
-const near = (actual: number | undefined, expected: number) =>
-  expect(Math.abs((actual ?? Number.NaN) - expected)).toBeLessThan(5);
+const texts = (drawn: ReturnType<typeof draw>) => drawn.words.map((word) => word.text);
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 describe("Director's doodles", () => {
-  it("marks the subject's corners and the body to match, in the waiting colour", () => {
-    const drawn = draw(
-      scene({
-        target: {
-          nose: { x: 0.25, y: 0.25 },
-          left_shoulder: { x: 0.3, y: 0.35 },
-          right_shoulder: { x: 0.2, y: 0.35 },
-          left_elbow: { x: 0.33, y: 0.45 },
-        },
-        framing: "come-closer",
-      }),
-    );
+  it("draws the body to step into, a ghost of it first, in the waiting colour", () => {
+    const drawn = draw(scene({ target: BODY, framing: "come-closer" }));
     expect(drawn.clearRect).toHaveBeenCalledWith(0, 0, WIDTH, HEIGHT);
-    // Eight corner arms, two bones (the elbow's wrist isn't there), the head and four arrows.
-    expect(drawn.strokes).toHaveLength(8 + 2 + 1 + 4);
-    expect(new Set(drawn.strokes.map((s) => s.color))).toEqual(new Set([COLORS.waiting]));
-    expect(drawn.strokes.every((s) => s.dash.length === 0)).toBe(true);
-    expect(drawn.fills).toEqual(Array(4).fill(COLORS.waiting));
+    // The ghost's head is a filled circle; the outline's head an ellipse.
     expect(drawn.arc).toHaveBeenCalledOnce();
-    expect(drawn.arc.mock.calls[0]?.slice(0, 2)).toEqual([0.25 * WIDTH, 0.25 * HEIGHT]);
-    // The first corner arm starts at the box's top left.
-    near(drawn.moveTo.mock.calls[0]?.[0], SUBJECT.x * WIDTH);
-    expect(drawn.labels).toEqual([]);
+    expect(drawn.fills).toContain(COLORS.waiting);
+    expect(new Set(drawn.strokes)).toEqual(new Set([COLORS.shade, COLORS.waiting]));
+    expect(drawn.words).toEqual([]);
   });
 
-  it("locks the outline once matched, mirrored onto the front camera's preview", () => {
+  it("locks the outline once matched, without the ghost while recording", () => {
     const drawn = draw(
       scene({
         matched: true,
         mirrored: true,
+        recording: true,
         target: { left_hip: { x: 0.3, y: 0.6 }, right_hip: { x: 0.2, y: 0.6 } },
       }),
     );
-    // Corners and the one bone, no head without a nose.
-    expect(drawn.strokes).toHaveLength(8 + 1);
-    expect(new Set(drawn.strokes.map((s) => s.color))).toEqual(new Set([COLORS.locked]));
     expect(drawn.arc).not.toHaveBeenCalled();
-    near(drawn.moveTo.mock.calls[0]?.[0], (1 - SUBJECT.x - SUBJECT.width) * WIDTH);
-    near(drawn.moveTo.mock.calls[8]?.[0], (1 - 0.3) * WIDTH);
+    expect(drawn.fills).toEqual([]);
+    expect(drawn.strokes).toContain(COLORS.locked);
   });
 
-  it("rings the landmark, marks the spot beside it, and arrows the walk there", () => {
+  it("draws the ghost of a body without a head when the plan gives none", () => {
+    const drawn = draw(
+      scene({ target: { left_hip: { x: 0.3, y: 0.6 }, right_hip: { x: 0.2, y: 0.6 } } }),
+    );
+    expect(drawn.arc).not.toHaveBeenCalled();
+    expect(drawn.strokes).toContain(COLORS.waiting);
+  });
+
+  it("lassos where a shot without a body goes, and draws nothing of it while sharing", () => {
+    const shoes = draw(scene());
+    expect(shoes.strokes).toContain(COLORS.waiting);
+    const sharing = draw(scene({ subject: false }));
+    expect(sharing.strokes).toEqual([]);
+  });
+
+  it("lassos the landmark, tags the spot beside it, and arrows the walk there", () => {
     const drawn = draw(
       scene({
         person: { x: 0.95, y: 0.5 },
@@ -152,124 +170,113 @@ describe("Director's doodles", () => {
         labels: { spot: "Stand here", meters: "3 m", move: null },
       }),
     );
-    const walk = drawn.strokes.slice(8);
-    expect(walk).toMatchObject([
-      { color: COLORS.locked, dash: [10, 8] },
-      { color: COLORS.waiting, dash: [] },
-      { color: COLORS.waiting, dash: [] },
-      { color: COLORS.waiting, dash: [18, 18 * 0.8] },
-    ]);
-    // The ring and the spot.
-    expect(drawn.ellipse).toHaveBeenCalledTimes(2);
-    expect(drawn.labels.map((label) => [label.text, label.color])).toEqual([
-      ["Tree", COLORS.locked],
-      ["Stand here", COLORS.waiting],
-      ["3 m", COLORS.waiting],
-    ]);
-    // The feet, mirrored to the frame's left, start the arrow; the spot is right of them.
-    near(drawn.moveTo.mock.calls.at(-2)?.[0], 0.05 * WIDTH);
-    near(drawn.moveTo.mock.calls.at(-2)?.[1], 0.5 * HEIGHT);
-    // The labels' backings, and the arrow's head.
-    expect(drawn.fills).toEqual([COLORS.shade, COLORS.shade, COLORS.waiting, COLORS.shade]);
+    expect(texts(drawn)).toEqual(["Tree", "Stand here", "3 m"]);
+    // Tags are dark writing on the label stock.
+    expect(new Set(drawn.words.map((word) => word.color))).toEqual(new Set([COLORS.shade]));
+    expect(drawn.fills).toContain(COLORS.paper);
+    expect(drawn.strokes).toContain(COLORS.locked);
   });
 
-  it("bows the arrow the other way coming from the right, unlabelled with no distance", () => {
+  it("bows the walk the other way from the right, unlabelled with no distance", () => {
     const drawn = draw(
       scene({
         person: { x: 0.95, y: 0.5 },
-        scene: check({ direction: "left", landmark: { ...TREE, box: { ...TREE.box, x: 0.1 } } }),
+        scene: check({ landmark: { ...TREE, box: { ...TREE.box, x: 0.1 } } }),
       }),
     );
-    expect(drawn.strokes.slice(8).map((s) => s.dash.length > 0)).toEqual([
-      true,
-      false,
-      false,
-      true,
-    ]);
-    expect(drawn.labels.map((label) => label.text)).toEqual(["Tree", "Stand here"]);
-    near(drawn.moveTo.mock.calls.at(-2)?.[0], 0.95 * WIDTH);
+    expect(texts(drawn)).toEqual(["Tree", "Stand here"]);
   });
 
   it("shows the spot without an arrow once the member is in place", () => {
-    const drawn = draw(scene({ scene: check({ inPlace: true, landmark: TREE }) }));
-    expect(drawn.strokes.slice(8).map((s) => s.color)).toEqual([
-      COLORS.locked,
-      COLORS.locked,
-      COLORS.locked,
-    ]);
-    expect(drawn.fills).toEqual([COLORS.shade, COLORS.shade]);
-    expect(drawn.labels.map((label) => label.text)).toEqual(["Tree", "Stand here"]);
+    const drawn = draw(scene({ subject: false, scene: check({ inPlace: true, landmark: TREE }) }));
+    expect(texts(drawn)).toEqual(["Tree", "Stand here"]);
+    expect(drawn.strokes).not.toContain(COLORS.waiting);
   });
 
-  it("arrows the way to walk with no landmark seen, from the feet or the frame's middle", () => {
-    const fromMiddle = draw(
+  it("arrows the way to walk with no landmark, labelled with the distance", () => {
+    const labelled = draw(
       scene({
         scene: check({ direction: "right" }),
         labels: { spot: "Stand here", meters: "5 m", move: null },
       }),
     );
-    expect(fromMiddle.strokes.slice(8)).toMatchObject([
-      { color: COLORS.waiting, dash: [18, 14.4] },
-    ]);
-    near(fromMiddle.moveTo.mock.calls[8]?.[0], 0.5 * WIDTH);
-    near(fromMiddle.moveTo.mock.calls[8]?.[1], OPEN_BOTTOM * HEIGHT);
-    expect(fromMiddle.labels).toMatchObject([{ text: "5 m", color: COLORS.waiting }]);
-    expect(fromMiddle.labels[0]?.x).toBeCloseTo(0.8 * WIDTH, 0);
-
+    expect(texts(labelled)).toEqual(["5 m"]);
     const fromFeet = draw(scene({ person: { x: 0.7, y: 0.4 }, scene: check() }));
-    near(fromFeet.moveTo.mock.calls[8]?.[0], 0.7 * WIDTH);
-    near(fromFeet.moveTo.mock.calls[8]?.[1], 0.4 * HEIGHT);
-    expect(fromFeet.labels).toEqual([]);
+    expect(fromFeet.words).toEqual([]);
+    expect(fromFeet.strokes).toContain(COLORS.waiting);
   });
 
   it("draws no walk with nothing to say, or once in place", () => {
     for (const doodles of [
-      scene(),
-      scene({ scene: check({ direction: "none" }) }),
-      scene({ scene: check({ inPlace: true }) }),
+      scene({ subject: false, scene: check({ direction: "none" }) }),
+      scene({ subject: false, scene: check({ inPlace: true }) }),
     ]) {
       const drawn = draw(doodles);
-      expect(drawn.strokes).toHaveLength(8);
-      expect(drawn.labels).toEqual([]);
+      expect(drawn.strokes).toEqual([]);
+      expect(drawn.words).toEqual([]);
     }
-  });
-
-  it("still wobbles the walk from feet far off the frame", () => {
-    // Feet left of a laptop camera's 9:16 crop, the arrow resting at the bottom of its bob.
-    // Its seed comes to nothing there: the wobble starts its sequence from one instead.
-    const drawn = draw(
-      scene({ person: { x: -0.7, y: 0.9 }, scene: check({ direction: "forward" }) }),
-    );
-    const jitter = 0.16 * HEIGHT * 0.015;
-    const first = 16_807 / 2_147_483_647 - 0.5;
-    const [x, y] = drawn.moveTo.mock.calls[8] ?? [];
-    expect(x).toBeCloseTo(-0.7 * WIDTH + first * jitter);
-    near(y, OPEN_BOTTOM * HEIGHT);
   });
 
   it("circles the phone round the subject for an orbit, labelled", () => {
     const drawn = draw(
-      scene({ move: "orbit", labels: { spot: "Stand here", meters: null, move: "Orbit" } }),
+      scene({ subject: false, move: "orbit", labels: { spot: "", meters: null, move: "Orbit" } }),
     );
-    // The loop (marching dashes) and its arrow.
-    expect(drawn.strokes.slice(8)).toMatchObject([
-      { color: COLORS.ink, dash: [16, 16 * 0.8] },
-      { color: COLORS.ink, dash: [] },
-    ]);
-    expect(drawn.ellipse).toHaveBeenCalledOnce();
-    expect(drawn.fills).toEqual([COLORS.ink, COLORS.shade]);
-    expect(drawn.labels).toMatchObject([{ text: "Orbit", color: COLORS.ink, y: 0.74 * HEIGHT }]);
+    expect(texts(drawn)).toEqual(["Orbit"]);
+    expect(new Set(drawn.strokes)).toEqual(new Set([COLORS.shade, COLORS.ink]));
   });
 
-  it("arrows a straight camera move, and none for holding still", () => {
-    const tilt = draw(scene({ move: "tilt-down" }));
-    expect(tilt.strokes.slice(8)).toMatchObject([{ color: COLORS.ink, dash: [] }]);
-    expect(tilt.fills).toEqual([COLORS.ink]);
-    expect(tilt.labels).toEqual([]);
+  it("arrows a straight camera move, holding still with reduced motion, and none for none", () => {
+    const tilt = draw(scene({ subject: false, still: true, move: "tilt-down" }));
+    expect(tilt.strokes).toContain(COLORS.ink);
+    expect(tilt.words).toEqual([]);
     const still = draw(
-      scene({ move: "static", labels: { spot: "Stand here", meters: null, move: "Hold" } }),
+      scene({ subject: false, move: "static", labels: { spot: "", meters: null, move: "Hold" } }),
     );
-    expect(still.strokes).toHaveLength(8);
-    expect(still.labels).toEqual([]);
+    expect(still.strokes).toEqual([]);
+    expect(still.words).toEqual([]);
+  });
+
+  it("lassos and names what's worth using in the frame", () => {
+    const drawn = draw(
+      scene({
+        subject: false,
+        mirrored: true,
+        highlights: [
+          { key: "cup", label: "cup", box: { x: 0.1, y: 0.02, width: 0.2, height: 0.2 } },
+          { key: "dog", label: "dog", box: { x: 0.6, y: 0.5, width: 0.3, height: 0.3 } },
+        ],
+      }),
+    );
+    expect(texts(drawn)).toEqual(["cup", "dog"]);
+    expect(drawn.strokes).toContain(COLORS.pop);
+  });
+
+  it("draws a horizon to level, solid once level", () => {
+    const off = draw(scene({ subject: false, horizon: { roll: 8, level: false } }));
+    expect(off.strokes).toContain(COLORS.waiting);
+    const level = draw(scene({ subject: false, horizon: { roll: 0, level: true } }));
+    expect(level.strokes).toContain(COLORS.locked);
+  });
+
+  it("pops each sticker in, and lets it go at the end of its life", () => {
+    const drawn = draw(
+      scene({
+        subject: false,
+        stickers: [
+          sticker("star", 0.8),
+          sticker("nailed", 0.9, "Nailed it!"),
+          sticker("clap", 0.7, "Take 2"),
+          sticker("cut", 0.95, "Cut!"),
+        ],
+      }),
+    );
+    expect(texts(drawn)).toEqual(["Nailed it!", "Take 2", "Cut!"]);
+    expect(drawn.fills).toContain(COLORS.pop);
+    // Not landed yet, or long gone: nothing.
+    const none = draw(
+      scene({ subject: false, stickers: [sticker("star", 5), sticker("cut", -10, "Cut!")] }),
+    );
+    expect(none.fills).toEqual([]);
+    expect(none.words).toEqual([]);
   });
 });

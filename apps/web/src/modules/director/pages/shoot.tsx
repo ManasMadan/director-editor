@@ -1,142 +1,46 @@
 "use client";
 
+import "@fontsource/gochi-hand/400.css";
+import "../live.css";
 import { useApiErrorMessage } from "@repo/client";
 import { useDirectorPlanQuery } from "@repo/client/api/director/plan";
-import type { CameraMove, SceneCheck, Shot, ShotPlan } from "@repo/contracts/api";
+import type { Shot, ShotPlan } from "@repo/contracts/api";
 import { buttonVariants } from "@repo/ui/components/button";
 import { Spinner } from "@repo/ui/components/spinner";
 import { cn } from "@repo/ui/lib/utils";
+import { Camera, MonitorUp, SwitchCamera } from "lucide-react";
 import Link from "next/link";
-import { useLocale, useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { DirectorGate, YouTubeEmbed } from "@/modules/shorts";
-import { CaptureBar } from "../components/capture-bar";
+import { DirectorsCut } from "../components/directors-cut";
 import { DoodleLayer } from "../components/doodle-layer";
-import { GuideChips } from "../components/guide-chips";
-import { StudioHud } from "../components/studio-hud";
-import { TakePreview } from "../components/take-preview";
+import { DirectorCaption } from "../components/live-caption";
+import { LiveDock, Shutter } from "../components/live-dock";
+import {
+  GLASS,
+  type LiveMode,
+  LivePill,
+  ReadyCheck,
+  ShotDots,
+  StatusPill,
+  TimerButton,
+  VoiceButton,
+} from "../components/live-hud";
+import { CountdownPulse, LiveBackdrop, LiveViewport } from "../components/live-stage";
 import { Teleprompter } from "../components/teleprompter";
-import { useDirections } from "../hooks/use-directions";
-import { usePose } from "../hooks/use-pose";
-import { useSceneGuide } from "../hooks/use-scene-guide";
-import { type StudioShot, useStudio } from "../hooks/use-studio";
-import { useTilt } from "../hooks/use-tilt";
+import { useSpeaking } from "../hooks/use-live-director";
+import { useSession } from "../hooks/use-session";
+import type { StudioShot } from "../hooks/use-studio";
 import { parseAudio } from "../lib/audio";
-import type { DoodleScene } from "../lib/doodle";
-import { bodyBox, framingHint } from "../lib/framing";
-import { POSE_MATCH, poseScore, targetBody } from "../lib/pose";
 import { activeStep } from "../lib/timeline";
 
-type StudioState = ReturnType<typeof useStudio>;
-
-/** The pose outline and framing hint, for a shot with a person in it. */
-function useBodyGuides(shot: Shot, video: StudioState["camera"]["video"], live: boolean) {
-  const target = useMemo(() => targetBody(shot.pose), [shot]);
-  const tracksBody = shot.pose.keypoints.length > 0;
-  const pose = usePose(video, tracksBody && live);
-  const score = pose.body ? poseScore(target, pose.body) : null;
-  const box = pose.body ? bodyBox(pose.body) : null;
-  return {
-    target,
-    state: pose.state,
-    matched: score !== null && score >= POSE_MATCH,
-    framing: tracksBody ? framingHint(shot.framing.subject, box, shot.camera) : null,
-    // Where they stand: the walking arrow starts at their feet.
-    person: box ? { x: box.x + box.width / 2, y: Math.min(0.94, box.y + box.height) } : null,
-  };
-}
-
-type Guides = ReturnType<typeof useBodyGuides>;
-const previewing = (phase: StudioState["phase"]) => phase === "preview" || phase === "sending";
-
-/**
- * What the doodles show now: getting into place (the walk to the spot, the framing) until
- * recording starts, then the step's camera move.
- */
-function useDoodleScene(
-  shot: Shot,
-  guides: Guides,
-  { setup, scene, move }: { setup: boolean; scene: SceneCheck | null; move: CameraMove | null },
-): DoodleScene {
-  const t = useTranslations("director.shoot.doodle");
-  const check = setup ? scene : null;
-  const meters = check && !check.inPlace ? check.distanceMeters : null;
-  return {
-    shot,
-    target: guides.target,
-    matched: guides.matched,
-    mirrored: shot.camera === "front",
-    person: guides.person,
-    framing: setup ? guides.framing : null,
-    scene: check,
-    move,
-    labels: {
-      spot: t("standHere"),
-      meters: meters === null ? null : t("meters", { meters }),
-      move: move === null || move === "static" ? null : t(`move.${move}`),
-    },
-  };
-}
-
-/** The camera, with Director's doodles over it, or the take once it's recorded. */
-function Stage({
-  studio,
-  shot,
-  doodles,
-}: {
-  studio: StudioState;
-  shot: Shot;
-  doodles: DoodleScene;
-}) {
-  const t = useTranslations("director.shoot");
-  const locale = useLocale();
-  const front = shot.camera === "front";
-  const blocked = studio.camera.state === "blocked" || studio.camera.state === "missing";
-  return (
-    <>
-      <video
-        ref={studio.camera.video}
-        autoPlay
-        muted
-        playsInline
-        aria-hidden
-        className={cn("absolute inset-0 size-full object-cover", front && "-scale-x-100")}
-      />
-      {previewing(studio.phase) && studio.take ? (
-        <TakePreview take={studio.take} label={t("preview")} script={shot.script} lang={locale} />
-      ) : null}
-      {previewing(studio.phase) ? null : <DoodleLayer scene={doodles} />}
-      {blocked ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-8 text-center">
-          <p role="alert">
-            {t(studio.camera.state === "blocked" ? "cameraBlocked" : "cameraMissing")}
-          </p>
-          <button
-            type="button"
-            onClick={() => void studio.camera.start()}
-            className={buttonVariants({ variant: "secondary" })}
-          >
-            {t("start")}
-          </button>
-        </div>
-      ) : null}
-      {studio.countdown === null ? null : (
-        <p
-          aria-live="assertive"
-          className="absolute inset-0 flex items-center justify-center text-8xl font-black drop-shadow-lg"
-        >
-          {studio.countdown}
-        </p>
-      )}
-    </>
-  );
-}
+type Session = ReturnType<typeof useSession>;
 
 /** The original's audio, playing the shot's part while the member films along to it. */
 function OriginalAudio({ videoId, shot }: { videoId: string; shot: Shot }) {
   const t = useTranslations("director.shoot");
   return (
-    <div className="absolute top-28 right-4 w-20 overflow-hidden rounded-lg opacity-80">
+    <div className="absolute top-16 right-3 w-16 overflow-hidden rounded-xl opacity-80 shadow-lg">
       <YouTubeEmbed
         videoId={videoId}
         title={t("original")}
@@ -151,130 +55,269 @@ function OriginalAudio({ videoId, shot }: { videoId: string; shot: Shot }) {
   );
 }
 
-/** What went wrong with the take, if anything: sending it, or taking it. */
-function captureError(
-  studio: StudioState,
-  errorMessage: (error: unknown) => string,
-  recordFailed: string,
-) {
-  if (studio.submit.error) {
-    return errorMessage(studio.submit.error);
-  }
-  return studio.failed ? recordFailed : null;
-}
-
-/** The bottom of the screen: the step, the teleprompter, and the capture controls. */
-function Controls({
-  studio,
-  shot,
-  step,
-  voice,
-}: {
-  studio: StudioState;
-  shot: Shot;
-  step: Shot["steps"][number] | undefined;
-  voice: boolean;
-}) {
-  const t = useTranslations("director.shoot");
-  const errorMessage = useApiErrorMessage();
-  const during = !previewing(studio.phase);
+/** No camera to show: why, and the way back to one. */
+function CameraBlocked({ session }: { session: Session }) {
+  const t = useTranslations("director");
+  const { camera } = session.studio;
   return (
-    <div className="absolute inset-x-0 bottom-0 flex flex-col gap-3 bg-linear-to-t from-studio/90 to-transparent p-4 pt-16 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-      {during && step ? (
-        <p
-          className="rounded-2xl bg-studio/70 px-4 py-3 text-base font-semibold backdrop-blur"
-          aria-live="polite"
-        >
-          <span className="mr-2 text-xs font-medium text-studio-foreground/60">
-            {t("step", { index: shot.steps.indexOf(step) + 1 })}
-          </span>
-          {step.instruction}
-        </p>
-      ) : null}
-      {voice && during ? <Teleprompter script={shot.script} seconds={studio.seconds} /> : null}
-      {!voice && studio.phase === "setup" ? (
-        <p className="text-center text-xs text-studio-foreground/70">{t("original")}</p>
-      ) : null}
-      <div className="flex justify-center">
-        <CaptureBar
-          phase={studio.phase}
-          kind={shot.kind}
-          ready={studio.camera.state === "live"}
-          error={captureError(studio, errorMessage, t("recordFailed"))}
-          onRecord={studio.actions.record}
-          onStop={studio.actions.stop}
-          onRetake={studio.actions.retake}
-          onUse={studio.actions.use}
-        />
-      </div>
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-8 text-center">
+      <span className="flex size-20 -rotate-6 items-center justify-center rounded-3xl bg-doodle-paper text-studio shadow-xl">
+        <Camera className="size-10" aria-hidden />
+      </span>
+      <h2 className="font-[family-name:var(--font-hand)] text-3xl">{t("live.camera.title")}</h2>
+      <p role="alert" className="max-w-xs text-sm text-studio-foreground/80">
+        {t(camera.state === "blocked" ? "shoot.cameraBlocked" : "shoot.cameraMissing")}
+      </p>
+      <button
+        type="button"
+        onClick={() => void camera.start()}
+        className="rounded-full bg-studio-foreground px-6 py-3 font-semibold text-studio"
+      >
+        {t("live.camera.retry")}
+      </button>
     </div>
   );
 }
 
-function Studio(props: StudioShot) {
-  const { shot, videoId } = props;
-  const studio = useStudio(props);
-  const { tilt, ask } = useTilt(shot.camera);
-  const [speak, setSpeak] = useState(true);
-  const live = studio.camera.state === "live";
-  const setup = studio.phase === "setup" || studio.phase === "countdown";
-  const recording = studio.phase === "recording";
-  const scene = useSceneGuide(studio.camera.video, {
-    videoId,
-    shotIndex: props.index,
-    active: studio.phase === "setup" && live,
-  });
-  // Bodies are tracked only while getting into place: not while recording, so the phone's
-  // work goes to the recorder.
-  const guides = useBodyGuides(shot, studio.camera.video, live && setup);
-  const step = shot.steps[activeStep(shot.steps, studio.seconds)];
-  const doodles = useDoodleScene(shot, guides, {
-    setup,
-    scene: scene.scene,
-    move: recording ? (step?.cameraMove ?? null) : null,
-  });
-  useDirections({
-    shot,
-    enabled: speak,
-    scene: scene.scene,
-    countdown: studio.countdown,
-    step,
-    recording,
-    micOn: studio.micOn,
-  });
+/** The top of the viewport: which take and shot size, the ready check, the tilt request. */
+function ViewportTop({ session, shot }: { session: Session; shot: Shot }) {
+  const t = useTranslations("director.shoot");
+  const { studio, seen } = session;
+  if (studio.phase !== "setup" && studio.phase !== "countdown") {
+    return null;
+  }
   return (
-    // Exactly 9:16, as big as the screen allows: the viewfinder is the frame the plan's
-    // positions are fractions of (lib/view.ts).
-    <div className="relative mx-auto aspect-9/16 w-[min(100vw,calc(100dvh*9/16))] overflow-hidden bg-studio">
-      <Stage studio={studio} shot={shot} doodles={doodles} />
-      <div className="absolute inset-x-0 top-0">
-        <StudioHud
-          videoId={videoId}
-          shot={shot}
-          index={props.index}
-          count={props.count}
-          speak={speak}
-          onSpeak={setSpeak}
-          tilt={tilt}
-          onAskTilt={ask}
-          recording={recording}
-        />
-        {setup ? (
-          <div className="px-4">
-            <GuideChips
-              scene={shot.scene}
-              sceneCheck={scene.scene}
-              framing={guides.framing}
-              pose={guides.state}
-              poseMatched={guides.matched}
-            />
-          </div>
+    <div className="absolute inset-x-3 top-3 flex items-start justify-between gap-2">
+      <div className="flex flex-col items-start gap-1.5">
+        <StatusPill take={session.take} size={shot.framing.shotSize} />
+        {seen.ask ? (
+          <button
+            type="button"
+            onClick={() => void seen.ask?.()}
+            className={cn("rounded-full px-3 py-1.5 text-xs font-semibold", GLASS)}
+          >
+            {t("useTilt")}
+          </button>
         ) : null}
       </div>
-      {recording && props.audio === "original" ? (
-        <OriginalAudio videoId={videoId} shot={shot} />
+      {studio.camera.source === "camera" ? <ReadyCheck readiness={seen.readiness} /> : null}
+    </div>
+  );
+}
+
+/** The foot of the viewport: Director's caption, or while recording, the step and the lines. */
+function ViewportFoot({ session, shot, voice }: { session: Session; shot: Shot; voice: boolean }) {
+  const t = useTranslations("director");
+  const talking = useSpeaking();
+  const { studio } = session;
+  const sharing = studio.camera.source === "screen";
+  if (studio.phase === "recording") {
+    const step = shot.steps[activeStep(shot.steps, studio.seconds)];
+    return (
+      <div className="live-motion absolute inset-x-3 bottom-3 flex flex-col gap-2">
+        {step ? (
+          <p
+            key={step.atSeconds}
+            className={cn(
+              "animate-[live-rise_300ms_ease-out_both] rounded-2xl px-3.5 py-2.5 text-[15px] font-semibold",
+              GLASS,
+            )}
+          >
+            {step.instruction}
+          </p>
+        ) : null}
+        {voice ? <Teleprompter script={shot.script} seconds={studio.seconds} /> : null}
+      </div>
+    );
+  }
+  return (
+    <div className="absolute inset-x-3 bottom-3 flex items-end gap-2">
+      <div className="min-w-0 flex-1">
+        {sharing ? (
+          <p
+            className={cn(
+              "mb-1.5 flex w-fit items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold",
+              GLASS,
+            )}
+          >
+            <MonitorUp className="size-3.5" aria-hidden />
+            {t("live.screen.sharing")}
+          </p>
+        ) : null}
+        <DirectorCaption
+          line={studio.phase === "countdown" ? null : session.director.line}
+          talking={talking}
+          heard={session.voice.words}
+          listening={session.voice.state === "listening"}
+        />
+      </div>
+      {sharing ? null : (
+        <button
+          type="button"
+          aria-label={t("live.dock.flip")}
+          title={t("live.dock.flip")}
+          onClick={studio.camera.flip}
+          className={cn(
+            "flex size-11 shrink-0 items-center justify-center rounded-full transition-transform active:scale-90",
+            GLASS,
+          )}
+        >
+          <SwitchCamera className="size-5" aria-hidden />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Inside the capsule: the picture, the doodles, and whatever the moment needs over them. */
+function Viewport({ session, props }: { session: Session; props: StudioShot }) {
+  const t = useTranslations("director");
+  const errorMessage = useApiErrorMessage();
+  const { studio, cut } = session;
+  const { camera } = studio;
+  const mirrored = camera.facing === "front" && camera.source === "camera";
+  const reviewing = studio.phase === "preview" || studio.phase === "sending";
+  const blocked = camera.state === "blocked" || camera.state === "missing";
+  return (
+    <>
+      <video
+        ref={camera.video}
+        autoPlay
+        muted
+        playsInline
+        aria-hidden
+        className={cn(
+          "absolute inset-0 size-full",
+          camera.source === "screen" ? "object-contain" : "object-cover",
+          mirrored && "-scale-x-100",
+        )}
+      />
+      {reviewing ? null : <DoodleLayer scene={session.scene} />}
+      {blocked ? <CameraBlocked session={session} /> : null}
+      <ViewportTop session={session} shot={props.shot} />
+      <CountdownPulse seconds={studio.countdown} />
+      {studio.phase === "recording" && props.audio === "original" ? (
+        <OriginalAudio videoId={props.videoId} shot={props.shot} />
       ) : null}
-      <Controls studio={studio} shot={shot} step={step} voice={props.audio === "voice"} />
+      {reviewing && studio.take && cut ? (
+        <DirectorsCut
+          take={studio.take}
+          cut={cut}
+          script={props.shot.script}
+          sending={studio.phase === "sending"}
+          error={studio.submit.error ? errorMessage(studio.submit.error) : null}
+          onAgain={() => session.actions.retake(cut)}
+          onKeep={() => session.actions.use(cut)}
+        />
+      ) : (
+        <ViewportFoot session={session} shot={props.shot} voice={props.audio === "voice"} />
+      )}
+      {studio.failed ? (
+        <p
+          role="alert"
+          className="absolute inset-x-6 top-1/2 rounded-2xl bg-studio/85 p-3 text-center text-sm text-studio-error"
+        >
+          {t("shoot.recordFailed")}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+const SHUTTER = { video: "record", photo: "photo" } as const;
+
+/** The shutter for this moment: record (or take the photo), then stop. */
+function SessionShutter({ session, shot }: { session: Session; shot: Shot }) {
+  const t = useTranslations("director");
+  const { studio } = session;
+  const recording = studio.phase === "recording";
+  const sharing = studio.camera.source === "screen";
+  const label = sharing
+    ? t("live.dock.sharingNoRecord")
+    : t(shot.kind === "photo" ? "shoot.photo" : "record");
+  return (
+    <Shutter
+      mode={recording ? "stop" : SHUTTER[shot.kind]}
+      label={recording ? t("shoot.stop") : label}
+      progress={studio.seconds / shot.durationSeconds}
+      disabled={
+        !recording && (studio.camera.state !== "live" || studio.phase !== "setup" || sharing)
+      }
+      onClick={recording ? studio.actions.stop : session.actions.record}
+    />
+  );
+}
+
+const liveMode = (recording: boolean, paused: boolean): LiveMode => {
+  if (recording) {
+    return "recording";
+  }
+  return paused ? "paused" : "live";
+};
+
+/** The dock's screen button: share, or stop sharing; nothing where screens can't be shared. */
+function shareAction(camera: Session["studio"]["camera"]) {
+  const { share } = camera;
+  if (!share) {
+    return null;
+  }
+  return camera.source === "screen" ? camera.stopSharing : () => void share();
+}
+
+function Studio(props: StudioShot) {
+  const session = useSession(props);
+  const talking = useSpeaking();
+  const { studio, memory, actions } = session;
+  const { camera } = studio;
+  const recording = studio.phase === "recording";
+  const reviewing = studio.phase === "preview" || studio.phase === "sending";
+  const listening = session.voice.state === "listening";
+  const step = activeStep(props.shot.steps, studio.seconds);
+  return (
+    <div className="relative flex min-h-dvh flex-col items-center justify-center gap-3 overflow-hidden px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] text-studio-foreground">
+      <LiveBackdrop stream={camera.stream} />
+      <header className="live-motion relative grid w-full max-w-md grid-cols-[1fr_auto_1fr] items-center">
+        <ShotDots index={props.index} count={props.count} />
+        <LivePill
+          mode={liveMode(recording, session.paused)}
+          talking={talking || (listening && session.voice.words !== "")}
+          seconds={studio.seconds}
+          onDevice={session.seen.scene.offline}
+        />
+        <div
+          className={cn(
+            "flex justify-end gap-2 transition-opacity duration-700",
+            session.idle && "opacity-0",
+          )}
+        >
+          <TimerButton
+            chosen={memory.countdown}
+            seconds={session.countdownFrom}
+            onChoose={actions.countdown}
+          />
+          <VoiceButton on={memory.speak} onToggle={() => actions.speak(!memory.speak)} />
+        </div>
+      </header>
+      <LiveViewport
+        glowing={talking || listening}
+        recording={recording}
+        beat={recording ? step + 1 : 0}
+      >
+        <Viewport session={session} props={props} />
+      </LiveViewport>
+      <div className={cn("relative h-[5.75rem]", reviewing && "invisible")}>
+        <LiveDock
+          idle={session.idle}
+          shutter={<SessionShutter session={session} shot={props.shot} />}
+          sharing={camera.source === "screen"}
+          onShare={shareAction(camera)}
+          listen={session.voice.state}
+          onListen={() => actions.listen(!memory.listen)}
+          paused={session.paused}
+          onPause={() => actions.pause(!session.paused)}
+          endHref={`/director/${props.videoId}`}
+        />
+      </div>
     </div>
   );
 }
@@ -292,7 +335,7 @@ function Shoot({
   const plan = useDirectorPlanQuery(videoId);
   if (plan.isPending) {
     return (
-      <div className="flex h-dvh items-center justify-center">
+      <div className="flex h-dvh items-center justify-center bg-live-deep">
         <Spinner />
       </div>
     );
@@ -312,7 +355,7 @@ function Shoot({
       </div>
     );
   }
-  // A fresh studio per shot: its camera, recorder and guidance start over.
+  // A fresh session per shot: its camera, recorder and guidance start over.
   return (
     <Studio
       key={index}
@@ -325,7 +368,7 @@ function Shoot({
   );
 }
 
-/** Director's camera: one shot at a time, with its guides, then the take. */
+/** Director Live: the camera, one shot at a time, with Director guiding every take. */
 export function ShootPage(props: {
   videoId: string;
   shot: string | undefined;

@@ -2,7 +2,7 @@
 
 import type { Workspace } from "@repo/client/auth";
 import { useOAuthClientQuery } from "@repo/client/auth/oauth-client";
-import { loosely } from "@repo/i18n";
+import { loosely } from "@repo/i18n/loosely";
 import { Button } from "@repo/ui/components/button";
 import {
   Card,

@@ -44,7 +44,12 @@ describe("the camera", () => {
       aspectRatio: { ideal: 9 / 16 },
     };
     expect(getUserMedia.mock.calls).toEqual([
-      [{ video: { facingMode: "user", ...portrait }, audio: true }],
+      [
+        {
+          video: { facingMode: "user", ...portrait },
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        },
+      ],
       [{ video: { facingMode: "environment", ...portrait }, audio: false }],
     ]);
   });

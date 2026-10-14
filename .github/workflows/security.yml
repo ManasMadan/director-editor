@@ -86,11 +86,12 @@ jobs:
           fail-on-severity: moderate
           comment-summary-in-pr: on-failure
           # Permissive licenses, plus LGPL for dynamically linked native libraries (libvips
-          # under sharp) and MPL for file-level copyleft.
+          # under sharp), MPL for file-level copyleft, and OFL for fonts bundled with the
+          # web app (it allows bundling; only selling the font on its own is ruled out).
           allow-licenses: >-
             MIT, MIT-0, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD, Unlicense,
             CC0-1.0, CC-BY-4.0, BlueOak-1.0.0, Python-2.0, PSF-2.0, Zlib, BSL-1.0,
-            MPL-2.0, LGPL-3.0-or-later, LGPL-2.1-or-later
+            MPL-2.0, LGPL-3.0-or-later, LGPL-2.1-or-later, OFL-1.1
 
   # Known vulnerabilities in everything the lockfiles pin (bun.lock and apps/ai/uv.lock),
   # including dependencies that haven't changed. Blocks changes; the weekly run only

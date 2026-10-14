@@ -91,7 +91,7 @@ function renderStudio(
   api: ReturnType<typeof director>["api"],
   { viewfinder = true } = {},
 ) {
-  return renderHook(() => useStudio(studio), {
+  return renderHook(() => useStudio(studio, 3), {
     api,
     url: `/director/${VIDEO_ID}/shoot`,
     view: (value: Studio) => (viewfinder ? <video ref={value.camera.video} muted /> : null),
@@ -119,7 +119,7 @@ describe("useStudio", () => {
     );
     expect(hook.current.micOn).toBe(true);
     expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledWith(
-      expect.objectContaining({ audio: true }),
+      expect.objectContaining({ audio: expect.objectContaining({ echoCancellation: true }) }),
     );
     await until(() => expect(hook.current.camera.state).toBe("live"));
     expect([hook.current.phase, hook.current.take, hook.current.failed]).toEqual([
@@ -133,6 +133,9 @@ describe("useStudio", () => {
     await until(() =>
       expect([hook.current.phase, hook.current.countdown]).toEqual(["countdown", 3]),
     );
+    // A second press (or "action") mid-countdown doesn't start it over.
+    hook.current.actions.record();
+    expect(hook.current.countdown).toBe(3);
     await ticking(() => expect(hook.current.phase).toBe("recording"));
     expect(FakeRecorder.last?.stream).toBe(hook.current.camera.stream);
     await ticking(() => expect(hook.current.seconds).toBeGreaterThanOrEqual(2));
@@ -180,7 +183,7 @@ describe("useStudio", () => {
     vi.useRealTimers();
 
     hook.current.actions.use();
-    await expect.poll(currentUrl).toBe(`/director/${VIDEO_ID}/review?audio=voice`);
+    await expect.poll(currentUrl).toBe(`/director/${VIDEO_ID}/review?audio=voice&wrap=1`);
     expect(uploads).toMatchObject([
       { purpose: "director-take-photo", filename: "shot-2.jpg", contentType: "image/jpeg" },
     ]);

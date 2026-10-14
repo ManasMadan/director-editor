@@ -3,7 +3,7 @@
 import { useApiErrorMessage } from "@repo/client";
 import { useAuditLogInfiniteQuery } from "@repo/client/api/audit/list";
 import type { AuditEntry } from "@repo/contracts/api";
-import { loosely } from "@repo/i18n";
+import { loosely } from "@repo/i18n/loosely";
 import { Button } from "@repo/ui/components/button";
 import {
   Card,

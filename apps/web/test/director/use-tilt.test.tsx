@@ -12,6 +12,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  Reflect.deleteProperty(navigator, "maxTouchPoints");
   if (chromiumGate) {
     Object.defineProperty(DeviceOrientationEvent, "requestPermission", chromiumGate);
   }
@@ -20,8 +21,9 @@ afterEach(() => {
 const orient = (beta: number | null, gamma: number | null) =>
   window.dispatchEvent(new DeviceOrientationEvent("deviceorientation", { beta, gamma }));
 
-/** iOS Safari's gate on the sensor, answering `answer`. */
-function gated(answer: () => Promise<"granted" | "denied">) {
+/** iOS Safari's gate on the sensor, answering `answer`, on a touch screen (or not). */
+function gated(answer: () => Promise<"granted" | "denied">, { touch = true } = {}) {
+  Object.defineProperty(navigator, "maxTouchPoints", { value: touch ? 5 : 0, configurable: true });
   const requestPermission = vi.fn(answer);
   Object.defineProperty(DeviceOrientationEvent, "requestPermission", {
     value: requestPermission,
@@ -63,6 +65,13 @@ describe("useTilt", () => {
     vi.stubGlobal("DeviceOrientationEvent", undefined);
     const hook = await renderHook(() => useTilt("back"));
     expect(hook.current).toEqual({ tilt: null, ask: null });
+  });
+
+  it("doesn't ask on a computer, whose browser may offer the request with no sensor behind it", async () => {
+    const requestPermission = gated(async () => "granted", { touch: false });
+    const hook = await renderHook(() => useTilt("back"));
+    expect(hook.current.ask).toBeNull();
+    expect(requestPermission).not.toHaveBeenCalled();
   });
 
   it("asks first where the browser needs a tap to allow it", async () => {

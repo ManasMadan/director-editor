@@ -35,3 +35,13 @@ export function tiltInRange(tilt: Tilt, target: Shot["phoneAngle"]): boolean {
 function clamp(value: number, low: number, high: number) {
   return Math.min(high, Math.max(low, value));
 }
+
+export type TiltHint = "tipUp" | "tipDown" | "leanLeft" | "leanRight";
+
+/** Which way to fix the angle: the axis that's furthest off. */
+export function tiltHint(offset: Tilt): TiltHint {
+  if (Math.abs(offset.pitch) >= Math.abs(offset.roll)) {
+    return offset.pitch > 0 ? "tipUp" : "tipDown";
+  }
+  return offset.roll > 0 ? "leanRight" : "leanLeft";
+}

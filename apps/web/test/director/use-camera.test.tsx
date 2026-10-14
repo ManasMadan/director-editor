@@ -20,7 +20,7 @@ describe("useCamera", () => {
     const { stream } = hook.current;
     expect(getUserMedia).toHaveBeenCalledWith(
       expect.objectContaining({
-        audio: true,
+        audio: expect.objectContaining({ echoCancellation: true, noiseSuppression: true }),
         video: expect.objectContaining({ facingMode: "user" }),
       }),
     );
@@ -82,5 +82,39 @@ describe("useCamera", () => {
     // The hook's handler was waiting first, so it has run by the time this one does.
     await answer.promise.catch(() => undefined);
     expect(hook.current.state).toBe("starting");
+  });
+
+  it("flips between the cameras, shows the screen, and goes back to the camera", async () => {
+    const getUserMedia = fakeCamera();
+    const screen = cameraStream();
+    vi.spyOn(navigator.mediaDevices, "getDisplayMedia").mockResolvedValue(screen);
+    const hook = await renderHook(() => useCamera("front", false));
+    await expect.poll(() => hook.current.state).toBe("live");
+    hook.current.flip();
+    await expect.poll(() => hook.current.facing).toBe("back");
+    hook.current.flip();
+    await expect.poll(() => hook.current.facing).toBe("front");
+    await expect.poll(() => getUserMedia.mock.calls.length).toBe(3);
+
+    await hook.current.share?.();
+    await expect.poll(() => hook.current.source).toBe("screen");
+    expect(hook.current.stream).toBe(screen);
+    hook.current.stopSharing();
+    await expect.poll(() => hook.current.source).toBe("camera");
+    expect(ended(screen)).toBe(true);
+  });
+
+  it("offers no screen sharing where the browser has none", async () => {
+    fakeCamera();
+    const own = Object.getOwnPropertyDescriptor(MediaDevices.prototype, "getDisplayMedia");
+    Reflect.deleteProperty(MediaDevices.prototype, "getDisplayMedia");
+    try {
+      const hook = await renderHook(() => useCamera("back", false));
+      expect(hook.current.share).toBeNull();
+    } finally {
+      if (own) {
+        Object.defineProperty(MediaDevices.prototype, "getDisplayMedia", own);
+      }
+    }
   });
 });

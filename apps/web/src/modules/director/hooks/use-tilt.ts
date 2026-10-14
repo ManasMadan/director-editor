@@ -13,8 +13,12 @@ function isPermissionGated(value: object): value is PermissionGated {
   return "requestPermission" in value && typeof value.requestPermission === "function";
 }
 
+// Only a touch device has a tilt worth asking for: a laptop's browser may still offer the
+// request, but there's no level to read behind it.
 const needsPermission = () =>
-  typeof DeviceOrientationEvent !== "undefined" && isPermissionGated(DeviceOrientationEvent);
+  typeof DeviceOrientationEvent !== "undefined" &&
+  isPermissionGated(DeviceOrientationEvent) &&
+  navigator.maxTouchPoints > 0;
 
 /**
  * How the phone is held right now (null until the first reading; it stays null on a

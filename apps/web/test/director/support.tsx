@@ -68,8 +68,8 @@ const nextTask = () =>
  * Waits for `check` to pass, like `expect.poll`, but without moving fake timers (under
  * `vi.useFakeTimers()` each of expect.poll's tries does): the test moves the clock itself.
  */
-export async function until(check: () => void) {
-  const deadline = Date.now() + 5_000;
+export async function until(check: () => void, timeout = 5_000) {
+  const deadline = Date.now() + timeout;
   for (;;) {
     try {
       check();
@@ -328,3 +328,50 @@ export async function photo(): Promise<Blob> {
     canvas.toBlob((blob) => resolve(blob as Blob), "image/jpeg", 0.8),
   );
 }
+
+/**
+ * The browser's speech recogniser, hearing what the test says (`hear`) instead of a
+ * microphone. `FakeRecognizer.last` is the one the page made most recently.
+ */
+export class FakeRecognizer {
+  static last: FakeRecognizer | null = null;
+  lang = "";
+  continuous = false;
+  interimResults = false;
+  started = 0;
+  aborted = false;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null = null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null = null;
+  onend: (() => void) | null = null;
+  constructor() {
+    FakeRecognizer.last = this;
+  }
+  start() {
+    this.started += 1;
+  }
+  stop() {
+    this.onend?.();
+  }
+  abort() {
+    this.aborted = true;
+  }
+  /** The member says `text`: still being heard (`final: false`) or a finished phrase. */
+  hear(text: string, { final = true, confidence = 0.9 } = {}) {
+    const best = { transcript: text, confidence };
+    const result = Object.assign([best], { isFinal: final, item: () => best });
+    this.onresult?.({ resultIndex: 0, results: [result] } as unknown as SpeechRecognitionEvent);
+  }
+  fail(error: string) {
+    this.onerror?.({ error } as unknown as SpeechRecognitionErrorEvent);
+  }
+}
+
+/** A browser with a speech recogniser (Chrome's prefixed one), the test's to speak into. */
+export function fakeRecognizer() {
+  FakeRecognizer.last = null;
+  vi.stubGlobal("SpeechRecognition", undefined);
+  vi.stubGlobal("webkitSpeechRecognition", FakeRecognizer);
+}
+
+/** Moves the pointer, as a member touching the screen does: faded controls come back. */
+export const touch = () => window.dispatchEvent(new PointerEvent("pointermove"));

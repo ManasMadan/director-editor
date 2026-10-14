@@ -61,7 +61,7 @@ export function ClipPanel({
             {t("editor.clip", { index: clip.index + 1, title: clip.shot.title })}
           </span>
           {score === null ? null : (
-            <span className="shrink-0 rounded-full bg-studio-foreground/10 px-2 py-0.5 text-xs">
+            <span className="shrink-0 -rotate-3 rounded-full bg-doodle-pop px-2 py-0.5 text-xs font-bold text-studio shadow">
               {t("review.score", { score })}
             </span>
           )}

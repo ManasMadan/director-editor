@@ -4,7 +4,7 @@
  *   export const generateMetadata = pageTitle("settings.title");
  */
 
-import { loosely } from "@repo/i18n";
+import { loosely } from "@repo/i18n/loosely";
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 

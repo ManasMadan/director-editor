@@ -1,18 +1,23 @@
+import type { Shot } from "@repo/contracts/api";
 import { describe, expect, it } from "vitest";
 import {
   bob,
   controlOf,
+  type DoodleScene,
   flipBody,
   flipBox,
   flipPoint,
   framingArrows,
+  glideScene,
   moveArrow,
   OPEN_BOTTOM,
   OPEN_TOP,
   spotBeside,
+  stickerAlive,
   walkArrow,
   walkStart,
 } from "./doodle";
+import { Glider } from "./spring";
 
 describe("doodles", () => {
   it("points an arrow the way each camera move goes, and none for staying still", () => {
@@ -110,4 +115,76 @@ describe("doodles", () => {
     const dot = { from: { x: 0.3, y: 0.3 }, to: { x: 0.3, y: 0.3 }, bend: 0 };
     expect(bob(dot, 1)).toEqual(dot);
   });
+
+  it("keeps a sticker for its life, then lets it go", () => {
+    const star = { id: 1, kind: "star", born: 10, at: { x: 0.5, y: 0.5 }, label: "" } as const;
+    expect(stickerAlive(star, 11)).toBe(true);
+    expect(stickerAlive(star, 12)).toBe(false);
+  });
+
+  it("glides the tracked positions towards each new reading", () => {
+    const box = { x: 0.1, y: 0.1, width: 0.2, height: 0.2 };
+    const scene = (x: number) =>
+      ({
+        person: { x, y: 0.8 },
+        scene: {
+          inPlace: false,
+          instruction: "",
+          direction: "none",
+          distanceMeters: null,
+          lighting: "good",
+          landmark: { label: "tree", box: { ...box, x } },
+        },
+        highlights: [{ key: "cup", label: "cup", box: { ...box, x } }],
+      }) as const;
+    const glider = new Glider();
+    glider.frame(0);
+    const first = glideScene(fill(scene(0.1)), glider);
+    expect(first.person?.x).toBeCloseTo(0.1);
+    glider.frame(1 / 30);
+    const next = glideScene(fill(scene(0.6)), glider);
+    for (const x of [next.person?.x, next.scene?.landmark?.box.x, next.highlights[0]?.box.x]) {
+      expect(x).toBeGreaterThan(0.1);
+      expect(x).toBeLessThan(0.6);
+    }
+    const none = glideScene(fill({ person: null, scene: null, highlights: [] }), glider);
+    expect(none.person).toBeNull();
+    expect(none.scene).toBeNull();
+  });
 });
+
+const SHOT: Shot = {
+  kind: "video",
+  title: "t",
+  purpose: "p",
+  sourceStartSeconds: 0,
+  sourceEndSeconds: 1,
+  durationSeconds: 1,
+  camera: "back",
+  scene: "s",
+  sceneLandmark: null,
+  framing: { shotSize: "medium", subject: { x: 0, y: 0, width: 1, height: 1 }, note: "n" },
+  phoneAngle: { pitch: 0, roll: 0, tolerance: 5, height: "eye" },
+  pose: { description: "d", keypoints: [] },
+  steps: [],
+  script: [],
+};
+
+/** A scene with only what gliding reads; the rest is never looked at. */
+function fill(part: Pick<DoodleScene, "person" | "scene" | "highlights">): DoodleScene {
+  return {
+    shot: SHOT,
+    target: {},
+    matched: false,
+    mirrored: false,
+    framing: null,
+    move: null,
+    recording: false,
+    subject: true,
+    still: false,
+    horizon: null,
+    stickers: [],
+    labels: { spot: "", meters: null, move: null },
+    ...part,
+  };
+}

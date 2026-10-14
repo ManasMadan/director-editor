@@ -12,7 +12,7 @@ import { useSystemInfoQuery } from "@repo/client/api/system/info";
 import { useSetAvatarMutation } from "@repo/client/api/user/avatar";
 import { useMeQuery } from "@repo/client/api/user/me";
 import { uploadPurposes } from "@repo/contracts/files";
-import { loosely } from "@repo/i18n";
+import { loosely } from "@repo/i18n/loosely";
 import { Avatar, AvatarFallback, AvatarImage } from "@repo/ui/components/avatar";
 import { Button } from "@repo/ui/components/button";
 import {

@@ -159,10 +159,17 @@ describe("route files", () => {
         params,
         searchParams: Promise.resolve({ audio: ["original", "voice"] }),
       }),
-    ).toEqual(<ReviewPage videoId="dQw4w9WgXcQ" audio="original" />);
+    ).toEqual(<ReviewPage videoId="dQw4w9WgXcQ" audio="original" wrap={false} />);
     expect(
       await rendered(review.default, { params, searchParams: Promise.resolve({ audio: "voice" }) }),
-    ).toEqual(<ReviewPage videoId="dQw4w9WgXcQ" audio="voice" />);
+    ).toEqual(<ReviewPage videoId="dQw4w9WgXcQ" audio="voice" wrap={false} />);
+    // Arriving from the last shot: the wrap.
+    expect(
+      await rendered(review.default, {
+        params,
+        searchParams: Promise.resolve({ audio: "voice", wrap: "1" }),
+      }),
+    ).toEqual(<ReviewPage videoId="dQw4w9WgXcQ" audio="voice" wrap />);
     expect(await director.generateMetadata()).toEqual({ title: en.director.title });
     expect(await shoot.generateMetadata()).toEqual({ title: en.director.title });
     expect(await review.generateMetadata()).toEqual({ title: en.director.review.title });
