@@ -446,16 +446,20 @@ describe("Director Live", () => {
       .toBeInTheDocument();
   });
 
-  it("listens only when asked, and says where the browser can't hear", async () => {
+  it("listens only when asked", async () => {
     canvasCamera();
     const { page } = await openShoot({ shots: [walkIn] }, { shot: "0", audio: "voice" });
     await press(page, "Stop listening");
     await expect.element(page.getByRole("button", { name: "Talk to Director" })).toBeVisible();
     expect(FakeRecognizer.last?.aborted).toBe(true);
+  });
+
+  it("says where the browser can't hear, and leaves its talk button off", async () => {
+    canvasCamera();
     vi.stubGlobal("webkitSpeechRecognition", undefined);
-    const other = await openShoot({ shots: [walkIn] }, { shot: "0", audio: "voice" });
+    const { page } = await openShoot({ shots: [walkIn] }, { shot: "0", audio: "voice" });
     await expect
-      .element(other.page.getByRole("button", { name: /can't hear you/ }).first())
+      .element(page.getByRole("button", { name: /can't hear you/ }).first())
       .toBeDisabled();
   });
 
