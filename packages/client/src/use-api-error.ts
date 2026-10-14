@@ -1,4 +1,4 @@
-import { loosely } from "@repo/i18n";
+import { loosely } from "@repo/i18n/loosely";
 import { useTranslations } from "use-intl";
 import { errorMessageKey, errorParams } from "./errors";
 

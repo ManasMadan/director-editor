@@ -2,7 +2,7 @@
 
 import type { AppNotification } from "@repo/contracts/api";
 import { MINUTE_MS } from "@repo/contracts/time";
-import { loosely } from "@repo/i18n";
+import { loosely } from "@repo/i18n/loosely";
 import { cn } from "@repo/ui/lib/utils";
 import { useFormatter, useNow, useTranslations } from "next-intl";
 

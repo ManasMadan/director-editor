@@ -4,7 +4,7 @@
  */
 import { authErrorKey } from "@repo/client/auth/errors";
 import { authFormSchemas } from "@repo/client/auth/forms";
-import { loosely } from "@repo/i18n";
+import { loosely } from "@repo/i18n/loosely";
 import { useTranslations } from "use-intl";
 
 export function useAuthSchemas() {

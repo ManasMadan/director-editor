@@ -17,6 +17,12 @@ const OFFLINE_AFTER = 2;
 const FRAME_WIDTH = 640;
 const FRAME_QUALITY = 0.7;
 
+/** The viewfinder's frame to send, as base64, or null when the camera has none to give. */
+const frameOf = (element: HTMLVideoElement) =>
+  captureFrame(element, FRAME_WIDTH, FRAME_QUALITY)
+    .then(base64Of)
+    .catch(() => null);
+
 /**
  * Gemini's direction to the shot's spot, from what the camera sees, while `active`
  * (before recording starts): every few seconds, and at once when the camera is pointed
@@ -57,10 +63,14 @@ export function useSceneGuide(
       return;
     }
     busy.current = true;
-    checks.current += 1;
     lastAt.current = performance.now();
     try {
-      const image = await base64Of(await captureFrame(element, FRAME_WIDTH, FRAME_QUALITY));
+      const image = await frameOf(element);
+      // No frame to send (the camera between pictures): nothing spent, nothing failed.
+      if (image === null) {
+        return;
+      }
+      checks.current += 1;
       setScene(await mutateAsync({ videoId, shotIndex, image }));
       failures.current = 0;
     } catch {

@@ -51,17 +51,7 @@ export const bundledMessages: MessageSource = {
   load: async (locale) => catalogs[locale] as Messages,
 };
 
-/**
- * `t` for a key known only at run time (an error code, a notification or audit event)
- * whose arguments arrive with it. The compiler can't pair those, so the ICU test checks
- * every message's arguments against English instead. Everywhere else, call `t` itself.
- */
-export type LooseTranslate = ((key: string, values?: Record<string, string | number>) => string) & {
-  /** Whether the catalog has the key (a translator from `useTranslations` or `createTranslator`). */
-  has(key: string): boolean;
-};
-// type-coverage:ignore-next-line
-export const loosely = (t: object) => t as LooseTranslate;
+export { loosely } from "./loosely";
 
 export type Translator = ReturnType<typeof createTranslator<Messages>>;
 

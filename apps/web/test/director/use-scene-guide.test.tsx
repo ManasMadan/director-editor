@@ -185,6 +185,34 @@ describe("useSceneGuide", () => {
     expect(inputs).toHaveLength(2);
   });
 
+  it("spends nothing, and doesn't count Gemini out, when the camera can't give a frame", async () => {
+    everySixSeconds();
+    const { api, inputs } = director();
+    const toBlob = HTMLCanvasElement.prototype.toBlob;
+    const empty = vi
+      .spyOn(HTMLCanvasElement.prototype, "toBlob")
+      .mockImplementation((done) => done(null));
+    const video = { current: cameraVideo() };
+    const hook = await renderHook(
+      () => useSceneGuide(video, { videoId: VIDEO_ID, shotIndex: 0, active: true, moved: 0 }),
+      { api },
+    );
+    // Each tick looks again once the last look has settled.
+    await until(() => {
+      vi.advanceTimersByTime(6_000);
+      expect(empty.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+    expect(inputs).toHaveLength(0);
+    expect(hook.current.offline).toBe(false);
+    empty.mockImplementation(function (this: HTMLCanvasElement, ...args) {
+      toBlob.apply(this, args);
+    });
+    await until(() => {
+      vi.advanceTimersByTime(6_000);
+      expect(hook.current.scene?.instruction).toBe("Direction 1");
+    });
+  });
+
   it("skips a check with no frame to send, or with the page hidden", async () => {
     everySixSeconds();
     const { api, inputs } = director();
@@ -205,7 +233,10 @@ describe("useSceneGuide", () => {
     await until(() => expect(hook.current.scene?.instruction).toBe("Direction 1"));
   });
 
-  it("gives up after sixteen checks, so a camera left on stops spending", async () => {
+  // Sixteen real frames and answers: past the default 30 seconds on a busy runner.
+  it("gives up after sixteen checks, so a camera left on stops spending", {
+    timeout: 90_000,
+  }, async () => {
     everySixSeconds();
     const { api, inputs } = director();
     const video = { current: cameraVideo() };

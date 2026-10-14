@@ -404,40 +404,43 @@ describe("Director Live", () => {
       { shot: "0", audio: "original" },
     );
     await expect.poll(() => FakeRecognizer.last?.started).toBe(1);
-    const ears = FakeRecognizer.last as FakeRecognizer;
-    expect(ears.lang).toBe("en");
+    // The page starts listening afresh whenever the camera reopens (a flip): the member
+    // always speaks into its latest recogniser.
+    const ears = () => FakeRecognizer.last as FakeRecognizer;
+    expect(ears().lang).toBe("en");
     // Words still being heard show as the member says them.
-    ears.hear("let's", { final: false });
+    ears().hear("let's", { final: false });
     await expect.element(page.getByText("let's", { exact: true })).toBeVisible();
     // A phrase the recogniser doubts, or that isn't a request, does nothing.
-    ears.hear("action", { confidence: 0.1 });
-    ears.hear("what a lovely day");
-    ears.hear("flip the camera");
+    ears().hear("action", { confidence: 0.1 });
+    ears().hear("what a lovely day");
+    ears().hear("flip the camera");
     await expect.poll(() => camera.opened).toHaveLength(2);
     expect(camera.opened[1]).toMatchObject({ video: { facingMode: "user" } });
-    ears.hear("quiet");
+    ears().hear("quiet");
     await expect
       .element(page.getByRole("button", { name: "Director's voice" }))
       .toHaveAttribute("aria-pressed", "false");
-    ears.hear("talk to me");
+    ears().hear("talk to me");
     await expect
       .element(page.getByRole("button", { name: "Director's voice" }))
       .toHaveAttribute("aria-pressed", "true");
-    ears.hear("repeat");
-    ears.hear("action");
+    ears().hear("repeat");
+    ears().hear("action");
     await expect
       .element(page.getByRole("button", { name: "Stop" }), { timeout: 10_000 })
       .toBeVisible();
-    ears.hear("cut");
+    ears().hear("cut");
     await expect.element(page.getByLabelText("Best moment, on loop")).toBeVisible();
-    ears.hear("go again");
+    ears().hear("go again");
     await expect.poll(() => said()).toContain("Back to one. Let's go again!");
     await expect.element(page.getByText("Take 2 • Medium shot")).toBeVisible();
     // The recogniser stops by itself on silence: it's started again.
-    ears.stop();
-    await expect.poll(() => ears.started).toBe(2);
+    const listening = ears();
+    listening.stop();
+    await expect.poll(() => listening.started).toBe(2);
     // A microphone the browser won't allow: it says so, and stops trying.
-    ears.fail("not-allowed");
+    ears().fail("not-allowed");
     await expect
       .element(page.getByRole("button", { name: /Allow the microphone/ }))
       .toBeInTheDocument();

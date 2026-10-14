@@ -1,7 +1,7 @@
 "use client";
 
 import { authFormSchemas } from "@repo/client/auth/forms";
-import { loosely } from "@repo/i18n";
+import { loosely } from "@repo/i18n/loosely";
 import { useTranslations } from "next-intl";
 
 /** The shared auth form schemas (packages/client) with messages in the user's language. */
