@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { recorderFormat } from "./media";
+import { base64Of, recorderFormat } from "./media";
 
 describe("the recorder's format", () => {
   it("prefers MP4 (Safari, recent Chromium), then WebM", () => {
@@ -15,5 +15,13 @@ describe("the recorder's format", () => {
 
   it("is none where the browser records nothing", () => {
     expect(recorderFormat(() => false)).toBeNull();
+  });
+});
+
+describe("a blob as base64", () => {
+  it("encodes every byte, past the size read in one go", async () => {
+    const bytes = Uint8Array.from({ length: 0x8000 * 2 + 5 }, (_, at) => (at * 7) % 256);
+    expect(await base64Of(new Blob([bytes]))).toBe(Buffer.from(bytes).toString("base64"));
+    expect(await base64Of(new Blob([]))).toBe("");
   });
 });

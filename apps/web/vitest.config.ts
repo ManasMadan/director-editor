@@ -29,7 +29,14 @@ const browserProject = (
   include: string[],
   exclude: string[] = [],
 ) => ({
-  resolve: { alias },
+  resolve: {
+    alias: {
+      ...alias,
+      // Next's ES module build: Vite hands a default import of the CommonJS one its whole
+      // `exports` object, where Next's bundler gives the component.
+      "next/image": "next/dist/esm/shared/lib/image-external.js",
+    },
+  },
   // React's automatic runtime (Next compiles JSX the same way).
   oxc: { jsx: { runtime: "automatic" as const } },
   server: {

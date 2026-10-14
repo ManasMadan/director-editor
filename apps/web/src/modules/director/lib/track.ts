@@ -42,14 +42,11 @@ export function peaks(
   const first = Math.max(0, Math.floor(from * sampleRate));
   const last = Math.min(samples.length, Math.ceil(to * sampleRate));
   const slice = Math.max(1, Math.floor((last - first) / Math.max(1, count)));
-  const bars = Array.from({ length: Math.max(0, count) }, (_, bar) => {
-    let loudest = 0;
-    const end = Math.min(last, first + (bar + 1) * slice);
-    for (let at = first + bar * slice; at < end; at++) {
-      loudest = Math.max(loudest, Math.abs(samples[at] ?? 0));
-    }
-    return loudest;
-  });
+  const bars = Array.from({ length: Math.max(0, count) }, (_, bar) =>
+    samples
+      .subarray(first + bar * slice, Math.min(last, first + (bar + 1) * slice))
+      .reduce((loudest, sample) => Math.max(loudest, Math.abs(sample)), 0),
+  );
   const top = Math.max(...bars, 0);
   return top > 0 ? bars.map((bar) => bar / top) : bars;
 }

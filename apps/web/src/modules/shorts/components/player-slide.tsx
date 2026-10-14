@@ -4,7 +4,7 @@ import type { Short } from "@repo/contracts/api";
 import { Volume2, VolumeX } from "lucide-react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { sendCommand } from "../lib/embed";
 import { ActionRail } from "./action-rail";
 import { YouTubeEmbed } from "./youtube-embed";
@@ -22,33 +22,32 @@ export function PlayerSlide({
   onVisible: (videoId: string) => void;
 }) {
   const t = useTranslations("shorts");
-  const slide = useRef<HTMLElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const [active, setActive] = useState(false);
   const [muted, setMuted] = useState(true);
 
-  useEffect(() => {
-    const element = slide.current;
-    if (!element) {
-      return;
-    }
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        const visible = (entry?.intersectionRatio ?? 0) > 0.6;
-        setActive(visible);
-        // The player comes back muted, as browsers autoplay only without sound.
-        if (!visible) {
-          setMuted(true);
-        }
-        if (visible) {
-          onVisible(short.videoId);
-        }
-      },
-      { threshold: [0, 0.6, 1] },
-    );
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [short.videoId, onVisible]);
+  // A ref callback: React runs its cleanup when the section goes or the callback changes.
+  const observe = useCallback(
+    (element: HTMLElement) => {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          // The latest report on the slide: the browser may deliver several at once.
+          const visible = entries.reduce((_, entry) => entry.intersectionRatio, 0) > 0.6;
+          setActive(visible);
+          if (visible) {
+            onVisible(short.videoId);
+          } else {
+            // The player comes back muted, as browsers autoplay only without sound.
+            setMuted(true);
+          }
+        },
+        { threshold: [0, 0.6, 1] },
+      );
+      observer.observe(element);
+      return () => observer.disconnect();
+    },
+    [short.videoId, onVisible],
+  );
 
   const toggleSound = () => {
     sendCommand(frame.current, muted ? "unMute" : "mute");
@@ -57,7 +56,7 @@ export function PlayerSlide({
 
   return (
     <section
-      ref={slide}
+      ref={observe}
       aria-label={short.title}
       className="relative flex h-dvh snap-start snap-always items-center justify-center"
     >

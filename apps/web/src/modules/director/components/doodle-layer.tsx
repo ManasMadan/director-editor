@@ -33,9 +33,12 @@ export function DoodleLayer({ scene }: { scene: DoodleScene }) {
       paper: token("--doodle-paper"),
       record: token("--record"),
     };
-    const font = token("--font-hand");
+    // The marker hand (live.css); a page without it writes in the system's cursive.
+    const font = token("--font-hand") || "cursive";
     // The canvas draws text in a font only once it has loaded; until then, the fallback.
-    void document.fonts?.load(`24px ${font}`);
+    document.fonts.load(`24px ${font}`).catch(() => {
+      // A font that can't load leaves the fallback, which still reads.
+    });
     const glider = new Glider();
     let frame = 0;
     const draw = (now: number) => {

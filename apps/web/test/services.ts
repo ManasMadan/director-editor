@@ -76,6 +76,7 @@ export const STRIPE = {
 export interface Services {
   databaseUrl: string;
   stripeUrl: string;
+  aiUrl: string;
   close(): Promise<void>;
 }
 

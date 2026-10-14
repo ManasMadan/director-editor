@@ -36,9 +36,10 @@ export function clipsOf(shots: readonly Shot[], latest: Map<number, DirectorTake
     const take = latest.get(index);
     const state = stateOf(take);
     const best = state === "cut" ? take : undefined;
-    const picked = best !== undefined && best.bestStartMs !== null && best.bestEndMs !== null;
-    const from = picked ? (best.bestStartMs ?? 0) / 1000 : 0;
-    const to = picked ? (best.bestEndMs ?? 0) / 1000 : shot.durationSeconds;
+    const { from, to } =
+      best && best.bestStartMs !== null && best.bestEndMs !== null
+        ? { from: best.bestStartMs / 1000, to: best.bestEndMs / 1000 }
+        : { from: 0, to: shot.durationSeconds };
     const seconds = shot.kind === "video" && state === "cut" ? to - from : shot.durationSeconds;
     const clip: Clip = { index, shot, take: take ?? null, state, at, seconds, from, to };
     at += seconds;
