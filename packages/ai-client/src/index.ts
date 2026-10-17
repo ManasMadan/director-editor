@@ -15,12 +15,17 @@ import { SignJWT } from "jose";
 import { createClient } from "./generated/client";
 import {
   checkDirectorScene,
+  createDirectorCut,
   createDirectorTake,
+  getDirectorLibrary,
   getDirectorPlan,
+  indexDirectorPlan,
+  listDirectorCuts,
+  listDirectorMedia,
   listDirectorTakes,
-  requestDirectorPlan,
 } from "./generated/sdk.gen";
 import type {
+  DirectorCutCreate,
   DirectorTakeCreate,
   ErrorCode,
   ErrorIssue,
@@ -102,8 +107,11 @@ async function unwrap<T>(call: Promise<{ data?: T; error?: unknown; response?: R
 /** Director's calls (apps/ai/app/director.py), each on a client made for that call. */
 function directorCalls(forCall: (caller: AiCaller) => Promise<ReturnType<typeof createClient>>) {
   return {
-    async requestPlan(caller: AiCaller, videoId: string) {
-      return unwrap(requestDirectorPlan({ client: await forCall(caller), body: { videoId } }));
+    async index(caller: AiCaller, videoId: string) {
+      return unwrap(indexDirectorPlan({ client: await forCall(caller), body: { videoId } }));
+    },
+    async library(caller: AiCaller) {
+      return unwrap(getDirectorLibrary({ client: await forCall(caller) }));
     },
     async getPlan(caller: AiCaller, videoId: string) {
       return unwrap(
@@ -120,6 +128,17 @@ function directorCalls(forCall: (caller: AiCaller) => Promise<ReturnType<typeof 
       return unwrap(
         listDirectorTakes({ client: await forCall(caller), path: { video_id: videoId } }),
       );
+    },
+    async createCut(caller: AiCaller, body: DirectorCutCreate) {
+      return unwrap(createDirectorCut({ client: await forCall(caller), body }));
+    },
+    async listCuts(caller: AiCaller, videoId: string) {
+      return unwrap(
+        listDirectorCuts({ client: await forCall(caller), path: { video_id: videoId } }),
+      );
+    },
+    async listMedia(caller: AiCaller) {
+      return unwrap(listDirectorMedia({ client: await forCall(caller) }));
     },
   };
 }
@@ -141,6 +160,6 @@ export function createAiClient(options: { baseUrl: string; secret: string; timeo
     });
   }
 
-  /** Director's calls, as `ai.director.requestPlan(...)`. */
+  /** Director's calls, as `ai.director.index(...)`. */
   return { director: directorCalls(forCall) };
 }

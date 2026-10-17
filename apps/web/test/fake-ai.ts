@@ -87,8 +87,12 @@ function directorRoute(
           body: {
             id: randomUUID(),
             videoId: plan[1],
+            source: "user",
+            stage: "queued",
             error: null,
             model: "stand-in",
+            audioStatus: "none",
+            audioKey: null,
             createdAt: now(),
             updatedAt: now(),
             ...found,

@@ -30,6 +30,15 @@ export const uploadPurposes = {
     types: ["image/jpeg", "image/png", "image/webp"],
     maxBytes: 8_000_000,
   },
+  /**
+   * A Director cut: the picked takes rendered into one video in the browser, to keep and
+   * publish to YouTube. Kept as rendered. The cap holds a three-minute Short (the longest
+   * there is) at a high bitrate.
+   */
+  "director-cut-video": {
+    types: ["video/mp4", "video/webm"],
+    maxBytes: 200_000_000,
+  },
 } as const satisfies Record<string, { types: readonly string[]; maxBytes: number }>;
 
 export type UploadPurpose = keyof typeof uploadPurposes;

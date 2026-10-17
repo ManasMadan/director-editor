@@ -3,11 +3,14 @@ import type { Procedures } from "../../rpc/procedures";
 import type { DirectorService } from "./director.service";
 
 export const directorRouter = ({ inOrg }: Procedures, director: DirectorService) => ({
+  library: inOrg.director.library.handler(({ context }) =>
+    director.library(context.userId, context.orgId),
+  ),
+  index: inOrg.director.index.handler(({ context, input }) =>
+    director.index(context.userId, context.orgId, input.url),
+  ),
   plan: inOrg.director.plan.handler(({ context, input }) =>
     director.plan(context.userId, context.orgId, input.videoId),
-  ),
-  requestPlan: inOrg.director.requestPlan.handler(({ context, input }) =>
-    director.requestPlan(context.userId, context.orgId, input.videoId),
   ),
   checkScene: inOrg.director.checkScene.handler(({ context, input }) =>
     director.checkScene(context.userId, context.orgId, input),
@@ -17,5 +20,17 @@ export const directorRouter = ({ inOrg }: Procedures, director: DirectorService)
   ),
   addTake: inOrg.director.addTake.handler(({ context, input }) =>
     director.addTake(context.userId, context.orgId, input),
+  ),
+  shots: inOrg.director.shots.handler(({ context, input }) =>
+    director.shots(context.userId, context.orgId, input.videoId),
+  ),
+  cuts: inOrg.director.cuts.handler(({ context, input }) =>
+    director.cuts(context.userId, context.orgId, input.videoId),
+  ),
+  saveCut: inOrg.director.saveCut.handler(({ context, input }) =>
+    director.saveCut(context.userId, context.orgId, input),
+  ),
+  media: inOrg.director.media.handler(({ context }) =>
+    director.media(context.userId, context.orgId),
   ),
 });

@@ -1,8 +1,8 @@
 "use client";
 
-import { errorCode, useApiErrorMessage } from "@repo/client";
+import { useApiErrorMessage } from "@repo/client";
+import { useIndexShortMutation } from "@repo/client/api/director/index-short";
 import { useDirectorPlanQuery } from "@repo/client/api/director/plan";
-import { useRequestDirectorPlanMutation } from "@repo/client/api/director/request-plan";
 import type { DirectorPlan, Shot, ShotPlan } from "@repo/contracts/api";
 import { Button } from "@repo/ui/components/button";
 import { Spinner } from "@repo/ui/components/spinner";
@@ -21,7 +21,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { DirectorGate, type EmbedOptions, sendCommand, YouTubeEmbed } from "@/modules/shorts";
 import { ShotList, Storyboard } from "../components/shot-list";
 import { type AudioMode, defaultAudio, offersVoice } from "../lib/audio";
@@ -248,18 +248,10 @@ function Ready({ plan }: { plan: DirectorPlan & { plan: ShotPlan } }) {
 
 function Plan({ videoId }: { videoId: string }) {
   const plan = useDirectorPlanQuery(videoId);
-  const request = useRequestDirectorPlanMutation();
-  const { mutate } = request;
-  const missing = plan.isError && errorCode(plan.error) === "DIRECTOR_PLAN_NOT_FOUND";
-
-  // Nobody in the workspace has asked for this short yet: ask now.
-  useEffect(() => {
-    if (missing) {
-      mutate({ videoId });
-    }
-  }, [missing, mutate, videoId]);
-
-  const error = request.error ?? (missing ? null : plan.error);
+  // Indexing counts as the member's one short of their own, so it happens only when they
+  // ask (the retry below), never just by opening a short.
+  const index = useIndexShortMutation();
+  const error = index.error ?? plan.error;
   const current = plan.data;
   if (current?.status === "ready" && current.plan) {
     return <Ready plan={{ ...current, plan: current.plan }} />;
@@ -267,7 +259,11 @@ function Plan({ videoId }: { videoId: string }) {
   return (
     <>
       <Header videoId={videoId} />
-      <Waiting error={error} plan={current} onRetry={() => mutate({ videoId })} />
+      <Waiting
+        error={error}
+        plan={current}
+        onRetry={() => index.mutate({ url: `https://www.youtube.com/shorts/${videoId}` })}
+      />
     </>
   );
 }

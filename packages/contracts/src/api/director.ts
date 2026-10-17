@@ -1,24 +1,34 @@
 /**
  * Director: how to film a YouTube short, worked out by Gemini in the AI service (apps/ai)
- * and served by apps/api. A workspace's plan for a video is shared by its members; takes
- * and their reviews are each member's own.
+ * and served by apps/api. A workspace's plans are its library of templates, shared by its
+ * members: the seeded ones every workspace starts with, and the one short each member
+ * may index themselves. Takes, their reviews and the cuts made of them are each member's
+ * own.
  *
  * The plan's shape mirrors the Python service's ShotPlan (apps/ai/app/schemas.py), which
  * is the model's output type; a test in apps/api compares the two through the generated
  * AI client's schemas. Positions are fractions of a 9:16 portrait frame, from its top-left.
  */
 import * as z from "zod";
-import { directorPlanIdSchema, directorTakeIdSchema, fileIdSchema, videoIdSchema } from "../ids";
+import {
+  directorCutIdSchema,
+  directorPlanIdSchema,
+  directorTakeIdSchema,
+  fileIdSchema,
+  videoIdSchema,
+} from "../ids";
 import { HOUR_S } from "../time";
-import { base, errorsOf, WORKSPACE_ERRORS } from "./base";
+import { base, EVERYDAY_WRITES, errorsOf, WORKSPACE_ERRORS } from "./base";
+import { SHORT_URL_MAX_LENGTH } from "./shorts";
 
 const errors = errorsOf(
   ...WORKSPACE_ERRORS,
   "FEATURE_DISABLED",
   "UPSTREAM_UNAVAILABLE",
   "AI_BUDGET_EXCEEDED",
-  "SHORT_NOT_FOUND",
-  "SHORT_TOO_LONG",
+  "DIRECTOR_INDEX_LIMIT",
+  "DIRECTOR_VIDEO_UNAVAILABLE",
+  "DIRECTOR_TOO_LONG",
   "DIRECTOR_PLAN_NOT_FOUND",
   "DIRECTOR_PLAN_NOT_READY",
   "DIRECTOR_SHOT_NOT_FOUND",
@@ -28,6 +38,10 @@ const errors = errorsOf(
 );
 
 export const DIRECTOR_MAX_SHOTS = 12;
+/** A shot needs a retake when its best take scored below this (out of 100). */
+export const DIRECTOR_RETAKE_BELOW = 60;
+/** A cut's title becomes its YouTube title, which YouTube caps at 100 characters. */
+const DIRECTOR_CUT_TITLE_MAX_LENGTH = 100;
 /** A take's longest: what a 15 MB upload holds at the recorder's bitrate. */
 const DIRECTOR_MAX_SHOT_SECONDS = 60;
 /** A scene check's camera frame, base64 (a 640-pixel JPEG is 40-120 kB). */
@@ -142,15 +156,36 @@ export type ShotPlan = z.infer<typeof shotPlanSchema>;
 export const directorPlanSchema = z.object({
   id: directorPlanIdSchema,
   videoId: videoIdSchema,
+  /** A seeded template every workspace starts with, or a short a member indexed. */
+  source: z.enum(["seed", "user"]),
   /** pending → analyzing → ready (or failed, with an error code). */
   status: z.enum(["pending", "analyzing", "ready", "failed"]),
+  /** How far indexing got, finer than `status`, for showing its progress. */
+  stage: z.enum(["queued", "watching", "writing", "ready", "failed"]),
   error: z.string().nullable(),
   plan: shotPlanSchema.nullable(),
   model: z.string().nullable(),
+  /**
+   * The short's original audio, to film along to: `url` is a short-lived link to it,
+   * while it's `ready` and uploads are on (null otherwise); `failed` means it couldn't be
+   * fetched (the microphone is used instead), `none` that it wasn't tried.
+   */
+  audio: z.object({
+    status: z.enum(["ready", "failed", "none"]),
+    url: z.url().nullable(),
+  }),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
 export type DirectorPlan = z.infer<typeof directorPlanSchema>;
+
+const directorLibrarySchema = z.object({
+  /** The workspace's plans, newest first: seeded templates and members' own shorts. */
+  templates: z.array(directorPlanSchema),
+  /** The caller has indexed their one short of their own (a failed one doesn't count). */
+  indexUsed: z.boolean(),
+});
+export type DirectorLibrary = z.infer<typeof directorLibrarySchema>;
 
 export const sceneCheckSchema = z.object({
   inPlace: z.boolean(),
@@ -187,20 +222,62 @@ const shotIndex = z
   .min(0)
   .max(DIRECTOR_MAX_SHOTS - 1);
 
+/** A shot of the plan with the caller's takes of it, newest first. */
+const directorShotSchema = z.object({
+  index: shotIndex,
+  takes: z.array(directorTakeSchema),
+  /** The best-scored take (the newest of a tie); null until one is scored. */
+  pickedTakeId: directorTakeIdSchema.nullable(),
+  /** The picked take scored below DIRECTOR_RETAKE_BELOW. */
+  needsRetake: z.boolean(),
+});
+export type DirectorShot = z.infer<typeof directorShotSchema>;
+
+/** The take picked for each shot used in a cut, by shot index. */
+const picksSchema = z.record(shotIndex, directorTakeIdSchema);
+
+export const directorCutSchema = z.object({
+  id: directorCutIdSchema,
+  planId: directorPlanIdSchema,
+  videoId: videoIdSchema,
+  /** The plan's title (the template the cut was made from). */
+  templateTitle: z.string(),
+  title: z.string(),
+  picks: picksSchema,
+  /** The rendered video: a `director-cut-video` upload. */
+  fileId: fileIdSchema,
+  durationMs: z.number().int().nonnegative(),
+  createdAt: z.date(),
+  publish: z.object({
+    status: z.enum(["none", "uploading", "published", "failed"]),
+    youtubeVideoId: z.string().nullable(),
+    /** YouTube's privacy status, as published. */
+    visibility: z.enum(["private", "unlisted", "public"]).nullable(),
+  }),
+});
+export type DirectorCut = z.infer<typeof directorCutSchema>;
+
 const route = (method: "GET" | "POST", path: `/${string}`, summary: string) =>
   base.errors(errors).route({ method, path, tags: ["Director"], summary });
 
 export const directorContract = {
-  /** The workspace's plan for a short (DIRECTOR_PLAN_NOT_FOUND until someone asks for it). */
-  plan: route("GET", "/director/{videoId}/plan", "A short's plan")
-    .input(z.object({ videoId: videoIdSchema }))
-    .output(directorPlanSchema),
+  /** The workspace's templates, and whether the caller has indexed their own short. */
+  library: route("GET", "/director/library", "Your workspace's templates").output(
+    directorLibrarySchema,
+  ),
   /**
-   * Asks Director to work out a short (a no-op once it's queued or ready; a failed one is
-   * tried again). The short must exist and be a short (SHORT_NOT_FOUND, SHORT_TOO_LONG).
+   * Indexes a short from its YouTube link (watch, shorts or youtu.be): Director watches
+   * it and works out its plan. The link must be a video YouTube shows
+   * (DIRECTOR_VIDEO_UNAVAILABLE) and a Short (DIRECTOR_TOO_LONG). Each member indexes one
+   * short of their own (DIRECTOR_INDEX_LIMIT; one that failed doesn't count, and is tried
+   * again). A short already in the library is answered with its plan, counting for no one.
    */
-  requestPlan: route("POST", "/director/{videoId}/plan", "Ask Director to plan a short")
-    .meta({ rateLimit: { name: "director-plans", points: 30, windowSeconds: HOUR_S, per: "user" } })
+  index: route("POST", "/director/library", "Index a short")
+    .meta({ rateLimit: { name: "director-index", points: 10, windowSeconds: HOUR_S, per: "user" } })
+    .input(z.object({ url: z.string().trim().min(1).max(SHORT_URL_MAX_LENGTH) }))
+    .output(directorPlanSchema),
+  /** The workspace's plan for a short (DIRECTOR_PLAN_NOT_FOUND unless it's in the library). */
+  plan: route("GET", "/director/{videoId}/plan", "A short's plan")
     .input(z.object({ videoId: videoIdSchema }))
     .output(directorPlanSchema),
   /** Where to go for a shot, from one camera frame (a model call each time). */
@@ -235,4 +312,33 @@ export const directorContract = {
       }),
     )
     .output(directorTakeSchema),
+  /**
+   * Each shot of a ready plan with the caller's takes of it, the take picked for it and
+   * whether it needs a retake (DIRECTOR_PLAN_NOT_READY before the plan is ready).
+   */
+  shots: route("GET", "/director/{videoId}/shots", "Your takes, shot by shot")
+    .input(z.object({ videoId: videoIdSchema }))
+    .output(z.array(directorShotSchema)),
+  /** The caller's cuts of a short, newest first. */
+  cuts: route("GET", "/director/{videoId}/cuts", "Your cuts of a short")
+    .input(z.object({ videoId: videoIdSchema }))
+    .output(z.array(directorCutSchema)),
+  /**
+   * Saves a cut: a ready `director-cut-video` upload of the caller's (FILE_NOT_FOUND,
+   * FILE_NOT_READY) and the take of theirs picked for each shot it uses, each a take of
+   * that shot (DIRECTOR_SHOT_NOT_FOUND, NOT_FOUND).
+   */
+  saveCut: route("POST", "/director/{videoId}/cuts", "Save a cut")
+    .meta({ rateLimit: EVERYDAY_WRITES })
+    .input(
+      z.object({
+        videoId: videoIdSchema,
+        picks: picksSchema.refine((picks) => Object.keys(picks).length > 0),
+        fileId: fileIdSchema,
+        title: z.string().trim().min(1).max(DIRECTOR_CUT_TITLE_MAX_LENGTH),
+      }),
+    )
+    .output(directorCutSchema),
+  /** Every cut of the caller's, newest first (the client groups them by template). */
+  media: route("GET", "/media", "Your cuts").output(z.array(directorCutSchema)),
 };

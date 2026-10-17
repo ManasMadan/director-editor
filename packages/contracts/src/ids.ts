@@ -36,6 +36,8 @@ export const directorPlanIdSchema = z.uuid().brand<"DirectorPlanId">();
 
 export const directorTakeIdSchema = z.uuid().brand<"DirectorTakeId">();
 
+export const directorCutIdSchema = z.uuid().brand<"DirectorCutId">();
+
 /** A YouTube video id: 11 characters of URL-safe base64. */
 export const videoIdSchema = z
   .string()

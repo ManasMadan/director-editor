@@ -25,6 +25,16 @@ export const zCameraMove = z.enum([
     'tilt-down'
 ]);
 
+/**
+ * CutPick
+ *
+ * The take picked for one shot of a cut.
+ */
+export const zCutPick = z.object({
+    shotIndex: z.int().gte(0).lt(12),
+    takeId: z.uuid()
+});
+
 export const zDirection = z.enum([
     'none',
     'left',
@@ -34,6 +44,43 @@ export const zDirection = z.enum([
     'turn-left',
     'turn-right'
 ]);
+
+/**
+ * DirectorCutCreate
+ */
+export const zDirectorCutCreate = z.object({
+    fileId: z.uuid(),
+    picks: z.array(zCutPick).min(1).max(12),
+    title: z.string().min(1).max(100),
+    videoId: z.string().regex(/^[A-Za-z0-9_-]{11}$/)
+});
+
+/**
+ * DirectorCutOut
+ */
+export const zDirectorCutOut = z.object({
+    createdAt: z.iso.datetime(),
+    durationMs: z.int().gte(0),
+    fileId: z.uuid(),
+    id: z.uuid(),
+    picks: z.array(zCutPick),
+    planId: z.uuid(),
+    publishStatus: z.enum([
+        'none',
+        'uploading',
+        'published',
+        'failed'
+    ]),
+    templateTitle: z.string(),
+    title: z.string(),
+    videoId: z.string(),
+    visibility: z.enum([
+        'private',
+        'unlisted',
+        'public'
+    ]).nullable(),
+    youtubeVideoId: z.string().nullable()
+});
 
 /**
  * DirectorPlanCreate
@@ -117,7 +164,9 @@ export const zErrorCode = z.enum([
     'INVALID_SIGNATURE',
     'AI_BUDGET_EXCEEDED',
     'SHORT_NOT_FOUND',
-    'SHORT_TOO_LONG',
+    'DIRECTOR_INDEX_LIMIT',
+    'DIRECTOR_VIDEO_UNAVAILABLE',
+    'DIRECTOR_TOO_LONG',
     'DIRECTOR_PLAN_NOT_FOUND',
     'DIRECTOR_PLAN_NOT_READY',
     'DIRECTOR_SHOT_NOT_FOUND',
@@ -322,11 +371,25 @@ export const zShotPlan = z.object({
  * DirectorPlanOut
  */
 export const zDirectorPlanOut = z.object({
+    audioKey: z.string().nullable(),
+    audioStatus: z.enum([
+        'ready',
+        'failed',
+        'none'
+    ]),
     createdAt: z.iso.datetime(),
     error: z.string().nullable(),
     id: z.uuid(),
     model: z.string().nullable(),
     plan: zShotPlan.nullable(),
+    source: z.enum(['seed', 'user']),
+    stage: z.enum([
+        'queued',
+        'watching',
+        'writing',
+        'ready',
+        'failed'
+    ]),
     status: z.enum([
         'pending',
         'analyzing',
@@ -335,6 +398,14 @@ export const zDirectorPlanOut = z.object({
     ]),
     updatedAt: z.iso.datetime(),
     videoId: z.string()
+});
+
+/**
+ * DirectorLibraryOut
+ */
+export const zDirectorLibraryOut = z.object({
+    indexUsed: z.boolean(),
+    templates: z.array(zDirectorPlanOut)
 });
 
 /**
@@ -352,9 +423,21 @@ export const zLiveResponse = zHealthResponse;
  */
 export const zReadyResponse = zHealthResponse;
 
-export const zRequestDirectorPlanBody = zDirectorPlanCreate;
+export const zListDirectorMediaHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
 
-export const zRequestDirectorPlanHeaders = z.object({
+/**
+ * Response Listdirectormedia
+ *
+ * Successful Response
+ */
+export const zListDirectorMediaResponse = z.array(zDirectorCutOut);
+
+export const zCreateDirectorCutBody = zDirectorCutCreate;
+
+export const zCreateDirectorCutHeaders = z.object({
     authorization: z.string().nullish(),
     'x-request-id': z.string().nullish()
 });
@@ -362,7 +445,29 @@ export const zRequestDirectorPlanHeaders = z.object({
 /**
  * Successful Response
  */
-export const zRequestDirectorPlanResponse = zDirectorPlanOut;
+export const zCreateDirectorCutResponse = zDirectorCutOut;
+
+export const zGetDirectorLibraryHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+/**
+ * Successful Response
+ */
+export const zGetDirectorLibraryResponse = zDirectorLibraryOut;
+
+export const zIndexDirectorPlanBody = zDirectorPlanCreate;
+
+export const zIndexDirectorPlanHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+/**
+ * Successful Response
+ */
+export const zIndexDirectorPlanResponse = zDirectorPlanOut;
 
 export const zGetDirectorPlanHeaders = z.object({
     authorization: z.string().nullish(),
@@ -377,6 +482,22 @@ export const zGetDirectorPlanPath = z.object({
  * Successful Response
  */
 export const zGetDirectorPlanResponse = zDirectorPlanOut;
+
+export const zListDirectorCutsHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+export const zListDirectorCutsPath = z.object({
+    video_id: z.string().regex(/^[A-Za-z0-9_-]{11}$/)
+});
+
+/**
+ * Response Listdirectorcuts
+ *
+ * Successful Response
+ */
+export const zListDirectorCutsResponse = z.array(zDirectorCutOut);
 
 export const zListDirectorTakesHeaders = z.object({
     authorization: z.string().nullish(),

@@ -147,9 +147,13 @@ iOS asks before a page may read the tilt: the level shows a button for that.
 
 ## Where things are
 
-- Data: `ai.director_plan` (one per workspace and video, shared by its members),
-  `ai.director_take` (each member's own), `app.short_reaction` (likes and saves); all under
-  row-level security. Plans are a JSON column validated by `ShotPlan` on the way in and out.
+- Data: `ai.director_plan` (one per workspace and video, shared by its members: the
+  workspace's library of templates, the seeded ones and the one short each member may
+  index, held by the partial unique index `director_plan_one_user_index`),
+  `ai.director_take` (each member's own; never replaced, the best-scored is picked),
+  `ai.director_cut` (a member's rendered video of a plan and how far publishing it got),
+  `app.short_reaction` (likes and saves); all under row-level security. Plans are a JSON
+  column validated by `ShotPlan` on the way in and out.
 - AI service: `apps/ai/app/director.py` (the three Gemini calls, their token budgets and
   failures), queue `ai-director` (`plan`, `review-take`) in `packages/jobs`.
 - API: `apps/api/src/modules/shorts` (YouTube; `youtube.ts` is the only code that knows its

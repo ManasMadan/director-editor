@@ -4,8 +4,8 @@ import * as z from 'zod';
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CheckDirectorSceneData, CheckDirectorSceneErrors, CheckDirectorSceneResponses, CreateDirectorTakeData, CreateDirectorTakeErrors, CreateDirectorTakeResponses, DependenciesData, DependenciesErrors, DependenciesResponses, GetDirectorPlanData, GetDirectorPlanErrors, GetDirectorPlanResponses, ListDirectorTakesData, ListDirectorTakesErrors, ListDirectorTakesResponses, LiveData, LiveErrors, LiveResponses, ReadyData, ReadyErrors, ReadyResponses, RequestDirectorPlanData, RequestDirectorPlanErrors, RequestDirectorPlanResponses } from './types.gen';
-import { zCheckDirectorSceneBody, zCheckDirectorSceneHeaders, zCheckDirectorSceneResponse, zCreateDirectorTakeBody, zCreateDirectorTakeHeaders, zCreateDirectorTakeResponse, zDependenciesResponse, zGetDirectorPlanHeaders, zGetDirectorPlanPath, zGetDirectorPlanResponse, zListDirectorTakesHeaders, zListDirectorTakesPath, zListDirectorTakesResponse, zLiveResponse, zReadyResponse, zRequestDirectorPlanBody, zRequestDirectorPlanHeaders, zRequestDirectorPlanResponse } from './zod.gen';
+import type { CheckDirectorSceneData, CheckDirectorSceneErrors, CheckDirectorSceneResponses, CreateDirectorCutData, CreateDirectorCutErrors, CreateDirectorCutResponses, CreateDirectorTakeData, CreateDirectorTakeErrors, CreateDirectorTakeResponses, DependenciesData, DependenciesErrors, DependenciesResponses, GetDirectorLibraryData, GetDirectorLibraryErrors, GetDirectorLibraryResponses, GetDirectorPlanData, GetDirectorPlanErrors, GetDirectorPlanResponses, IndexDirectorPlanData, IndexDirectorPlanErrors, IndexDirectorPlanResponses, ListDirectorCutsData, ListDirectorCutsErrors, ListDirectorCutsResponses, ListDirectorMediaData, ListDirectorMediaErrors, ListDirectorMediaResponses, ListDirectorTakesData, ListDirectorTakesErrors, ListDirectorTakesResponses, LiveData, LiveErrors, LiveResponses, ReadyData, ReadyErrors, ReadyResponses } from './types.gen';
+import { zCheckDirectorSceneBody, zCheckDirectorSceneHeaders, zCheckDirectorSceneResponse, zCreateDirectorCutBody, zCreateDirectorCutHeaders, zCreateDirectorCutResponse, zCreateDirectorTakeBody, zCreateDirectorTakeHeaders, zCreateDirectorTakeResponse, zDependenciesResponse, zGetDirectorLibraryHeaders, zGetDirectorLibraryResponse, zGetDirectorPlanHeaders, zGetDirectorPlanPath, zGetDirectorPlanResponse, zIndexDirectorPlanBody, zIndexDirectorPlanHeaders, zIndexDirectorPlanResponse, zListDirectorCutsHeaders, zListDirectorCutsPath, zListDirectorCutsResponse, zListDirectorMediaHeaders, zListDirectorMediaResponse, zListDirectorTakesHeaders, zListDirectorTakesPath, zListDirectorTakesResponse, zLiveResponse, zReadyResponse } from './zod.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -69,18 +69,74 @@ export const ready = <ThrowOnError extends boolean = false>(options?: Options<Re
 });
 
 /**
- * Request Director Plan
+ * List Director Media
  *
- * The workspace's plan for a short; asking queues its analysis when there is none.
+ * Every cut of the caller's, newest first.
  */
-export const requestDirectorPlan = <ThrowOnError extends boolean = false>(options: Options<RequestDirectorPlanData, ThrowOnError>): RequestResult<RequestDirectorPlanResponses, RequestDirectorPlanErrors, ThrowOnError> => (options.client ?? client).post<RequestDirectorPlanResponses, RequestDirectorPlanErrors, ThrowOnError>({
+export const listDirectorMedia = <ThrowOnError extends boolean = false>(options?: Options<ListDirectorMediaData, ThrowOnError>): RequestResult<ListDirectorMediaResponses, ListDirectorMediaErrors, ThrowOnError> => (options?.client ?? client).get<ListDirectorMediaResponses, ListDirectorMediaErrors, ThrowOnError>({
     requestValidator: async (data) => await z.object({
-        body: zRequestDirectorPlanBody,
-        headers: zRequestDirectorPlanHeaders.optional(),
+        body: z.never().optional(),
+        headers: zListDirectorMediaHeaders.optional(),
         path: z.never().optional(),
         query: z.never().optional()
     }).parseAsync(data),
-    responseValidator: async (data) => await zRequestDirectorPlanResponse.parseAsync(data),
+    responseValidator: async (data) => await zListDirectorMediaResponse.parseAsync(data),
+    url: '/v1/director/cuts',
+    ...options
+});
+
+/**
+ * Create Director Cut
+ *
+ * Records a cut of the caller's, from their takes picked one per shot.
+ */
+export const createDirectorCut = <ThrowOnError extends boolean = false>(options: Options<CreateDirectorCutData, ThrowOnError>): RequestResult<CreateDirectorCutResponses, CreateDirectorCutErrors, ThrowOnError> => (options.client ?? client).post<CreateDirectorCutResponses, CreateDirectorCutErrors, ThrowOnError>({
+    requestValidator: async (data) => await z.object({
+        body: zCreateDirectorCutBody,
+        headers: zCreateDirectorCutHeaders.optional(),
+        path: z.never().optional(),
+        query: z.never().optional()
+    }).parseAsync(data),
+    responseValidator: async (data) => await zCreateDirectorCutResponse.parseAsync(data),
+    url: '/v1/director/cuts',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get Director Library
+ *
+ * The workspace's plans, and whether the caller has indexed their own short.
+ */
+export const getDirectorLibrary = <ThrowOnError extends boolean = false>(options?: Options<GetDirectorLibraryData, ThrowOnError>): RequestResult<GetDirectorLibraryResponses, GetDirectorLibraryErrors, ThrowOnError> => (options?.client ?? client).get<GetDirectorLibraryResponses, GetDirectorLibraryErrors, ThrowOnError>({
+    requestValidator: async (data) => await z.object({
+        body: z.never().optional(),
+        headers: zGetDirectorLibraryHeaders.optional(),
+        path: z.never().optional(),
+        query: z.never().optional()
+    }).parseAsync(data),
+    responseValidator: async (data) => await zGetDirectorLibraryResponse.parseAsync(data),
+    url: '/v1/director/library',
+    ...options
+});
+
+/**
+ * Index Director Plan
+ *
+ * The workspace's plan for a short; asking queues its analysis when there is none,
+ * as the caller's one short of their own (DIRECTOR_INDEX_LIMIT past it).
+ */
+export const indexDirectorPlan = <ThrowOnError extends boolean = false>(options: Options<IndexDirectorPlanData, ThrowOnError>): RequestResult<IndexDirectorPlanResponses, IndexDirectorPlanErrors, ThrowOnError> => (options.client ?? client).post<IndexDirectorPlanResponses, IndexDirectorPlanErrors, ThrowOnError>({
+    requestValidator: async (data) => await z.object({
+        body: zIndexDirectorPlanBody,
+        headers: zIndexDirectorPlanHeaders.optional(),
+        path: z.never().optional(),
+        query: z.never().optional()
+    }).parseAsync(data),
+    responseValidator: async (data) => await zIndexDirectorPlanResponse.parseAsync(data),
     url: '/v1/director/plans',
     ...options,
     headers: {
@@ -101,6 +157,23 @@ export const getDirectorPlan = <ThrowOnError extends boolean = false>(options: O
     }).parseAsync(data),
     responseValidator: async (data) => await zGetDirectorPlanResponse.parseAsync(data),
     url: '/v1/director/plans/{video_id}',
+    ...options
+});
+
+/**
+ * List Director Cuts
+ *
+ * The caller's cuts of the short, newest first.
+ */
+export const listDirectorCuts = <ThrowOnError extends boolean = false>(options: Options<ListDirectorCutsData, ThrowOnError>): RequestResult<ListDirectorCutsResponses, ListDirectorCutsErrors, ThrowOnError> => (options.client ?? client).get<ListDirectorCutsResponses, ListDirectorCutsErrors, ThrowOnError>({
+    requestValidator: async (data) => await z.object({
+        body: z.never().optional(),
+        headers: zListDirectorCutsHeaders.optional(),
+        path: zListDirectorCutsPath,
+        query: z.never().optional()
+    }).parseAsync(data),
+    responseValidator: async (data) => await zListDirectorCutsResponse.parseAsync(data),
+    url: '/v1/director/plans/{video_id}/cuts',
     ...options
 });
 

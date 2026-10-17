@@ -32,7 +32,119 @@ export type Box = {
 
 export type CameraMove = 'static' | 'up' | 'down' | 'left' | 'right' | 'forward' | 'back' | 'orbit' | 'tilt-up' | 'tilt-down';
 
+/**
+ * CutPick
+ *
+ * The take picked for one shot of a cut.
+ */
+export type CutPick = {
+    /**
+     * Shotindex
+     */
+    shotIndex: number;
+    /**
+     * Takeid
+     */
+    takeId: string;
+};
+
 export type Direction = 'none' | 'left' | 'right' | 'forward' | 'back' | 'turn-left' | 'turn-right';
+
+/**
+ * DirectorCutCreate
+ */
+export type DirectorCutCreate = {
+    /**
+     * Fileid
+     */
+    fileId: string;
+    /**
+     * Picks
+     */
+    picks: Array<CutPick>;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Videoid
+     */
+    videoId: string;
+};
+
+/**
+ * DirectorCutOut
+ */
+export type DirectorCutOut = {
+    /**
+     * Createdat
+     */
+    createdAt: string;
+    /**
+     * Durationms
+     */
+    durationMs: number;
+    /**
+     * Fileid
+     */
+    fileId: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Picks
+     */
+    picks: Array<CutPick>;
+    /**
+     * Planid
+     */
+    planId: string;
+    /**
+     * Publishstatus
+     */
+    publishStatus: 'none' | 'uploading' | 'published' | 'failed';
+    /**
+     * Templatetitle
+     *
+     * The plan's title.
+     */
+    templateTitle: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Videoid
+     */
+    videoId: string;
+    /**
+     * Visibility
+     */
+    visibility: 'private' | 'unlisted' | 'public' | null;
+    /**
+     * Youtubevideoid
+     */
+    youtubeVideoId: string | null;
+};
+
+/**
+ * DirectorLibraryOut
+ */
+export type DirectorLibraryOut = {
+    /**
+     * Indexused
+     *
+     * The caller has indexed their one short of their own.
+     */
+    indexUsed: boolean;
+    /**
+     * Templates
+     *
+     * The workspace's plans, newest first.
+     */
+    templates: Array<DirectorPlanOut>;
+};
 
 /**
  * DirectorPlanCreate
@@ -48,6 +160,16 @@ export type DirectorPlanCreate = {
  * DirectorPlanOut
  */
 export type DirectorPlanOut = {
+    /**
+     * Audiokey
+     *
+     * The original audio's object key in storage, once captured; apps/api turns it into a short-lived link.
+     */
+    audioKey: string | null;
+    /**
+     * Audiostatus
+     */
+    audioStatus: 'ready' | 'failed' | 'none';
     /**
      * Createdat
      */
@@ -65,6 +187,14 @@ export type DirectorPlanOut = {
      */
     model: string | null;
     plan: ShotPlan | null;
+    /**
+     * Source
+     */
+    source: 'seed' | 'user';
+    /**
+     * Stage
+     */
+    stage: 'queued' | 'watching' | 'writing' | 'ready' | 'failed';
     /**
      * Status
      */
@@ -164,7 +294,7 @@ export type DirectorTakeOut = {
 /**
  * ErrorCode
  */
-export type ErrorCode = 'BAD_REQUEST' | 'VALIDATION_FAILED' | 'UNAUTHENTICATED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT' | 'RATE_LIMITED' | 'INTERNAL' | 'SERVICE_UNAVAILABLE' | 'METHOD_NOT_SUPPORTED' | 'TIMEOUT' | 'PAYLOAD_TOO_LARGE' | 'UNSUPPORTED_MEDIA_TYPE' | 'IDEMPOTENCY_IN_PROGRESS' | 'FEATURE_DISABLED' | 'CLIENT_OUTDATED' | 'FRESH_SESSION_REQUIRED' | 'DESTINATION_NOT_ALLOWED' | 'RESPONSE_TOO_LARGE' | 'TOO_MANY_REDIRECTS' | 'UPSTREAM_UNAVAILABLE' | 'NO_ACTIVE_ORGANIZATION' | 'FILE_NOT_FOUND' | 'FILE_TYPE_NOT_ALLOWED' | 'FILE_TOO_LARGE' | 'FILE_SIZE_MISMATCH' | 'FILE_INFECTED' | 'FILE_UNREADABLE' | 'FILE_NOT_UPLOADED' | 'FILE_NOT_READY' | 'INVALID_SIGNATURE' | 'AI_BUDGET_EXCEEDED' | 'SHORT_NOT_FOUND' | 'SHORT_TOO_LONG' | 'DIRECTOR_PLAN_NOT_FOUND' | 'DIRECTOR_PLAN_NOT_READY' | 'DIRECTOR_SHOT_NOT_FOUND' | 'DIRECTOR_TAKE_KIND_MISMATCH' | 'DIRECTOR_VIDEO_UNREADABLE' | 'DIRECTOR_ANALYSIS_FAILED' | 'DIRECTOR_REVIEW_FAILED';
+export type ErrorCode = 'BAD_REQUEST' | 'VALIDATION_FAILED' | 'UNAUTHENTICATED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT' | 'RATE_LIMITED' | 'INTERNAL' | 'SERVICE_UNAVAILABLE' | 'METHOD_NOT_SUPPORTED' | 'TIMEOUT' | 'PAYLOAD_TOO_LARGE' | 'UNSUPPORTED_MEDIA_TYPE' | 'IDEMPOTENCY_IN_PROGRESS' | 'FEATURE_DISABLED' | 'CLIENT_OUTDATED' | 'FRESH_SESSION_REQUIRED' | 'DESTINATION_NOT_ALLOWED' | 'RESPONSE_TOO_LARGE' | 'TOO_MANY_REDIRECTS' | 'UPSTREAM_UNAVAILABLE' | 'NO_ACTIVE_ORGANIZATION' | 'FILE_NOT_FOUND' | 'FILE_TYPE_NOT_ALLOWED' | 'FILE_TOO_LARGE' | 'FILE_SIZE_MISMATCH' | 'FILE_INFECTED' | 'FILE_UNREADABLE' | 'FILE_NOT_UPLOADED' | 'FILE_NOT_READY' | 'INVALID_SIGNATURE' | 'AI_BUDGET_EXCEEDED' | 'SHORT_NOT_FOUND' | 'DIRECTOR_INDEX_LIMIT' | 'DIRECTOR_VIDEO_UNAVAILABLE' | 'DIRECTOR_TOO_LONG' | 'DIRECTOR_PLAN_NOT_FOUND' | 'DIRECTOR_PLAN_NOT_READY' | 'DIRECTOR_SHOT_NOT_FOUND' | 'DIRECTOR_TAKE_KIND_MISMATCH' | 'DIRECTOR_VIDEO_UNREADABLE' | 'DIRECTOR_ANALYSIS_FAILED' | 'DIRECTOR_REVIEW_FAILED';
 
 /**
  * ErrorData
@@ -584,7 +714,114 @@ export type ReadyResponses = {
 
 export type ReadyResponse = ReadyResponses[keyof ReadyResponses];
 
-export type RequestDirectorPlanData = {
+export type ListDirectorMediaData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/director/cuts';
+};
+
+export type ListDirectorMediaErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type ListDirectorMediaError = ListDirectorMediaErrors[keyof ListDirectorMediaErrors];
+
+export type ListDirectorMediaResponses = {
+    /**
+     * Response Listdirectormedia
+     *
+     * Successful Response
+     */
+    200: Array<DirectorCutOut>;
+};
+
+export type ListDirectorMediaResponse = ListDirectorMediaResponses[keyof ListDirectorMediaResponses];
+
+export type CreateDirectorCutData = {
+    body: DirectorCutCreate;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/director/cuts';
+};
+
+export type CreateDirectorCutErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type CreateDirectorCutError = CreateDirectorCutErrors[keyof CreateDirectorCutErrors];
+
+export type CreateDirectorCutResponses = {
+    /**
+     * Successful Response
+     */
+    201: DirectorCutOut;
+};
+
+export type CreateDirectorCutResponse = CreateDirectorCutResponses[keyof CreateDirectorCutResponses];
+
+export type GetDirectorLibraryData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/director/library';
+};
+
+export type GetDirectorLibraryErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type GetDirectorLibraryError = GetDirectorLibraryErrors[keyof GetDirectorLibraryErrors];
+
+export type GetDirectorLibraryResponses = {
+    /**
+     * Successful Response
+     */
+    200: DirectorLibraryOut;
+};
+
+export type GetDirectorLibraryResponse = GetDirectorLibraryResponses[keyof GetDirectorLibraryResponses];
+
+export type IndexDirectorPlanData = {
     body: DirectorPlanCreate;
     headers?: {
         /**
@@ -601,23 +838,23 @@ export type RequestDirectorPlanData = {
     url: '/v1/director/plans';
 };
 
-export type RequestDirectorPlanErrors = {
+export type IndexDirectorPlanErrors = {
     /**
      * An error.
      */
     default: ErrorResponse;
 };
 
-export type RequestDirectorPlanError = RequestDirectorPlanErrors[keyof RequestDirectorPlanErrors];
+export type IndexDirectorPlanError = IndexDirectorPlanErrors[keyof IndexDirectorPlanErrors];
 
-export type RequestDirectorPlanResponses = {
+export type IndexDirectorPlanResponses = {
     /**
      * Successful Response
      */
     200: DirectorPlanOut;
 };
 
-export type RequestDirectorPlanResponse = RequestDirectorPlanResponses[keyof RequestDirectorPlanResponses];
+export type IndexDirectorPlanResponse = IndexDirectorPlanResponses[keyof IndexDirectorPlanResponses];
 
 export type GetDirectorPlanData = {
     body?: never;
@@ -658,6 +895,48 @@ export type GetDirectorPlanResponses = {
 };
 
 export type GetDirectorPlanResponse = GetDirectorPlanResponses[keyof GetDirectorPlanResponses];
+
+export type ListDirectorCutsData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path: {
+        /**
+         * Video Id
+         */
+        video_id: string;
+    };
+    query?: never;
+    url: '/v1/director/plans/{video_id}/cuts';
+};
+
+export type ListDirectorCutsErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type ListDirectorCutsError = ListDirectorCutsErrors[keyof ListDirectorCutsErrors];
+
+export type ListDirectorCutsResponses = {
+    /**
+     * Response Listdirectorcuts
+     *
+     * Successful Response
+     */
+    200: Array<DirectorCutOut>;
+};
+
+export type ListDirectorCutsResponse = ListDirectorCutsResponses[keyof ListDirectorCutsResponses];
 
 export type ListDirectorTakesData = {
     body?: never;

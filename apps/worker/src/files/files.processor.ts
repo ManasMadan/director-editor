@@ -183,8 +183,9 @@ export class FilesProcessor extends JobProcessor {
           throw new Rejected("FILE_UNREADABLE");
         }
       case "director-take-video":
-        // Kept as recorded: re-encoding video is minutes of CPU, and the browser's
-        // recorder writes no location or device metadata into it.
+      case "director-cut-video":
+        // Kept as recorded (or as the browser rendered the cut): re-encoding video is
+        // minutes of CPU, and the browser writes no location or device metadata into it.
         return { body: bytes, contentType: sniffed.mime };
     }
   }

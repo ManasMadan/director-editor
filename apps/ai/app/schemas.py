@@ -238,10 +238,19 @@ class ShotPlanDraft(BaseModel):
     shots: list[ShotDraft]
 
 
-# The database checks them too (director_plan_status_check, director_take_status_check).
+# The database checks them too (director_plan_status_check, director_take_status_check,
+# director_plan_stage_check, ...).
 PlanStatus = Literal["pending", "analyzing", "ready", "failed"]
+PlanSource = Literal["seed", "user"]
+PlanStage = Literal["queued", "watching", "writing", "ready", "failed"]
+AudioStatus = Literal["ready", "failed", "none"]
 TakeStatus = Literal["pending", "reviewing", "ready", "failed"]
 TakeKind = Literal["video", "photo"]
+PublishStatus = Literal["none", "uploading", "published", "failed"]
+# YouTube's privacy statuses, as a cut was published.
+Visibility = Literal["private", "unlisted", "public"]
+# A cut's title becomes its YouTube title, which YouTube caps at 100 characters.
+MAX_CUT_TITLE = 100
 
 
 class DirectorPlanCreate(BaseModel):
@@ -253,12 +262,24 @@ class DirectorPlanCreate(BaseModel):
 class DirectorPlanOut(BaseModel):
     id: UUID
     videoId: str
+    source: PlanSource
     status: PlanStatus
+    stage: PlanStage
     error: str | None
     plan: ShotPlan | None
     model: str | None
+    audioStatus: AudioStatus
+    audioKey: str | None = Field(
+        description="The original audio's object key in storage, once captured; apps/api "
+        "turns it into a short-lived link."
+    )
     createdAt: datetime
     updatedAt: datetime
+
+
+class DirectorLibraryOut(BaseModel):
+    templates: list[DirectorPlanOut] = Field(description="The workspace's plans, newest first.")
+    indexUsed: bool = Field(description="The caller has indexed their one short of their own.")
 
 
 class SceneCheckRequest(BaseModel):
@@ -331,4 +352,39 @@ class DirectorTakeOut(BaseModel):
     bestEndMs: int | None
     score: int | None
     feedback: str | None
+    createdAt: datetime
+
+
+class CutPick(BaseModel):
+    """The take picked for one shot of a cut."""
+
+    model_config = REQUEST
+
+    shotIndex: int = Field(ge=0, lt=MAX_SHOTS)
+    # A JSON string, so not strict (strict wants a UUID object, which JSON can't carry).
+    takeId: UUID = Field(strict=False)
+
+
+class DirectorCutCreate(BaseModel):
+    model_config = REQUEST
+
+    videoId: str = Field(pattern=VIDEO_ID_PATTERN)
+    title: str = Field(min_length=1, max_length=MAX_CUT_TITLE)
+    # A ready director-cut-video upload of the caller's (apps/api checked it).
+    fileId: UUID = Field(strict=False)
+    picks: list[CutPick] = Field(min_length=1, max_length=MAX_SHOTS)
+
+
+class DirectorCutOut(BaseModel):
+    id: UUID
+    planId: UUID
+    videoId: str
+    templateTitle: str = Field(description="The plan's title.")
+    title: str
+    picks: list[CutPick]
+    fileId: UUID
+    durationMs: int = Field(ge=0)
+    publishStatus: PublishStatus
+    youtubeVideoId: str | None
+    visibility: Visibility | None
     createdAt: datetime

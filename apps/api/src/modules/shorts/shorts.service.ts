@@ -108,11 +108,19 @@ export class ShortsService {
     return short;
   }
 
-  /** A short Director can film (SHORT_TOO_LONG past SHORT_MAX_SECONDS). */
-  async filmable(videoId: VideoId): Promise<Short> {
-    const short = await this.get(videoId);
+  /**
+   * The short a pasted link points at, when Director can film it: DIRECTOR_VIDEO_UNAVAILABLE
+   * when the link isn't a YouTube video or YouTube won't show it (private, removed),
+   * DIRECTOR_TOO_LONG past SHORT_MAX_SECONDS.
+   */
+  async filmable(link: string): Promise<Short> {
+    const videoId = videoIdFromLink(link);
+    const [short] = videoId ? await this.videos([videoId]) : [];
+    if (!short) {
+      throw new AppError("DIRECTOR_VIDEO_UNAVAILABLE");
+    }
     if (short.durationSeconds > SHORT_MAX_SECONDS) {
-      throw new AppError("SHORT_TOO_LONG", { params: { maxSeconds: SHORT_MAX_SECONDS } });
+      throw new AppError("DIRECTOR_TOO_LONG", { params: { maxSeconds: SHORT_MAX_SECONDS } });
     }
     return short;
   }
