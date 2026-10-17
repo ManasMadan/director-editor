@@ -7,7 +7,7 @@
  * call reaches its time limit; the browser hears why as an `error` message just before
  * its socket closes.
  */
-import type { ShotPlan } from "@repo/contracts/api";
+import { DIRECTOR_MAX_SHOTS, type ShotPlan } from "@repo/contracts/api";
 import { ERROR_CODES, type ErrorCode } from "@repo/contracts/errors";
 import {
   LIVE_TOOLS,
@@ -61,6 +61,12 @@ const AUDIO_WINDOW_BYTES = 2 * AUDIO_BYTES_PER_SECOND * (AUDIO_WINDOW_MS / SECON
 const TEXT_TURNS = 3;
 const TEXT_WINDOW_MS = 10 * SECOND_MS;
 /**
+ * Moves to another shot in the same window: a whole plan's worth, so Director skipping
+ * to the last shot (one move per shot, each its own tool call) still fits, and only a
+ * browser sending moves in a loop is hung up on.
+ */
+const SHOT_MOVES = DIRECTOR_MAX_SHOTS;
+/**
  * What may wait unsent to Gemini: about half a minute of audio. Past it Gemini isn't
  * keeping up, the conversation has fallen too far behind to recover, and the call ends.
  */
@@ -101,6 +107,7 @@ export class LiveRelay {
   private lastFrameAt = Number.NEGATIVE_INFINITY;
   private readonly audio: SlidingBudget;
   private readonly turns: SlidingBudget;
+  private readonly moves: SlidingBudget;
   private readonly timer: NodeJS.Timeout;
   private setupTimer: NodeJS.Timeout | undefined;
   private readonly finished = Promise.withResolvers<void>();
@@ -115,6 +122,7 @@ export class LiveRelay {
     this.timer = setTimeout(() => this.end("TIMEOUT"), options.maxDurationMs);
     this.audio = new SlidingBudget(AUDIO_WINDOW_BYTES, AUDIO_WINDOW_MS, options.now);
     this.turns = new SlidingBudget(TEXT_TURNS, TEXT_WINDOW_MS, options.now);
+    this.moves = new SlidingBudget(SHOT_MOVES, TEXT_WINDOW_MS, options.now);
     client.on("message", (data, isBinary) => this.fromClient(data, isBinary));
     client.on("close", () => this.end(null));
   }
@@ -180,8 +188,8 @@ export class LiveRelay {
   }
 
   /**
-   * The browser is on shot `index` now. A move costs a turn like a typed line does; before
-   * Gemini is ready it's only remembered, and the call opens on that shot instead.
+   * The browser is on shot `index` now. Moves have their own allowance (SHOT_MOVES);
+   * before Gemini is ready a move is only remembered, and the call opens on that shot.
    */
   private moveTo(index: number) {
     if (index >= this.options.plan.shots.length) {
@@ -190,7 +198,7 @@ export class LiveRelay {
     if (index === this.shot) {
       return;
     }
-    if (!this.turns.spend(1)) {
+    if (!this.moves.spend(1)) {
       return this.end("DIRECTOR_CALL_TOO_FAST");
     }
     this.shot = index;

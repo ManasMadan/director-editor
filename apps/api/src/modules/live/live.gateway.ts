@@ -1,6 +1,7 @@
 /**
  * GET /api/live?videoId=…&shot=n, upgraded to a WebSocket: a voice and video call with
- * Director (Gemini Live on Vertex AI) about one shot of a short's plan. The browser
+ * Director (Gemini Live on Vertex AI) through a short's plan, starting on shot n and
+ * following the browser from shot to shot. The browser
  * signs in with its session cookie and calls as its active workspace, exactly as an
  * `inOrg` procedure would; the call is refused (an `error` message, then the socket
  * closes) when the feature is off, the caller isn't signed in, the plan or shot doesn't
@@ -27,7 +28,10 @@ import { CLIENT_MAX_PAYLOAD_BYTES } from "./live.messages";
 import { closeWithError, type LiveLog, LiveRelay } from "./live.relay";
 import { type LiveModel, liveUrl, setupMessage } from "./live.setup";
 
-/** A call's longest. Cost grows with every second of audio and video, and a shot is short. */
+/**
+ * A call's longest. Cost grows with every second of audio and video, and ten minutes is
+ * time enough to film a whole short; the member calls again to carry on.
+ */
 export const MAX_CALL_MS = 10 * MINUTE_MS;
 const FRAME_INTERVAL_MS = SECOND_MS;
 

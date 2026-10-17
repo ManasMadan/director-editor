@@ -6,7 +6,12 @@
 import { type IncomingHttpHeaders, IncomingMessage } from "node:http";
 import { type AddressInfo, connect, Socket } from "node:net";
 import { Duplex } from "node:stream";
-import { type DirectorPlan, directorPlanSchema, type Shot } from "@repo/contracts/api";
+import {
+  DIRECTOR_MAX_SHOTS,
+  type DirectorPlan,
+  directorPlanSchema,
+  type Shot,
+} from "@repo/contracts/api";
 import { orgIdSchema, userIdSchema } from "@repo/contracts/ids";
 import { LIVE_PATH, LIVE_TOOLS } from "@repo/contracts/live";
 import { PROVIDER_TIMEOUT_MS } from "@repo/contracts/time";
@@ -426,17 +431,17 @@ describe("a live call", () => {
     expect(fake.received).toHaveLength(10);
   });
 
-  it("takes three turns (typed, or a move to another shot) in ten seconds, and hangs up on a fourth", async () => {
+  it("takes three typed turns in ten seconds, and hangs up on a fourth; a move to another shot isn't one", async () => {
     const { fake, browser } = await liveCall();
     browser.send({ type: "text", text: "one" });
     browser.send({ type: "shot", shot: 1 });
-    for (const text of ["three", "four"]) {
+    for (const text of ["two", "three", "four"]) {
       browser.send({ type: "text", text });
     }
     expect(await browser.closed).toBe(1008);
     expect(browser.received).toEqual([{ type: "error", code: "DIRECTOR_CALL_TOO_FAST" }]);
     await vi.waitFor(() => expect(fake.server.clients.size).toBe(0));
-    expect(fake.received).toHaveLength(5);
+    expect(fake.received).toHaveLength(6);
   });
 
   it("hangs up when Gemini stops reading what it's sent", async () => {
@@ -639,12 +644,14 @@ describe("moving to another shot mid-call", () => {
     expect(fake.received).toHaveLength(4);
   });
 
-  it("hangs up on moves faster than a person makes them", async () => {
-    const { browser } = await liveCall();
-    for (const text of ["one", "two", "three"]) {
-      browser.send({ type: "text", text });
+  it("lets Gemini skip across a whole plan at once, and hangs up on more moves than that", async () => {
+    const { fake, browser } = await liveCall();
+    // A plan's worth of moves in a burst (Director skipping to the last shot) goes through.
+    for (let move = 1; move <= DIRECTOR_MAX_SHOTS; move += 1) {
+      browser.send({ type: "shot", shot: move % 2 });
     }
-    browser.send({ type: "shot", shot: 1 });
+    await vi.waitFor(() => expect(fake.received).toHaveLength(2 + DIRECTOR_MAX_SHOTS));
+    browser.send({ type: "shot", shot: (DIRECTOR_MAX_SHOTS + 1) % 2 });
     expect(await browser.closed).toBe(1008);
     expect(browser.received).toEqual([{ type: "error", code: "DIRECTOR_CALL_TOO_FAST" }]);
   });
