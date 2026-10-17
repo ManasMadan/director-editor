@@ -147,11 +147,11 @@ describe("load-test users", () => {
   });
 });
 
-describe("the load-test users command", () => {
-  const output = join(import.meta.dirname, "../../../load/.sessions.json");
+describe("the fuzzing's users command", () => {
+  const output = join(import.meta.dirname, "../../../.fuzz/sessions.json");
   const kept = `${output}.kept`;
 
-  it("writes a session cookie per user for k6", async () => {
+  it("writes a session cookie per user for the fuzzing", async () => {
     // A developer's own file is put back afterwards.
     const had = existsSync(output);
     if (had) {
@@ -177,7 +177,9 @@ describe("the load-test users command", () => {
     const exit = refusingExit();
     const run = await command("../src/load-users", PRODUCTION);
     expect(exit).toHaveBeenCalledWith(1);
-    expect(run.errors).toEqual(["Load-test users are for development and test environments only."]);
+    expect(run.errors).toEqual([
+      "The fuzzing's users are for development and test environments only.",
+    ]);
   });
 });
 

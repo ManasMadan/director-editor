@@ -17,20 +17,13 @@ response_schema_conformance.enabled = true
 max-examples = 50
 # Without a database of past examples, a run never depends on the one before it.
 database = "none"
-# The session below is how requests get in. Otherwise Schemathesis also makes up values
-# for the other security scheme (API keys), and those requests only ever answer 401.
+# The session below is how requests get in, so Schemathesis makes up no security values
+# of its own.
 with-security-parameters = false
 
 [[project]]
-title = "Director-editor API"
+title = "Director API"
 auth.openapi.session.api_key = "${FUZZ_SESSION}"
-
-# The answer streams as server-sent events. oRPC documents each event's data as the
-# object it decodes to; Schemathesis reads it as the text on the wire, which is that
-# object as JSON, so its check of the event's schema can't pass.
-[[project.operations]]
-include-operation-id = "ai.ask"
-checks.response_schema_conformance.enabled = false
 
 [[project]]
 title = "ai"
