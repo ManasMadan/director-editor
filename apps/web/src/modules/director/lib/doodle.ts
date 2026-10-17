@@ -436,14 +436,17 @@ function sketchArrow(pen: Pen, arrow: Arrow, stroke: Stroke, shade: string) {
   });
 }
 
+/** Which side of a head has more of the frame: -1 left, 1 right. */
+const roomierSide = (head: Point) => (head.x > 0.5 ? -1 : 1);
+
 /** A pen path through `points` (pixels), corner to corner, as one line. */
-function polyline(ctx: CanvasRenderingContext2D, [first, ...rest]: readonly Point[]) {
-  if (!first) {
-    return;
-  }
-  ctx.moveTo(first.x, first.y);
-  for (const point of rest) {
-    ctx.lineTo(point.x, point.y);
+function polyline(ctx: CanvasRenderingContext2D, points: readonly Point[]) {
+  for (const [index, point] of points.entries()) {
+    if (index === 0) {
+      ctx.moveTo(point.x, point.y);
+    } else {
+      ctx.lineTo(point.x, point.y);
+    }
   }
 }
 
@@ -646,12 +649,12 @@ function sketchBuddy(pen: Pen, buddy: Buddy, look: BuddyLook) {
       );
     }
   });
-  if (!drawn.head) {
+  if (!buddy.head || !drawn.head) {
     return;
   }
   sketchFace(pen, drawn.head, radius, look);
   if (look.mood === "lost") {
-    sketchWonder(pen, drawn.head, { radius, side: (buddy.head?.x ?? 0) > 0.5 ? -1 : 1 }, look);
+    sketchWonder(pen, drawn.head, { radius, side: roomierSide(buddy.head) }, look);
   }
 }
 
@@ -736,9 +739,8 @@ function sunBeside(buddy: Buddy | null): Point {
   if (!buddy?.head) {
     return { x: 0.8, y: OPEN_TOP };
   }
-  const side = buddy.head.x > 0.5 ? -1 : 1;
   return {
-    x: clamp(buddy.head.x + side * buddy.radius * 2.4),
+    x: clamp(buddy.head.x + roomierSide(buddy.head) * buddy.radius * 2.4),
     // The radius is a share of the frame's width; the frame is 9:16.
     y: clamp(buddy.head.y - buddy.radius * 0.3 * (9 / 16)),
   };

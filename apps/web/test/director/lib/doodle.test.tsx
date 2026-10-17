@@ -163,10 +163,13 @@ describe("Director's doodles", () => {
   });
 
   it("worries when the light needs fixing, with a sun by its head", () => {
-    const drawn = draw(scene({ target: BODY, light: "too-dark", framing: "not-seen" }));
-    expect(drawn.strokes).toContain(COLORS.pop);
-    // The light comes first: no "?" on top of the worry.
-    expect(drawn.words).toEqual([]);
+    // On either side of the frame: the sun goes where there's more room.
+    for (const mirrored of [false, true]) {
+      const drawn = draw(scene({ target: BODY, light: "too-dark", framing: "not-seen", mirrored }));
+      expect(drawn.strokes).toContain(COLORS.pop);
+      // The light comes first: no "?" on top of the worry.
+      expect(drawn.words).toEqual([]);
+    }
     expect(draw(scene({ target: BODY, light: "good" })).strokes).not.toContain(COLORS.pop);
   });
 
