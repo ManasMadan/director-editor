@@ -154,12 +154,20 @@ run "ha_servers_and_agents" {
     error_message = "cluster traffic on the private address, the public one as external"
   }
   assert {
+    condition     = local.config["server-2"]["advertise-address"] == "10.0.0.11" && !contains(keys(local.config["agent-1"]), "advertise-address")
+    error_message = "servers advertise the API on their private address, which they can reach behind NAT"
+  }
+  assert {
     condition     = tolist(local.config["agent-1"]["node-label"]) == tolist(["director-editor.dev/mail=true"]) && local.config["agent-1"]["node-taint"] == tolist(["dedicated=mail:NoSchedule"])
     error_message = "labels and taints"
   }
   assert {
     condition     = strcontains(local.install_script["agent-1"], "INSTALL_K3S_EXEC='agent'")
     error_message = "agents install the agent"
+  }
+  assert {
+    condition     = endswith(local.install_script["server-1"], "$sudo systemctl restart k3s") && endswith(local.install_script["agent-1"], "$sudo systemctl restart k3s-agent")
+    error_message = "every reinstall restarts k3s, so a changed config.yaml takes effect"
   }
 }
 

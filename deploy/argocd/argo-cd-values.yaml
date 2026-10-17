@@ -10,6 +10,11 @@
 # `preview.txt` for theirs. A source with the plugin env `AGE_KEY: preview` decrypts
 # with the preview key alone.
 configs:
+  # Standard globbing for the ApplicationSets' git file generators. Argo CD's default
+  # lets `*` cross directories, so the platform's deploy/platform/addons/*.yaml would
+  # also install the observability add-ons on every cluster, opted in or not.
+  params:
+    applicationsetcontroller.enable.new.git.file.globbing: true
   cmp:
     create: true
     plugins:

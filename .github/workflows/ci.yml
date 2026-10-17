@@ -148,7 +148,10 @@ jobs:
       # The repo's tooling, outside the workspaces turbo runs (the scripts, the Claude Code
       # hooks, and the build scripts, presets, generators, load test and image checks Bun's
       # runner owns), each file at 100%: a change to them alone skips the coverage job below.
-      - run: bun test --coverage ./scripts/ ./.claude/hooks/ && bun scripts/coverage.ts --bun
+      # Some of them import the services (the image smoke test reads their env schemas,
+      # which load the Prisma client), so the generated code comes first, which turbo has
+      # cached when the packages' tests above already made it.
+      - run: bun run gen && bun test --coverage ./scripts/ ./.claude/hooks/ && bun scripts/coverage.ts --bun
 
   components:
     name: Components (stories, a11y, screenshots)
