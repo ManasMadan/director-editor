@@ -1090,28 +1090,28 @@ declare const messages: {
         "overhead": "Hold the phone up high"
       },
       "framing": {
-        "in-frame": "You're in frame",
-        "not-seen": "Step into the frame",
-        "come-closer": "Come closer",
-        "step-back": "Step back",
-        "step-left": "Step to your left",
-        "step-right": "Step to your right",
-        "aim-left": "Aim a little left",
-        "aim-right": "Aim a little right"
+        "in-frame": "You're in the picture!",
+        "not-seen": "Step into the picture!",
+        "come-closer": "Come a little closer",
+        "step-back": "Take a little step back",
+        "step-left": "Scoot a little to your left",
+        "step-right": "Scoot a little to your right",
+        "aim-left": "Turn the phone a little left",
+        "aim-right": "Turn the phone a little right"
       },
       "pose": {
-        "matched": "Pose matched",
-        "match": "Match the outline",
+        "matched": "Just like your buddy!",
+        "match": "Copy your buddy's pose",
         "loading": "Loading the pose guide…",
         "failed": "The pose guide couldn't load. You can still film."
       },
       "scene": {
-        "checking": "Checking your spot…",
-        "inPlace": "Great spot.",
+        "checking": "Finding your spot…",
+        "inPlace": "Perfect spot!",
         "lighting": {
-          "good": "Good light",
-          "too-dark": "It's too dark here",
-          "too-bright": "It's too bright here",
+          "good": "Nice light",
+          "too-dark": "A little dark here",
+          "too-bright": "Very bright here",
           "backlit": "The light is behind you"
         }
       },
@@ -1168,7 +1168,6 @@ declare const messages: {
       "storyboard": "Storyboard",
       "watchShot": "Watch shot {index, number}: {title}",
       "shots": "{count, plural, one {# shot} other {# shots}}",
-      "mix": "{videos, plural, =0 {no videos} one {# video} other {# videos}} · {photos, plural, =0 {no photos} one {# photo} other {# photos}}",
       "playing": "Playing shot {index, number}: {title}",
       "watchAll": "Watch the whole short"
     },
@@ -1262,29 +1261,29 @@ declare const messages: {
         }
       },
       "say": {
-        "first": "Hi, I'm your director! First up: {title}. {scene}. Let's make it gorgeous.",
-        "back": "Welcome back! {title}. {scene}.",
-        "backLight": "Welcome back! Last time the light was {problem, select, dark {a little dark} bright {a little harsh} other {behind you}}, so let's find a good spot. {title}.",
-        "backThing": "Welcome back! Bring your {thing} again? It looked great last time. {title}.",
-        "next": "Moving on! {title}. {scene}.",
-        "offline": "Gemini's out of reach, so I'll guide you from what the camera shows.",
-        "ready": "That's the shot! Say action, raise a hand, or tap record.",
-        "inPlace": "Great spot! Right there.",
-        "matched": "Pose matched! Hold it.",
-        "match": "Now match the outline.",
-        "rolling": "Quiet on set. Rolling in {seconds, number}.",
+        "first": "Hi! I'm your director, and this is going to be fun. First up: {title}. {scene}.",
+        "back": "Welcome back, superstar! {title}. {scene}.",
+        "backLight": "Welcome back! Last time it was {problem, select, dark {a little dark} bright {a bit too bright} other {bright behind you}}, so let's find a spot with nice light. {title}.",
+        "backThing": "Welcome back! Got your {thing}? It looked great last time. {title}.",
+        "next": "Yay, next one! {title}. {scene}.",
+        "offline": "I can't reach Gemini right now, so I'll help using the camera. No problem!",
+        "ready": "You look great! When you're ready, say action, put a hand up high, or tap the red button.",
+        "inPlace": "Perfect spot! Stay right there.",
+        "matched": "Yes! Just like that!",
+        "match": "Now copy my little buddy's pose.",
+        "rolling": "Get ready! Here we go in {seconds, number}.",
         "count": "{seconds, number}",
         "action": "Action!",
         "cut": "Cut!",
-        "backToOne": "Back to one. Let's go again!",
-        "wrap": "That's a wrap! Let's see what we made.",
-        "heard": "Got it.",
+        "backToOne": "No worries! Let's try that one more time.",
+        "wrap": "That's a wrap! You did it. Let's watch what you made!",
+        "heard": "Got it!",
         "light": {
-          "too-dark": "It's a bit dark here. Face a window or switch on a lamp.",
-          "too-bright": "That's very bright. Turn away from the sun a little.",
-          "backlit": "The light's behind you. Turn so it falls on your face."
+          "too-dark": "It's a little dark. Can you face a window, or turn on a lamp?",
+          "too-bright": "Ooh, that's bright! Turn a little away from the sun.",
+          "backlit": "The light is behind you. Turn around so it shines on your face."
         },
-        "thing": "{role, select, pet {I see a {thing}! A co-star?} prop {Ooh, a {thing}. That could be a fun prop.} glare {Careful with that {thing}: screens can glare.} other {Nice {thing} back there. Good depth.}}"
+        "thing": "{role, select, pet {Aww, a {thing}! Want them in the video?} prop {Ooh, a {thing}! That could be fun to hold.} glare {That {thing} might shine too bright. Maybe turn it off?} other {That {thing} looks nice behind you.}}"
       },
       "thing": {
         "plant": "plant",
@@ -1324,7 +1323,7 @@ declare const messages: {
         "later": "Gemini reviews the whole take once you keep it.",
         "again": "Go again",
         "keep": "Keep it",
-        "ship": "Nothing to fix. Ship it!",
+        "ship": "Nothing to fix. Perfect!",
         "praise": {
           "framing": "Framing was spot-on!",
           "steady": "Rock-steady camera. Beautiful.",
@@ -1334,15 +1333,15 @@ declare const messages: {
           "effort": "Love the commitment!"
         },
         "tip": {
-          "longer": "Hold it a beat longer next time.",
-          "too-dark": "Find a little more light and it'll really pop.",
-          "too-bright": "Step out of the glare a little.",
-          "backlit": "Turn toward the light so we see your face.",
-          "steady": "Tuck your elbows in for a steadier shot.",
-          "framing": "Stay inside the outline.",
-          "energy": "Try it with a bit more energy, like you're talking to the back row!",
-          "angle": "Mind the phone's angle: keep the horizon level.",
-          "pose": "Match the outline a little closer."
+          "longer": "Hold the last moment a little longer next time.",
+          "too-dark": "A bit more light next time, and you'll shine!",
+          "too-bright": "Step out of the bright sun a little.",
+          "backlit": "Turn toward the light so we can see your face.",
+          "steady": "Prop the phone up, or hold it with both hands, for a steadier shot.",
+          "framing": "Try to stand where your little buddy stands.",
+          "energy": "Give it a big smile and a little more energy!",
+          "angle": "Keep the phone straight, like a picture on the wall.",
+          "pose": "Copy your buddy's pose a little closer."
         }
       },
       "screen": {

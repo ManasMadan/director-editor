@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   difference,
+  judgedLight,
   lightOf,
   lumaOf,
   SAMPLE_HEIGHT,
@@ -58,5 +59,21 @@ describe("frame stats", () => {
     expect(read("good")).toBe("dark");
     expect(read("good")).toBe("dark");
     expect(read("good")).toBe("good");
+  });
+
+  it("goes by the phone's light when it sees a problem, else Gemini's last look", () => {
+    const scene = (lighting: "good" | "too-dark" | "backlit") => ({
+      inPlace: false,
+      instruction: "",
+      direction: "none" as const,
+      distanceMeters: null,
+      landmark: null,
+      lighting,
+    });
+    expect(judgedLight("too-bright", scene("too-dark"))).toBe("too-bright");
+    expect(judgedLight("good", scene("backlit"))).toBe("backlit");
+    expect(judgedLight("good", null)).toBe("good");
+    expect(judgedLight(null, scene("good"))).toBe("good");
+    expect(judgedLight(null, null)).toBeNull();
   });
 });

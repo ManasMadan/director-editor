@@ -4,7 +4,7 @@
  * shot or device can judge. The shot is ready when everything that can be judged is fine.
  */
 import type { SceneCheck } from "@repo/contracts/api";
-import type { Light } from "./frame-stats";
+import { judgedLight, type Light } from "./frame-stats";
 import type { FramingHint } from "./framing";
 import type { Body } from "./pose";
 
@@ -41,11 +41,11 @@ export function readinessOf({
   framing: FramingHint | null;
   /** Null without a tilt sensor. */
   level: boolean | null;
-  /** The phone's own reading, else Gemini's. */
+  /** The phone's own reading; Gemini's (from `scene`) counts when the phone sees no problem. */
   light: Light | null;
 }): Readiness {
   const spotJudged = landmark !== null && !offline;
-  const seenLight = light ?? scene?.lighting ?? null;
+  const seenLight = judgedLight(light, scene);
   return {
     spot: judged(spotJudged ? scene?.inPlace === true : null),
     frame: judged(framing === null ? null : framing === "in-frame"),

@@ -2,13 +2,13 @@ import type { SceneCheck } from "@repo/contracts/api";
 import { describe, expect, it } from "vitest";
 import { handRaised, isReady, readinessOf } from "./readiness";
 
-const scene = (inPlace: boolean): SceneCheck => ({
+const scene = (inPlace: boolean, lighting: SceneCheck["lighting"] = "too-dark"): SceneCheck => ({
   inPlace,
   instruction: "",
   direction: "none",
   distanceMeters: null,
   landmark: null,
-  lighting: "too-dark",
+  lighting,
 });
 
 describe("the ready check", () => {
@@ -16,7 +16,7 @@ describe("the ready check", () => {
     expect(
       readinessOf({
         landmark: "tree",
-        scene: scene(false),
+        scene: scene(false, "good"),
         offline: false,
         framing: "step-left",
         level: null,
@@ -45,6 +45,19 @@ describe("the ready check", () => {
       light: null,
     });
     expect(readiness).toEqual({ spot: "na", frame: "ok", angle: "off", light: "off" });
+  });
+
+  it("goes by Gemini's light when the phone's own reading sees no problem", () => {
+    const readiness = readinessOf({
+      landmark: null,
+      scene: scene(true, "backlit"),
+      offline: false,
+      framing: null,
+      level: null,
+      light: "good",
+    });
+    // The same light the buddy and the voice go by (judgedLight): not ready yet.
+    expect(readiness.light).toBe("off");
   });
 
   it("is ready when everything judged is fine, and only then", () => {

@@ -31,10 +31,13 @@ bun dev:full                        # the AI service, RustFS, ClamAV and the moc
 Then sign in (`bun run db:seed` makes `demo@example.com`) and open
 http://localhost:3000/home. What the mock answers:
 
-- the feed: six real public YouTube videos standing in for shorts (their pictures and the
-  embedded player are YouTube's own); any pasted link opens too;
-- the plans: the PRD's examples, a GRWM in six shots (four videos, two photos) with a
-  script, the pen-drop shoe flaunt in one back-camera video, and a "stand near a tree" talk;
+- the feed: six real public YouTube videos (their pictures and the embedded player are
+  YouTube's own); the first, "GRWM for the office in summer time!", is the short the demo
+  recreates, the other five stand in for shorts; any pasted link opens too;
+- the plans: for the office GRWM, its own twelve cuts (ten videos, two product photos,
+  filmed on a propped-up phone, music and no script); then the PRD's examples, a GRWM in
+  six shots (four videos, two photos) with a script, the pen-drop shoe flaunt in one
+  back-camera video, and a "stand near a tree" talk;
 - scene checks: two directions toward the shot's landmark, then "in place";
 - take reviews: the shot's length from just after the take starts, a score and feedback.
 
@@ -68,8 +71,10 @@ Controls fade after a few seconds untouched; any touch brings them back.
   the steps) offers a cue to `lib/cues.ts`, which picks the one that matters most, waits
   a breath between lines, never repeats a line inside its cooldown, and gives the member
   the floor when they talk. The line is shown as a caption and, with the voice on, said
-  aloud. A set's calls punctuate it: "Quiet on set. Rolling in 3", "Action!", "Cut!",
-  "Back to one", "Moving on", "That's a wrap".
+  aloud. It talks to someone filming for the first time, a grandparent or a child: warm,
+  short, one thing at a time, and patient (a breath of 4.5 seconds between lines, 25
+  before a nudge comes back). A few calls punctuate it: "Get ready! Here we go in 3",
+  "Action!", "Cut!", "Let's try that one more time", "That's a wrap".
 - **Reacts as the camera moves.** The phone samples a tiny copy of the frame four times
   a second (`lib/frame-stats.ts`): light, backlight and shake answer at once, and a
   frame that looks somewhere new asks Gemini for a scene check straight away instead of
@@ -77,12 +82,20 @@ Controls fade after a few seconds untouched; any touch brings them back.
 - **Points things out.** MediaPipe's object detector (EfficientDet-Lite0, in the browser)
   finds props, backdrops, pets and screens (`lib/things.ts`); the best few get a lasso
   and a name, and Director says what they're good for. The shot's landmark comes first.
-- **Doodles, not boxes** (`lib/sketch.ts`, `lib/doodle.ts`): a fat marker line with a
-  dark edge, boiling like hand-drawn animation; a ghost silhouette to step into; lassos;
-  a horizon to level; stickers when it comes together (a star when the pose locks,
-  "Nailed it!" when the ready check is all green, the clapperboard for each take).
-  Everything tracked glides on a critically damped spring (`lib/spring.ts`), so nothing
-  jitters. Reduced motion stops the boil and the bob.
+- **Doodles, not boxes** (`lib/sketch.ts`, `lib/doodle.ts`): single pen lines with a
+  soft shadow, boiling like hand-drawn animation, few at a time. A stick buddy strikes
+  the pose to copy, breathing and blinking, and its face says how the set-up is going
+  before Director does: a smile, a "?" while it can't see you, a worried look with a
+  little sun when the light needs fixing, a grin and a hop once you match it (faded back
+  while recording). Footprints mark where to stand, beside a lassoed landmark; arrows
+  say which way to go. One thing at a time: while Gemini walks you to your spot, the walk
+  is all that's drawn, and the buddy comes once you're there (or once Gemini can't guide
+  any more: out of reach, or its checks spent). Then a horizon to level, and stickers
+  when it comes together (a star when
+  the pose locks, "Nailed it!" when the ready check is all green, the clapperboard for
+  each take). Everything tracked glides on a critically damped spring
+  (`lib/spring.ts`), so nothing jitters. Reduced motion stops the boil, the bob and the
+  blink.
 - **The ready check**: spot, frame, angle, light, each green, amber, or left out when the
   shot or device can't judge it (`lib/readiness.ts`).
 - **Talk to it.** The browser's speech recogniser listens (Chrome, Safari): "action",

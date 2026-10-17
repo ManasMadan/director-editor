@@ -5,6 +5,12 @@
  */
 import { generateKeyPairSync } from "node:crypto";
 import { createServer } from "node:net";
+import { applyTestEnvironment } from "@repo/testing/environment";
+
+// The tests' environment (.env.example, with this checkout's stack laid over it), applied
+// here too: vitest.config.ts imports this module before its own call runs, and a value
+// read before then would point at another checkout's services.
+applyTestEnvironment();
 
 /** A port nothing listens on right now. */
 function freePort() {
@@ -53,7 +59,12 @@ export const SITE = {
  * Nothing here consumes the queues the APIs fill, so OTPs are read from them.
  */
 export const REDIS_URL = (() => {
-  const url = new URL(process.env.REDIS_URL ?? "redis://localhost:56379");
+  // No default: a guessed port is how a stack's tests ended up reading another's Valkey.
+  const configured = process.env.REDIS_URL;
+  if (!configured) {
+    throw new Error("REDIS_URL isn't set, though .env.example names it");
+  }
+  const url = new URL(configured);
   url.pathname = "/18";
   return url.toString();
 })();

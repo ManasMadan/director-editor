@@ -5,14 +5,14 @@ import { currentUrl, renderPage } from "../render";
 import { signUp } from "../users";
 import { editShorts, type Feed } from "./support";
 
-const FIRST = /^GRWM: fall layers, piece by piece/;
+const FIRST = /^GRWM for the office in summer time!/;
 
 describe("the Shorts home", () => {
   it("shows the most watched shorts, each opening in the player", async () => {
     await signUp();
     const page = await renderPage(<HomePage />, { url: "/home" });
     const card = page.getByRole("link", { name: FIRST });
-    await expect.element(card).toHaveAttribute("href", "/shorts/jNQXAC9IVRw");
+    await expect.element(card).toHaveAttribute("href", "/shorts/HasaZYkwYds");
     await expect.element(card).toMatchTextContent(/1\.8M views$/);
     await expect
       .element(page.getByRole("link", { name: "Director" }))
@@ -31,7 +31,7 @@ describe("the Shorts home", () => {
     // Everything has loaded: the feed is all there is, no next page.
     expect(page.getByRole("button", { name: "Show more" }).query()).toBeNull();
     await userEvent.click(card);
-    await expect.poll(currentUrl).toBe("/shorts/jNQXAC9IVRw");
+    await expect.poll(currentUrl).toBe("/shorts/HasaZYkwYds");
   });
 
   it("shows a topic's shorts when its chip is picked", async () => {

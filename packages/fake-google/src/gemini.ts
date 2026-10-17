@@ -120,17 +120,19 @@ function sceneCheck(shot: z.infer<typeof shotText> | null, seen: SceneSteps) {
   const count = (seen.get(key) ?? 0) + 1;
   seen.set(key, count);
   const walking = { inPlace: false, direction: "left", landmark: null, lighting: "good" };
+  // Said the way Director talks to someone filming for the first time: warm, short, and
+  // in steps rather than meters.
   if (landmark && count === 1) {
     return {
       ...walking,
-      instruction: `Move about five meters left, toward the ${landmark}.`,
+      instruction: `Let's find your spot! Walk a few steps to your left, toward the ${landmark}.`,
       distanceMeters: 5,
     };
   }
   if (landmark && count === 2) {
     return {
       ...walking,
-      instruction: `A couple more steps left; the ${landmark} is right there.`,
+      instruction: `Almost there! Just a couple more little steps to the ${landmark}.`,
       distanceMeters: 1.5,
     };
   }
@@ -139,8 +141,8 @@ function sceneCheck(shot: z.infer<typeof shotText> | null, seen: SceneSteps) {
   return {
     inPlace: true,
     instruction: landmark
-      ? `Perfect, stay by the ${landmark}.`
-      : "Anywhere works here. Good light.",
+      ? `Perfect! Stay right there by the ${landmark}.`
+      : "This spot works great, and the light looks lovely!",
     direction: "none",
     distanceMeters: null,
     landmark: null,
@@ -158,7 +160,7 @@ function takeReview(shot: z.infer<typeof shotText> | null, takeBytes: number) {
     bestStartSeconds: photo ? null : 0.3,
     bestEndSeconds: photo ? null : Math.round((0.3 + length) * 10) / 10,
     score,
-    feedback: `Good energy in "${title}". Next time, hold the last moment a beat longer.`,
+    feedback: `Lovely job on "${title}"! Next time, hold the last moment a little longer.`,
   };
 }
 

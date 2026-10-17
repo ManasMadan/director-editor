@@ -49,22 +49,6 @@ export function targetBody(pose: Shot["pose"]): Body {
   return Object.fromEntries(pose.keypoints.map(({ name, x, y }) => [name, { x, y }]));
 }
 
-/** The bones a stick figure is drawn with, joint to joint. */
-export const BONES: readonly [KeypointName, KeypointName][] = [
-  ["left_shoulder", "right_shoulder"],
-  ["left_shoulder", "left_elbow"],
-  ["left_elbow", "left_wrist"],
-  ["right_shoulder", "right_elbow"],
-  ["right_elbow", "right_wrist"],
-  ["left_shoulder", "left_hip"],
-  ["right_shoulder", "right_hip"],
-  ["left_hip", "right_hip"],
-  ["left_hip", "left_knee"],
-  ["left_knee", "left_ankle"],
-  ["right_hip", "right_knee"],
-  ["right_knee", "right_ankle"],
-];
-
 /**
  * Centres a joint on the joints' middle and scales it to their unit spread, so size and
  * place don't count.

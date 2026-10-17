@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Perception } from "../lib/cues";
 import { type Cut, directorsCut, type Setup } from "../lib/cut";
 import type { DoodleScene } from "../lib/doodle";
+import { judgedLight } from "../lib/frame-stats";
 import { intentOf, type Vocabulary } from "../lib/intents";
 import { type Countdown, countdownOf } from "../lib/memory";
 import { isReady, readinessOf } from "../lib/readiness";
@@ -155,6 +156,10 @@ function useDoodleScene(
     person: seen.guides.person,
     framing: setup ? seen.guides.framing : null,
     scene: check,
+    // The phone's own reading answers at once; Gemini's fills in when the phone says it's fine.
+    light: setup ? judgedLight(seen.vision.light, seen.scene.scene) : null,
+    // The walk has the frame to itself only while Gemini is still guiding it.
+    guided: studio.phase === "setup" && !sharing && seen.scene.guiding,
     move,
     recording,
     subject: !sharing,
