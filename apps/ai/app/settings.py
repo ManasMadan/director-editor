@@ -31,22 +31,8 @@ class Settings(BaseSettings):
     # apps/api signs a short-lived token for every call (see app/auth.py).
     service_secret: str = Field(min_length=32, alias="AI_SERVICE_SECRET")
 
-    # The assistant's model, as a Pydantic AI model name ("anthropic:claude-sonnet-5",
-    # "openai:gpt-5"), with an optional fallback when it fails. Unset: assistant off.
-    # "local:extractive" answers from the retrieved passages without any model: for
-    # development and tests only.
-    model: str | None = Field(default=None, alias="AI_MODEL")
-    fallback_model: str | None = Field(default=None, alias="AI_FALLBACK_MODEL")
-    # The embedding model, as a Pydantic AI name ("openai:text-embedding-3-small"), or
-    # "hashing" (local and lexical: development and tests only). Must give 1536 dimensions.
-    embeddings: str = Field(default="hashing", min_length=1, alias="AI_EMBEDDINGS")
-    # Cosine similarity below which a passage isn't relevant to a question (provider
-    # embeddings only; see app/embeddings.py). Calibrate with `bun run --cwd apps/ai evals`.
-    min_relevance: float = Field(default=0.0, ge=0.0, lt=1.0, alias="AI_MIN_RELEVANCE")
-
-    # Budgets: tokens a workspace may use per calendar month, and per assistant answer.
+    # Budget: tokens a workspace may use per calendar month, across every model call.
     monthly_tokens_per_org: int = Field(default=2_000_000, ge=0, alias="AI_MONTHLY_TOKENS_PER_ORG")
-    tokens_per_run: int = Field(default=20_000, ge=1_000, alias="AI_TOKENS_PER_RUN")
 
     # Director (app/director.py): the Gemini model that watches shorts and reviews takes, by
     # its Gemini API name ("gemini-3.5-flash"). Gemini, not any provider: it is the model
@@ -75,14 +61,12 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _production_uses_real_providers(self) -> Self:
-        if self.node_env == "production":
-            if self.embeddings == "hashing":
-                raise ValueError("AI_EMBEDDINGS=hashing is for development only")
-            for name in (self.model, self.fallback_model):
-                if name and name.startswith("local:"):
-                    raise ValueError(f"AI_MODEL={name} is for development only")
-            if self.google_base_url and self.google_base_url.scheme != "https":
-                raise ValueError("GOOGLE_BASE_URL must be HTTPS in production")
+        if (
+            self.node_env == "production"
+            and self.google_base_url
+            and self.google_base_url.scheme != "https"
+        ):
+            raise ValueError("GOOGLE_BASE_URL must be HTTPS in production")
         return self
 
     @model_validator(mode="after")

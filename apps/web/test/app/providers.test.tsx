@@ -1,8 +1,8 @@
 /** What the app does when any API call says the session, the app or the workspace is gone. */
 import { describe, expect, it } from "vitest";
 import { commands } from "vitest/browser";
-import { AssistantPage } from "@/modules/assistant";
 import { DashboardPage } from "@/modules/dashboard";
+import { SavedPage } from "@/modules/shorts";
 import { currentUrl, renderPage } from "../render";
 import { auth, currentSession, signOut, signUp } from "../users";
 
@@ -50,7 +50,7 @@ describe("the app's providers", () => {
     await renderPage(
       <>
         <DashboardPage />
-        <AssistantPage />
+        <SavedPage />
       </>,
       { url: "/settings" },
     );

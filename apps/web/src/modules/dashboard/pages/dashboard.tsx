@@ -3,7 +3,6 @@
 import { useMeQuery } from "@repo/client/api/user/me";
 import { Skeleton } from "@repo/ui/components/skeleton";
 import { useTranslations } from "next-intl";
-import { SentimentCard } from "../components/sentiment-card";
 import { TodoList } from "../components/todo-list";
 
 export function DashboardPage() {
@@ -14,10 +13,7 @@ export function DashboardPage() {
       <h1 className="text-2xl font-semibold tracking-tight">
         {me ? t("greeting", { name: me.name }) : <Skeleton className="h-8 w-40" />}
       </h1>
-      <div className="grid gap-6 md:grid-cols-2">
-        <TodoList />
-        <SentimentCard />
-      </div>
+      <TodoList />
     </div>
   );
 }

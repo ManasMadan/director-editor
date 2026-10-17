@@ -7,7 +7,6 @@
  * in app.module.ts and its router below.
  */
 import type { INestApplicationContext } from "@nestjs/common";
-import { AiService, aiRouter } from "../modules/ai";
 import { ApiKeysService, apiKeysRouter } from "../modules/api-keys";
 import { AuditService, auditRouter } from "../modules/audit";
 import { BillingService, billingRouter } from "../modules/billing";
@@ -28,7 +27,6 @@ export function createRouter(procedures: Procedures, app: INestApplicationContex
     user: userRouter(procedures, app.get(PhoneService), app.get(AvatarService)),
     apiKeys: apiKeysRouter(procedures, app.get(ApiKeysService)),
     todo: todoRouter(procedures, app.get(TodoService)),
-    ai: aiRouter(procedures, app.get(AiService)),
     audit: auditRouter(procedures, app.get(AuditService)),
     webhooks: webhooksRouter(procedures, app.get(WebhooksService)),
     realtime: realtimeRouter(procedures, app.get(RealtimeService)),

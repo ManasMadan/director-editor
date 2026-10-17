@@ -11,31 +11,22 @@
  * Each call carries a token signed for that call (60 seconds, AI_SERVICE_SECRET) naming
  * the user and organization it's for: the service trusts nothing else.
  */
-import { EventSourceParserStream } from "eventsource-parser/stream";
 import { SignJWT } from "jose";
-import type * as z from "zod";
 import { createClient } from "./generated/client";
 import {
   checkDirectorScene,
   createDirectorTake,
-  createDocument,
-  deleteDocument,
   getDirectorPlan,
   listDirectorTakes,
-  listDocuments,
   requestDirectorPlan,
-  sentiment,
 } from "./generated/sdk.gen";
 import type {
-  AnswerData,
   DirectorTakeCreate,
   ErrorCode,
   ErrorIssue,
   SceneCheckRequest,
 } from "./generated/types.gen";
-import { zAssistantEvent, zErrorResponse } from "./generated/zod.gen";
-
-export type AssistantEvent = z.infer<typeof zAssistantEvent>["event"];
+import { zErrorResponse } from "./generated/zod.gen";
 
 export interface AiCaller {
   userId: string;
@@ -133,23 +124,15 @@ function directorCalls(forCall: (caller: AiCaller) => Promise<ReturnType<typeof 
   };
 }
 
-export function createAiClient(options: {
-  baseUrl: string;
-  secret: string;
-  timeoutMs?: number;
-  /** The longest an answer may stream, start to finish (default two minutes). */
-  answerTimeoutMs?: number;
-}) {
+export function createAiClient(options: { baseUrl: string; secret: string; timeoutMs?: number }) {
   const key = new TextEncoder().encode(options.secret);
   const timeoutMs = options.timeoutMs ?? 30_000;
-
-  const headers = (caller: AiCaller) => callHeaders(key, caller);
 
   /** A client for one call: its token, and a timeout so a hung service can't hang us. */
   async function forCall(caller: AiCaller) {
     return createClient({
       baseUrl: options.baseUrl,
-      headers: await headers(caller),
+      headers: await callHeaders(key, caller),
       // Always JSON, so the validator sees every body: left to the content type, a body
       // without one would come back as a raw stream, unchecked.
       parseAs: "json",
@@ -158,71 +141,6 @@ export function createAiClient(options: {
     });
   }
 
-  const director = directorCalls(forCall);
-  return {
-    async sentiment(caller: AiCaller, text: string) {
-      return unwrap(sentiment({ client: await forCall(caller), body: { text } }));
-    },
-    async listDocuments(caller: AiCaller) {
-      return unwrap(listDocuments({ client: await forCall(caller) }));
-    },
-    async createDocument(caller: AiCaller, body: { title: string; content: string }) {
-      return unwrap(createDocument({ client: await forCall(caller), body }));
-    },
-    async deleteDocument(caller: AiCaller, documentId: string) {
-      await settle(
-        deleteDocument({ client: await forCall(caller), path: { document_id: documentId } }),
-      );
-    },
-
-    /** Director's calls, as `ai.director.requestPlan(...)`. */
-    director,
-
-    /**
-     * Starts an answer. Refusals (budget, feature off, validation) and an unreachable
-     * service throw here, before any event; the events that follow are validated against
-     * the service's AssistantEvent model.
-     */
-    async answer(
-      caller: AiCaller,
-      question: string,
-      signal?: AbortSignal,
-    ): Promise<AsyncGenerator<AssistantEvent, void, unknown>> {
-      // From the service's OpenAPI document: a changed route or body fails to compile. The
-      // generated SDK can't be used here: it reads the whole body, and this streams it.
-      const path: AnswerData["url"] = "/v1/assistant/answers";
-      const body: AnswerData["body"] = { question };
-      let response: Response;
-      try {
-        response = await fetch(new URL(path, options.baseUrl), {
-          method: "POST",
-          headers: { ...(await headers(caller)), "content-type": "application/json" },
-          body: JSON.stringify(body),
-          // The caller's signal (the client went away) or the answer's own limit.
-          signal: AbortSignal.any([
-            AbortSignal.timeout(options.answerTimeoutMs ?? 120_000),
-            ...(signal ? [signal] : []),
-          ]),
-        });
-      } catch (cause) {
-        throw Object.assign(new AiServiceError(503, "UPSTREAM_UNAVAILABLE"), { cause });
-      }
-      if (!response.ok || !response.body) {
-        throw toServiceError(response.status, await response.json().catch(() => undefined));
-      }
-      return events(response.body);
-    },
-  };
-}
-
-/** Server-Sent Events from a response body, each one's data one AssistantEvent. */
-async function* events(
-  body: ReadableStream<BufferSource>,
-): AsyncGenerator<AssistantEvent, void, unknown> {
-  const stream = body
-    .pipeThrough(new TextDecoderStream())
-    .pipeThrough(new EventSourceParserStream());
-  for await (const message of stream) {
-    yield zAssistantEvent.parse(JSON.parse(message.data)).event;
-  }
+  /** Director's calls, as `ai.director.requestPlan(...)`. */
+  return { director: directorCalls(forCall) };
 }

@@ -3,13 +3,6 @@
 import * as z from 'zod';
 
 /**
- * AssistantRequest
- */
-export const zAssistantRequest = z.object({
-    question: z.string().min(1).max(2000)
-});
-
-/**
  * Box
  */
 export const zBox = z.object({
@@ -88,33 +81,6 @@ export const zDirectorTakeOut = z.object({
 });
 
 /**
- * DocumentCreate
- */
-export const zDocumentCreate = z.object({
-    content: z.string().min(1).max(200000),
-    title: z.string().min(1).max(200)
-});
-
-/**
- * DocumentOut
- */
-export const zDocumentOut = z.object({
-    chunkCount: z.int(),
-    createdAt: z.iso.datetime(),
-    createdBy: z.uuid().nullable(),
-    error: z.string().nullable(),
-    id: z.uuid(),
-    status: z.enum([
-        'pending',
-        'indexing',
-        'ready',
-        'failed'
-    ]),
-    summary: z.string().nullable(),
-    title: z.string()
-});
-
-/**
  * ErrorCode
  */
 export const zErrorCode = z.enum([
@@ -162,10 +128,7 @@ export const zErrorCode = z.enum([
     'API_KEY_NOT_FOUND',
     'API_KEY_LIMIT_REACHED',
     'API_KEY_SCOPE_MISSING',
-    'DOCUMENT_NOT_FOUND',
-    'DOCUMENT_INDEXING_FAILED',
     'AI_BUDGET_EXCEEDED',
-    'AI_RUN_LIMIT',
     'SHORT_NOT_FOUND',
     'SHORT_TOO_LONG',
     'DIRECTOR_PLAN_NOT_FOUND',
@@ -178,14 +141,6 @@ export const zErrorCode = z.enum([
     'TODO_NOT_FOUND',
     'TODO_VERSION_CONFLICT'
 ]);
-
-/**
- * ErrorEvent
- */
-export const zErrorEvent = z.object({
-    code: z.enum(['AI_RUN_LIMIT', 'UPSTREAM_UNAVAILABLE']),
-    type: z.literal('error').optional().default('error')
-});
 
 /**
  * ErrorIssue
@@ -325,48 +280,12 @@ export const zScriptLine = z.object({
 });
 
 /**
- * SentimentRequest
- */
-export const zSentimentRequest = z.object({
-    text: z.string().min(1).max(5000)
-});
-
-/**
- * SentimentResponse
- */
-export const zSentimentResponse = z.object({
-    label: z.enum([
-        'positive',
-        'negative',
-        'neutral'
-    ]),
-    model: z.string(),
-    score: z.number().gte(0).lte(1)
-});
-
-/**
  * ShotStep
  */
 export const zShotStep = z.object({
     atSeconds: z.number().gte(0).lte(60),
     cameraMove: zCameraMove,
     instruction: z.string().min(1).max(160)
-});
-
-/**
- * Source
- */
-export const zSource = z.object({
-    documentId: z.uuid(),
-    title: z.string()
-});
-
-/**
- * SourcesEvent
- */
-export const zSourcesEvent = z.object({
-    sources: z.array(zSource),
-    type: z.literal('sources').optional().default('sources')
 });
 
 /**
@@ -434,44 +353,6 @@ export const zDirectorPlanOut = z.object({
 });
 
 /**
- * TextEvent
- */
-export const zTextEvent = z.object({
-    text: z.string(),
-    type: z.literal('text').optional().default('text')
-});
-
-/**
- * Usage
- */
-export const zUsage = z.object({
-    inputTokens: z.int(),
-    outputTokens: z.int()
-});
-
-/**
- * DoneEvent
- */
-export const zDoneEvent = z.object({
-    type: z.literal('done').optional().default('done'),
-    usage: zUsage
-});
-
-/**
- * AssistantEvent
- *
- * One server-sent event of an answer.
- */
-export const zAssistantEvent = z.object({
-    event: z.discriminatedUnion('type', [
-        zTextEvent,
-        zSourcesEvent,
-        zDoneEvent,
-        zErrorEvent
-    ])
-});
-
-/**
  * Successful Response
  */
 export const zDependenciesResponse = zHealthResponse;
@@ -485,18 +366,6 @@ export const zLiveResponse = zHealthResponse;
  * Successful Response
  */
 export const zReadyResponse = zHealthResponse;
-
-export const zAnswerBody = zAssistantRequest;
-
-export const zAnswerHeaders = z.object({
-    authorization: z.string().nullish(),
-    'x-request-id': z.string().nullish()
-});
-
-/**
- * Server-sent events, each `data:` line one AssistantEvent.
- */
-export const zAnswerResponse = zAssistantEvent;
 
 export const zRequestDirectorPlanBody = zDirectorPlanCreate;
 
@@ -563,53 +432,3 @@ export const zCreateDirectorTakeHeaders = z.object({
  * Successful Response
  */
 export const zCreateDirectorTakeResponse = zDirectorTakeOut;
-
-export const zListDocumentsHeaders = z.object({
-    authorization: z.string().nullish(),
-    'x-request-id': z.string().nullish()
-});
-
-/**
- * Response Listdocuments
- *
- * Successful Response
- */
-export const zListDocumentsResponse = z.array(zDocumentOut);
-
-export const zCreateDocumentBody = zDocumentCreate;
-
-export const zCreateDocumentHeaders = z.object({
-    authorization: z.string().nullish(),
-    'x-request-id': z.string().nullish()
-});
-
-/**
- * Successful Response
- */
-export const zCreateDocumentResponse = zDocumentOut;
-
-export const zDeleteDocumentHeaders = z.object({
-    authorization: z.string().nullish(),
-    'x-request-id': z.string().nullish()
-});
-
-export const zDeleteDocumentPath = z.object({
-    document_id: z.uuid()
-});
-
-/**
- * Successful Response
- */
-export const zDeleteDocumentResponse = z.void();
-
-export const zSentimentBody = zSentimentRequest;
-
-export const zSentimentHeaders = z.object({
-    authorization: z.string().nullish(),
-    'x-request-id': z.string().nullish()
-});
-
-/**
- * Successful Response
- */
-export const zSentimentResponse2 = zSentimentResponse;

@@ -27,7 +27,6 @@ declare const messages: {
     },
     "language": "Language",
     "captchaFailed": "The security check couldn't load. Check your connection, allow challenges.cloudflare.com if you use a blocker, and reload.",
-    "assistant": "Assistant",
     "director": "Director"
   },
   "meta": {
@@ -120,19 +119,6 @@ declare const messages: {
       "empty": "Nothing to do. Add your first todo above.",
       "delete": "Delete {title}",
       "loadMore": "Load more"
-    },
-    "ai": {
-      "title": "Sentiment (Python)",
-      "description": "Runs in the Python service. Its Pydantic types flow all the way to this page.",
-      "placeholder": "Type something to classify…",
-      "analyze": "Analyze",
-      "labels": {
-        "positive": "Positive",
-        "negative": "Negative",
-        "neutral": "Neutral"
-      },
-      "result": "{score, number}% confidence · model {model}",
-      "disabled": "The AI service isn't configured."
     }
   },
   "settings": {
@@ -429,10 +415,7 @@ declare const messages: {
     "ENTITLEMENT_REQUIRED": "Your plan doesn't include this. Upgrade in billing settings to use it.",
     "ALREADY_SUBSCRIBED": "This workspace already has a paid plan. Manage it from billing settings.",
     "NO_SUBSCRIPTION": "This workspace doesn't have a paid plan yet.",
-    "DOCUMENT_NOT_FOUND": "That document doesn't exist in this workspace.",
-    "DOCUMENT_INDEXING_FAILED": "This document couldn't be prepared for the assistant. Try adding it again.",
-    "AI_BUDGET_EXCEEDED": "This workspace has used this month's assistant allowance. It resets on the 1st.",
-    "AI_RUN_LIMIT": "That question needed more work than one answer allows. Try a narrower question.",
+    "AI_BUDGET_EXCEEDED": "You've used this month's AI allowance. It resets on the 1st.",
     "SHORT_NOT_FOUND": "That short isn't on YouTube, or it's private.",
     "SHORT_TOO_LONG": "Director works with shorts up to {maxSeconds, number} seconds long. Pick a shorter video.",
     "DIRECTOR_PLAN_NOT_FOUND": "Director hasn't looked at this short yet. Open it from the Shorts feed.",
@@ -720,8 +703,6 @@ declare const messages: {
       "scopes": {
         "todos:read": "Read todos",
         "todos:write": "Create, change and delete todos",
-        "documents:read": "Read the assistant's documents",
-        "documents:write": "Add and remove the assistant's documents",
         "audit:read": "Read the audit log"
       },
       "expiry": "Expires",
@@ -882,34 +863,6 @@ declare const messages: {
     "checkoutDone": "Thanks! Your plan will update in a moment.",
     "limitReached": "Your plan allows {limit, number} members. Upgrade in billing settings to invite more.",
     "upgradeForWebhooks": "Webhooks are part of Pro. Upgrade in billing settings to send events to your endpoints."
-  },
-  "assistant": {
-    "title": "Assistant",
-    "description": "Ask questions and get answers from this workspace's documents.",
-    "ask": "Ask",
-    "question": "Your question",
-    "placeholder": "How long do refunds take?",
-    "thinking": "Looking through your documents…",
-    "sources": "From",
-    "empty": "Add a document below, then ask about it.",
-    "documents": {
-      "title": "Documents",
-      "description": "What the assistant can answer from. Everyone in the workspace can use them.",
-      "add": "Add document",
-      "docTitle": "Title",
-      "content": "Text",
-      "added": "Document added. It will be ready in a moment.",
-      "remove": "Remove",
-      "removed": "Document removed",
-      "none": "No documents yet.",
-      "status": {
-        "pending": "Waiting",
-        "indexing": "Preparing",
-        "ready": "Ready",
-        "failed": "Failed"
-      },
-      "passages": "{count, plural, one {# passage} other {# passages}}"
-    }
   },
   "mobile": {
     "tabs": {

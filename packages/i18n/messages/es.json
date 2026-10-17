@@ -26,7 +26,6 @@
     },
     "language": "Idioma",
     "captchaFailed": "No se pudo cargar la verificación de seguridad. Revisa tu conexión, permite challenges.cloudflare.com si usas un bloqueador y recarga la página.",
-    "assistant": "Asistente",
     "director": "Director"
   },
   "meta": {
@@ -119,19 +118,6 @@
       "empty": "Nada pendiente. Añade tu primera tarea.",
       "delete": "Eliminar {title}",
       "loadMore": "Cargar más"
-    },
-    "ai": {
-      "title": "Sentimiento (Python)",
-      "description": "Se ejecuta en el servicio de Python. Sus tipos Pydantic llegan hasta esta página.",
-      "placeholder": "Escribe algo para clasificar…",
-      "analyze": "Analizar",
-      "labels": {
-        "positive": "Positivo",
-        "negative": "Negativo",
-        "neutral": "Neutral"
-      },
-      "result": "{score, number}% de confianza · modelo {model}",
-      "disabled": "El servicio de IA no está configurado."
     }
   },
   "settings": {
@@ -428,10 +414,7 @@
     "ENTITLEMENT_REQUIRED": "Tu plan no incluye esto. Mejóralo en la configuración de facturación para usarlo.",
     "ALREADY_SUBSCRIBED": "Este espacio de trabajo ya tiene un plan de pago. Gestiónalo desde la configuración de facturación.",
     "NO_SUBSCRIPTION": "Este espacio de trabajo aún no tiene un plan de pago.",
-    "DOCUMENT_NOT_FOUND": "Ese documento no existe en este espacio de trabajo.",
-    "DOCUMENT_INDEXING_FAILED": "No se pudo preparar este documento para el asistente. Prueba a añadirlo de nuevo.",
     "AI_BUDGET_EXCEEDED": "Este espacio de trabajo ya usó la asignación del asistente de este mes. Se renueva el día 1.",
-    "AI_RUN_LIMIT": "Esa pregunta necesitaba más trabajo del que permite una respuesta. Prueba con una pregunta más concreta.",
     "SHORT_NOT_FOUND": "Ese short no está en YouTube o es privado.",
     "SHORT_TOO_LONG": "Director funciona con shorts de hasta {maxSeconds, number} segundos. Elige un video más corto.",
     "DIRECTOR_PLAN_NOT_FOUND": "Director todavía no ha visto este short. Ábrelo desde el feed de Shorts.",
@@ -719,8 +702,6 @@
       "scopes": {
         "todos:read": "Ver tareas",
         "todos:write": "Crear, cambiar y eliminar tareas",
-        "documents:read": "Ver los documentos del asistente",
-        "documents:write": "Añadir y quitar documentos del asistente",
         "audit:read": "Ver el registro de auditoría"
       },
       "expiry": "Caduca",
@@ -881,34 +862,6 @@
     "checkoutDone": "¡Gracias! Tu plan se actualizará en un momento.",
     "limitReached": "Tu plan permite {limit, number} miembros. Mejóralo en la configuración de facturación para invitar a más.",
     "upgradeForWebhooks": "Los webhooks forman parte de Pro. Mejora tu plan en la configuración de facturación para enviar eventos a tus endpoints."
-  },
-  "assistant": {
-    "title": "Asistente",
-    "description": "Haz preguntas y obtén respuestas a partir de los documentos de este espacio de trabajo.",
-    "ask": "Preguntar",
-    "question": "Tu pregunta",
-    "placeholder": "¿Cuánto tardan los reembolsos?",
-    "thinking": "Buscando en tus documentos…",
-    "sources": "De",
-    "empty": "Añade un documento abajo y luego pregunta sobre él.",
-    "documents": {
-      "title": "Documentos",
-      "description": "Lo que el asistente puede usar para responder. Todos en el espacio de trabajo pueden usarlos.",
-      "add": "Añadir documento",
-      "docTitle": "Título",
-      "content": "Texto",
-      "added": "Documento añadido. Estará listo en un momento.",
-      "remove": "Quitar",
-      "removed": "Documento quitado",
-      "none": "Todavía no hay documentos.",
-      "status": {
-        "pending": "En espera",
-        "indexing": "Preparando",
-        "ready": "Listo",
-        "failed": "Falló"
-      },
-      "passages": "{count, plural, one {# pasaje} other {# pasajes}}"
-    }
   },
   "mobile": {
     "tabs": {

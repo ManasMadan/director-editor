@@ -64,10 +64,10 @@ describe("features off", () => {
     );
   });
 
-  it("answers FEATURE_DISABLED for the AI features", async () => {
+  it("answers FEATURE_DISABLED for Director's plans without the AI service", async () => {
     const session = await signedIn();
     const error = await expectError(
-      session.rpc.ai.sentiment({ text: "Great" }),
+      session.rpc.director.plan({ videoId: "dQw4w9WgXcQ" }),
       "FEATURE_DISABLED",
     );
     expect(error.data?.params).toEqual({ feature: "ai" });

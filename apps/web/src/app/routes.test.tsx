@@ -5,7 +5,6 @@
 import en from "@repo/i18n/messages/en.json" with { type: "json" };
 import { isValidElement, type ReactElement, Suspense } from "react";
 import { describe, expect, it } from "vitest";
-import { AssistantPage } from "@/modules/assistant";
 import {
   CaptchaPage,
   ForgotPasswordPage,
@@ -35,7 +34,6 @@ import {
   WorkspaceWebhooksPage,
 } from "@/modules/workspace";
 import { renderHtml } from "../../test/next-server";
-import * as assistant from "./(app)/assistant/page";
 import * as dashboard from "./(app)/dashboard/page";
 import * as director from "./(app)/director/[videoId]/page";
 import * as review from "./(app)/director/[videoId]/review/page";
@@ -75,7 +73,6 @@ interface Route {
 }
 
 const pages: [string, Route, string, unknown][] = [
-  ["/assistant", assistant, en.assistant.title, AssistantPage],
   ["/dashboard", dashboard, en.common.dashboard, DashboardPage],
   ["/home", home, en.shorts.homeTitle, HomePage],
   ["/notifications", notifications, en.notificationCenter.title, NotificationsPage],

@@ -16,7 +16,6 @@ from pydantic import BaseModel, TypeAdapter
 from redis.client import PubSub
 
 from app.contracts.error_response import ErrorResponse
-from app.schemas import DocumentOut
 from tests.tokens import SECRET, service_token
 
 # Its own Redis database (the TypeScript suites use 7-15; 0 is the dev stack).
@@ -26,8 +25,6 @@ REDIS_URL = urlunsplit(
 ENV = {
     "REDIS_URL": REDIS_URL,
     "AI_SERVICE_SECRET": SECRET,
-    "AI_MODEL": "local:extractive",
-    "AI_EMBEDDINGS": "hashing",
     "AI_MONTHLY_TOKENS_PER_ORG": "2000000",
     # Off unless a test turns it on (.env.example points it at the local mock Google).
     "DIRECTOR_MODEL": "",
@@ -76,15 +73,6 @@ def on_app_loop[T](client: TestClient, work: Callable[[], Awaitable[T]]) -> T:
     return portal.call(work)
 
 
-def index_all(client: TestClient, org: UUID) -> None:
-    """What the worker does for each queued document, run in-process."""
-    from app.main import services
-
-    documents = services().documents
-    for doc in documents_of(client.get("/v1/documents", headers=headers(org, uuid4()))):
-        on_app_loop(client, lambda doc=doc: documents.index(org, doc.id))
-
-
 def body(response: httpx.Response) -> object:
     """The whole JSON body, to compare with what it should be."""
     return _JSON.validate_json(response.content)
@@ -92,17 +80,6 @@ def body(response: httpx.Response) -> object:
 
 # Any JSON value: what a body or a message is compared with.
 _JSON = TypeAdapter(object)
-
-
-_DOCUMENTS = TypeAdapter(list[DocumentOut])
-
-
-def documents_of(response: httpx.Response) -> list[DocumentOut]:
-    return _DOCUMENTS.validate_json(response.content)
-
-
-def document_of(response: httpx.Response) -> DocumentOut:
-    return DocumentOut.model_validate_json(response.content)
 
 
 def error_of(response: httpx.Response) -> ErrorResponse:

@@ -7,7 +7,6 @@ export const APP_PATHS = [
   "/settings",
   "/invitations",
   "/notifications",
-  "/assistant",
   // Director: the Shorts feed and filming one.
   "/home",
   "/shorts",

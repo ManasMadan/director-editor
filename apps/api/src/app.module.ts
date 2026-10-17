@@ -11,7 +11,6 @@ import {
 } from "@repo/nest-common";
 import { AuthModule } from "./auth/auth.module";
 import { env } from "./env";
-import { AiModule } from "./modules/ai";
 import { ApiKeysModule } from "./modules/api-keys";
 import { AuditModule } from "./modules/audit";
 import { BillingModule } from "./modules/billing";
@@ -49,7 +48,6 @@ import { NotificationsProducerModule } from "./notifications";
     AuthModule,
     TodoModule,
     UserModule,
-    AiModule,
     ApiKeysModule,
     AuditModule,
     WebhooksModule,

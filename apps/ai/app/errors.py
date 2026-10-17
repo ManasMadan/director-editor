@@ -1,7 +1,7 @@
 """Errors in the shape apps/api's own errors have on the wire (oRPC's error JSON, the
 `errorResponse` schema in packages/contracts):
 
-    {"defined": true, "code": "DOCUMENT_NOT_FOUND", "status": 404, "message": "DOCUMENT_NOT_FOUND",
+    {"defined": true, "code": "DIRECTOR_PLAN_NOT_FOUND", "status": 404, "message": "…",
      "data": {"params": {}, "requestId": "…", "issues": [...]}}
 
 The model, the codes and their statuses are generated from packages/contracts

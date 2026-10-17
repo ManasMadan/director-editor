@@ -32,9 +32,6 @@ export type TodoId = z.infer<typeof todoIdSchema>;
 export const fileIdSchema = z.uuid().brand<"FileId">();
 export type FileId = z.infer<typeof fileIdSchema>;
 
-export const documentIdSchema = z.uuid().brand<"DocumentId">();
-export type DocumentId = z.infer<typeof documentIdSchema>;
-
 export const directorPlanIdSchema = z.uuid().brand<"DirectorPlanId">();
 
 export const directorTakeIdSchema = z.uuid().brand<"DirectorTakeId">();

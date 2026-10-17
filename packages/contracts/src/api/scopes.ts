@@ -5,13 +5,7 @@
  * reach account settings, billing or key management itself. The settings page describes each scope (`workspace.apiKeys.scopes.*`
  * in packages/i18n).
  */
-export const API_KEY_SCOPES = [
-  "todos:read",
-  "todos:write",
-  "documents:read",
-  "documents:write",
-  "audit:read",
-] as const;
+export const API_KEY_SCOPES = ["todos:read", "todos:write", "audit:read"] as const;
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
 
 /** The request header an API key travels in. */

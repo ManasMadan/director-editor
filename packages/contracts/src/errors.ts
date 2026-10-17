@@ -77,12 +77,7 @@ export const ERROR_CODES = {
   /** The key is valid but lacks the scope this call needs (params: scope). */
   API_KEY_SCOPE_MISSING: 403,
   // AI
-  DOCUMENT_NOT_FOUND: 404,
-  // DOCUMENT_INDEXING_FAILED (a document's error) and AI_RUN_LIMIT (an answer's) are never
-  // HTTP answers, only codes inside a response; their statuses are there for the catalog.
-  DOCUMENT_INDEXING_FAILED: 422,
   AI_BUDGET_EXCEEDED: 429,
-  AI_RUN_LIMIT: 422,
   // Shorts (YouTube) and Director
   SHORT_NOT_FOUND: 404,
   /** Director films shorts, not long videos (params: maxSeconds). */

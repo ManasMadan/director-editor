@@ -74,28 +74,3 @@ describe("the dashboard", () => {
     await expect.element(page.getByText("Please sign in to continue.")).toBeVisible();
   });
 });
-
-describe("sentiment", () => {
-  it("classifies text through the AI service", async () => {
-    await signUp();
-    const page = await renderPage(<DashboardPage />, { url: "/dashboard" });
-    const text = page.getByRole("textbox", { name: "Sentiment (Python)" });
-    const analyze = page.getByRole("button", { name: "Analyze" });
-    await expect.element(analyze).toBeDisabled();
-    await userEvent.fill(text, "What a lovely day");
-    await userEvent.click(analyze);
-    await expect.element(page.getByText("Positive")).toBeVisible();
-    await expect
-      .element(page.getByText("87% confidence · model stand-in", { exact: false }))
-      .toBeVisible();
-  });
-
-  it("says why it couldn't", async () => {
-    await signUp();
-    const page = await renderPage(<DashboardPage />, { url: "/dashboard" });
-    await userEvent.fill(page.getByRole("textbox", { name: "Sentiment (Python)" }), "Hmm");
-    await signOut();
-    await userEvent.click(page.getByRole("button", { name: "Analyze" }));
-    await expect.element(page.getByText("Please sign in to continue.")).toBeVisible();
-  });
-});

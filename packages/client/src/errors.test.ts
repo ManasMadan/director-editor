@@ -24,7 +24,7 @@ describe("errorCode", () => {
   });
 
   it("reads a code the API reported inside a response, as { code }", () => {
-    expect(errorMessageKey({ code: "AI_RUN_LIMIT" })).toBe("errors.AI_RUN_LIMIT");
+    expect(errorMessageKey({ code: "AI_BUDGET_EXCEEDED" })).toBe("errors.AI_BUDGET_EXCEEDED");
     expect(errorCode({ code: "SOMETHING_NEW" })).toBe("INTERNAL");
     expect(errorCode(null)).toBe("INTERNAL");
   });

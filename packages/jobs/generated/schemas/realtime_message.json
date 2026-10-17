@@ -35,20 +35,6 @@
       "properties": {
         "type": {
           "type": "string",
-          "const": "documents.changed"
-        }
-      },
-      "required": [
-        "type"
-      ],
-      "additionalProperties": false,
-      "title": "DocumentsChanged"
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
           "const": "files.changed"
         }
       },

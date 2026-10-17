@@ -3,7 +3,7 @@
 # needs a settings change.
 #
 # Nightly, the same checks run on master with more weight: the load test ramps to a real
-# load instead of the smoke run, and the evals measure the configured model (evals job).
+# load instead of the smoke run.
 name: CI
 
 on:
@@ -356,9 +356,6 @@ jobs:
       S3_SECRET_ACCESS_KEY: rustfs-secret
       S3_FORCE_PATH_STYLE: "true"
       STORAGE_ORIGIN: http://localhost:59000
-      # The assistant without a model provider: quotes the best passage (local:extractive).
-      AI_MODEL: local:extractive
-      AI_EMBEDDINGS: hashing
       # Billing on, against the local fake Stripe started with the stack (test-only keys).
       STRIPE_SECRET_KEY: sk_test_ci
       STRIPE_WEBHOOK_SECRET: whsec_ci
@@ -496,10 +493,6 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run basedpyright
       - run: uv run pytest
-      # The assistant and summarizer on a fixed handbook, with the local stand-ins (no
-      # model or key): retrieval, the relevance floor, refusals and summaries must hold.
-      - name: Evals
-        run: uv run python -m evals
       # The same database the TypeScript services use, migrated by Prisma (which owns the DDL).
       - name: Bootstrap database roles and migrate
         working-directory: .
@@ -507,7 +500,7 @@ jobs:
         run: |
           psql -h localhost -U postgres -d app -v ON_ERROR_STOP=1 -f infra/postgres/init/01-roles-and-databases.sql
           bun run db:deploy
-      # Routes, tenancy, indexing, the assistant, the worker, and models vs database, with
+      # Routes, tenancy, Director, the worker, and models vs database, with
       # every line and branch covered (pyproject.toml, tool.coverage).
       - name: All tests with coverage
         run: bun run coverage
@@ -518,34 +511,6 @@ jobs:
           name: coverage-python
           path: apps/ai/coverage/lcov.info
           retention-days: 3
-
-  # The evals against a real model, nightly: set the EVAL_MODEL variable (and optionally
-  # EVAL_EMBEDDINGS, EVAL_JUDGE_MODEL, EVAL_MIN_PASS_RATE, EVAL_MIN_RELEVANCE) and the
-  # provider keys as secrets. Every change already runs them with the local stand-ins.
-  evals:
-    name: Evals (${{ vars.EVAL_MODEL }})
-    if: github.event_name == 'schedule' && vars.EVAL_MODEL != ''
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions: { contents: read }
-    defaults:
-      run: { working-directory: apps/ai }
-    env:
-      AI_MODEL: ${{ vars.EVAL_MODEL }}
-      AI_EMBEDDINGS: ${{ vars.EVAL_EMBEDDINGS || 'hashing' }}
-      AI_MIN_RELEVANCE: ${{ vars.EVAL_MIN_RELEVANCE || '0' }}
-      EVAL_JUDGE_MODEL: ${{ vars.EVAL_JUDGE_MODEL }}
-      EVAL_MIN_PASS_RATE: ${{ vars.EVAL_MIN_PASS_RATE || '0.9' }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-    steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
-        with: { egress-policy: audit }
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
-      - uses: ./.github/actions/setup
-        with: { python: "true" }
-      - run: uv run python -m evals
 
   codegen:
     name: Generated code is committed

@@ -987,8 +987,8 @@ describe("the checks a merge waits for", () => {
     "kind.yml": "Kubernetes passed",
     "infra.yml": "Infrastructure passed",
   };
-  /** Jobs a gate leaves out on purpose: the nightly evals call real model providers. */
-  const NOT_GATED: Record<string, string[]> = { "ci.yml": ["evals"] };
+  /** Jobs a gate leaves out on purpose. */
+  const NOT_GATED: Record<string, string[]> = {};
   /** Runs on pull requests but never blocks one: optional, or started by a label. */
   const ADVISORY = ["claude-review.yml", "preview.yml"];
   const onPullRequests = readdirSync(join(ROOT, ".github/workflows")).filter(

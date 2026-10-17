@@ -62,11 +62,6 @@ export function UserMenu({ user }: UserMenuProps) {
         {system?.features.director ? (
           <DropdownMenuItem onClick={() => router.push("/home")}>{t("director")}</DropdownMenuItem>
         ) : null}
-        {system?.features.ai ? (
-          <DropdownMenuItem onClick={() => router.push("/assistant")}>
-            {t("assistant")}
-          </DropdownMenuItem>
-        ) : null}
         <DropdownMenuItem onClick={() => router.push("/settings")}>
           {t("settings")}
         </DropdownMenuItem>

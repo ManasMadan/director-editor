@@ -24,7 +24,6 @@ import {
 import {
   directorPlanIdSchema,
   directorTakeIdSchema,
-  documentIdSchema,
   fileIdSchema,
   orgIdSchema,
   todoIdSchema,
@@ -195,8 +194,6 @@ export const WEBHOOK_RETRY_DELAYS_MS = [
   10 * HOUR_MS,
 ];
 
-const aiDocumentJob = z.object({ documentId: documentIdSchema, orgId: orgIdSchema });
-
 /**
  * Retries with exponential backoff; the defaults every queue starts from. The jitter
  * spreads retries out, so jobs that failed together (a provider's outage) don't all come
@@ -296,20 +293,8 @@ export const queues = {
     options: { ...retrying, removeOnComplete: { age: DAY_S }, removeOnFail: { age: 7 * DAY_S } },
   },
   /**
-   * Indexing a document for the assistant (apps/ai produces and consumes it; the payload
-   * reaches Python as generated Pydantic models, see scripts/export-schemas.ts).
-   */
-  "ai-ingest": {
-    jobs: {
-      /** Split and embed a document. */
-      ingest: aiDocumentJob,
-      /** Summarize an indexed document (queued after indexing when a model is configured). */
-      summarize: aiDocumentJob,
-    },
-    options: { ...retrying, removeOnComplete: { age: DAY_S }, removeOnFail: { age: 7 * DAY_S } },
-  },
-  /**
-   * Director (apps/ai produces and consumes it): Gemini watches a YouTube short and
+   * Director (apps/ai produces and consumes it; the payload reaches Python as generated
+   * Pydantic models, see scripts/export-schemas.ts): Gemini watches a YouTube short and
    * writes its shot plan, and reviews each take a member records for it. Model calls
    * cost money and a provider outage passes, so a few spaced retries, no more.
    */

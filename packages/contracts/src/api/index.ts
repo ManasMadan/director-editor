@@ -6,7 +6,6 @@
  * changes (removed fields, new required inputs), which also protects older mobile apps.
  */
 import { populateContractRouterPaths } from "@orpc/contract";
-import { aiContract } from "./ai";
 import { apiKeysContract } from "./api-keys";
 import { auditContract } from "./audit";
 import { billingContract } from "./billing";
@@ -25,7 +24,6 @@ export const contract = populateContractRouterPaths({
   user: userContract,
   apiKeys: apiKeysContract,
   todo: todoContract,
-  ai: aiContract,
   audit: auditContract,
   webhooks: webhooksContract,
   realtime: realtimeContract,
@@ -38,7 +36,6 @@ export const contract = populateContractRouterPaths({
 
 export type Contract = typeof contract;
 
-export * from "./ai";
 export * from "./api-keys";
 export * from "./audit";
 export * from "./base";

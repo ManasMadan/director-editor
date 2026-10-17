@@ -36,8 +36,6 @@ describe("the site header", () => {
       .toHaveAttribute("href", "/dashboard");
     await userEvent.click(page.getByRole("button", { name: user.name }));
     await expect.element(page.getByText(user.email)).toBeVisible();
-    await userEvent.click(page.getByRole("menuitem", { name: "Assistant" }));
-    await expect.poll(currentUrl).toBe("/assistant");
   });
 
   it.each([
@@ -46,7 +44,7 @@ describe("the site header", () => {
     ["Settings", "/settings"],
   ])("goes to %s", async (item, path) => {
     const user = await signUp();
-    const page = await renderPage(<SiteHeader />, { url: "/assistant" });
+    const page = await renderPage(<SiteHeader />, { url: "/saved" });
     await userEvent.click(page.getByRole("button", { name: user.name }));
     await userEvent.click(page.getByRole("menuitem", { name: item }));
     await expect.poll(currentUrl).toBe(path);
