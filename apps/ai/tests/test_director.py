@@ -7,7 +7,8 @@ import os
 import subprocess
 import sys
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator, Iterator
+from contextlib import contextmanager
 from uuid import UUID, uuid4
 
 import httpx2 as httpx
@@ -299,6 +300,17 @@ def usage(org: UUID, feature: str) -> int:
     return total
 
 
+def usage_models(org: UUID, feature: str) -> set[str]:
+    """Every distinct model a feature's usage rows (the reservation and its settling)
+    were recorded under, for the organization."""
+    rows = as_org(org, "SELECT DISTINCT model FROM ai.usage WHERE feature = %s", (feature,))
+    models: set[str] = set()
+    for (model,) in rows:
+        assert isinstance(model, str)
+        models.add(model)
+    return models
+
+
 def spend_the_month(org: UUID) -> None:
     """Uses up the workspace's monthly allowance (AI_MONTHLY_TOKENS_PER_ORG in the tests)."""
     _ = as_org(
@@ -385,23 +397,20 @@ def test_a_plan_with_no_speech_is_accepted(
     assert [line.text for line in shot.script] == ["Tip 1: Prep the night before"]
 
 
-def test_the_planner_retries_then_falls_back_to_the_index_fallback_model(
-    monkeypatch: pytest.MonkeyPatch, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
-) -> None:
-    """INDEX_MODEL's video calls fail intermittently; a transient failure is retried on it
-    a couple of times before the plan falls back to INDEX_FALLBACK_MODEL, rather than
-    failing a plan job over one bad response."""
-    fallback_model = "gemini-fallback-test"
-    fallback_path = f"/v1beta/models/{fallback_model}:generateContent"
-    gemini[1][GEMINI_PATH] = gemini_error(503, "UNAVAILABLE")
-    gemini[1][fallback_path] = gemini_output(PLAN)
+@contextmanager
+def _client_with_index_fallback(
+    monkeypatch: pytest.MonkeyPatch, gemini_url: str, fallback_model: str
+) -> Generator[TestClient]:
+    """A client whose INDEX_FALLBACK_MODEL is distinct from INDEX_MODEL and
+    DIRECTOR_MODEL (both GEMINI_MODEL, as `extra_env`'s are), so a retry/fallback test can
+    tell which model actually answered."""
     for key, value in {
         **ENV,
         "DIRECTOR_MODEL": GEMINI_MODEL,
         "INDEX_MODEL": GEMINI_MODEL,
         "INDEX_FALLBACK_MODEL": fallback_model,
         "GOOGLE_API_KEY": "test-key",
-        "GOOGLE_BASE_URL": gemini[0].url,
+        "GOOGLE_BASE_URL": gemini_url,
     }.items():
         monkeypatch.setenv(key, value)
     get_settings.cache_clear()
@@ -409,15 +418,54 @@ def test_the_planner_retries_then_falls_back_to_the_index_fallback_model(
     from app.main import app
 
     with TestClient(app) as test_client:
-        org, user = new_org()
-        plan = ready_plan(test_client, org, user)
+        yield test_client
     get_settings.cache_clear()
 
+
+def test_the_planner_retries_then_falls_back_to_the_index_fallback_model(
+    monkeypatch: pytest.MonkeyPatch, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    """INDEX_MODEL's video calls fail intermittently; a transient failure is retried on it
+    a couple of times before the plan falls back to INDEX_FALLBACK_MODEL, rather than
+    failing a plan job over one bad response. The plan is stored under whichever model
+    answered (the fallback here); the reservation, taken before either has run, is always
+    under the index model."""
+    fallback_model = "gemini-fallback-test"
+    fallback_path = f"/v1beta/models/{fallback_model}:generateContent"
+    gemini[1][GEMINI_PATH] = gemini_error(503, "UNAVAILABLE")
+    gemini[1][fallback_path] = gemini_output(PLAN)
+    with _client_with_index_fallback(monkeypatch, gemini[0].url, fallback_model) as test_client:
+        org, user = new_org()
+        plan = ready_plan(test_client, org, user)
+
     assert plan.status == "ready"
+    assert plan.model == fallback_model
+    assert usage_models(org, "director-plan") == {GEMINI_MODEL}
     paths = [path for path, _ in gemini[0].received]
     # Every attempt on the primary model (the initial try plus PLANNER_RETRIES), then one
     # on the fallback, which is the one that actually answers.
     assert paths.count(GEMINI_PATH) == PLANNER_RETRIES + 1
+    assert paths.count(fallback_path) == 1
+
+
+def test_a_refusal_about_the_model_falls_back_without_retrying(
+    monkeypatch: pytest.MonkeyPatch, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    """A 401, or a 403/404 whose body isn't about the video, means the model (or the key
+    it's configured with) refused, not the video: worth the fallback straight away, with
+    no retry first, since retrying the same model and key wouldn't change the answer."""
+    fallback_model = "gemini-fallback-test"
+    fallback_path = f"/v1beta/models/{fallback_model}:generateContent"
+    gemini[1][GEMINI_PATH] = gemini_error(404, "NOT_FOUND", "The requested model was not found.")
+    gemini[1][fallback_path] = gemini_output(PLAN)
+    with _client_with_index_fallback(monkeypatch, gemini[0].url, fallback_model) as test_client:
+        org, user = new_org()
+        plan = ready_plan(test_client, org, user)
+
+    assert plan.status == "ready"
+    assert plan.model == fallback_model
+    paths = [path for path, _ in gemini[0].received]
+    assert paths.count(GEMINI_PATH) == 1  # no retry on the primary
     assert paths.count(fallback_path) == 1
 
 
@@ -444,6 +492,8 @@ def test_a_video_gemini_may_not_watch_fails_without_retrying(
     org, user = new_org()
     plan = ready_plan(client, org, user)
     assert (plan.status, plan.error) == ("failed", "DIRECTOR_VIDEO_UNREADABLE")
+    # About the video, not the model: neither retried nor sent to the fallback.
+    assert len(gemini[0].received) == 1
 
 
 def test_a_refusal_that_isn_t_about_the_video_is_this_service_s_failure(

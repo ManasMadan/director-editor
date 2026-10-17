@@ -67,10 +67,8 @@ describe("Director's contract and the AI service", () => {
       expect.arrayContaining([".shots[].pose.keypoints[].name", ".shots[].steps[].cameraMove"]),
     );
     expect(shape(json(shotPlanSchema))).toEqual(plan);
-    // No `maxItems` on `shots` (or on `steps`, `script`, `pose.keypoints`, not asserted
-    // here): Vertex AI answers 400 INVALID_ARGUMENT to a ShotPlan schema carrying any
-    // array bound at all, so DIRECTOR_MAX_SHOTS is enforced by the AI service's
-    // repair_plan trimming an answer that runs over, never by the declared schema.
-    expect(node.parse(node.parse(json(zShotPlan)).properties?.shots).maxItems).toBeUndefined();
+    expect(node.parse(node.parse(json(zShotPlan)).properties?.shots).maxItems).toBe(
+      DIRECTOR_MAX_SHOTS,
+    );
   });
 });

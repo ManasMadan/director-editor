@@ -353,6 +353,7 @@ file below 100%, or one no test loads.
 | `biome.jsonc` | `useImportType` and `noStaticOnlyClass` off in the Nest services and `packages/nest-common` | Nest's dependency injection needs the imported class at run time, which `import type` erases; a module is a class with only a decorator and static members |
 | `biome.jsonc` | `noConsole` off in `scripts/`, the hooks, config files and the API's command-line scripts | they talk to whoever runs them through the console |
 | `apps/ai/app/embeddings.py` | `# noqa: SIM905` | a stop-word list reads as prose on one line |
+| `apps/ai/tests/test_plan_repair.py` | `# noqa: S311` | a deterministic seed for a reproducible fuzz test, not a cryptographic use |
 | `apps/ai/app/audio.py` | `# pyright: ignore[reportMissingTypeStubs]` on the import, `# pyright: ignore[reportUnknownMemberType]` on the upload | google-cloud-storage ships no stubs |
 | `apps/ai/app/documents.py` | `# pyright: ignore[reportMissingTypeStubs]` | langgraph ships no stubs |
 | `apps/ai/app/summaries.py` | `# pyright: ignore[reportMissingTypeStubs, reportUnknownMemberType]` | langgraph ships no stubs, and its graph, config and checkpointer types are unknown |

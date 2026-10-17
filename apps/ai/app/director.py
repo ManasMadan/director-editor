@@ -23,12 +23,9 @@ from uuid import UUID
 import httpx
 from google.genai.types import MediaResolution
 from pydantic_ai import Agent, AgentRunResult, BinaryContent, VideoUrl
-from pydantic_ai._json_schema import JsonSchema
 from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError
 from pydantic_ai.models import Model
 from pydantic_ai.models.google import GoogleModel, GoogleModelSettings
-from pydantic_ai.profiles import ModelProfile
-from pydantic_ai.profiles.google import GoogleJsonSchemaTransformer
 from pydantic_ai.providers.google import GoogleProvider
 from pydantic_ai.providers.google_cloud import GoogleCloudProvider
 from pydantic_ai.settings import ModelSettings
@@ -52,6 +49,7 @@ from app.schemas import (
     SceneCheck,
     Shot,
     ShotPlan,
+    ShotPlanDraft,
     TakeReview,
 )
 from app.settings import Settings
@@ -77,8 +75,14 @@ _VIDEO_WORDS = ("video", "youtube", "file_uri", "url")
 # than failing the whole job over one bad response from INDEX_MODEL.
 PLANNER_RETRIES = 2
 PLANNER_RETRY_BACKOFF_SECONDS = 1.0
-# A frame a second is plenty for a shot plan (it's reading cuts and poses, not reading
-# fine print), and keeps the request well under Gemini's token budget for a long short.
+# The statuses worth trying the index fallback model for straight away, no retry: the
+# model itself refused the request (a bad key, a model it doesn't recognize) rather than
+# the video, so a different model (or the key it's configured with) might succeed where
+# this one didn't. 401 is always about the model; 403/404 only when they aren't about the
+# video (REFUSED_STATUSES' own distinction).
+_FALLBACK_STATUSES = frozenset({401, 403, 404})
+# Three frames a second is plenty for a shot plan (it's reading cuts and poses, not fine
+# print), and keeps the request well under Gemini's token budget for a long short.
 INDEX_VIDEO_FPS = 3.0
 
 PLAN_INSTRUCTIONS = """\
@@ -181,29 +185,6 @@ class Budgets:
     per_review: int
 
 
-class _LenientGoogleJsonSchemaTransformer(GoogleJsonSchemaTransformer):
-    """Vertex AI answers 400 INVALID_ARGUMENT to a ShotPlan schema that carries a
-    `minItems`/`maxItems` anywhere in it, on every model and output mode (bisected down to
-    exactly that keyword: every sub-model validates alone, and it passes once every array
-    bound is gone, but stripping only some of them doesn't). `Shot.steps`, `Shot.script`,
-    `TargetPose.keypoints` and `ShotPlan.shots` carry no length `Field` constraint for
-    exactly this reason (see app/schemas.py); `repair_plan` enforces their limits instead,
-    after the fact. This only strips what two Field constraints would otherwise still put
-    on *this* schema transform's own output, in case either ever comes back."""
-
-    def transform(self, schema: JsonSchema) -> JsonSchema:
-        schema = super().transform(schema)
-        schema.pop("minItems", None)
-        schema.pop("maxItems", None)
-        return schema
-
-
-# A model profile for the planner's schema alone (see `_LenientGoogleJsonSchemaTransformer`):
-# merged on top of the provider's own Google profile, so every other Google-specific
-# default (thinking levels, tool support, ...) is untouched.
-_INDEX_PROFILE: ModelProfile = {"json_schema_transformer": _LenientGoogleJsonSchemaTransformer}
-
-
 def _google_provider(settings: Settings) -> GoogleProvider | GoogleCloudProvider:
     base_url = str(settings.google_base_url) if settings.google_base_url else None
     return (
@@ -224,15 +205,13 @@ def create_director_model(settings: Settings) -> GoogleModel | None:
 def create_index_model(settings: Settings, model_name: str) -> GoogleModel:
     """A Gemini model for indexing (writing a plan unattended): INDEX_MODEL or, once its
     retries are spent, INDEX_FALLBACK_MODEL (see `Director._run_planner`)."""
-    return GoogleModel(model_name, provider=_google_provider(settings), profile=_INDEX_PROFILE)
+    return GoogleModel(model_name, provider=_google_provider(settings))
 
 
 def youtube_video(video_id: str) -> VideoUrl:
     # A YouTube page has no container type, and Vertex AI answers a YouTube URL sent as
     # video/mp4 (what VideoUrl infers) with a 500; video/* works there and on the Gemini API.
-    # fps: VideoMetadata.fps, verified on Vertex to reach the request; a plan reads cuts and
-    # poses, not fine print, so one frame a second plenty, and keeps a long short's request
-    # well inside the token budget.
+    # fps: VideoMetadata.fps, verified on Vertex to reach the request.
     return VideoUrl(
         url=f"https://www.youtube.com/watch?v={video_id}",
         media_type="video/*",
@@ -271,15 +250,31 @@ def retryable(error: BaseException) -> bool:
     return isinstance(error, (httpx.TransportError, ModelAPIError, TimeoutError))
 
 
+def _about_the_video(error: ModelHTTPError) -> bool:
+    """Whether a refusal's own body is about the video (private, removed, age-restricted)
+    rather than this service's configuration (a bad key, a model it doesn't recognize)."""
+    about = str(error.body or "").lower()
+    return any(word in about for word in _VIDEO_WORDS)
+
+
 def _refusal_code(error: ModelHTTPError) -> ErrorCode | None:
     """The plan's error for a refused request: the video's fault, or this service's."""
     if error.status_code not in REFUSED_STATUSES:
         return None
-    about = str(error.body or "").lower()
-    if any(word in about for word in _VIDEO_WORDS):
+    if _about_the_video(error):
         return "DIRECTOR_VIDEO_UNREADABLE"
     log.error("gemini refused a plan request", status=error.status_code, body=error.body)
     return "DIRECTOR_ANALYSIS_FAILED"
+
+
+def _falls_back_to_the_other_model(error: BaseException) -> bool:
+    """Worth trying the index fallback model for, straight away, no retry on the same
+    model first: a refusal that's about the model (an auth error, or a 403/404 that isn't
+    about the video) might not happen on the other one, where a refusal about the video
+    itself would happen on either."""
+    if not isinstance(error, ModelHTTPError) or error.status_code not in _FALLBACK_STATUSES:
+        return False
+    return error.status_code == 401 or not _about_the_video(error)
 
 
 def best_range(review: TakeReview, kind: str) -> tuple[int | None, int | None]:
@@ -307,6 +302,8 @@ class Director:
         http: httpx.AsyncClient,
     ) -> None:
         self._model_name = model_name
+        self._index_model_name = index_model.model_name
+        self._index_fallback_model_name = index_fallback_model.model_name
         self._budgets = budgets
         self._queue = queue
         self._redis = redis
@@ -316,19 +313,26 @@ class Director:
             timeout=WATCH_TIMEOUT_SECONDS,
             google_video_resolution=MediaResolution.MEDIA_RESOLUTION_MEDIUM,
         )
+        # ShotPlanDraft, not ShotPlan: Vertex AI answers 400 INVALID_ARGUMENT to a schema
+        # with a minItems/maxItems anywhere in it (app/schemas.py's module comment), which
+        # the real ShotPlan's Field constraints would put there. repair_plan turns the
+        # draft `_run_planner` returns into a real ShotPlan, restoring those constraints
+        # and validating against them.
         self._planner = Agent(
             index_model,
-            output_type=ShotPlan,
+            output_type=ShotPlanDraft,
             instructions=PLAN_INSTRUCTIONS,
             model_settings=planner_settings,
             defer_model_check=True,
         )
-        # Tried once, after `_run_planner`'s retries on `self._planner` (INDEX_MODEL) are
-        # spent: INDEX_MODEL's video calls fail intermittently (a 500 or a spurious auth
-        # error) and usually succeed on a retry, but not always.
+        # Tried once, after `_run_planner` gives up on `self._planner` (INDEX_MODEL):
+        # INDEX_MODEL's video calls fail intermittently (a 500) and usually succeed on a
+        # retry, but not always, and a refusal that's about the model itself (a bad key,
+        # an auth error, a model it doesn't recognize) goes straight to the fallback
+        # instead, since retrying the same model and key wouldn't change the answer.
         self._planner_fallback = Agent(
             index_fallback_model,
-            output_type=ShotPlan,
+            output_type=ShotPlanDraft,
             instructions=PLAN_INSTRUCTIONS,
             model_settings=planner_settings,
             defer_model_check=True,
@@ -420,13 +424,18 @@ class Director:
             plan.status, plan.updated_at = "analyzing", func.now()
             video_id = plan.video_id
         await publish_to_org(self._redis, org_id, CHANGED)
-        reservation = await self._reserve(org_id, user_id, "director-plan", self._budgets.per_plan)
+        # Reserved under the index model: whichever one actually answers (the primary or,
+        # once `_run_planner` falls back, the fallback) is recorded on the plan itself,
+        # below, but the reservation happens before either has run.
+        reservation = await self._reserve(
+            org_id, user_id, "director-plan", self._budgets.per_plan, model=self._index_model_name
+        )
         if reservation is None:
             await self._fail_plan(org_id, plan_id, "AI_BUDGET_EXCEEDED")
             return
         usage = RunUsage()
         try:
-            result = await self._run_planner(
+            result, answering_model = await self._run_planner(
                 video_id, usage, UsageLimits(total_tokens_limit=reservation.tokens)
             )
             # Gemini's plan validates field by field but can still be inconsistent with
@@ -456,7 +465,7 @@ class Director:
                     status="ready",
                     error=None,
                     plan=repaired.model_dump(mode="json"),
-                    model=self._model_name,
+                    model=answering_model,
                     updated_at=func.now(),
                 )
             )
@@ -464,29 +473,35 @@ class Director:
 
     async def _run_planner(
         self, video_id: str, usage: RunUsage, usage_limits: UsageLimits
-    ) -> AgentRunResult[ShotPlan]:
-        """Runs the planner, retrying a transient failure (a 5xx or 429) on INDEX_MODEL a
-        couple more times with a short backoff, then once more on INDEX_FALLBACK_MODEL:
-        INDEX_MODEL's video calls fail intermittently and usually succeed on a retry, but
-        not always. A refusal or a broken contract isn't retried at all: a different
-        model watching the same video wouldn't fix what's wrong with the video."""
+    ) -> tuple[AgentRunResult[ShotPlanDraft], str]:
+        """Runs the planner and the name of whichever model answered. Retries a transient
+        failure (a 5xx or 429) on INDEX_MODEL a couple more times with a short backoff;
+        falls back to INDEX_FALLBACK_MODEL, with no retry first, on a refusal that's about
+        the model itself rather than the video (`_falls_back_to_the_other_model`) or once
+        INDEX_MODEL's retries are spent. Anything else (a refusal about the video, a
+        broken contract) isn't retried and doesn't fall back: a different model watching
+        the same video wouldn't fix what's wrong with the video."""
         messages = [youtube_video(video_id), "Write the shot plan for this short."]
         last_error: Exception | None = None
         for attempt in range(PLANNER_RETRIES + 1):
             try:
-                return await self._planner.run(messages, usage=usage, usage_limits=usage_limits)
+                result = await self._planner.run(messages, usage=usage, usage_limits=usage_limits)
+                return result, self._index_model_name
             except Exception as error:
+                last_error = error
+                if _falls_back_to_the_other_model(error):
+                    break
                 if not retryable(error):
                     raise
-                last_error = error
                 if attempt < PLANNER_RETRIES:
                     await asyncio.sleep(PLANNER_RETRY_BACKOFF_SECONDS * (attempt + 1))
         log.warning(
-            "index model retries exhausted, falling back to the index fallback model",
+            "falling back to the index fallback model",
             video_id=video_id,
             error=str(last_error),
         )
-        return await self._planner_fallback.run(messages, usage=usage, usage_limits=usage_limits)
+        result = await self._planner_fallback.run(messages, usage=usage, usage_limits=usage_limits)
+        return result, self._index_fallback_model_name
 
     async def _fail_plan(self, org_id: UUID, plan_id: UUID, code: ErrorCode) -> None:
         async with tenant(org_id) as session:
@@ -684,13 +699,19 @@ class Director:
         await publish_to_org(self._redis, org_id, CHANGED)
 
     async def _reserve(
-        self, org_id: UUID, user_id: UUID | None, feature: Feature, most: int
+        self,
+        org_id: UUID,
+        user_id: UUID | None,
+        feature: Feature,
+        most: int,
+        *,
+        model: str | None = None,
     ) -> Reservation | None:
         return await reserve(
             org_id,
             user_id,
             feature,
-            self._model_name,
+            model or self._model_name,
             most=most,
             monthly=self._budgets.monthly,
         )
