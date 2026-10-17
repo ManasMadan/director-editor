@@ -146,11 +146,14 @@ describe("where it runs", () => {
       readFileSync(join(import.meta.dir, `../deploy/environments/${env}/data.yaml`), "utf8"),
     ) as Data;
 
-  it("drills every environment with backups, production from its offsite copy", () => {
-    for (const env of ["staging", "production"]) {
+  it("backs up every environment, and drills them where there's room for a second Postgres", () => {
+    // Production is one 16 GB machine, which can't hold the drill's scratch Postgres
+    // beside the live one; its backups and offsite copy stay on.
+    const drills = { staging: true, production: false };
+    for (const [env, drill] of Object.entries(drills)) {
       const { postgres } = values(env);
       expect({ env, backups: postgres?.backups?.enabled, drill: postgres?.drill?.enabled }).toEqual(
-        { env, backups: true, drill: true },
+        { env, backups: true, drill },
       );
     }
     // With an offsite endpoint the chart restores from that copy (its tests check how).

@@ -294,6 +294,7 @@ The `director` feature in the API is on when `YOUTUBE_API_KEY` is set and the `a
 | `DIRECTOR_MODEL` | ai | `gemini-mock` in `.env.example` | The Gemini model, by its Gemini API name (`gemini-3.5-flash`). Gemini because it watches a YouTube video from its URL. Unset: Director off. |
 | `GOOGLE_API_KEY` | ai (req. with `DIRECTOR_MODEL`), the mock Google | `mock-google-key` in `.env.example` | The Gemini API key (the mock's own locally). |
 | `GOOGLE_BASE_URL` | ai | `http://localhost:12112` in `.env.example` | Another Gemini API endpoint: the mock Google locally, a gateway, or unset for Google's. Must be HTTPS in production. |
+| `GOOGLE_VERTEX` | ai | false | `true`: Gemini through Vertex AI express mode, billed through Cloud Billing (so a project's Cloud credits pay), with `GOOGLE_API_KEY` a Vertex key bound to a service account. Embeddings follow `AI_EMBEDDINGS` (`google-cloud:gemini-embedding-001` for Vertex). |
 | `DIRECTOR_TOKENS_PER_PLAN` | ai | 200000 | Cap per plan: watching the whole short and thinking (at least 10000). |
 | `DIRECTOR_TOKENS_PER_SCENE_CHECK` | ai | 12000 | Cap per scene check: one camera frame (at least 2000). |
 | `DIRECTOR_TOKENS_PER_REVIEW` | ai | 120000 | Cap per take review: watching one take (at least 10000). |

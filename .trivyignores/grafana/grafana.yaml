@@ -144,3 +144,19 @@ vulnerabilities:
     statement: >-
       stdlib v1.26.6 (fixed in 1.26.9, 1.27.2): no upstream rebuild with the fixed package as of 2026-10-13
     expired_at: 2026-11-12
+  - id: CVE-2026-100351
+    statement: >-
+      github.com/getkin/kin-openapi v0.144.0 (fixed in 0.147.0), 13.2.4 still ships it: no upstream rebuild with the fixed package as of 2026-10-17
+    expired_at: 2026-11-16
+  - id: CVE-2026-100352
+    statement: >-
+      github.com/getkin/kin-openapi v0.144.0 (fixed in 0.147.0), 13.2.4 still ships it: no upstream rebuild with the fixed package as of 2026-10-17
+    expired_at: 2026-11-16
+  - id: CVE-2026-100353
+    statement: >-
+      github.com/getkin/kin-openapi v0.144.0 (fixed in 0.147.0), 13.2.4 still ships it: no upstream rebuild with the fixed package as of 2026-10-17
+    expired_at: 2026-11-16
+  - id: CVE-2026-100354
+    statement: >-
+      github.com/getkin/kin-openapi v0.144.0 (fixed in 0.147.0), 13.2.4 still ships it: no upstream rebuild with the fixed package as of 2026-10-17
+    expired_at: 2026-11-16

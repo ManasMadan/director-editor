@@ -207,3 +207,19 @@ vulnerabilities:
     statement: >-
       stdlib v1.26.7 (fixed in 1.26.9, 1.27.2): no upstream rebuild with the fixed package as of 2026-10-13
     expired_at: 2026-11-12
+  - id: CVE-2026-8286
+    statement: >-
+      curl 8.14.1-2+deb13u4 (fixed in 8.14.1-2+deb13u7); libcurl4t64 8.14.1-2+deb13u4 (fixed in 8.14.1-2+deb13u7), kind's local node only: no upstream rebuild with the fixed package as of 2026-10-17
+    expired_at: 2026-11-16
+  - id: CVE-2026-8927
+    statement: >-
+      curl 8.14.1-2+deb13u4 (fixed in 8.14.1-2+deb13u7); libcurl4t64 8.14.1-2+deb13u4 (fixed in 8.14.1-2+deb13u7), kind's local node only: no upstream rebuild with the fixed package as of 2026-10-17
+    expired_at: 2026-11-16
+  - id: CVE-2026-92392
+    statement: >-
+      curl 8.14.1-2+deb13u4 (fixed in 8.14.1-2+deb13u7); libcurl4t64 8.14.1-2+deb13u4 (fixed in 8.14.1-2+deb13u7), kind's local node only: no upstream rebuild with the fixed package as of 2026-10-17
+    expired_at: 2026-11-16
+  - id: CVE-2026-95837
+    statement: >-
+      github.com/containerd/containerd/v2 v2.2.0 (fixed in 2.2.7, 2.3.4), kind's local node only: no upstream rebuild with the fixed package as of 2026-10-17
+    expired_at: 2026-11-16

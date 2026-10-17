@@ -1,32 +1,31 @@
-# Production: two Postgres instances, continuous backups kept 30 days.
+# Production on one machine: one Postgres instance (a second on the same disk adds
+# nothing), continuous backups kept 14 days and copied offsite every hour.
 postgres:
-  instances: 2
-  storage: { size: 50Gi }
+  instances: 1
+  storage: { size: 15Gi }
   resources:
     requests: { cpu: 500m, memory: 1Gi }
     limits: { memory: 2Gi }
   backups:
     enabled: true
-    retention: 30d
-  # Every Sunday at 04:30 UTC (the quiet hours, after the 03:00 base backup), the latest
-  # backup restored from the offsite copy into a scratch cluster and checked against the
-  # live database (deploy/README.md, "Backups and restore"). While it runs, the scratch
-  # cluster claims as much disk as storage.size above, on a node Postgres can run on: keep
-  # that free, or turn this off until there is.
+    retention: 14d
+  # The weekly restore drill (deploy/README.md, "Backups and restore") runs a second
+  # Postgres as large as this one, which one 16 GB machine can't spare. Turn it on with
+  # a bigger machine or a second node.
   drill:
-    enabled: true
+    enabled: false
 storage:
   uploads:
-    # Your production hosts: one of the gateway's (<domain> or *.<domain>).
-    host: files.example.com
-    corsOrigins: [https://app.example.com]
-    storage: { size: 100Gi }
+    host: director-files.mmadan.in
+    corsOrigins: [https://director.mmadan.in]
+    storage: { size: 25Gi }
   backups:
-    storage: { size: 200Gi }
-# The copy outside the cluster: required in production. Your S3-compatible storage on
-# another machine; its keys go in secrets/offsite-storage.sops.yaml.
+    storage: { size: 25Gi }
+# The copy outside the cluster: required in production. A GCS bucket through its S3 API
+# (an HMAC key); the keys are in secrets/offsite-storage.sops.yaml.
 offsite:
   required: true
-  endpoint: https://s3.backups.example.net
-  bucket: director-editor-offsite
+  endpoint: https://storage.googleapis.com
+  region: auto
+  bucket: director-editor-offsite-1053522546520
   prefix: production

@@ -25,6 +25,7 @@ from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError
 from pydantic_ai.models import Model
 from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.providers.google import GoogleProvider
+from pydantic_ai.providers.google_cloud import GoogleCloudProvider
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RunUsage, UsageLimits
 from redis.asyncio import Redis
@@ -152,15 +153,19 @@ def create_director_model(settings: Settings) -> GoogleModel | None:
     """The Gemini model Director uses; None when DIRECTOR_MODEL isn't set."""
     if not settings.director_model:
         return None
-    provider = GoogleProvider(
-        api_key=settings.google_api_key,
-        base_url=str(settings.google_base_url) if settings.google_base_url else None,
+    base_url = str(settings.google_base_url) if settings.google_base_url else None
+    provider = (
+        GoogleCloudProvider(api_key=settings.google_api_key, base_url=base_url)
+        if settings.google_vertex
+        else GoogleProvider(api_key=settings.google_api_key, base_url=base_url)
     )
     return GoogleModel(settings.director_model, provider=provider)
 
 
-def youtube_url(video_id: str) -> str:
-    return f"https://www.youtube.com/watch?v={video_id}"
+def youtube_video(video_id: str) -> VideoUrl:
+    # A YouTube page has no container type, and Vertex AI answers a YouTube URL sent as
+    # video/mp4 (what VideoUrl infers) with a 500; video/* works there and on the Gemini API.
+    return VideoUrl(url=f"https://www.youtube.com/watch?v={video_id}", media_type="video/*")
 
 
 def _shot(plan: DirectorPlan, shot_index: int) -> Shot:
@@ -334,7 +339,7 @@ class Director:
         try:
             result = await self._planner.run(
                 [
-                    VideoUrl(url=youtube_url(video_id)),
+                    youtube_video(video_id),
                     "Write the shot plan for this short.",
                 ],
                 usage=usage,

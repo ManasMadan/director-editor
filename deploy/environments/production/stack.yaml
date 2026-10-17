@@ -1,27 +1,28 @@
 # Production. Its image tag and the revision these values are read at are in
 # release.yaml, which only a promotion pull request changes (merge = deploy).
 site:
-  # Your production host.
-  host: app.example.com
+  host: director.mmadan.in
 env:
   LOG_LEVEL: info
+# Sized for one 16 GB machine (a demo on a fixed budget): one replica of each service,
+# scaling out a little under load. Raise these with the machine.
 defaults:
-  replicas: 3
+  replicas: 1
   resources:
-    requests: { cpu: 250m, memory: 384Mi }
+    requests: { cpu: 100m, memory: 320Mi }
     limits: { memory: 768Mi }
   keda:
-    minReplicas: 2
-    maxReplicas: 20
+    minReplicas: 1
+    maxReplicas: 3
 services:
   notifications:
     env:
       # Mail goes through the cluster's mail server (deploy/platform/mail): SMTP_URL,
       # with the submission password, is in secrets/notifications.sops.yaml.
-      # Your sender: the mail server's submission account on its email domain.
-      EMAIL_FROM: Director-editor <no-reply@example.com>
+      # The mail server's submission account on its email domain.
+      EMAIL_FROM: Director <no-reply@director.mmadan.in>
   web:
-    autoscaling: { minReplicas: 3, maxReplicas: 20 }
+    autoscaling: { minReplicas: 1, maxReplicas: 3 }
     # Optional: the mobile app's https links and passkeys (docs/web-and-mobile.md,
     # "Universal links and App Links"), for the build that talks to this site
     # (the production variant). Off while unset; set all four or none (a partial set stops the
@@ -32,11 +33,10 @@ services:
     #   ANDROID_PACKAGE: com.directoreditor.app
     #   ANDROID_CERT_FINGERPRINTS: AB:CD:...
   api:
-    autoscaling: { minReplicas: 3, maxReplicas: 30 }
+    autoscaling: { minReplicas: 1, maxReplicas: 3 }
     # With the mobile app's links on (web, above): passkeys made in the Android app come
     # from its certificates (apps/api/src/auth/auth.ts).
     # env:
     #   ANDROID_CERT_FINGERPRINTS: AB:CD:...
   clamav:
     enabled: true
-    replicas: 2
