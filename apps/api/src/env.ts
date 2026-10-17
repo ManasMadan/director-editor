@@ -10,7 +10,6 @@
 import {
   asError,
   coreEnv,
-  csv,
   databaseEnv,
   port,
   redisEnv,
@@ -51,30 +50,12 @@ export const envSchema = {
   /** Public URL of the web app, the browser origin allowed to call the API. */
   WEB_URL: z.url(),
   /**
-   * Other origins of this product that may sign users in (comma-separated): the mobile
-   * app's web build, for example. Native apps need nothing here (their scheme is
-   * trusted by the Expo plugin).
-   */
-  APP_ORIGINS: csv.prefault("").pipe(z.array(z.url())),
-
-  /**
-   * SHA-256 fingerprints of the Android app's signing certificates (comma-separated,
-   * AB:CD:...), the same as the web app's. A passkey made in the app is signed for the
-   * app, not the site, so these are origins passkeys may come from (src/auth/auth.ts).
-   */
-  ANDROID_CERT_FINGERPRINTS: csv
-    .prefault("")
-    .pipe(
-      z.array(z.string().regex(/^([0-9A-Fa-f]{2}:){31}[0-9A-Fa-f]{2}$/, "a SHA-256 fingerprint")),
-    ),
-
-  /**
    * Optional: the cluster's Alertmanager, which `system.alerting` asks whether Prometheus's
    * Watchdog alert is still arriving (src/modules/system/alerting.ts). Unset: `off`.
    */
   ALERTMANAGER_URL: z.url().optional(),
 
-  /** Oldest web/mobile app version still supported; older clients get CLIENT_OUTDATED. */
+  /** Oldest app version still supported; older clients get CLIENT_OUTDATED. */
   MINIMUM_CLIENT_VERSION: z
     .string()
     .regex(/^\d+\.\d+\.\d+$/, "major.minor.patch")
@@ -94,25 +75,6 @@ export const envSchema = {
   PASSWORD_BREACH_CHECK: z
     .enum(["on", "off"])
     .default(process.env.NODE_ENV === "production" ? "on" : "off"),
-  // Browser push: the public half of apps/notifications' VAPID key pair.
-  VAPID_PUBLIC_KEY: z.string().min(1).optional(),
-  // Optional: billing (Stripe). On when STRIPE_SECRET_KEY is set, with both prices.
-  STRIPE_SECRET_KEY: z
-    .string()
-    .regex(/^(sk|rk)_(test|live)_/)
-    .optional(),
-  STRIPE_PRICE_PRO_MONTHLY: z.string().startsWith("price_").optional(),
-  STRIPE_PRICE_PRO_YEARLY: z.string().startsWith("price_").optional(),
-  // Free trial for an organization's first subscription; 0 turns trials off.
-  STRIPE_TRIAL_DAYS: z.coerce.number().int().min(0).max(730).default(14),
-  // Test hook: where Stripe's API lives (packages/fake-stripe).
-  STRIPE_API_URL: z.url().optional(),
-  // Checks one-click unsubscribe links (apps/notifications signs them with the same secret).
-  UNSUBSCRIBE_SECRET: z.string().min(32),
-  // Encrypts webhook signing secrets at rest (apps/webhooks decrypts them to sign).
-  ENCRYPTION_KEYS: z.string().min(1),
-  // Exact private IPs webhook endpoints may use, for local development and tests only.
-  WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: csv.prefault(""),
   // Optional: the Python AI service, and the secret this API signs its calls with
   // (the same AI_SERVICE_SECRET the service verifies with).
   AI_URL: z.url().optional(),
@@ -150,14 +112,6 @@ export const env = createEnv({
 });
 
 export type Env = typeof env;
-
-if (env.NODE_ENV === "production" && env.STRIPE_API_URL) {
-  throw new Error("STRIPE_API_URL is for tests only");
-}
-
-if (env.NODE_ENV === "production" && env.WEBHOOK_ALLOWED_PRIVATE_ADDRESSES.length > 0) {
-  throw new Error("WEBHOOK_ALLOWED_PRIVATE_ADDRESSES must be empty in production");
-}
 
 // The local mock Google (packages/fake-google) is plain HTTP: production never reads it.
 if (env.NODE_ENV === "production" && !env.YOUTUBE_API_URL.startsWith("https://")) {

@@ -30,7 +30,7 @@ const SMTP_URL =
 // The Mailpit Stalwart relays to: compose's. In CI that isn't the job's own Mailpit.
 const MAILPIT =
   process.env.STALWART_MAILPIT_URL ?? process.env.MAILPIT_URL ?? "http://localhost:58025";
-const FROM = "Director-editor <no-reply@director-editor.test>";
+const FROM = "Director <no-reply@director-editor.test>";
 const SECRET = randomBytes(32).toString("base64");
 
 /** One call to Stalwart's management API (JMAP), as the admin. */
@@ -88,7 +88,6 @@ describe.skipIf(!STALWART_URL)("mail through Stalwart", () => {
       WEBHOOKS_DATABASE_URL: testDb.urlFor("app_webhooks"),
       LOAD_SHEDDING: "off",
       REDIS_URL: redisDatabase(16),
-      ENCRYPTION_KEYS: `test:${randomBytes(32).toString("base64")}`,
       STALWART_WEBHOOK_SECRET: SECRET,
     });
     const redis = createRedis(process.env.REDIS_URL as string);

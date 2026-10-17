@@ -8,7 +8,6 @@ describe("system info", () => {
       release: "1.4.0",
       features: {
         ai: true,
-        billing: false,
         captcha: false,
         director: false,
         files: true,
@@ -16,7 +15,6 @@ describe("system info", () => {
       },
       minimumClientVersion: "1.0.0",
       captchaSiteKey: null,
-      webPushPublicKey: null,
     };
     const api = standIn((os) => ({ system: { info: os.system.info.handler(() => info) } }));
     const { result } = renderHook(() => useSystemInfoQuery(), api);

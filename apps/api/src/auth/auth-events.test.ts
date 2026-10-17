@@ -43,8 +43,6 @@ describe("auth audit events", () => {
     [{ event: "two-factor-enabled" }, "auth.two_factor_changed.v1", { enabled: true }],
     [{ event: "two-factor-disabled" }, "auth.two_factor_changed.v1", { enabled: false }],
     [{ event: "passkey-added" }, "auth.passkey_added.v1", {}],
-    [{ event: "phone-added" }, "auth.phone_changed.v1", { change: "added" }],
-    [{ event: "phone-removed" }, "auth.phone_changed.v1", { change: "removed" }],
   ] as const)("records the alert %o as %s", (change, name, payload) => {
     const userId = userIdSchema.parse(randomUUID());
     expect(auditEventForAlert(change, userId)).toEqual({

@@ -1,16 +1,14 @@
 /**
  * Moves every encrypted value to the newest key, so older keys can be retired:
- * better-auth's values (OAuth tokens, 2FA secrets and backup codes) to
- * the newest BETTER_AUTH_SECRETS version, and webhook endpoint secrets (the current and
- * the previous one) to the active ENCRYPTION_KEYS key and SecretBox's current format. Run by `bun run --filter @repo/api secrets:reencrypt` (src/reencrypt.ts).
+ * better-auth's values (OAuth tokens, 2FA secrets and backup codes) to the newest
+ * BETTER_AUTH_SECRETS version. Run by `bun run --filter @repo/api secrets:reencrypt`
+ * (src/reencrypt.ts).
  *
  * Safe while the services run and safe to repeat: each row is written only if it still
  * holds the value that was read (a token refreshed meanwhile is left alone and is
  * already on the newest key), and values already on the newest key are skipped.
  */
-import { type OrgId, orgIdSchema } from "@repo/contracts/ids";
-import { type Database, tenantTx } from "@repo/db";
-import { type SecretBox, webhookSecretContext } from "@repo/nest-common";
+import type { Database } from "@repo/db";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
 import type { authEncryptionKey } from "../auth/secrets";
 
@@ -19,7 +17,6 @@ type AuthKey = ReturnType<typeof authEncryptionKey>;
 export interface ReencryptResult {
   accounts: number;
   twoFactors: number;
-  webhookEndpoints: number;
 }
 
 const PAGE = 200;
@@ -109,46 +106,14 @@ class AuthValues {
   }
 }
 
-/** One workspace's webhook endpoint secrets, the current and the previous one, on `box`'s key. */
-async function reencryptWebhookEndpoints(db: Db, orgId: OrgId, box: SecretBox) {
-  // Webhook endpoints are tenant rows: each workspace's inside its own tenant context.
-  return tenantTx(db, orgId, async (tx) => {
-    let count = 0;
-    const endpoints = await tx.webhookEndpoint.findMany({
-      select: { id: true, secret: true, previousSecret: true },
-    });
-    for (const { id, secret, previousSecret } of endpoints) {
-      // The previous secret too: it still signs until its overlap ends, and would fail
-      // to decrypt once its key is dropped.
-      const context = webhookSecretContext(id);
-      const refresh = (value: string) =>
-        box.needsRotation(value) ? box.encrypt(box.decrypt(value, context), context) : value;
-      const data = {
-        secret: refresh(secret),
-        previousSecret: previousSecret && refresh(previousSecret),
-      };
-      if (data.secret === secret && data.previousSecret === previousSecret) {
-        continue;
-      }
-      const updated = await tx.webhookEndpoint.updateMany({
-        where: { id, secret, previousSecret },
-        data,
-      });
-      count += updated.count;
-    }
-    return count;
-  });
-}
-
 export async function reencryptSecrets(
   database: Database,
-  { authKey, box }: { authKey: AuthKey; box: SecretBox },
+  { authKey }: { authKey: AuthKey },
 ): Promise<ReencryptResult> {
   const db = database.write;
   const result: ReencryptResult = {
     accounts: 0,
     twoFactors: 0,
-    webhookEndpoints: 0,
   };
 
   // Without versioned secrets there is one key, so better-auth's values are current.
@@ -156,12 +121,6 @@ export async function reencryptSecrets(
     const values = new AuthValues(db, authKey);
     result.accounts = await values.accounts();
     result.twoFactors = await values.twoFactors();
-  }
-
-  for await (const org of pages((cursor) =>
-    db.organization.findMany({ select: { id: true }, ...cursor }),
-  )) {
-    result.webhookEndpoints += await reencryptWebhookEndpoints(db, orgIdSchema.parse(org.id), box);
   }
   return result;
 }

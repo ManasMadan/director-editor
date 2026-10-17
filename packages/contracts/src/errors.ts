@@ -8,7 +8,7 @@ import { keysOf } from "./objects";
  *
  * The wire shape is oRPC's error JSON, the same over /rpc and REST (/api/v1), with the
  * HTTP status from this catalog:
- *   { code: "TODO_NOT_FOUND", status: 404, message: "…", data: { requestId: "…", params: { … } } }
+ *   { code: "SHORT_NOT_FOUND", status: 404, message: "…", data: { requestId: "…", params: { … } } }
  * `message` is for logs only; clients translate `code`.
  *
  * Adding a code: add it here with its HTTP status, then add `errors.<CODE>` to every
@@ -38,20 +38,13 @@ export const ERROR_CODES = {
   /** 400, not 426: that one requires an Upgrade header naming a protocol to switch to. */
   CLIENT_OUTDATED: 400,
   FRESH_SESSION_REQUIRED: 403,
-  /** The same refusal as WEBHOOK_URL_NOT_ALLOWED, found later (at delivery), so the same status. */
+  /** safeFetch refused the address (private, internal, or not https). */
   DESTINATION_NOT_ALLOWED: 422,
   RESPONSE_TOO_LARGE: 502,
   TOO_MANY_REDIRECTS: 502,
   UPSTREAM_UNAVAILABLE: 502,
   // Tenancy
   NO_ACTIVE_ORGANIZATION: 403,
-  // Account
-  PHONE_CODE_INVALID: 400,
-  PHONE_NUMBER_TAKEN: 409,
-  // Billing
-  ENTITLEMENT_REQUIRED: 402,
-  ALREADY_SUBSCRIBED: 409,
-  NO_SUBSCRIPTION: 409,
   // Files
   FILE_NOT_FOUND: 404,
   FILE_TYPE_NOT_ALLOWED: 422,
@@ -62,20 +55,8 @@ export const ERROR_CODES = {
   FILE_UNREADABLE: 422,
   FILE_NOT_UPLOADED: 409,
   FILE_NOT_READY: 409,
-  // Notifications
-  UNSUBSCRIBE_LINK_INVALID: 400,
-  // Inbound webhooks (Stripe, the mail server): the signature doesn't match the body
+  // Inbound webhooks (the mail server): the signature doesn't match the body
   INVALID_SIGNATURE: 400,
-  // Webhooks
-  WEBHOOK_ENDPOINT_NOT_FOUND: 404,
-  WEBHOOK_DELIVERY_NOT_FOUND: 404,
-  WEBHOOK_URL_NOT_ALLOWED: 422,
-  WEBHOOK_ENDPOINT_LIMIT: 409,
-  // API keys
-  API_KEY_NOT_FOUND: 404,
-  API_KEY_LIMIT_REACHED: 409,
-  /** The key is valid but lacks the scope this call needs (params: scope). */
-  API_KEY_SCOPE_MISSING: 403,
   // AI
   AI_BUDGET_EXCEEDED: 429,
   // Shorts (YouTube) and Director
@@ -93,9 +74,6 @@ export const ERROR_CODES = {
   DIRECTOR_VIDEO_UNREADABLE: 422,
   DIRECTOR_ANALYSIS_FAILED: 422,
   DIRECTOR_REVIEW_FAILED: 422,
-  // Todos (example feature)
-  TODO_NOT_FOUND: 404,
-  TODO_VERSION_CONFLICT: 409,
 } as const satisfies Record<string, number>;
 
 export type ErrorCode = keyof typeof ERROR_CODES;
@@ -108,11 +86,9 @@ export type ErrorCode = keyof typeof ERROR_CODES;
  */
 export const ERROR_PARAMS = {
   RATE_LIMITED: z.object({ retryAfterSeconds: z.number().int().nonnegative() }),
-  WEBHOOK_ENDPOINT_LIMIT: z.object({ max: z.number().int() }),
   FILE_TYPE_NOT_ALLOWED: z.object({ types: z.string() }),
   FILE_TOO_LARGE: z.object({ maxBytes: z.number().int() }),
   SHORT_TOO_LONG: z.object({ maxSeconds: z.number().int() }),
-  API_KEY_SCOPE_MISSING: z.object({ scope: z.string() }),
 } as const satisfies Partial<Record<ErrorCode, z.ZodObject>>;
 
 type ParamsFree = Record<string, string | number>;
@@ -158,7 +134,6 @@ export const AUTH_ERROR_CODES = [
   // From ERROR_CODES.
   "VALIDATION_FAILED",
   "RATE_LIMITED",
-  "ENTITLEMENT_REQUIRED",
 ] as const satisfies readonly string[];
 export type AuthErrorCode = (typeof AUTH_ERROR_CODES)[number];
 
@@ -177,7 +152,6 @@ export const AUTH_ERROR_ALIASES: Readonly<Record<string, AuthErrorCode>> = {
   ERROR_CEREMONY_ABORTED: "PASSKEY_CANCELLED",
   ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY: "PASSKEY_CANCELLED",
   ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED: "PREVIOUSLY_REGISTERED",
-  ORGANIZATION_MEMBERSHIP_LIMIT_REACHED: "ENTITLEMENT_REQUIRED",
 };
 
 export const isAuthErrorCode = (value: unknown): value is AuthErrorCode =>

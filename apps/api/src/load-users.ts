@@ -1,10 +1,11 @@
 /**
- * Signed-in users for the load tests (load/): `bun run --cwd apps/api load:users`.
+ * Signed-in users for the API's fuzzing (scripts/fuzz.ts): `bun run --cwd apps/api
+ * load:users`.
  *
- * Sign-in is rate limited per IP by design, so a load test can't sign in hundreds of
- * virtual users itself. This signs LOAD_USERS of them in through the app's own auth
+ * Sign-in is rate limited per IP by design, so the fuzzing can't sign in a user per
+ * operation itself. This signs LOAD_USERS of them in through the app's own auth
  * configuration instead, once, and writes their session cookies to load/.sessions.json
- * for k6 (see src/seed/load-users.ts). Refuses to run in production.
+ * (gitignored; see src/seed/load-users.ts). Refuses to run in production.
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";

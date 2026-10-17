@@ -3,8 +3,6 @@ import type { RealtimeMessage } from "@repo/contracts/realtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn, until } from "../test/stand-in";
 import { useFileQuery } from "./api/files/get";
-import { useUnreadNotificationsCountQuery } from "./api/notifications/unread-count";
-import { useTodoListInfiniteQuery } from "./api/todo/list";
 import { useLiveUpdates, useRealtime } from "./realtime";
 
 /**
@@ -38,10 +36,6 @@ function realtimeApi(connections: Connection[]) {
         })();
       }),
     },
-    todo: {
-      list: os.todo.list.handler(() => ({ items: [], nextCursor: null })),
-    },
-    notifications: { unreadCount: os.notifications.unreadCount.handler(() => ({ count: 0 })) },
     files: {
       get: os.files.get.handler(({ input }) => ({
         id: input.fileId,
@@ -70,13 +64,13 @@ afterEach(() => {
 
 describe("useRealtime", () => {
   it("passes on each message, and reconnects when the stream ends, saying so", async () => {
-    const { api, streams } = realtimeApi([["todos.changed", "files.changed"]]);
+    const { api, streams } = realtimeApi([["director.changed", "files.changed"]]);
     const onMessage = vi.fn();
     const onReconnect = vi.fn();
     const { unmount } = renderHook(() => useRealtime(onMessage, onReconnect, "org"), api);
     await until(() => expect(onMessage).toHaveBeenCalledTimes(2));
     expect(onMessage.mock.calls).toEqual([
-      [{ type: "todos.changed" }],
+      [{ type: "director.changed" }],
       [{ type: "files.changed" }],
     ]);
     expect(onReconnect).not.toHaveBeenCalled();
@@ -157,25 +151,19 @@ describe("useRealtime", () => {
 describe("useLiveUpdates", () => {
   const live = () => {
     useLiveUpdates(id(9));
-    useTodoListInfiniteQuery();
-    useUnreadNotificationsCountQuery();
     useFileQuery(id(1));
   };
 
   it("refetches what each message says changed, and everything after a reconnect", async () => {
-    const messages = realtimeApi([["todos.changed", "notifications.changed", "files.changed"]]);
+    const messages = realtimeApi([["files.changed"]]);
     const { count } = messages;
     const { unmount } = renderHook(live, messages.api);
     await until(() => {
-      expect(count("todo/list")).toBe(2);
-      expect(count("notifications/unreadCount")).toBe(2);
       expect(count("files/get")).toBe(2);
     });
 
     await vi.advanceTimersByTimeAsync(1_000);
     await until(() => {
-      expect(count("todo/list")).toBe(3);
-      expect(count("notifications/unreadCount")).toBe(3);
       expect(count("files/get")).toBe(3);
     });
     unmount();

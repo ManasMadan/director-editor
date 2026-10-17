@@ -25,9 +25,11 @@ export const FRESH_SESSION_AGE = 2 * HOUR_S;
 export const ORGANIZATION_LIMIT = 20;
 export const PENDING_INVITATION_LIMIT = 20;
 
-/** Digits a texted code has, and how long (seconds) it stays valid. */
-export const PHONE_CODE_LENGTH = 6;
-export const PHONE_CODE_EXPIRES_IN = 10 * 60;
+/**
+ * People one workspace may have, invitations waiting included. Director gives each person
+ * one personal workspace of their own, never shared, so it is one: its owner.
+ */
+export const WORKSPACE_MEMBER_LIMIT = 1;
 
 /**
  * Extra columns on the auth user, in better-auth's field format. The server registers

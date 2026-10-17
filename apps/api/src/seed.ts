@@ -5,7 +5,6 @@
 import { DATABASE, type Database } from "@repo/nest-common";
 import { AUTH, type Auth } from "./auth/auth.module";
 import { env } from "./env";
-import { TodoService } from "./modules/todo";
 import { DEMO_PASSWORD, DEMO_PEOPLE, seedDemo } from "./seed/demo";
 import { createApiServer } from "./server";
 
@@ -20,7 +19,6 @@ try {
   const seeded = await seedDemo({
     auth: app.get<Auth>(AUTH),
     database: app.get<Database>(DATABASE),
-    todos: app.get(TodoService),
   });
   console.log(seeded ? "Seeded." : "Already seeded. `bun run db:reset` starts over.");
   console.log(`Sign in at ${env.WEB_URL}/sign-in with any of:`);

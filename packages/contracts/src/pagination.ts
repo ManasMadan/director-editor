@@ -12,14 +12,6 @@ export const pageInput = z.object({
   limit: z.coerce.number().int().min(1).max(PAGE_SIZE_MAX).default(20),
   cursor: z.uuid().optional(),
 });
-export type PageInput = z.infer<typeof pageInput>;
-
-export const page = <T extends z.ZodType>(item: T) =>
-  z.object({
-    items: z.array(item),
-    /** Pass as `cursor` to get the next page; null when there are no more items. */
-    nextCursor: z.uuid().nullable(),
-  });
 
 /**
  * Builds a page from `limit + 1` rows fetched in order: the extra row only tells us

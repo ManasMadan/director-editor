@@ -43,14 +43,8 @@ export const videoIdSchema = z
   .brand<"VideoId">();
 export type VideoId = z.infer<typeof videoIdSchema>;
 
-export const notificationIdSchema = z.uuid().brand<"NotificationId">();
-export type NotificationId = z.infer<typeof notificationIdSchema>;
-
+// The ids of features Director removed, kept for the events that still name them
+// (packages/contracts events.ts).
 export const apiKeyIdSchema = z.uuid().brand<"ApiKeyId">();
-export type ApiKeyId = z.infer<typeof apiKeyIdSchema>;
 
 export const webhookEndpointIdSchema = z.uuid().brand<"WebhookEndpointId">();
-export type WebhookEndpointId = z.infer<typeof webhookEndpointIdSchema>;
-
-export const webhookDeliveryIdSchema = z.uuid().brand<"WebhookDeliveryId">();
-export type WebhookDeliveryId = z.infer<typeof webhookDeliveryIdSchema>;

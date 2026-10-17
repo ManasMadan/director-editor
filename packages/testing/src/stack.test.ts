@@ -14,7 +14,6 @@ describe("a stack of local services", () => {
       POSTGRES_PORT: "55432",
       API_DATABASE_URL: "postgresql://app_api:app_api@localhost:55432/app",
       REDIS_URL: "redis://127.0.0.1:56379",
-      STRIPE_API_URL: "http://127.0.0.1:12111",
       WEB_URL: "http://localhost:3000",
     };
     const ports = { POSTGRES_PORT: "55432", VALKEY_PORT: "56379", NOT_A_PORT: "x" };
@@ -48,24 +47,20 @@ describe("a stack of local services", () => {
       WORKER_PORT: "3102",
       NOTIFICATIONS_PORT: "3103",
       WEBHOOKS_PORT: "3104",
-      MOBILE_WEB_PORT: "3105",
       AI_PORT: "8100",
       EMAIL_PREVIEW_PORT: "3130",
-      EXPO_PORT: "8181",
       STORYBOOK_PORT: "6106",
-      STRIPE_FAKE_PORT: "12211",
-      // The site, its auth origin and the mobile app's API, the web server's upstreams,
-      // and the mobile web build's sign-in origin.
+      GOOGLE_FAKE_PORT: "12212",
+      // The site and its auth origin, the web server's upstreams, and the mock Google.
       WEB_URL: "http://localhost:3100",
       BETTER_AUTH_URL: "http://localhost:3100",
-      EXPO_PUBLIC_API_URL: "http://localhost:3100",
       API_URL: "http://localhost:3101",
       AI_URL: "http://localhost:8100",
-      APP_ORIGINS: "http://localhost:3105",
+      GOOGLE_BASE_URL: "http://localhost:12212",
     });
-    // The fake Stripe's URL, set by hand in .env, follows it too.
-    expect(stackValues({ STRIPE_API_URL: "http://127.0.0.1:12111" }, example, 1)).toMatchObject({
-      STRIPE_API_URL: "http://127.0.0.1:12211",
+    // A local URL set by hand in .env follows its port too.
+    expect(stackValues({ AI_URL: "http://127.0.0.1:8000" }, example, 1)).toMatchObject({
+      AI_URL: "http://127.0.0.1:8100",
     });
   });
 

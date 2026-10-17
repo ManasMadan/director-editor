@@ -8,7 +8,6 @@
  * Used by the db-change skill: `bun run auth:schema`.
  */
 
-import { unlimited } from "@repo/contracts/billing";
 import { createDb } from "@repo/db";
 import type { Producer } from "@repo/jobs";
 import { memoryAdapter } from "better-auth/adapters/memory";
@@ -23,10 +22,6 @@ export const inert = {
     add: (..._job: Parameters<Producer<"notifications-critical">["add"]>) =>
       Promise.reject(new Error("The auth CLI never sends notifications")),
   },
-  billing: {
-    entitlements: async () => unlimited,
-    cancelFor: () => Promise.reject(new Error("The auth CLI never changes billing")),
-  },
 };
 
 const db = createDb({ url: env.API_DATABASE_URL, poolMax: 1, service: "auth-cli" });
@@ -38,6 +33,5 @@ export const auth = createAuth({
   redis,
   notifications: inert.notifications,
   memberships: createMemberships(db, redis),
-  billing: inert.billing,
   database: memoryAdapter({}),
 });

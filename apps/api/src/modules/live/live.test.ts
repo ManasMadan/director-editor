@@ -63,7 +63,6 @@ const caller: OrgCaller = {
   orgId: orgIdSchema.parse("0b9f5c1e-3f4a-4c55-8f0e-2a6d1c7e9b10"),
   userId: userIdSchema.parse("5e2d7c3a-1b4f-4a8e-9c6d-7f0a2b3c4d5e"),
   role: "member",
-  apiKeyId: null,
   signedInAt: new Date(0),
 };
 

@@ -1,22 +1,16 @@
 /**
  * The better-auth plugins whose configuration is more than a line (auth.ts lists them
- * all): emailed codes, organizations, API keys and the captcha.
+ * all): emailed codes, organizations and the captcha.
  */
 import { randomUUID } from "node:crypto";
-import { apiKey } from "@better-auth/api-key";
-import {
-  API_KEY_EXPIRY_DAYS,
-  API_KEY_NAME_MAX_LENGTH,
-  API_KEY_PREFIX,
-  API_KEY_REQUESTS_PER_MINUTE,
-} from "@repo/contracts/api";
 import {
   ORGANIZATION_LIMIT,
   OTP_EXPIRES_IN,
   OTP_LENGTH,
   PENDING_INVITATION_LIMIT,
+  WORKSPACE_MEMBER_LIMIT,
 } from "@repo/contracts/auth";
-import { DAY_S, MINUTE_MS, MINUTE_S } from "@repo/contracts/time";
+import { DAY_S, MINUTE_S } from "@repo/contracts/time";
 import { jobMetaFromContext } from "@repo/nest-common";
 import { APIError } from "better-auth/api";
 import { captcha } from "better-auth/plugins";
@@ -115,10 +109,9 @@ function membershipHooks({
   };
 }
 
-/** Workspaces created, deleted and invited to: audited, and held to the plan's limits. */
+/** Workspaces created, deleted and invited to: audited, and held to the member limit. */
 function workspaceHooks({
   db,
-  billing,
   memberships,
   record,
 }: AuthContext): NonNullable<OrganizationOptions["organizationHooks"]> {
@@ -139,24 +132,18 @@ function workspaceHooks({
       );
     },
     beforeDeleteOrganization: async ({ organization: org }) => {
-      const orgId = orgIdOf(org);
-      await billing.cancelFor(orgId);
-      await memberships.forgetOrganization(orgId);
+      await memberships.forgetOrganization(orgIdOf(org));
     },
-    // Invitations count towards the member limit, so a full plan can't over-invite.
+    // Invitations count towards the member limit, so a full workspace can't over-invite.
     beforeCreateInvitation: async ({ organization: org }) => {
-      const { members: limit } = await billing.entitlements(orgIdOf(org));
-      if (limit === null) {
-        return;
-      }
       const [members, pending] = await Promise.all([
         db.member.count({ where: { organizationId: org.id } }),
         db.invitation.count({ where: { organizationId: org.id, status: "pending" } }),
       ]);
-      if (members + pending >= limit) {
+      if (members + pending >= WORKSPACE_MEMBER_LIMIT) {
         throw new APIError("FORBIDDEN", {
-          code: "ENTITLEMENT_REQUIRED",
-          message: "The plan's member limit is reached.",
+          code: "FORBIDDEN",
+          message: "The workspace's member limit is reached.",
         });
       }
     },
@@ -187,7 +174,6 @@ function workspaceHooks({
 }
 
 export function organizationPlugin(context: AuthContext) {
-  const { env, billing, notifications, localeFor } = context;
   return organization({
     creatorRole: "owner",
     ac: orgAccess,
@@ -195,48 +181,10 @@ export function organizationPlugin(context: AuthContext) {
     invitationExpiresIn: INVITATION_DAYS * DAY_S,
     organizationLimit: ORGANIZATION_LIMIT,
     invitationLimit: PENDING_INVITATION_LIMIT,
-    // The plan's member limit (packages/contracts billing); null means none.
-    membershipLimit: async (_user, org) =>
-      (await billing.entitlements(orgIdOf(org))).members ?? Number.MAX_SAFE_INTEGER,
+    membershipLimit: WORKSPACE_MEMBER_LIMIT,
     // Every membership change is audited (in the organization's own log, so its admins
     // see it) and forgets the cached role, so access follows immediately.
     organizationHooks: { ...workspaceHooks(context), ...membershipHooks(context) },
-    sendInvitationEmail: async ({ id, email, organization: org, inviter }, request) => {
-      await notifications.add(
-        "send",
-        {
-          template: "org.invitation",
-          to: { email, locale: await localeFor(email, request?.headers) },
-          data: {
-            organizationName: org.name,
-            inviterName: inviter.user.name,
-            acceptUrl: new URL(`/invitations/${id}`, env.WEB_URL).toString(),
-            expiresInDays: INVITATION_DAYS,
-          },
-        },
-        { jobId: randomUUID(), meta: jobMetaFromContext() },
-      );
-    },
-  });
-}
-
-/**
- * Workspace API keys for the REST API (see modules/api-keys): hashed at rest, owned by the
- * organization, rate limited per key, and never a session of their own.
- */
-export function apiKeyPlugin() {
-  return apiKey({
-    references: "organization",
-    defaultPrefix: API_KEY_PREFIX,
-    requireName: true,
-    maximumNameLength: API_KEY_NAME_MAX_LENGTH,
-    enableMetadata: true,
-    keyExpiration: { maxExpiresIn: Math.max(...API_KEY_EXPIRY_DAYS) },
-    rateLimit: {
-      enabled: true,
-      timeWindow: MINUTE_MS,
-      maxRequests: API_KEY_REQUESTS_PER_MINUTE,
-    },
   });
 }
 

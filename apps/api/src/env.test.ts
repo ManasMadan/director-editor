@@ -37,21 +37,8 @@ describe("the environment", () => {
 
   it.each([
     [
-      "the fake Stripe",
-      { STRIPE_API_URL: "http://127.0.0.1:12111" },
-      "STRIPE_API_URL is for tests only",
-    ],
-    [
-      "private webhook addresses",
-      { WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "127.0.0.1" },
-      "WEBHOOK_ALLOWED_PRIVATE_ADDRESSES must be empty in production",
-    ],
-    [
       "the mock Google's YouTube",
-      {
-        WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "",
-        YOUTUBE_API_URL: "http://localhost:12112/youtube/v3",
-      },
+      { YOUTUBE_API_URL: "http://localhost:12112/youtube/v3" },
       "YOUTUBE_API_URL must be HTTPS in production",
     ],
     [
@@ -70,25 +57,13 @@ describe("the environment", () => {
 
 describe("optional features", () => {
   it("are off without their configuration", async () => {
-    const { features } = await load({
-      GOOGLE_CLIENT_ID: "",
-      GOOGLE_CLIENT_SECRET: "",
-      STRIPE_SECRET_KEY: "",
-      STRIPE_PRICE_PRO_MONTHLY: "",
-      STRIPE_PRICE_PRO_YEARLY: "",
-    });
-    expect(features).toMatchObject({ google: false, billing: false });
+    const { features } = await load({ GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" });
+    expect(features).toMatchObject({ google: false });
   });
 
   it("are on with all of it", async () => {
-    const { features } = await load({
-      GOOGLE_CLIENT_ID: "id",
-      GOOGLE_CLIENT_SECRET: "secret",
-      STRIPE_SECRET_KEY: "sk_test_x",
-      STRIPE_PRICE_PRO_MONTHLY: "price_m",
-      STRIPE_PRICE_PRO_YEARLY: "price_y",
-    });
-    expect(features).toMatchObject({ google: true, billing: true });
+    const { features } = await load({ GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "secret" });
+    expect(features).toMatchObject({ google: true });
   });
 
   it.each([
@@ -96,11 +71,6 @@ describe("optional features", () => {
       "Google sign-in",
       { GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "" },
       "Google sign-in (GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET) needs both of its variables set, or neither",
-    ],
-    [
-      "billing",
-      { STRIPE_SECRET_KEY: "sk_test_x", STRIPE_PRICE_PRO_MONTHLY: "", STRIPE_PRICE_PRO_YEARLY: "" },
-      "Billing needs STRIPE_SECRET_KEY and both STRIPE_PRICE_PRO_* set, or none",
     ],
   ])("refuse to start %s half configured", async (_, variables, message) => {
     await expect(load(variables)).rejects.toThrow(message);
@@ -110,7 +80,6 @@ describe("optional features", () => {
     // Production as it would be: without the local stand-ins the example sets.
     const production = {
       NODE_ENV: "production",
-      WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "",
       // .env.example points at the local mock Google, which production refuses.
       YOUTUBE_API_URL: "https://www.googleapis.com/youtube/v3",
     };

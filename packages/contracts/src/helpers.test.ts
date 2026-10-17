@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { isErrorCode } from "./errors";
 import { fileContentPath } from "./files";
 import { fileIdSchema } from "./ids";
-import { formatMoney } from "./money";
 import { entriesOf, fieldOf, hasKey, keysOf, required } from "./objects";
 import { pageInput, toPage } from "./pagination";
 
@@ -26,18 +25,9 @@ describe("toPage", () => {
   });
 });
 
-describe("formatMoney", () => {
-  it("converts minor units by the currency's own digits", () => {
-    expect(formatMoney({ amount: 1999, currency: "USD" }, "en")).toBe("$19.99");
-    expect(formatMoney({ amount: 1999, currency: "JPY" }, "en")).toBe("¥1,999");
-    // Intl separates the amount and the symbol with a no-break space.
-    expect(formatMoney({ amount: 1999, currency: "EUR" }, "es")).toBe("19,99\u00a0€");
-  });
-});
-
 describe("isErrorCode", () => {
   it("knows the catalog's codes and nothing else", () => {
-    expect(isErrorCode("TODO_NOT_FOUND")).toBe(true);
+    expect(isErrorCode("SHORT_NOT_FOUND")).toBe(true);
     expect(isErrorCode("NOT_A_CODE")).toBe(false);
     expect(isErrorCode("toString")).toBe(false);
     expect(isErrorCode(404)).toBe(false);

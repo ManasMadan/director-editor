@@ -16,12 +16,10 @@ import { AppModule } from "./app.module";
 import { AUTH, type Auth, MEMBERSHIPS, type Memberships } from "./auth/auth.module";
 import { mountAuth } from "./auth/auth.routes";
 import { env } from "./env";
-import { ApiKeysService } from "./modules/api-keys";
 import { DirectorService } from "./modules/director";
 import { FilesService, mountFileContent } from "./modules/files";
 import { createGoogleAuth, liveUpstream, mountLive } from "./modules/live";
-import { mountOneClickUnsubscribe, NotificationsService } from "./modules/notifications";
-import { type AuthenticateApiKey, createProcedures, orgCallerFor } from "./rpc/procedures";
+import { createProcedures, orgCallerFor } from "./rpc/procedures";
 import { createRouter } from "./rpc/router";
 import { mountRpc } from "./rpc/rpc.routes";
 
@@ -38,24 +36,16 @@ export function createApiServer() {
       const memberships = app.get<Memberships>(MEMBERSHIPS);
       const logger = app.get(Logger);
       mountAuth(fastify, auth, env.BETTER_AUTH_URL);
-      mountOneClickUnsubscribe(fastify, app.get(NotificationsService));
       mountFileContent(fastify, auth, app.get(FilesService));
-      const apiKeys = app.get(ApiKeysService);
-      const authenticateApiKey: AuthenticateApiKey = (key, scope) =>
-        apiKeys.authenticate(key, scope);
       mountDirectorCall(fastify, {
-        // Calls are for signed-in people: an API key is refused (no scope names a call).
-        caller: orgCallerFor(auth, memberships, authenticateApiKey),
+        caller: orgCallerFor(auth, memberships),
         director: app.get(DirectorService),
         redis: app.get<Redis>(REDIS),
         logger,
       });
       await mountRpc(
         fastify,
-        createRouter(
-          createProcedures(auth, memberships, authenticateApiKey, app.get<Redis>(REDIS)),
-          app,
-        ),
+        createRouter(createProcedures(auth, memberships, app.get<Redis>(REDIS)), app),
         {
           logError: (error, level) =>
             logger[level]({ err: describeError(error) }, "error in procedure"),
@@ -87,8 +77,8 @@ function mountDirectorCall(
     onRedisError: "deny",
   });
   mountLive(fastify, {
-    allowedOrigins: [env.WEB_URL, ...env.APP_ORIGINS],
-    caller: (headers) => deps.caller(headers, undefined),
+    allowedOrigins: [env.WEB_URL],
+    caller: deps.caller,
     plan: (caller, videoId) => deps.director.plan(caller.userId, caller.orgId, videoId),
     spendCallLimit: async (userId) => {
       await calls.take(userId);

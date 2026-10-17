@@ -16,7 +16,7 @@ const validation = new ORPCError("VALIDATION_FAILED", {
 describe("errorCode", () => {
   it("is the API's code, unreachable for a network failure, internal otherwise", () => {
     expect(errorCode(validation)).toBe("VALIDATION_FAILED");
-    expect(errorMessageKey(new ORPCError("TODO_NOT_FOUND"))).toBe("errors.TODO_NOT_FOUND");
+    expect(errorMessageKey(new ORPCError("SHORT_NOT_FOUND"))).toBe("errors.SHORT_NOT_FOUND");
     expect(errorCode(new TypeError("Failed to fetch"))).toBe("SERVICE_UNAVAILABLE");
     // A code the contract doesn't know (a newer API) is shown as a generic failure.
     expect(errorCode(new ORPCError("SOMETHING_NEW"))).toBe("INTERNAL");
