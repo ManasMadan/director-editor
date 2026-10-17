@@ -23,9 +23,8 @@ export interface Stroke {
   color: string;
   width: number;
   seed: number;
-  /** Marching dashes: the dash length in pixels, and the time they march by. */
+  /** A dashed line, the dash's length in pixels: the horizon until it's level. */
   dash?: number;
-  time?: number;
 }
 
 /** Twelve drawings a second, three of each: the classic "line boil". */
@@ -108,8 +107,20 @@ export function starPoints(centre: Point, radius: number, seed: number): Point[]
 }
 
 /**
- * Draws `build`'s path twice: a wider soft dark edge, then the marker colour on top, so
- * the line stands out on a bright wall and a dark room alike.
+ * The soft shadow under every pen line, and under the buddy's eyes and "?": tight enough
+ * to read on a white wall or in the sun.
+ */
+export function softShadow(pen: Pick<Pen, "ctx" | "width">, shade: string) {
+  const scale = scaleOf(pen);
+  pen.ctx.shadowColor = shade;
+  pen.ctx.shadowBlur = 4 * scale;
+  pen.ctx.shadowOffsetY = 1.5 * scale;
+}
+
+/**
+ * Draws `build`'s path as one pen line: the marker colour, round at the ends, with a soft
+ * shadow under it rather than a second, darker line, so it stands out on a bright wall
+ * and a dark room alike and still reads as a single stroke.
  */
 export function ink(
   pen: Pen,
@@ -120,19 +131,11 @@ export function ink(
   const { ctx } = pen;
   const scale = scaleOf(pen);
   const dash = stroke.dash ?? 0;
-  const alpha = ctx.globalAlpha;
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.setLineDash(dash > 0 ? [dash * scale, dash * scale * 0.8] : []);
-  ctx.lineDashOffset = dash > 0 ? -(stroke.time ?? 0) * 40 * scale : 0;
-  ctx.globalAlpha = alpha * 0.5;
-  ctx.strokeStyle = shade;
-  ctx.lineWidth = (stroke.width + 4) * scale;
-  ctx.beginPath();
-  build(ctx);
-  ctx.stroke();
-  ctx.globalAlpha = alpha;
+  softShadow(pen, shade);
   ctx.strokeStyle = stroke.color;
   ctx.fillStyle = stroke.color;
   ctx.lineWidth = stroke.width * scale;

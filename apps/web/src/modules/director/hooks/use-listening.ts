@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { isClear, isEcho } from "../lib/intents";
 import { saying } from "../lib/speech";
 
@@ -45,7 +45,10 @@ export function useListening(enabled: boolean, locale: string, heard: Heard) {
   const [state, setState] = useState<ListenState>("off");
   const [words, setWords] = useState("");
   const latest = useRef(heard);
-  useEffect(() => {
+  // Before paint, not after: a phrase the recogniser hands over as the screen changes (a
+  // "go again" as the take's review appears) must reach the new screen's handlers, not
+  // the last one's, or it's lost.
+  useLayoutEffect(() => {
     latest.current = heard;
   });
 

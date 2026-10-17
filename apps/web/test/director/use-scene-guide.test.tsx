@@ -69,6 +69,8 @@ describe("useSceneGuide", () => {
       { api },
     );
     await nextCheck(hook, 1);
+    // Not there yet, with checks to spare: Gemini is guiding the walk.
+    expect(hook.current.guiding).toBe(true);
     expect(inputs[0]).toMatchObject({ videoId: VIDEO_ID, shotIndex: 2 });
     // The frame, a JPEG in base64.
     expect(atob(inputs[0]?.image ?? "").startsWith("\xff\xd8\xff")).toBe(true);
@@ -80,6 +82,8 @@ describe("useSceneGuide", () => {
     vi.advanceTimersByTime(60_000);
     expect(inputs).toHaveLength(3);
     expect(hook.current.offline).toBe(false);
+    // There: nothing left to walk to.
+    expect(hook.current.guiding).toBe(false);
   });
 
   it("looks only while active", async () => {
@@ -143,6 +147,8 @@ describe("useSceneGuide", () => {
       vi.advanceTimersByTime(6_000);
       expect(hook.current.offline).toBe(true);
     });
+    // Out of reach: its last direction no longer guides the walk.
+    expect(hook.current.guiding).toBe(false);
     expect(vi.getTimerCount()).toBe(0);
     vi.advanceTimersByTime(60_000);
     expect(asked).toBe(4);
@@ -249,6 +255,8 @@ describe("useSceneGuide", () => {
       await nextCheck(hook, n, () => inputs.length);
     }
     await until(() => expect(hook.current.scene?.instruction).toBe("Direction 16"));
+    // Its checks spent, it no longer guides the walk.
+    expect(hook.current.guiding).toBe(false);
     vi.advanceTimersByTime(30_000);
     expect(inputs).toHaveLength(16);
   });

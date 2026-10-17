@@ -2,9 +2,11 @@
  * The shorts the fake YouTube knows. Each is a real, public YouTube video (so its picture
  * and the embedded player work), described as the kind of short Director is made for,
  * with the shot plan the fake Gemini writes for it (./plans.ts). Mock data: the titles,
- * counts and plans are made up; the videos are only stand-ins.
+ * counts and plans are made up; the videos are only stand-ins. The first is the exception,
+ * the GRWM the demo recreates: its own title and channel, and a plan from its own cuts
+ * (its counts are still made up).
  */
-export type Template = "grwm" | "pen-drop" | "tree-talk";
+export type Template = "grwm" | "office-grwm" | "pen-drop" | "tree-talk";
 
 export interface CatalogShort {
   videoId: string;
@@ -22,16 +24,16 @@ export interface CatalogShort {
 
 export const CATALOG: readonly CatalogShort[] = [
   {
-    videoId: "jNQXAC9IVRw",
-    title: "GRWM: fall layers, piece by piece",
-    channelTitle: "Director demo",
-    durationSeconds: 19,
+    videoId: "HasaZYkwYds",
+    title: "GRWM for the office in summer time!",
+    channelTitle: "Adam Gonon",
+    durationSeconds: 26,
     viewCount: 1_840_000,
     likeCount: 92_000,
     commentCount: 1_204,
     publishedAt: "2026-09-12T15:00:00Z",
     topics: ["grwm", "outfit", "fit"],
-    template: "grwm",
+    template: "office-grwm",
   },
   {
     videoId: "kJQP7kiw5Fk",

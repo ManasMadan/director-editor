@@ -25,6 +25,14 @@ export const NEW_PLACE = 0.16;
 
 export type Light = SceneCheck["lighting"];
 
+/**
+ * The light Director goes by: the phone's own reading when it sees a problem (it answers
+ * at once), otherwise Gemini's from its last look; null when neither has said.
+ */
+export function judgedLight(phone: Light | null, scene: SceneCheck | null): Light | null {
+  return phone && phone !== "good" ? phone : (scene?.lighting ?? phone);
+}
+
 /** Each pixel's brightness (Rec. 709 luma, 0 to 1) from RGBA bytes. */
 export function lumaOf(rgba: Uint8ClampedArray): Float32Array {
   // Read through a view: it says where each byte is, with no gaps to guess around.

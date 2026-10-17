@@ -79,7 +79,7 @@ describe("the mock Gemini", () => {
         usageMetadata: { totalTokenCount: expect.any(Number) },
       });
     }
-    const grwm = zShotPlan.parse(argsOf((await gemini(ask("shots", [watch("jNQXAC9IVRw")]))).json));
+    const grwm = zShotPlan.parse(argsOf((await gemini(ask("shots", [watch("OPf0YbXqDm0")]))).json));
     // The PRD's GRWM: six shots, four videos and two photos.
     expect(grwm.shots.map((shot) => shot.kind)).toEqual([
       "video",
@@ -89,6 +89,27 @@ describe("the mock Gemini", () => {
       "photo",
       "photo",
     ]);
+    // The office GRWM follows its video's cuts: back to back from the first frame to the
+    // last, each shot as long as its part of the original, and no script over the song.
+    const office = zShotPlan.parse(
+      argsOf((await gemini(ask("shots", [watch("HasaZYkwYds")]))).json),
+    );
+    expect(office).toMatchObject({ audio: "music", durationSeconds: 26.1 });
+    expect(office.shots).toHaveLength(12);
+    expect(office.shots.filter((shot) => shot.kind === "photo").map((shot) => shot.title)).toEqual([
+      "The watch",
+      "The fragrance",
+    ]);
+    expect(office.shots[0]?.sourceStartSeconds).toBe(0);
+    expect(office.shots.at(-1)?.sourceEndSeconds).toBe(office.durationSeconds);
+    office.shots.forEach((shot, index) => {
+      expect(shot.durationSeconds).toBeCloseTo(shot.sourceEndSeconds - shot.sourceStartSeconds);
+      expect(shot.script).toEqual([]);
+      const next = office.shots[index + 1];
+      if (next) {
+        expect(next.sourceStartSeconds).toBe(shot.sourceEndSeconds);
+      }
+    });
     const pasted = zShotPlan.parse(
       argsOf((await gemini(ask("shots", [watch("AbCdEfGhIjK")]))).json),
     );
@@ -156,7 +177,7 @@ describe("the mock Gemini", () => {
       )
     ).json;
     expect(usage).toMatchObject({ usageMetadata: { promptTokenCount: 1_200 } });
-    const watched = (await gemini(ask("shots", [watch("jNQXAC9IVRw")]))).json;
+    const watched = (await gemini(ask("shots", [watch("HasaZYkwYds")]))).json;
     expect(watched).toMatchObject({ usageMetadata: { promptTokenCount: 18_000 } });
     const photo = zTakeReview.parse(
       argsOf(
@@ -198,7 +219,7 @@ describe("the mock Gemini", () => {
   });
 
   it("refuses a wrong key, an unknown ask, and a body it can't read", async () => {
-    expect((await gemini(ask("shots", [watch("jNQXAC9IVRw")]), "wrong")).status).toBe(400);
+    expect((await gemini(ask("shots", [watch("HasaZYkwYds")]), "wrong")).status).toBe(400);
     expect((await gemini(ask("other", [{ text: "hi" }]))).status).toBe(400);
     expect((await gemini({ contents: "nope" })).status).toBe(400);
     const broken = await fetch(`${fake.url}/v1beta/models/gemini-mock:generateContent`, {
@@ -226,11 +247,11 @@ describe("the mock YouTube", () => {
   });
 
   it("describes any well-formed video, and lists its comments", async () => {
-    const videos = await youtube("videos?id=jNQXAC9IVRw,AbCdEfGhIjK,bad");
-    expect(videos.json.items?.map((item) => item.id)).toEqual(["jNQXAC9IVRw", "AbCdEfGhIjK"]);
+    const videos = await youtube("videos?id=HasaZYkwYds,AbCdEfGhIjK,bad");
+    expect(videos.json.items?.map((item) => item.id)).toEqual(["HasaZYkwYds", "AbCdEfGhIjK"]);
     expect(shortOf("AbCdEfGhIjK").title).toBe("Your pasted short");
     expect((await youtube("videos")).json.items).toEqual([]);
-    expect((await youtube("commentThreads?videoId=jNQXAC9IVRw")).json.items).toHaveLength(4);
+    expect((await youtube("commentThreads?videoId=HasaZYkwYds")).json.items).toHaveLength(4);
     expect((await youtube("commentThreads")).json.items).toHaveLength(4);
   });
 

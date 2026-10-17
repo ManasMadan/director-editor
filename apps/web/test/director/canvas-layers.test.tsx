@@ -59,6 +59,8 @@ const scene: DoodleScene = {
   person: null,
   framing: null,
   scene: null,
+  light: null,
+  guided: false,
   move: null,
   recording: false,
   subject: true,
@@ -211,7 +213,7 @@ describe("the Director's Cut", () => {
     await expect
       .element(page.getByRole("img", { name: "Director's cut" }))
       .toHaveAttribute("src", expect.stringMatching(/^blob:/));
-    await expect.element(page.getByText("Nothing to fix. Ship it!")).toBeInTheDocument();
+    await expect.element(page.getByText("Nothing to fix. Perfect!")).toBeInTheDocument();
     await expect.element(page.getByRole("alert")).toHaveTextContent("Couldn't send it.");
     await expect.element(page.getByRole("button", { name: /Keep it/ })).toBeDisabled();
   });

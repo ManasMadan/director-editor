@@ -128,7 +128,6 @@ function Hero({
   const frame = useRef<HTMLIFrameElement>(null);
   const [muted, setMuted] = useState(true);
   const shot = watching === null ? undefined : plan.shots[watching];
-  const videos = plan.shots.filter((each) => each.kind === "video").length;
   const toggleSound = () => {
     sendCommand(frame.current, muted ? "unMute" : "mute");
     setMuted(!muted);
@@ -183,9 +182,6 @@ function Hero({
           <span className="flex items-center gap-1.5">
             <Film className="size-4" aria-hidden />
             {t("template.shots", { count: plan.shots.length })}
-          </span>
-          <span className="text-studio-foreground/70">
-            {t("template.mix", { videos, photos: plan.shots.length - videos })}
           </span>
         </p>
         {shot && watching !== null ? (

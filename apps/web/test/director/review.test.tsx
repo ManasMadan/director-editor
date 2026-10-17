@@ -73,7 +73,7 @@ describe("the editor before it can open", () => {
     await expect.element(wrap).toBeVisible();
     await expect
       .poll(() => speak.mock.calls.map(([utterance]) => utterance.text))
-      .toContain("That's a wrap! Let's see what we made.");
+      .toContain("That's a wrap! You did it. Let's watch what you made!");
     await userEvent.click(wrap);
     await expect.element(wrap).not.toBeInTheDocument();
   });

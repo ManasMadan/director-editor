@@ -2,6 +2,7 @@ import type { Shot } from "@repo/contracts/api";
 import { describe, expect, it } from "vitest";
 import {
   bob,
+  buddyOf,
   controlOf,
   type DoodleScene,
   flipBody,
@@ -9,12 +10,14 @@ import {
   flipPoint,
   framingArrows,
   glideScene,
+  moodOf,
   moveArrow,
   OPEN_BOTTOM,
   OPEN_TOP,
   spotBeside,
   stickerAlive,
   walkArrow,
+  walking,
   walkStart,
 } from "./doodle";
 import { Glider } from "./spring";
@@ -82,7 +85,8 @@ describe("doodles", () => {
   it("draws the framing hint as arrows round the box", () => {
     const box = { x: 0.2, y: 0.1, width: 0.6, height: 0.8 };
     const closer = framingArrows("come-closer", box);
-    expect(closer).toHaveLength(4);
+    // Two opposite corners: as clear as four, with half the marks.
+    expect(closer).toHaveLength(2);
     // Pulling out to the corners: each arrow ends further from the middle than it starts.
     const middle = { x: 0.5, y: 0.5 };
     const far = (p: { x: number; y: number }) => Math.hypot(p.x - middle.x, p.y - middle.y);
@@ -120,6 +124,99 @@ describe("doodles", () => {
     const star = { id: 1, kind: "star", born: 10, at: { x: 0.5, y: 0.5 }, label: "" } as const;
     expect(stickerAlive(star, 11)).toBe(true);
     expect(stickerAlive(star, 12)).toBe(false);
+  });
+
+  it("gives the buddy a face for how the set-up is going: a cheer, then the light, then whether it sees you", () => {
+    const at = (part: Partial<Parameters<typeof moodOf>[0]>) =>
+      moodOf({ matched: false, light: null, framing: null, ...part });
+    expect(at({ matched: true, light: "too-dark", framing: "not-seen" })).toBe("cheer");
+    expect(at({ light: "backlit", framing: "not-seen" })).toBe("oops");
+    expect(at({ light: "good", framing: "not-seen" })).toBe("lost");
+    expect(at({ framing: "come-closer" })).toBe("happy");
+    expect(at({})).toBe("happy");
+  });
+
+  it("draws the buddy like a child would: limbs from the body's top and bottom, feet pointing out", () => {
+    const buddy = buddyOf({
+      nose: { x: 0.5, y: 0.1 },
+      left_shoulder: { x: 0.6, y: 0.2 },
+      right_shoulder: { x: 0.4, y: 0.2 },
+      left_elbow: { x: 0.65, y: 0.3 },
+      left_wrist: { x: 0.66, y: 0.4 },
+      left_hip: { x: 0.55, y: 0.5 },
+      right_hip: { x: 0.45, y: 0.5 },
+      left_knee: { x: 0.56, y: 0.7 },
+      left_ankle: { x: 0.57, y: 0.9 },
+      right_ankle: { x: 0.43, y: 0.9 },
+    });
+    // A big head, a little wider than the shoulders are apart.
+    expect(buddy.radius).toBeCloseTo(0.11);
+    // The body starts under the chin, at the shoulders' middle, and ends at the hips'.
+    expect(buddy.spine?.[0]).toEqual({ x: 0.5, y: 0.2 });
+    expect(buddy.spine?.[1]).toEqual({ x: 0.5, y: 0.5 });
+    // Arms from the neck, not a shoulder bar; a limb with one joint isn't drawn.
+    expect(buddy.arms).toEqual([
+      [
+        { x: 0.5, y: 0.2 },
+        { x: 0.65, y: 0.3 },
+        { x: 0.66, y: 0.4 },
+      ],
+    ]);
+    expect(buddy.legs).toHaveLength(2);
+    expect(buddy.hands).toEqual([{ x: 0.66, y: 0.4 }]);
+    expect(buddy.feet.map((foot) => foot.side)).toEqual([1, -1]);
+    // A head close over the shoulders still leaves the chin clear.
+    const hunched = buddyOf({
+      nose: { x: 0.5, y: 0.19 },
+      left_shoulder: { x: 0.6, y: 0.2 },
+      right_shoulder: { x: 0.4, y: 0.2 },
+      left_elbow: { x: 0.65, y: 0.3 },
+      left_hip: { x: 0.55, y: 0.5 },
+    });
+    expect(hunched.spine?.[0].y).toBeGreaterThan(0.2);
+    // The arms start there too, under the chin, not through the face.
+    expect(hunched.arms[0]?.[0]).toEqual(hunched.spine?.[0]);
+    // Its hips are the one it has.
+    expect(hunched.spine?.[1]).toEqual({ x: 0.55, y: 0.5 });
+  });
+
+  it("gives a buddy without shoulders a head that still reads, and no body without both ends", () => {
+    const head = buddyOf({ nose: { x: 0.5, y: 0.2 } });
+    expect(head).toMatchObject({ head: { x: 0.5, y: 0.2 }, radius: 0.07, spine: null });
+    expect(head.arms).toEqual([]);
+    const wide = buddyOf({ left_shoulder: { x: 0.9, y: 0.2 }, right_shoulder: { x: 0.1, y: 0.2 } });
+    expect(wide).toMatchObject({ head: null, radius: 0.15, spine: null });
+    const narrow = buddyOf({
+      left_shoulder: { x: 0.51, y: 0.2 },
+      right_shoulder: { x: 0.49, y: 0.2 },
+    });
+    expect(narrow.radius).toBe(0.05);
+    // Feet point out from the hips; one right under them points out to the right.
+    expect(buddyOf({ left_ankle: { x: 0.5, y: 0.9 } }).feet).toEqual([
+      { at: { x: 0.5, y: 0.9 }, side: 1 },
+    ]);
+  });
+
+  it("is walking while there's somewhere to go and the member isn't there yet", () => {
+    const check = {
+      inPlace: false,
+      instruction: "",
+      direction: "left",
+      distanceMeters: 2,
+      lighting: "good",
+      landmark: null,
+    } as const;
+    expect(walking(check)).toBe(true);
+    expect(walking({ ...check, direction: "none" })).toBe(false);
+    expect(
+      walking({
+        ...check,
+        direction: "none",
+        landmark: { label: "tree", box: { x: 0, y: 0, width: 0.2, height: 0.2 } },
+      }),
+    ).toBe(true);
+    expect(walking({ ...check, inPlace: true })).toBe(false);
+    expect(walking(null)).toBe(false);
   });
 
   it("glides the tracked positions towards each new reading", () => {
@@ -178,6 +275,8 @@ function fill(part: Pick<DoodleScene, "person" | "scene" | "highlights">): Doodl
     matched: false,
     mirrored: false,
     framing: null,
+    light: null,
+    guided: false,
     move: null,
     recording: false,
     subject: true,
