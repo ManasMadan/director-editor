@@ -94,8 +94,9 @@ redis:
 #   presign   S3_* with the public endpoint: the URLs it signs are for browsers
 #   internal  S3_* with the in-cluster endpoint: it reads and writes objects itself
 #   origin    STORAGE_ORIGIN only (the web app's Content-Security-Policy)
-# Files are on in a service when it has S3_BUCKET, so leave `storage` off to keep them
-# off (an environment without ClamAV).
+# Files are on in a service when its STORAGE_PROVIDER has its bucket (S3_BUCKET from
+# here, or GCS_BUCKET in the service's env with STORAGE_PROVIDER=gcs and `storage: none`),
+# so leave both off to keep them off (an environment without ClamAV).
 storage:
   secretName: storage
 
