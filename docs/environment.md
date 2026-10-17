@@ -250,6 +250,7 @@ The `director` feature in the API is on when `YOUTUBE_API_KEY` is set and the `a
 | `LIVE_LOCATION` | api | `us-central1` | The Vertex AI region of the live call's endpoint (`wss://<region>-aiplatform.googleapis.com/...`). |
 | `LIVE_MODEL` | api | `gemini-live-2.5-flash-native-audio` | The Live API model, by its Vertex AI name. |
 | `GOOGLE_ACCESS_TOKEN` | api | unset | Local development only: a Google access token (`gcloud auth print-access-token`, valid for an hour) used in place of the GCE metadata server's. Production refuses to start with it set. |
+| `BIGQUERY_DATASET` | api | unset | The BigQuery dataset `AnalyticsService` (`src/modules/analytics`) streams product events into, in its `events` table: `indexed`, `take_reviewed`, `cut_saved`, `published`, `call_started`. Reuses `GOOGLE_CLOUD_PROJECT`, above. Unset: analytics is off, nothing is written. |
 
 ## Web (apps/web)
 

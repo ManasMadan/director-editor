@@ -8,6 +8,7 @@ import {
 } from "@repo/nest-common";
 import { AuthModule } from "./auth/auth.module";
 import { env } from "./env";
+import { AnalyticsModule } from "./modules/analytics";
 import { DirectorModule } from "./modules/director";
 import { FilesModule } from "./modules/files";
 import { RealtimeModule } from "./modules/realtime";
@@ -36,6 +37,7 @@ import { NotificationsProducerModule } from "./notifications";
     RealtimeModule,
     FilesModule,
     ShortsModule,
+    AnalyticsModule,
     DirectorModule,
   ],
 })

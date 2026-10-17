@@ -16,9 +16,10 @@ import { AppModule } from "./app.module";
 import { AUTH, type Auth, MEMBERSHIPS, type Memberships } from "./auth/auth.module";
 import { mountAuth } from "./auth/auth.routes";
 import { env } from "./env";
+import { AnalyticsService } from "./modules/analytics";
 import { DirectorService } from "./modules/director";
 import { FilesService, mountFileContent } from "./modules/files";
-import { createGoogleAuth, liveUpstream, mountLive } from "./modules/live";
+import { createGoogleAuth, type LiveOptions, liveUpstream, mountLive } from "./modules/live";
 import { createProcedures, orgCallerFor } from "./rpc/procedures";
 import { createRouter } from "./rpc/router";
 import { mountRpc } from "./rpc/rpc.routes";
@@ -40,6 +41,7 @@ export function createApiServer() {
       mountDirectorCall(fastify, {
         caller: orgCallerFor(auth, memberships),
         director: app.get(DirectorService),
+        analytics: app.get(AnalyticsService),
         redis: app.get<Redis>(REDIS),
         logger,
       });
@@ -59,12 +61,46 @@ export function createApiServer() {
   });
 }
 
+/**
+ * The live call's wiring to the rest of the API, kept apart from mounting it
+ * (mountDirectorCall) so a test can call each option directly without opening a real
+ * socket to Gemini.
+ */
+export function liveCallOptions(deps: {
+  caller: ReturnType<typeof orgCallerFor>;
+  director: Pick<DirectorService, "plan">;
+  analytics: Pick<AnalyticsService, "record">;
+  // Only the one method this needs, so a test gives a plain stand-in, not a real limiter.
+  calls: { take(userId: string): Promise<void> };
+  logger: Pick<Logger, "warn" | "error">;
+}): LiveOptions {
+  return {
+    allowedOrigins: [env.WEB_URL],
+    caller: deps.caller,
+    plan: (caller, videoId) => deps.director.plan(caller.userId, caller.orgId, videoId),
+    spendCallLimit: async (userId) => {
+      await deps.calls.take(userId);
+    },
+    upstream: liveUpstream({
+      project: env.GOOGLE_CLOUD_PROJECT,
+      location: env.LIVE_LOCATION,
+      model: env.LIVE_MODEL,
+      auth: createGoogleAuth(env.GOOGLE_ACCESS_TOKEN),
+    }),
+    log: (level, details, message) => deps.logger[level](details, message),
+    now: Date.now,
+    recordCallStarted: (userId, videoId) =>
+      deps.analytics.record("call_started", { userId, videoId }),
+  };
+}
+
 /** Director's live video call (/api/live), on when GOOGLE_CLOUD_PROJECT is set. */
 function mountDirectorCall(
   fastify: FastifyInstance,
   deps: {
     caller: ReturnType<typeof orgCallerFor>;
     director: DirectorService;
+    analytics: AnalyticsService;
     redis: Redis;
     logger: Logger;
   },
@@ -76,20 +112,5 @@ function mountDirectorCall(
     windowSeconds: HOUR_S,
     onRedisError: "deny",
   });
-  mountLive(fastify, {
-    allowedOrigins: [env.WEB_URL],
-    caller: deps.caller,
-    plan: (caller, videoId) => deps.director.plan(caller.userId, caller.orgId, videoId),
-    spendCallLimit: async (userId) => {
-      await calls.take(userId);
-    },
-    upstream: liveUpstream({
-      project: env.GOOGLE_CLOUD_PROJECT,
-      location: env.LIVE_LOCATION,
-      model: env.LIVE_MODEL,
-      auth: createGoogleAuth(env.GOOGLE_ACCESS_TOKEN),
-    }),
-    log: (level, details, message) => deps.logger[level](details, message),
-    now: Date.now,
-  });
+  mountLive(fastify, liveCallOptions({ ...deps, calls }));
 }

@@ -169,6 +169,7 @@ async function startApi(overrides: Partial<LiveOptions> = {}, fake = new FakeLiv
     },
     log,
     now: () => clock,
+    recordCallStarted: vi.fn(),
     ...overrides,
   });
   app.get("/plain", () => Promise.resolve("plain answer"));
@@ -253,6 +254,32 @@ describe("a live call", () => {
     const tools = setup.tools as { functionDeclarations: { name: string }[] }[];
     expect(tools[0]?.functionDeclarations.map((tool) => tool.name)).toEqual([...LIVE_TOOLS]);
     expect(await fake.message(1)).toMatchObject({ clientContent: { turnComplete: true } });
+  });
+
+  it("records that the call started once Gemini's setup completes", async () => {
+    const recordCallStarted = vi.fn();
+    await liveCall({ recordCallStarted });
+    expect(recordCallStarted).toHaveBeenCalledExactlyOnceWith(caller.userId, "dQw4w9WgXcQ");
+  });
+
+  it("never records a call that hangs up before Gemini answers its setup", async () => {
+    const recordCallStarted = vi.fn();
+    const fake = new FakeLiveApi();
+    fake.answerSetup = false;
+    const { call } = await startApi({ recordCallStarted }, fake);
+    const browser = call();
+    await fake.message(0);
+    browser.socket.close();
+    await vi.waitFor(() => expect(fake.server.clients.size).toBe(0));
+    expect(recordCallStarted).not.toHaveBeenCalled();
+  });
+
+  it("records a call only once even if Gemini answers its setup twice", async () => {
+    const recordCallStarted = vi.fn();
+    const { fake } = await liveCall({ recordCallStarted });
+    fake.send({ setupComplete: {} });
+    await fake.message(2); // the second greeting, sent again for the second setupComplete
+    expect(recordCallStarted).toHaveBeenCalledOnce();
   });
 
   it("forwards the microphone, typed text, and at most one camera frame a second", async () => {
