@@ -35,8 +35,11 @@ services:
       # The production express key addresses every Vertex AI model by its full resource
       # name, which needs the project; not a secret.
       GOOGLE_CLOUD_PROJECT: project-18e15b18-c92e-44bb-9bf
+      BIGQUERY_DATASET: director
   ai-worker:
     env:
       GOOGLE_CLOUD_PROJECT: project-18e15b18-c92e-44bb-9bf
+      # Take reviews run here: each one's score goes to the same events table as the api's.
+      BIGQUERY_DATASET: director
   clamav:
     enabled: true

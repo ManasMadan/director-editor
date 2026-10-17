@@ -8,6 +8,7 @@ dependencies = [
   # run the same Lua scripts on the same queues. tests/test_bullmq_pair.py compares them.
   "bullmq==3.2.8",
   "fastapi[standard]>=0.141.1",
+  "google-cloud-bigquery>=3.46.2",
   "google-cloud-storage>=3.17.1",
   "httpx>=0.28.1",
   "opentelemetry-exporter-otlp-proto-http>=1.45.0",
