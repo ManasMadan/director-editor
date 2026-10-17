@@ -203,6 +203,9 @@ services:
       # oRPC over HTTP, including the live-update event streams: no request timeout.
       - path: /rpc
         timeout: 0s
+      # The Gemini video call's WebSocket stays open for the whole call (up to 10 minutes).
+      - path: /api/live
+        timeout: 0s
     env:
       PORT: "3001"
       WEB_URL: "{{ include \"stack.siteUrl\" $ }}"

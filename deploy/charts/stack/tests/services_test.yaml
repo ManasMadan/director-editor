@@ -68,7 +68,7 @@ tests:
             Services:
               ai
               ai-worker
-              api (/api, /docs, /rpc)
+              api (/api, /docs, /rpc, /api/live)
               notifications
               web (/)
               webhooks (/webhooks)

@@ -23,6 +23,16 @@ tests:
             backendRefs: [{ name: demo-api, port: 3001 }]
             timeouts: { request: 0s, backendRequest: 0s }
 
+  - it: gives the api's live video call WebSocket no request timeout
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - contains:
+          path: spec.rules
+          content:
+            matches: [{ path: { type: PathPrefix, value: /api/live } }]
+            backendRefs: [{ name: demo-api, port: 3001 }]
+            timeouts: { request: 0s, backendRequest: 0s }
+
   - it: renders no routes without a gateway
     set:
       gateway.enabled: false
