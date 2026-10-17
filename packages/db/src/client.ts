@@ -2,8 +2,8 @@
  * Database connections for one service.
  *
  *   const database = createDatabase({ url: env.API_DATABASE_URL, poolMax: env.API_DATABASE_POOL_MAX, service: "api" });
- *   await database.read.todo.findMany(...);   // queries that may be served by a replica
- *   await database.write.todo.update(...);    // writes, and reads that must see them
+ *   await database.read.shortReaction.findMany(...);   // queries a replica may serve
+ *   await database.write.shortReaction.create(...);    // writes, and reads that must see them
  *
  * `read` and `write` are the same primary today. Repositories choose one per query, so
  * adding read replicas later is a change in this file only: point `read` at a replica

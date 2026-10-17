@@ -38,7 +38,7 @@ export function toHeaders(request: { headers: IncomingHttpHeaders }) {
 
 /**
  * The Fastify request as a Web Request, for handlers written against the Fetch API
- * (better-auth, the MCP transport). The body is the raw one `rawBodies` keeps.
+ * (better-auth). The body is the raw one `rawBodies` keeps.
  */
 export function toWebRequest(request: FastifyRequest, url: URL, headers = toHeaders(request)) {
   const body = Buffer.isBuffer(request.body) ? new Uint8Array(request.body) : undefined;

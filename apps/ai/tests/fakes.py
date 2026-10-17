@@ -1,6 +1,6 @@
 """Local stand-ins for third parties that speak their real HTTP protocol, so the code
 under test talks to them exactly as it would to the real thing (the same idea as
-packages/fake-stripe on the TypeScript side)."""
+packages/fake-google on the TypeScript side)."""
 
 import json
 import threading

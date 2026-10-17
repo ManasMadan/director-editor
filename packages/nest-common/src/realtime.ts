@@ -3,7 +3,7 @@
  * realtime; plumbing stays free of domain types):
  *
  *   export const { publish, RealtimeHub } = createRealtime(realtimeMessage);   // once per service
- *   await publish(redis, realtimeChannel.org(orgId), { type: "todos.changed" }); // any service
+ *   await publish(redis, realtimeChannel.org(orgId), { type: "director.changed" }); // any service
  *   for await (const message of hub.stream([userChannel, orgChannel], signal)) yield message; // api
  *
  * Any service can publish. Each API process keeps one subscriber connection, subscribes

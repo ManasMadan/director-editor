@@ -5,8 +5,8 @@
  * response header and attached to every log line written while handling it, so one id
  * traces a request through api → queue → worker logs.
  *
- * Inject with `constructor(@InjectPinoLogger(TodoService.name) private log: PinoLogger)`
- * or use Nest's `new Logger(TodoService.name)`; both write through pino.
+ * Inject with `constructor(@InjectPinoLogger(ShortsService.name) private log: PinoLogger)`
+ * or use Nest's `new Logger(ShortsService.name)`; both write through pino.
  */
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";

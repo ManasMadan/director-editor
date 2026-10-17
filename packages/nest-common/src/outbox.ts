@@ -4,9 +4,9 @@
  *   // once per service (apps/api/src/outbox.ts):
  *   export const { emitEvent, emitAnyEvent } = createOutbox("app", events);
  *
- *   await tenantTx(database.write, orgId, async (tx) => {
- *     const todo = await tx.todo.update(...);
- *     await emitEvent(tx, "todo.completed.v1", todo.id, { todoId: todo.id, title: todo.title });
+ *   await transaction(database.write, async (tx) => {
+ *     await tx.user.update(...);
+ *     await emitEvent(tx, "auth.password_changed.v1", userId, { userId });
  *   });
  *
  * The event is committed atomically with the change, so it can neither be lost (change
