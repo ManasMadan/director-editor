@@ -117,11 +117,15 @@ export function requiredInProduction(schema: z.ZodType<string, string>, devDefau
 }
 
 /**
- * Object storage (S3 API). Files are on when S3_BUCKET is set; the rest describe where.
- * RustFS locally (`docker compose --profile files`) and in every cluster (the data chart).
- * Another S3-compatible provider: its S3 endpoint and keys.
+ * Object storage. `STORAGE_PROVIDER` picks the implementation (`createStorage` in
+ * storage.ts); files are on when the chosen provider's bucket is set.
+ *   s3   S3 API. RustFS locally (`docker compose --profile files`) and in every cluster
+ *        (the data chart); S3_* also reaches any other S3-compatible provider.
+ *   gcs  GCS's own JSON API, with Application Default Credentials (no keys): production's
+ *        bucket, readable by its `gs://` URI from another Google service in the project.
  */
 export const storageEnv = {
+  STORAGE_PROVIDER: z.enum(["s3", "gcs"]).default("s3"),
   S3_BUCKET: z.string().min(3).optional(),
   S3_REGION: z.string().default("us-east-1"),
   S3_ENDPOINT: z.url().optional(),
@@ -132,4 +136,5 @@ export const storageEnv = {
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
+  GCS_BUCKET: z.string().min(3).optional(),
 };

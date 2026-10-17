@@ -394,6 +394,7 @@ const checkUpload: BrowserCommand<[fileId: string, rejectReason?: string]> = asy
     return;
   }
   const storage = createStorage({
+    STORAGE_PROVIDER: "s3",
     S3_BUCKET: process.env.S3_BUCKET ?? "uploads",
     S3_REGION: process.env.S3_REGION ?? "us-east-1",
     S3_ENDPOINT: process.env.S3_ENDPOINT,

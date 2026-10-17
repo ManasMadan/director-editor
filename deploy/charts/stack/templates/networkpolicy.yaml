@@ -82,6 +82,18 @@ spec:
         - port: 443
         - port: 465
         - port: 587
+    {{- if $svc.allowMetadataServer }}
+    {{- /*
+    GCP's metadata server: Application Default Credentials (no key file). It's a
+    link-local address, so it's inside privateRanges and would otherwise be unreachable
+    like every other address there; this is the one address of it a service needs.
+    */}}
+    - to:
+        - ipBlock:
+            cidr: 169.254.169.254/32
+      ports:
+        - port: 80
+    {{- end }}
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0

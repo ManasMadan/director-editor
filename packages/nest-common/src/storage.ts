@@ -11,9 +11,15 @@
  * so the client cannot swap in a larger or different file; the file-processing worker
  * still verifies size and type from the stored object before accepting it.
  *
- * Seam: `S3Storage` speaks the S3 API: RustFS, locally and in every cluster, and any other
- * S3-compatible provider (AWS S3, Cloudflare R2, GCS with HMAC keys, Azure through a gateway).
- * A provider without an S3 API gets its own `Storage` implementation; callers don't change.
+ * Seam: `STORAGE_PROVIDER` chooses the implementation (`createStorage`, below).
+ * `S3Storage` speaks the S3 API: RustFS, locally and in every cluster, and any other
+ * S3-compatible provider (AWS S3, Cloudflare R2, GCS with HMAC keys, Azure through a
+ * gateway). `GcsStorage` speaks the GCS JSON API directly, with Application Default
+ * Credentials (the cluster's workload identity, no key file): production's bucket, so
+ * another Google service in the same project (Gemini on Vertex, reviewing a Director
+ * take) can read an object by its `gs://` URI, with its own credentials, instead of a
+ * presigned URL (`directUri`). A provider with neither API gets its own `Storage`
+ * implementation; callers don't change.
  */
 import {
   CopyObjectCommand,
@@ -24,6 +30,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { Storage as GcsClient } from "@google-cloud/storage";
 import { fieldOf, required } from "@repo/contracts/objects";
 
 interface PresignedUpload {
@@ -55,6 +62,13 @@ export interface Storage {
   write(key: string, body: Buffer, contentType: string): Promise<void>;
   move(from: string, to: string): Promise<void>;
   delete(key: string): Promise<void>;
+  /**
+   * A reference another Google Cloud service can read directly, with its own
+   * credentials, instead of a presigned URL (`gs://bucket/key` on GCS); null when the
+   * provider has no such reference (every other provider: the caller falls back to
+   * `presignDownload`).
+   */
+  directUri(key: string): string | null;
 }
 
 export interface S3StorageOptions {
@@ -190,17 +204,161 @@ export class S3Storage implements Storage {
   async delete(key: string) {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.options.bucket, Key: key }));
   }
+
+  directUri(_key: string) {
+    // RustFS and any other S3-compatible provider are reached only through a presigned
+    // URL: nothing else in the cluster has its own credentials for them.
+    return null;
+  }
 }
 
-/** The configured storage, or null when files are off (no S3_BUCKET). */
+/**
+ * The slice of `@google-cloud/storage`'s client `GcsStorage` calls, so a test can pass a
+ * fake speaking only this much instead of the whole SDK (the real client satisfies it as
+ * is: this is narrower, not different).
+ */
+export interface GcsFile {
+  getSignedUrl(
+    config: { version: "v4"; expires: Date } & (
+      | { action: "read"; responseDisposition?: string }
+      | { action: "write"; contentType: string }
+    ),
+  ): Promise<[string]>;
+  getMetadata(): Promise<[{ size?: string | number; contentType?: string }, ...unknown[]]>;
+  download(): Promise<[Buffer]>;
+  save(data: Buffer, options: { contentType: string; resumable: boolean }): Promise<void>;
+  rename(destination: string): Promise<unknown>;
+  delete(): Promise<unknown>;
+}
+
+export interface GcsClientLike {
+  bucket(name: string): { file(key: string): GcsFile };
+}
+
+export interface GcsStorageOptions {
+  bucket: string;
+  /** A fake in tests; the real `@google-cloud/storage` client otherwise. */
+  client?: GcsClientLike;
+}
+
+/**
+ * GCS over its own JSON API (not the S3-compatible one), with Application Default
+ * Credentials: the cluster's workload identity in production, `gcloud auth
+ * application-default login` locally. No key file, and none of this ever needs one: a
+ * service account with `roles/storage.objectAdmin` on the bucket can read, write and
+ * sign for it; `getSignedUrl` falls back to the IAM Credentials API's `signBlob` to sign
+ * when the credentials have no private key of their own (the metadata server's), which
+ * needs `roles/iam.serviceAccountTokenCreator` on that same service account.
+ */
+export class GcsStorage implements Storage {
+  private readonly client: GcsClientLike;
+  private readonly bucket: string;
+
+  constructor(options: GcsStorageOptions) {
+    this.client = options.client ?? new GcsClient();
+    this.bucket = options.bucket;
+  }
+
+  private file(key: string) {
+    return this.client.bucket(this.bucket).file(key);
+  }
+
+  async presignUpload({
+    key,
+    contentType,
+    contentLength,
+    expiresInSeconds = 300,
+  }: Parameters<Storage["presignUpload"]>[0]) {
+    const expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
+    // V4 signing has no generic way to bind Content-Length the way S3's does (its
+    // extension headers must be `x-goog-`-prefixed): the file-processing worker's own
+    // size check, against the stored object, is what actually enforces the limit.
+    const [url] = await this.file(key).getSignedUrl({
+      version: "v4",
+      action: "write",
+      expires: expiresAt,
+      contentType,
+    });
+    return {
+      url,
+      headers: { "Content-Type": contentType, "Content-Length": String(contentLength) },
+      expiresAt,
+    };
+  }
+
+  async presignDownload(
+    key: string,
+    { filename, expiresInSeconds = 300 }: { filename?: string; expiresInSeconds?: number } = {},
+  ) {
+    const expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
+    const [url] = await this.file(key).getSignedUrl({
+      version: "v4",
+      action: "read",
+      expires: expiresAt,
+      // Anything opened from storage downloads instead of rendering in our origin.
+      ...(filename && {
+        responseDisposition: `attachment; filename="${filename.replaceAll('"', "")}"`,
+      }),
+    });
+    return { url, expiresAt };
+  }
+
+  async head(key: string): Promise<StoredObject | null> {
+    try {
+      const [metadata] = await this.file(key).getMetadata();
+      return {
+        size: Number(required(metadata.size, "size")),
+        contentType: metadata.contentType,
+      };
+    } catch (error) {
+      if (fieldOf(error, "code") === 404) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  async read(key: string, maxBytes: number) {
+    const file = this.file(key);
+    const [metadata] = await file.getMetadata();
+    if (Number(required(metadata.size, "size")) > maxBytes) {
+      throw new Error(`${key} is larger than ${maxBytes} bytes`);
+    }
+    const [buffer] = await file.download();
+    return buffer;
+  }
+
+  async write(key: string, body: Buffer, contentType: string) {
+    await this.file(key).save(body, { contentType, resumable: false });
+  }
+
+  async move(from: string, to: string) {
+    await this.file(from).rename(to);
+  }
+
+  async delete(key: string) {
+    await this.file(key).delete();
+  }
+
+  directUri(key: string) {
+    return `gs://${this.bucket}/${key}`;
+  }
+}
+
+/** The configured storage, or null when files are off (no bucket for the chosen provider). */
 export function createStorage(env: {
+  STORAGE_PROVIDER: "s3" | "gcs";
   S3_BUCKET?: string | undefined;
   S3_REGION: string;
   S3_ENDPOINT?: string | undefined;
   S3_ACCESS_KEY_ID?: string | undefined;
   S3_SECRET_ACCESS_KEY?: string | undefined;
   S3_FORCE_PATH_STYLE: boolean;
+  GCS_BUCKET?: string | undefined;
 }): Storage | null {
+  if (env.STORAGE_PROVIDER === "gcs") {
+    return env.GCS_BUCKET ? new GcsStorage({ bucket: env.GCS_BUCKET }) : null;
+  }
   if (!env.S3_BUCKET) {
     return null;
   }

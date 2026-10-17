@@ -48,15 +48,18 @@ it (the files migration's policies), and what processing it gets (the files proc
 
 ## Storage
 
-Everything goes through the `Storage` interface (`packages/nest-common/src/storage.ts`).
-`S3Storage` speaks the S3 API; the server is RustFS everywhere, locally (docker compose)
-and in every cluster (`deploy/charts/data`). A provider without an S3 API gets its own
-`Storage` implementation; callers don't change. Virus scanning is behind `FileScanner`
-(`apps/worker/src/files/file-scanner.ts`), clamd today.
+Everything goes through the `Storage` interface (`packages/nest-common/src/storage.ts`),
+chosen by `STORAGE_PROVIDER`. `S3Storage` speaks the S3 API; the server is RustFS
+locally (docker compose) and in kind (`deploy/charts/data`). `GcsStorage` speaks GCS's
+own JSON API with Application Default Credentials (no key file): production's bucket.
+A provider with neither API gets its own `Storage` implementation; callers don't change.
+Virus scanning is behind `FileScanner` (`apps/worker/src/files/file-scanner.ts`), clamd
+today.
 
 Browsers upload to the bucket directly, so it needs CORS for the site's origin (locally
-set by the `s3-init` container, in a cluster by the data chart's bucket Job), and the web
-app's CSP must allow `STORAGE_ORIGIN`.
+set by the `s3-init` container, in a cluster by the data chart's bucket Job, in
+production the bucket's own CORS configuration), and the web app's CSP must allow
+`STORAGE_ORIGIN`.
 
 In a cluster, the uploads bucket is on a RustFS server of its own, reached by browsers
 at a host of its own (`storage.uploads.host` in the environment's `data.yaml`, e.g.
@@ -67,6 +70,17 @@ needs of it: the api signs URLs for the public host, the worker reads and writes
 in-cluster, the web app gets `STORAGE_ORIGIN`. Database backups are on a separate RustFS
 server the application has no keys to. Environments without ClamAV (kind, previews)
 leave files off.
+
+In production, `STORAGE_PROVIDER=gcs` and `GCS_BUCKET` (api, worker) point at
+`director-media-…` instead: no `storage` Secret, no access keys. The VM's service
+account needs `roles/storage.objectAdmin` on the bucket to read and write it, and
+`roles/iam.serviceAccountTokenCreator` on itself, since Application Default Credentials
+from the metadata server have no private key to sign a URL with: `getSignedUrl` falls
+back to the IAM Credentials API's `signBlob` instead. Pods reach the metadata server
+(169.254.169.254) through `allowMetadataServer: true` in the stack chart, since it's
+otherwise unreachable like the rest of `networkPolicy.privateRanges`. `web` needs no
+`STORAGE_ORIGIN` for this: GCS's signed URLs are on `storage.googleapis.com`, already
+allowed for Director's pose model.
 
 ## Locally
 

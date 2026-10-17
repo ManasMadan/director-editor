@@ -25,12 +25,30 @@ services:
     autoscaling: { minReplicas: 1, maxReplicas: 3 }
   api:
     autoscaling: { minReplicas: 1, maxReplicas: 3 }
+    allowMetadataServer: true
+    env:
+      # Media (uploads, Director takes, final cuts) on Cloud Storage, not the in-cluster
+      # RustFS the `storage` chart value still wires up: Application Default Credentials
+      # (the VM's service account) sign for this bucket and read and write it directly,
+      # so none of the RustFS Secret's keys below are used even though they're still set.
+      STORAGE_PROVIDER: gcs
+      GCS_BUCKET: director-media-1053522546520
+  worker:
+    # Checks and moves uploaded files: it must agree with the api on where they live.
+    allowMetadataServer: true
+    env:
+      STORAGE_PROVIDER: gcs
+      GCS_BUCKET: director-media-1053522546520
   ai:
+    # Vertex AI calls and (once a take's review reads a gs:// URI instead of downloading
+    # it) Cloud Storage both authenticate with the VM's service account.
+    allowMetadataServer: true
     env:
       # The production express key addresses every Vertex AI model by its full resource
       # name, which needs the project; not a secret.
       GOOGLE_CLOUD_PROJECT: project-18e15b18-c92e-44bb-9bf
   ai-worker:
+    allowMetadataServer: true
     env:
       GOOGLE_CLOUD_PROJECT: project-18e15b18-c92e-44bb-9bf
   clamav:

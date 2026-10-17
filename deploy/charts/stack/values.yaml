@@ -161,6 +161,11 @@ defaults:
   allowFrom: []
   # Namespaces whose pods may connect to this one (the mail server's, for webhooks).
   allowFromNamespaces: []
+  # GCP's metadata server (169.254.169.254), for Application Default Credentials: a
+  # service account's token, or (for a signed URL) its signBlob call through the IAM
+  # Credentials API. Off by default: this link-local address is otherwise unreachable,
+  # like the rest of networkPolicy.privateRanges.
+  allowMetadataServer: false
   # Paths the process may write to (the root filesystem is read-only; /tmp always is).
   writablePaths: []
   # A Secret with `ca.crt`: certificate authorities a Node service trusts besides the
