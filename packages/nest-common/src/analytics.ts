@@ -18,6 +18,7 @@
  */
 import { BigQuery } from "@google-cloud/bigquery";
 import { required } from "@repo/contracts/objects";
+import * as z from "zod";
 
 export interface AnalyticsEvent {
   kind: string;
@@ -58,6 +59,14 @@ export class BigQueryAnalytics implements Analytics {
   }
 
   async record(event: AnalyticsEvent): Promise<void> {
+    try {
+      await this.insert(event);
+    } catch (error) {
+      throw refusedRows(error) ?? error;
+    }
+  }
+
+  private async insert(event: AnalyticsEvent): Promise<void> {
     await this.bigquery
       .dataset(this.dataset)
       .table(this.table)
@@ -73,6 +82,35 @@ export class BigQueryAnalytics implements Analytics {
         },
       ]);
   }
+}
+
+// What the SDK's PartialFailureError carries: per refused row, BigQuery's reasons (and
+// the row itself, which is deliberately not part of this schema).
+const partialFailure = z.object({
+  name: z.literal("PartialFailureError"),
+  errors: z.array(
+    z.object({
+      errors: z.array(z.object({ reason: z.string().optional(), message: z.string().optional() })),
+    }),
+  ),
+});
+
+/**
+ * BigQuery can answer an insert with a 200 that still lists rows it refused
+ * (`insertErrors`). The SDK throws a PartialFailureError for that whose message is empty,
+ * so a log of it says nothing; this rewrites it as an error naming each refusal's
+ * `reason: message`. Only those: the rows themselves (user and video ids) stay out of
+ * the message, and the original error isn't attached as a cause for the same reason.
+ */
+function refusedRows(error: unknown): Error | undefined {
+  const parsed = partialFailure.safeParse(error);
+  if (!parsed.success) {
+    return undefined;
+  }
+  const reasons = parsed.data.errors.flatMap((row) =>
+    row.errors.map(({ reason, message }) => [reason, message].filter(Boolean).join(": ")),
+  );
+  return new Error(`BigQuery refused the event: ${reasons.join("; ")}`);
 }
 
 /** The configured analytics, or null when it's off (no BIGQUERY_DATASET). */

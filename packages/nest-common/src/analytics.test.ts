@@ -3,6 +3,13 @@
  * protocol (the same shape `tabledata.insertAll` expects), so this never reaches Google
  * or the GCE metadata server: the stand-in's `BigQuery` client carries its own, already
  * valid access token (see `client()` below).
+ *
+ * That token lives on an `OAuth2Client` from this package's own `google-auth-library`
+ * devDependency, handed to a `BigQuery` client that authenticates through
+ * `@google-cloud/common`'s copy of the same library. The two must stay on the same major
+ * version (upgrade them together): across majors the SDK stops recognizing the client
+ * as one of its own and goes looking for ADC, and these tests start reaching for the
+ * metadata server.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -17,6 +24,8 @@ class FakeBigQuery {
   readonly listening: Promise<void>;
   readonly received: { path: string; rows: Record<string, unknown>[] }[] = [];
   status = 200;
+  /** What a 200 says about rows BigQuery still refused (`insertErrors`), when set. */
+  insertErrors: unknown[] | undefined;
 
   constructor() {
     this.server = createServer((request, response) => void this.handle(request, response));
@@ -38,7 +47,10 @@ class FakeBigQuery {
     response.writeHead(this.status, { "content-type": "application/json" });
     response.end(
       this.status === 200
-        ? JSON.stringify({ kind: "bigquery#tableDataInsertAllResponse" })
+        ? JSON.stringify({
+            kind: "bigquery#tableDataInsertAllResponse",
+            ...(this.insertErrors && { insertErrors: this.insertErrors }),
+          })
         : JSON.stringify({ error: { message: "insert refused" } }),
     );
   }
@@ -146,5 +158,30 @@ describe("recording an event", () => {
   it("rejects when BigQuery refuses the insert, for the caller to handle", async () => {
     const { analytics } = await setup(400);
     await expect(analytics.record({ kind: "cut_saved" })).rejects.toThrow();
+  });
+
+  it("names each refused row's reason when BigQuery answers 200 but rejects rows", async () => {
+    // A partial failure: the request succeeds and the response lists the rows it dropped.
+    // The SDK's own error for it has an empty message, which logs as nothing useful.
+    const { fake, analytics } = await setup();
+    fake.insertErrors = [
+      {
+        index: 0,
+        errors: [
+          { reason: "invalid", location: "user_id", message: "no such field: user_id." },
+          { reason: "stopped", location: "", message: "" },
+        ],
+      },
+    ];
+    const recorded = analytics.record({ kind: "indexed", userId: "user-secret-1" });
+    await expect(recorded).rejects.toThrow(
+      "BigQuery refused the event: invalid: no such field: user_id.; stopped",
+    );
+    // Only the reasons: never the row itself, which would carry the user's ids into logs.
+    await expect(recorded).rejects.not.toThrow("user-secret-1");
+    await recorded.catch((error: unknown) => {
+      expect(error).toBeInstanceOf(Error);
+      expect(error).not.toHaveProperty("cause");
+    });
   });
 });
