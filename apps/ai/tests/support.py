@@ -26,9 +26,12 @@ ENV = {
     "REDIS_URL": REDIS_URL,
     "AI_SERVICE_SECRET": SECRET,
     "AI_MONTHLY_TOKENS_PER_ORG": "2000000",
-    # Off unless a test turns it on (.env.example points it at the local mock Google).
+    # Off unless a test turns it on; .env.example ships GOOGLE_VERTEX=true so a key
+    # someone adds is billed through Vertex, which needs GOOGLE_CLOUD_PROJECT too, so
+    # tests that don't care about Vertex stay off it unless they ask (extra_env/env).
     "DIRECTOR_MODEL": "",
     "GOOGLE_BASE_URL": "",
+    "GOOGLE_VERTEX": "false",
     "NODE_ENV": "test",
 }
 

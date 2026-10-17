@@ -10,10 +10,11 @@ description: Start, stop or troubleshoot the local development stack. Use when t
   the worker (:3002), notifications (:3003) and webhooks (:3004) services, all in turbo's
   terminal UI.
 - `bun dev:full` adds every optional service: the Python AI service (:8000), S3 storage
-  (RustFS on :59000, console http://localhost:59001), ClamAV (:53310), the mock Google
-  (:12112, Gemini and YouTube for Director) and the email previews
-  (http://localhost:3030). Uploads stay off until `bun run env:set S3_BUCKET=uploads`;
-  Director needs them (docs/director.md).
+  (RustFS on :59000, console http://localhost:59001), ClamAV (:53310) and the email
+  previews (http://localhost:3030). Uploads stay off until
+  `bun run env:set S3_BUCKET=uploads`; Director needs them and a real Gemini and YouTube
+  key (docs/director.md). Neither `bun dev` nor `bun dev:full` starts the mock Google
+  (:12112): it's a test fixture only (`bun run google:fake` starts it by hand).
 - Emails never leave the machine: open Mailpit at http://localhost:58025 to read sign-up
   codes and security alerts.
 - Every port, the services' and the apps', comes from `.env` (`POSTGRES_PORT`,

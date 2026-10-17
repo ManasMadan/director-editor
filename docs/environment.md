@@ -152,7 +152,7 @@ written anywhere else, so a new app gets its variable here.
 | `AI_PORT` | 8000 | apps/ai `dev` and `start` (`fastapi --port`) |
 | `EMAIL_PREVIEW_PORT` | 3030 | packages/email `dev` |
 | `STORYBOOK_PORT` | 6006 | packages/ui `storybook` |
-| `GOOGLE_FAKE_PORT` | 12112 | the mock Google: Gemini and YouTube for Director (`bun run google:fake`, `bun dev:full`) |
+| `GOOGLE_FAKE_PORT` | 12112 | the mock Google: Gemini and YouTube for Director, a test fixture only (`bun run google:fake`; integration and e2e suites start it themselves) |
 
 ## Auth and the API (apps/api)
 
@@ -228,25 +228,25 @@ both `AI_URL` and `AI_SERVICE_SECRET` are set.
 
 The `director` feature in the API is on when `YOUTUBE_API_KEY` is set and the `ai` and
 `files` features are; the AI service answers `FEATURE_DISABLED` for Director until
-`DIRECTOR_MODEL` is set. Locally `.env.example` points both at the mock Google
-(`packages/fake-google`): real requests, mock answers, no real keys. See
-[director.md](director.md).
+`DIRECTOR_MODEL` is set. Both are real Google services, empty in `.env.example` until you
+set a real key: integration and e2e suites start the mock Google (`packages/fake-google`)
+themselves, never `bun dev` or `bun dev:full`. See [director.md](director.md).
 
 | Variable | Read by | Default / example | What it does |
 |---|---|---|---|
-| `DIRECTOR_MODEL` | ai | `gemini-mock` in `.env.example` | The Gemini model, by its Gemini API name (`gemini-3.5-flash`). Gemini because it watches a YouTube video from its URL. Unset: Director off. |
-| `GOOGLE_API_KEY` | ai (req. with `DIRECTOR_MODEL`), the mock Google | `mock-google-key` in `.env.example` | The Gemini API key (the mock's own locally). |
-| `GOOGLE_BASE_URL` | ai | `http://localhost:12112` in `.env.example` | Another Gemini API endpoint: the mock Google locally, a gateway, or unset for Google's. Must be HTTPS in production. |
-| `GOOGLE_VERTEX` | ai | false | `true`: Gemini through Vertex AI express mode, billed through Cloud Billing (so a project's Cloud credits pay), with `GOOGLE_API_KEY` a Vertex key bound to a service account. |
+| `DIRECTOR_MODEL` | ai | empty in `.env.example` | The Gemini model, by its Gemini API name (`gemini-3.8-flash`). Gemini because it watches a YouTube video from its URL. Unset: Director off (and setting it without `GOOGLE_API_KEY` fails at boot). |
+| `GOOGLE_API_KEY` | ai (req. with `DIRECTOR_MODEL`) | empty in `.env.example` | The Gemini API key, or, with `GOOGLE_VERTEX`, a Vertex key bound to a service account. |
+| `GOOGLE_BASE_URL` | ai | empty in `.env.example` | Another Gemini API endpoint: a gateway, or unset for Google's. Must be HTTPS in production. |
+| `GOOGLE_VERTEX` | ai | `true` in `.env.example` | `true`: Gemini through Vertex AI express mode, billed through Cloud Billing (so a project's Cloud credits pay), with `GOOGLE_API_KEY` a Vertex key bound to a service account. Needs `GOOGLE_CLOUD_PROJECT` only once `GOOGLE_API_KEY` is also set; `true` with neither key nor project is harmless, so a key added later is billed through Vertex with no extra step. |
 | `VERTEX_LOCATION` | ai | `global` | The Vertex location every Gemini call addresses its model at. `global` by default: newer models (`gemini-4-argon`) are served only there, and an API key routes a bare model name to `us-central1` regardless of this setting. |
 | `DIRECTOR_TOKENS_PER_PLAN` | ai | 200000 | Cap per plan: watching the whole short and thinking (at least 10000). |
 | `DIRECTOR_TOKENS_PER_SCENE_CHECK` | ai | 12000 | Cap per scene check: one camera frame (at least 2000). |
 | `DIRECTOR_TOKENS_PER_REVIEW` | ai | 120000 | Cap per take review: watching one take (at least 10000). |
-| `INDEX_MODEL` | ai | `gemini-4-argon` (`gemini-mock` in `.env.example`) | The model a plan job indexes a short with, unattended, so it can be a different, more thorough model than `DIRECTOR_MODEL`'s live scene checks and reviews. |
-| `INDEX_FALLBACK_MODEL` | ai | `gemini-3.1-pro-preview` (`gemini-mock` in `.env.example`) | Tried once after `INDEX_MODEL`'s own retries on a plan are spent (a transient failure, not a refusal). |
-| `YOUTUBE_API_KEY` | api, the mock Google | `mock-google-key` in `.env.example` | YouTube Data API v3 key: the Shorts feed, search, video details and comments. Unset: Director off. |
-| `YOUTUBE_API_URL` | api | `https://www.googleapis.com/youtube/v3` (`http://localhost:12112/youtube/v3` in `.env.example`) | Where the API reads YouTube: the mock Google locally. Must be HTTPS in production. |
-| `GOOGLE_CLOUD_PROJECT` | api; ai (req. with `GOOGLE_VERTEX`) | unset | The Google Cloud project Director's live video call (`/api/live`, Gemini Live on Vertex AI) runs in and bills to. Unset: the call answers `FEATURE_DISABLED`. apps/ai reads the same project to address Vertex AI models by their full resource name. |
+| `INDEX_MODEL` | ai | `gemini-4-argon` | The model a plan job indexes a short with, unattended, so it can be a different, more thorough model than `DIRECTOR_MODEL`'s live scene checks and reviews. |
+| `INDEX_FALLBACK_MODEL` | ai | `gemini-3.1-pro-preview` | Tried once after `INDEX_MODEL`'s own retries on a plan are spent (a transient failure, not a refusal). |
+| `YOUTUBE_API_KEY` | api | empty in `.env.example` | YouTube Data API v3 key: the Shorts feed, search, video details and comments. Unset: Director off. |
+| `YOUTUBE_API_URL` | api | `https://www.googleapis.com/youtube/v3` | Where the API reads YouTube: real by default, a gateway otherwise (`.env.example` ships it commented out). Must be HTTPS in production. |
+| `GOOGLE_CLOUD_PROJECT` | api; ai (req. with `GOOGLE_VERTEX` once `GOOGLE_API_KEY` is set) | unset | The Google Cloud project Director's live video call (`/api/live`, Gemini Live on Vertex AI) runs in and bills to. Unset: the call answers `FEATURE_DISABLED`. apps/ai reads the same project to address Vertex AI models by their full resource name. |
 | `LIVE_LOCATION` | api | `us-central1` | The Vertex AI region of the live call's endpoint (`wss://<region>-aiplatform.googleapis.com/...`). |
 | `LIVE_MODEL` | api | `gemini-live-2.5-flash-native-audio` | The Live API model, by its Vertex AI name. |
 | `GOOGLE_ACCESS_TOKEN` | api | unset | Local development only: a Google access token (`gcloud auth print-access-token`, valid for an hour) used in place of the GCE metadata server's. Production refuses to start with it set. |

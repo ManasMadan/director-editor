@@ -27,10 +27,10 @@ bun run db:seed   # optional: a demo user
 
 Open http://localhost:3000 and sign up. Verification codes and every other email land
 in Mailpit at http://localhost:58025. `bun dev:full` adds the AI service (:8000) and its
-worker, RustFS and ClamAV, the Stalwart mail server, Jaeger, the mock Google and the
-email previews (:3030). Uploads switch on with `bun run env:set S3_BUCKET=uploads`
-([docs/files.md](docs/files.md)); Director needs them and the AI service
-([docs/director.md](docs/director.md)).
+worker, RustFS and ClamAV, the Stalwart mail server, Jaeger and the email previews
+(:3030). Uploads switch on with `bun run env:set S3_BUCKET=uploads`
+([docs/files.md](docs/files.md)); Director needs them, the AI service and a real Gemini
+and YouTube key ([docs/director.md](docs/director.md)).
 
 Local services run in Docker with memory limits on their own ports (55432 for
 Postgres, 56379 for Valkey, 5xxxx for the rest), so they sit beside other projects. The

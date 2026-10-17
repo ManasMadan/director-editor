@@ -1,7 +1,7 @@
 /**
- * Runs the mock Google for local development and demos (`bun dev:full` starts it, or
- * `bun run google:fake`). Its key is whatever GOOGLE_API_KEY and YOUTUBE_API_KEY say in
- * .env; both must match.
+ * Runs the mock Google by hand (`bun run google:fake`); test suites start it themselves
+ * instead, in-process (apps/web/test/global-setup.ts and similar). Its key is whatever
+ * GOOGLE_API_KEY and YOUTUBE_API_KEY say in .env; both must match.
  */
 import { startFakeGoogle } from "./index";
 
