@@ -54,6 +54,29 @@
         ],
         "type": "string"
       },
+      "CutPick": {
+        "additionalProperties": false,
+        "description": "The take picked for one shot of a cut.",
+        "properties": {
+          "shotIndex": {
+            "exclusiveMaximum": 12.0,
+            "minimum": 0.0,
+            "title": "Shotindex",
+            "type": "integer"
+          },
+          "takeId": {
+            "format": "uuid",
+            "title": "Takeid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shotIndex",
+          "takeId"
+        ],
+        "title": "CutPick",
+        "type": "object"
+      },
       "Direction": {
         "enum": [
           "none",
@@ -65,6 +88,169 @@
           "turn-right"
         ],
         "type": "string"
+      },
+      "DirectorCutCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "fileId": {
+            "format": "uuid",
+            "title": "Fileid",
+            "type": "string"
+          },
+          "picks": {
+            "items": {
+              "$ref": "#/components/schemas/CutPick"
+            },
+            "maxItems": 12,
+            "minItems": 1,
+            "title": "Picks",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "videoId": {
+            "pattern": "^[A-Za-z0-9_-]{11}$",
+            "title": "Videoid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "videoId",
+          "title",
+          "fileId",
+          "picks"
+        ],
+        "title": "DirectorCutCreate",
+        "type": "object"
+      },
+      "DirectorCutOut": {
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "durationMs": {
+            "minimum": 0.0,
+            "title": "Durationms",
+            "type": "integer"
+          },
+          "fileId": {
+            "format": "uuid",
+            "title": "Fileid",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "picks": {
+            "items": {
+              "$ref": "#/components/schemas/CutPick"
+            },
+            "title": "Picks",
+            "type": "array"
+          },
+          "planId": {
+            "format": "uuid",
+            "title": "Planid",
+            "type": "string"
+          },
+          "publishStatus": {
+            "enum": [
+              "none",
+              "uploading",
+              "published",
+              "failed"
+            ],
+            "title": "Publishstatus",
+            "type": "string"
+          },
+          "templateTitle": {
+            "description": "The plan's title.",
+            "title": "Templatetitle",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "videoId": {
+            "title": "Videoid",
+            "type": "string"
+          },
+          "visibility": {
+            "anyOf": [
+              {
+                "enum": [
+                  "private",
+                  "unlisted",
+                  "public"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visibility"
+          },
+          "youtubeVideoId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Youtubevideoid"
+          }
+        },
+        "required": [
+          "id",
+          "planId",
+          "videoId",
+          "templateTitle",
+          "title",
+          "picks",
+          "fileId",
+          "durationMs",
+          "publishStatus",
+          "youtubeVideoId",
+          "visibility",
+          "createdAt"
+        ],
+        "title": "DirectorCutOut",
+        "type": "object"
+      },
+      "DirectorLibraryOut": {
+        "properties": {
+          "indexUsed": {
+            "description": "The caller has indexed their one short of their own.",
+            "title": "Indexused",
+            "type": "boolean"
+          },
+          "templates": {
+            "description": "The workspace's plans, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/DirectorPlanOut"
+            },
+            "title": "Templates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "templates",
+          "indexUsed"
+        ],
+        "title": "DirectorLibraryOut",
+        "type": "object"
       },
       "DirectorPlanCreate": {
         "additionalProperties": false,
@@ -83,6 +269,27 @@
       },
       "DirectorPlanOut": {
         "properties": {
+          "audioKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The original audio's object key in storage, once captured; apps/api turns it into a short-lived link.",
+            "title": "Audiokey"
+          },
+          "audioStatus": {
+            "enum": [
+              "ready",
+              "failed",
+              "none"
+            ],
+            "title": "Audiostatus",
+            "type": "string"
+          },
           "createdAt": {
             "format": "date-time",
             "title": "Createdat",
@@ -125,6 +332,25 @@
               }
             ]
           },
+          "source": {
+            "enum": [
+              "seed",
+              "user"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "stage": {
+            "enum": [
+              "queued",
+              "watching",
+              "writing",
+              "ready",
+              "failed"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
           "status": {
             "enum": [
               "pending",
@@ -148,10 +374,14 @@
         "required": [
           "id",
           "videoId",
+          "source",
           "status",
+          "stage",
           "error",
           "plan",
           "model",
+          "audioStatus",
+          "audioKey",
           "createdAt",
           "updatedAt"
         ],
@@ -359,10 +589,13 @@
           "INVALID_SIGNATURE",
           "AI_BUDGET_EXCEEDED",
           "SHORT_NOT_FOUND",
-          "SHORT_TOO_LONG",
+          "DIRECTOR_INDEX_LIMIT",
+          "DIRECTOR_VIDEO_UNAVAILABLE",
+          "DIRECTOR_TOO_LONG",
           "DIRECTOR_PLAN_NOT_FOUND",
           "DIRECTOR_PLAN_NOT_READY",
           "DIRECTOR_SHOT_NOT_FOUND",
+          "DIRECTOR_TAKE_NOT_FOUND",
           "DIRECTOR_TAKE_KIND_MISMATCH",
           "DIRECTOR_VIDEO_UNREADABLE",
           "DIRECTOR_ANALYSIS_FAILED",
@@ -1081,10 +1314,211 @@
         "summary": "Ready"
       }
     },
+    "/v1/director/cuts": {
+      "get": {
+        "description": "Every cut of the caller's, newest first.",
+        "operationId": "listDirectorMedia",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DirectorCutOut"
+                  },
+                  "title": "Response Listdirectormedia",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "List Director Media"
+      },
+      "post": {
+        "description": "Records a cut of the caller's, from their takes picked one per shot.",
+        "operationId": "createDirectorCut",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectorCutCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectorCutOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Create Director Cut"
+      }
+    },
+    "/v1/director/library": {
+      "get": {
+        "description": "The workspace's plans, and whether the caller has indexed their own short.",
+        "operationId": "getDirectorLibrary",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectorLibraryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Get Director Library"
+      }
+    },
     "/v1/director/plans": {
       "post": {
-        "description": "The workspace's plan for a short; asking queues its analysis when there is none.",
-        "operationId": "requestDirectorPlan",
+        "description": "The workspace's plan for a short; asking queues its analysis when there is none,\nas the caller's one short of their own (DIRECTOR_INDEX_LIMIT past it).",
+        "operationId": "indexDirectorPlan",
         "parameters": [
           {
             "in": "header",
@@ -1151,7 +1585,7 @@
             "description": "An error."
           }
         },
-        "summary": "Request Director Plan"
+        "summary": "Index Director Plan"
       }
     },
     "/v1/director/plans/{video_id}": {
@@ -1224,6 +1658,83 @@
           }
         },
         "summary": "Get Director Plan"
+      }
+    },
+    "/v1/director/plans/{video_id}/cuts": {
+      "get": {
+        "description": "The caller's cuts of the short, newest first.",
+        "operationId": "listDirectorCuts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "video_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{11}$",
+              "title": "Video Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DirectorCutOut"
+                  },
+                  "title": "Response Listdirectorcuts",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "List Director Cuts"
       }
     },
     "/v1/director/plans/{video_id}/takes": {

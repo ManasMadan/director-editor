@@ -29,6 +29,8 @@ model File {
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// Director takes recorded into this file (ai schema).
   directorTakes DirectorTake[]
+  /// Director cuts rendered into this file (ai schema).
+  directorCuts  DirectorCut[]
 
   @@index([userId, createdAt])
   @@index([status, createdAt])

@@ -30,6 +30,17 @@ export const uploadPurposes = {
     types: ["image/jpeg", "image/png", "image/webp"],
     maxBytes: 8_000_000,
   },
+  /**
+   * A Director cut: the picked takes rendered into one video in the browser, to keep and
+   * publish to YouTube. Kept as rendered. The editor renders about 720x1280 at about
+   * 4 Mbit/s, so a three-minute Short (the longest there is) fits. The cap is also what
+   * the worker can check: it reads an upload into memory, and ClamAV scans at most
+   * 100 MB of a stream by default.
+   */
+  "director-cut-video": {
+    types: ["video/mp4", "video/webm"],
+    maxBytes: 100_000_000,
+  },
 } as const satisfies Record<string, { types: readonly string[]; maxBytes: number }>;
 
 export type UploadPurpose = keyof typeof uploadPurposes;

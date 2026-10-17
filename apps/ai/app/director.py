@@ -15,6 +15,7 @@ DIRECTOR_MODEL the feature is off, because a plan no model wrote would be made u
 import asyncio
 import base64
 import binascii
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
@@ -22,6 +23,7 @@ from uuid import UUID
 
 import httpx
 from google.genai.types import MediaResolution
+from psycopg.errors import UniqueViolation
 from pydantic_ai import Agent, AgentRunResult, BinaryContent, VideoUrl
 from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError
 from pydantic_ai.models import Model
@@ -31,12 +33,14 @@ from pydantic_ai.providers.google_cloud import GoogleCloudProvider
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RunUsage, UsageLimits
 from redis.asyncio import Redis
-from sqlalchemy import func, select, update
+from sqlalchemy import Boolean, func, select, type_coerce, update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.contracts.error_response import ErrorCode
 from app.contracts.realtime_message import DirectorChanged
-from app.db.models import DirectorPlan, DirectorTake
+from app.db.models import DirectorCut, DirectorPlan, DirectorTake
 from app.db.session import tenant
 from app.errors import AppError
 from app.log import log
@@ -45,6 +49,8 @@ from app.queues import DirectorQueue
 from app.realtime import publish_to_org
 from app.schemas import (
     MAX_SHOT_SECONDS,
+    CutPick,
+    DirectorCutCreate,
     DirectorTakeCreate,
     SceneCheck,
     Shot,
@@ -81,6 +87,9 @@ PLANNER_RETRY_BACKOFF_SECONDS = 1.0
 # this one didn't. 401 is always about the model; 403/404 only when they aren't about the
 # video (REFUSED_STATUSES' own distinction).
 _FALLBACK_STATUSES = frozenset({401, 403, 404})
+# The partial unique index that holds each member to one short of their own (Prisma's
+# ai.prisma, DirectorPlan).
+ONE_USER_INDEX = "director_plan_one_user_index"
 # Three frames a second is plenty for a shot plan (it's reading cuts and poses, not fine
 # print), and keeps the request well under Gemini's token budget for a long short.
 INDEX_VIDEO_FPS = 3.0
@@ -246,14 +255,58 @@ def youtube_video(video_id: str) -> VideoUrl:
     )
 
 
-def _shot(plan: DirectorPlan, shot_index: int) -> Shot:
-    """The plan's shot at `shot_index` (DIRECTOR_PLAN_NOT_READY, DIRECTOR_SHOT_NOT_FOUND)."""
+def _ready_shots(plan: DirectorPlan) -> list[Shot]:
+    """A ready plan's shots (DIRECTOR_PLAN_NOT_READY before then)."""
     if plan.status != "ready" or plan.plan is None:
         raise AppError("DIRECTOR_PLAN_NOT_READY")
-    shots = ShotPlan.model_validate(plan.plan).shots
+    return ShotPlan.model_validate(plan.plan).shots
+
+
+def _shot(plan: DirectorPlan, shot_index: int) -> Shot:
+    """The plan's shot at `shot_index` (DIRECTOR_PLAN_NOT_READY, DIRECTOR_SHOT_NOT_FOUND)."""
+    shots = _ready_shots(plan)
     if shot_index >= len(shots):
         raise AppError("DIRECTOR_SHOT_NOT_FOUND")
     return shots[shot_index]
+
+
+def _pick_ms(pick: CutPick, shots: list[Shot], takes: Mapping[UUID, DirectorTake]) -> int:
+    """How long a picked take lasts in a cut: a video take's best part once it's reviewed,
+    otherwise its shot's length (for a photo, how long it's shown). DIRECTOR_SHOT_NOT_FOUND
+    for a shot the plan hasn't, DIRECTOR_TAKE_NOT_FOUND for a take that isn't the caller's
+    take of that shot."""
+    if pick.shotIndex >= len(shots):
+        raise AppError("DIRECTOR_SHOT_NOT_FOUND")
+    take = takes.get(pick.takeId)
+    if take is None or take.shot_index != pick.shotIndex:
+        raise AppError("DIRECTOR_TAKE_NOT_FOUND")
+    if take.best_start_ms is not None and take.best_end_ms is not None:
+        return take.best_end_ms - take.best_start_ms
+    return round(shots[pick.shotIndex].durationSeconds * 1000)
+
+
+async def _index_used(session: AsyncSession, user_id: UUID) -> bool:
+    """Whether the user has a short of their own that hasn't failed, in any of their
+    workspaces: ai.index_used looks past row-level security, which would show this session
+    only the current one (the limit, ONE_USER_INDEX, is across all of them)."""
+    used = await session.scalar(select(type_coerce(func.ai.index_used(user_id), Boolean)))
+    return used is True
+
+
+async def _take_turns(session: AsyncSession, user_id: UUID) -> None:
+    """Holds the user's lock until the session's transaction ends, so their index requests
+    (a double click, two tabs) claim one at a time: each sees what the one before it
+    committed, and the same short twice is one plan, not a refusal. A transaction-scoped
+    lock, so it holds behind a transaction-mode pooler too."""
+    _ = await session.execute(
+        select(func.pg_advisory_xact_lock(func.hashtextextended(str(user_id), 0)))
+    )
+
+
+def _violates(error: IntegrityError, index: str) -> bool:
+    """Whether the database refused a write for a duplicate in `index`."""
+    cause = error.orig
+    return isinstance(cause, UniqueViolation) and cause.diag.constraint_name == index
 
 
 def _jpeg(image: str) -> bytes:
@@ -387,36 +440,23 @@ class Director:
 
     # ------------------------------------------------------------------------ plans
 
-    async def request_plan(
+    async def index(
         self, org_id: UUID, user_id: UUID, video_id: str, request_id: str | None
     ) -> DirectorPlan:
         """The workspace's plan for the video, queuing its analysis when there is none yet
-        or the last one failed. Asking again while it's queued or ready changes nothing."""
-        async with tenant(org_id) as session:
-            # ON CONFLICT: two members opening the same short at once make one plan, and
-            # RETURNING says whether this call made it.
-            created = await session.scalar(
-                insert(DirectorPlan)
-                .values(org_id=org_id, created_by=user_id, video_id=video_id, updated_at=func.now())
-                .on_conflict_do_nothing(index_elements=["org_id", "video_id"])
-                .returning(DirectorPlan.id)
-            )
-            # There now: this call made it, or the one it conflicted with did.
-            plan = (
-                await session.scalars(
-                    select(DirectorPlan).where(
-                        DirectorPlan.org_id == org_id, DirectorPlan.video_id == video_id
-                    )
-                )
-            ).one()
-            # A failed plan is tried again, by whichever request claims it first.
-            retried = await session.scalar(
-                update(DirectorPlan)
-                .where(DirectorPlan.id == plan.id, DirectorPlan.status == "failed")
-                .values(status="pending", error=None, updated_at=func.now())
-                .returning(DirectorPlan.id)
-            )
-            await session.refresh(plan)
+        or the last one failed. Asking again while it's queued or ready changes nothing,
+        and counts for no one. A new plan (or a failed one tried again) is the caller's
+        one short of their own: DIRECTOR_INDEX_LIMIT when they already have one that
+        hasn't failed. Seeded templates never count."""
+        try:
+            async with tenant(org_id) as session:
+                created, retried, plan = await self._claim(session, org_id, user_id, video_id)
+        except IntegrityError as error:
+            # A plan of the caller's made after the check in _claim looked, by something
+            # that didn't take their turn (_take_turns): the partial unique index refuses it.
+            if _violates(error, ONE_USER_INDEX):
+                raise AppError("DIRECTOR_INDEX_LIMIT") from None
+            raise
         if plan.status == "pending":
             # Queued on every ask while pending: the job id holds still until a retry, so
             # BullMQ adds it once, and a plan whose queuing failed gets queued next time.
@@ -428,9 +468,63 @@ class Director:
                 request_id=request_id,
                 user_id=user_id,
             )
-        if created is not None or retried is not None:
+        if created or retried:
             await publish_to_org(self._redis, org_id, CHANGED)
         return plan
+
+    async def _claim(
+        self, session: AsyncSession, org_id: UUID, user_id: UUID, video_id: str
+    ) -> tuple[bool, bool, DirectorPlan]:
+        """Makes the plan, or claims a failed one for another try, in the caller's name:
+        whether it made it, whether it claimed it, and the plan."""
+        await _take_turns(session, user_id)
+        existing = await session.scalar(
+            select(DirectorPlan).where(
+                DirectorPlan.org_id == org_id, DirectorPlan.video_id == video_id
+            )
+        )
+        if (existing is None or existing.status == "failed") and await _index_used(
+            session, user_id
+        ):
+            raise AppError("DIRECTOR_INDEX_LIMIT")
+        # ON CONFLICT: two members asking for the same short at once make one plan, and
+        # RETURNING says whether this call made it.
+        created = await session.scalar(
+            insert(DirectorPlan)
+            .values(org_id=org_id, created_by=user_id, video_id=video_id, updated_at=func.now())
+            .on_conflict_do_nothing(index_elements=["org_id", "video_id"])
+            .returning(DirectorPlan.id)
+        )
+        # There now: this call made it, or the one it conflicted with did.
+        plan = (
+            await session.scalars(
+                select(DirectorPlan).where(
+                    DirectorPlan.org_id == org_id, DirectorPlan.video_id == video_id
+                )
+            )
+        ).one()
+        # A failed plan is tried again, by whichever request claims it first, and is then
+        # that member's index.
+        retried = await session.scalar(
+            update(DirectorPlan)
+            .where(DirectorPlan.id == plan.id, DirectorPlan.status == "failed")
+            .values(
+                status="pending",
+                stage="queued",
+                error=None,
+                created_by=user_id,
+                updated_at=func.now(),
+            )
+            .returning(DirectorPlan.id)
+        )
+        await session.refresh(plan)
+        return created is not None, retried is not None, plan
+
+    async def library(self, org_id: UUID, user_id: UUID) -> tuple[list[DirectorPlan], bool]:
+        """The workspace's plans, newest first, and whether the caller has used their index."""
+        async with tenant(org_id) as session:
+            plans = await session.scalars(select(DirectorPlan).order_by(DirectorPlan.id.desc()))
+            return list(plans), await _index_used(session, user_id)
 
     async def plan(self, org_id: UUID, video_id: str) -> DirectorPlan:
         async with tenant(org_id) as session:
@@ -495,6 +589,7 @@ class Director:
                 .where(DirectorPlan.id == plan_id)
                 .values(
                     status="ready",
+                    stage="ready",
                     error=None,
                     plan=repaired.model_dump(mode="json"),
                     model=answering_model,
@@ -540,7 +635,7 @@ class Director:
             await session.execute(
                 update(DirectorPlan)
                 .where(DirectorPlan.id == plan_id)
-                .values(status="failed", error=code, updated_at=func.now())
+                .values(status="failed", stage="failed", error=code, updated_at=func.now())
             )
         await publish_to_org(self._redis, org_id, CHANGED)
 
@@ -693,6 +788,60 @@ class Director:
                 )
             )
         await publish_to_org(self._redis, org_id, CHANGED)
+
+    # ------------------------------------------------------------------------ cuts
+
+    async def save_cut(
+        self, org_id: UUID, user_id: UUID, body: DirectorCutCreate
+    ) -> tuple[DirectorCut, DirectorPlan]:
+        """Records the caller's cut of a ready plan, from takes of theirs picked one per
+        shot, and works out how long it lasts. The file was checked by apps/api."""
+        plan = await self.plan(org_id, body.videoId)
+        shots = _ready_shots(plan)
+        if len({pick.shotIndex for pick in body.picks}) != len(body.picks):
+            raise AppError("VALIDATION_FAILED")
+        async with tenant(org_id) as session:
+            takes = {
+                take.id: take
+                for take in await session.scalars(
+                    select(DirectorTake).where(
+                        DirectorTake.plan_id == plan.id,
+                        DirectorTake.user_id == user_id,
+                        DirectorTake.id.in_([pick.takeId for pick in body.picks]),
+                    )
+                )
+            }
+            duration_ms = sum(_pick_ms(pick, shots, takes) for pick in body.picks)
+            cut = DirectorCut(
+                org_id=org_id,
+                plan_id=plan.id,
+                user_id=user_id,
+                title=body.title,
+                picks=[pick.model_dump(mode="json") for pick in body.picks],
+                file_id=body.fileId,
+                duration_ms=duration_ms,
+                updated_at=func.now(),
+            )
+            session.add(cut)
+            await session.flush()
+            await session.refresh(cut)
+        return cut, plan
+
+    async def cuts(
+        self, org_id: UUID, user_id: UUID, video_id: str | None
+    ) -> list[tuple[DirectorCut, DirectorPlan]]:
+        """The caller's cuts, newest first, each with its plan: of one short's plan, or of
+        every plan when `video_id` is None."""
+        query = (
+            select(DirectorCut, DirectorPlan)
+            .join(DirectorPlan, DirectorCut.plan_id == DirectorPlan.id)
+            .where(DirectorCut.user_id == user_id)
+            .order_by(DirectorCut.id.desc())
+        )
+        if video_id is not None:
+            query = query.where(DirectorPlan.id == (await self.plan(org_id, video_id)).id)
+        async with tenant(org_id) as session:
+            return [(cut, plan) for cut, plan in (await session.execute(query)).all()]
 
     async def _download(self, url: str) -> tuple[bytes, TakeContentType]:
         """The take's bytes and type, read from its presigned URL up to MAX_TAKE_BYTES."""

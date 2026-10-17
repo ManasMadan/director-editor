@@ -44,8 +44,11 @@ const shot: Shot = {
 const readyPlan: DirectorPlan = directorPlanSchema.parse({
   id: "7d3c1c4e-8a52-4f0a-9d76-0f1f7b8b2a11",
   videoId: "dQw4w9WgXcQ",
+  source: "seed",
   status: "ready",
+  stage: "ready",
   error: null,
+  audio: { status: "none", url: null },
   plan: {
     title: "Morning coffee",
     format: "GRWM",

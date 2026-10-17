@@ -16,12 +16,13 @@ from typing import Annotated
 
 import httpx
 from fastapi import Depends, FastAPI, Path, Request
+from pydantic import TypeAdapter
 from redis.asyncio import Redis
 from sqlalchemy import text
 
 from app.auth import CallerDep
 from app.contracts.error_response import ErrorResponse
-from app.db.models import DirectorPlan, DirectorTake
+from app.db.models import DirectorCut, DirectorPlan, DirectorTake
 from app.db.session import close_engine, engine, open_engine
 from app.director import Director, create_director
 from app.errors import AppError, install_error_handlers
@@ -29,6 +30,10 @@ from app.log import configure_logging
 from app.queues import DirectorQueue
 from app.schemas import (
     VIDEO_ID_PATTERN,
+    CutPick,
+    DirectorCutCreate,
+    DirectorCutOut,
+    DirectorLibraryOut,
     DirectorPlanCreate,
     DirectorPlanOut,
     DirectorTakeCreate,
@@ -107,12 +112,37 @@ def _plan_out(plan: DirectorPlan) -> DirectorPlanOut:
     return DirectorPlanOut(
         id=plan.id,
         videoId=plan.video_id,
+        source=plan.source,
         status=plan.status,
+        stage=plan.stage,
         error=plan.error,
         plan=ShotPlan.model_validate(plan.plan) if plan.plan is not None else None,
         model=plan.model,
+        audioStatus=plan.audio_status,
+        audioKey=plan.audio_key,
         createdAt=plan.created_at,
         updatedAt=plan.updated_at,
+    )
+
+
+_PICKS = TypeAdapter(list[CutPick])
+
+
+def _cut_out(cut: DirectorCut, plan: DirectorPlan) -> DirectorCutOut:
+    return DirectorCutOut(
+        id=cut.id,
+        planId=plan.id,
+        videoId=plan.video_id,
+        # A cut is only ever made of a ready plan, and a ready plan stays ready.
+        templateTitle=ShotPlan.model_validate(plan.plan).title,
+        title=cut.title,
+        picks=_PICKS.validate_python(cut.picks),
+        fileId=cut.file_id,
+        durationMs=cut.duration_ms,
+        publishStatus=cut.publish_status,
+        youtubeVideoId=cut.youtube_video_id,
+        visibility=cut.visibility,
+        createdAt=cut.created_at,
     )
 
 
@@ -156,15 +186,23 @@ async def dependencies() -> HealthResponse:
 
 
 # `operation_id` becomes the operation name in the generated TypeScript client.
-@app.post("/v1/director/plans", operation_id="requestDirectorPlan")
-async def request_director_plan(
+@app.post("/v1/director/plans", operation_id="indexDirectorPlan")
+async def index_director_plan(
     body: DirectorPlanCreate, caller: CallerDep, director: DirectorDep, request: Request
 ) -> DirectorPlanOut:
-    """The workspace's plan for a short; asking queues its analysis when there is none."""
-    plan = await director.request_plan(
+    """The workspace's plan for a short; asking queues its analysis when there is none,
+    as the caller's one short of their own (DIRECTOR_INDEX_LIMIT past it)."""
+    plan = await director.index(
         caller.org_id, caller.user_id, body.videoId, request.headers.get("x-request-id")
     )
     return _plan_out(plan)
+
+
+@app.get("/v1/director/library", operation_id="getDirectorLibrary")
+async def get_director_library(caller: CallerDep, director: DirectorDep) -> DirectorLibraryOut:
+    """The workspace's plans, and whether the caller has indexed their own short."""
+    plans, used = await director.library(caller.org_id, caller.user_id)
+    return DirectorLibraryOut(templates=[_plan_out(plan) for plan in plans], indexUsed=used)
 
 
 @app.get("/v1/director/plans/{video_id}", operation_id="getDirectorPlan")
@@ -205,3 +243,28 @@ async def list_director_takes(
 ) -> list[DirectorTakeOut]:
     """The caller's takes for the short's plan, newest first."""
     return [_take_out(t) for t in await director.takes(caller.org_id, caller.user_id, video_id)]
+
+
+@app.post("/v1/director/cuts", operation_id="createDirectorCut", status_code=201)
+async def create_director_cut(
+    body: DirectorCutCreate, caller: CallerDep, director: DirectorDep
+) -> DirectorCutOut:
+    """Records a cut of the caller's, from their takes picked one per shot."""
+    cut, plan = await director.save_cut(caller.org_id, caller.user_id, body)
+    return _cut_out(cut, plan)
+
+
+@app.get("/v1/director/plans/{video_id}/cuts", operation_id="listDirectorCuts")
+async def list_director_cuts(
+    video_id: Annotated[str, Path(pattern=VIDEO_ID_PATTERN)],
+    caller: CallerDep,
+    director: DirectorDep,
+) -> list[DirectorCutOut]:
+    """The caller's cuts of the short, newest first."""
+    return [_cut_out(*row) for row in await director.cuts(caller.org_id, caller.user_id, video_id)]
+
+
+@app.get("/v1/director/cuts", operation_id="listDirectorMedia")
+async def list_director_media(caller: CallerDep, director: DirectorDep) -> list[DirectorCutOut]:
+    """Every cut of the caller's, newest first."""
+    return [_cut_out(*row) for row in await director.cuts(caller.org_id, caller.user_id, None)]

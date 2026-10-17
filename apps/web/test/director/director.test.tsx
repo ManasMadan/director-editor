@@ -124,24 +124,26 @@ describe("Director's page before the plan is ready", () => {
   ])("says why the plan failed (%s), and asks again", async (error, message) => {
     const videoId = newVideoId();
     await commands.fakeDirector(videoId, { plan: { status: "failed", error, plan: null } });
-    await commands.failRequests("/rpc/director/requestPlan", { status: 502 });
+    await commands.failRequests("/rpc/director/index", { status: 502 });
     const page = await showPlan(videoId);
     await expect.element(page.getByRole("alert")).toHaveTextContent(message);
     await userEvent.click(page.getByRole("button", { name: "Try again" }));
-    await expect.poll(() => commands.failedRequests("/rpc/director/requestPlan")).toBe(1);
+    await expect.poll(() => commands.failedRequests("/rpc/director/index")).toBe(1);
     await expect.element(page.getByRole("alert")).not.toHaveTextContent(message);
   });
 
-  it("asks Director for a plan nobody has asked for yet, and again after a failure", async () => {
+  it("doesn't index a short just because it was opened, only when the member asks", async () => {
     const videoId = newVideoId();
     // The API checks the short on YouTube first, which isn't reachable here: as if the
     // gateway couldn't reach the API.
-    await commands.failRequests("/rpc/director/requestPlan", { status: 502 });
+    await commands.failRequests("/rpc/director/index", { status: 502 });
     const page = await showPlan(videoId);
-    await expect.poll(() => commands.failedRequests("/rpc/director/requestPlan")).toBe(1);
-    await expect.element(page.getByRole("alert")).toBeVisible();
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent("This Short isn't in your library yet.");
+    expect(await commands.failedRequests("/rpc/director/index")).toBe(0);
     await userEvent.click(page.getByRole("button", { name: "Try again" }));
-    await expect.poll(() => commands.failedRequests("/rpc/director/requestPlan")).toBe(2);
+    await expect.poll(() => commands.failedRequests("/rpc/director/index")).toBe(1);
   });
 
   it("says when the plan can't be read", async () => {
@@ -149,6 +151,6 @@ describe("Director's page before the plan is ready", () => {
     await commands.failRequests("/rpc/director/plan", { status: 502 });
     const page = await showPlan(videoId);
     await expect.element(page.getByRole("alert")).toBeVisible();
-    expect(await commands.failedRequests("/rpc/director/requestPlan")).toBe(0);
+    expect(await commands.failedRequests("/rpc/director/index")).toBe(0);
   });
 });

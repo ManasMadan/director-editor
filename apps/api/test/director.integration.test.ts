@@ -26,6 +26,8 @@ const KEY = "test-youtube-key";
 const VIDEO = "dQw4w9WgXcQ";
 const LONG = "LongVideo01";
 const GONE = "GoneVideo01";
+/** A take the AI service says isn't the member's take of the shot. */
+const SOMEONE_ELSES_TAKE = randomUUID();
 /** A plan the AI service fails to read. */
 const BROKEN = "BrokenPlan1";
 
@@ -155,8 +157,11 @@ const PLAN = {
 interface StandInPlan {
   id: string;
   org: string;
+  /** Who indexed it: the AI service holds each member to one (DIRECTOR_INDEX_LIMIT). */
+  user: string | null;
   videoId: string;
   status: string;
+  audioKey: string | null;
 }
 const plans: StandInPlan[] = [];
 const takes: {
@@ -167,6 +172,16 @@ const takes: {
   shotIndex: number;
   fileId: string;
   kind: string;
+  score: number | null;
+  createdAt: string;
+}[] = [];
+const cuts: {
+  id: string;
+  org: string;
+  user: string;
+  plan: StandInPlan;
+  body: unknown;
+  createdAt: string;
 }[] = [];
 
 function planOut(plan: StandInPlan) {
@@ -174,13 +189,24 @@ function planOut(plan: StandInPlan) {
   return {
     id: plan.id,
     videoId: plan.videoId,
+    source: plan.user ? "user" : "seed",
     status: plan.status,
+    stage: plan.status === "ready" ? "ready" : "queued",
     error: null,
     plan: plan.status === "ready" ? PLAN : null,
     model: plan.status === "ready" ? "gemini-test" : null,
+    audioStatus: plan.audioKey ? "ready" : "none",
+    audioKey: plan.audioKey,
     createdAt: now,
     updatedAt: now,
   };
+}
+
+/** A plan of the workspace's, ready to film, as a seeded template is. */
+function readyTemplate(org: string, videoId: string, audioKey: string | null = null) {
+  const plan = { id: randomUUID(), org, user: null, videoId, status: "ready", audioKey };
+  plans.unshift(plan);
+  return plan;
 }
 
 async function readBody(request: IncomingMessage): Promise<Record<string, unknown>> {
@@ -225,13 +251,9 @@ async function aiRoute(request: IncomingMessage, response: ServerResponse) {
       data: { params: {}, requestId: "r" },
     });
   const find = (videoId: string) => plans.find((p) => p.org === who.org && p.videoId === videoId);
-  if (route === "POST /v1/director/plans") {
-    const videoId = String(body.videoId);
-    const plan = find(videoId) ?? { id: randomUUID(), org: who.org, videoId, status: "pending" };
-    if (!plans.includes(plan)) {
-      plans.push(plan);
-    }
-    return send(response, 200, planOut(plan));
+  const answer = libraryRoute(route, who, body) ?? directorCutRoute(route, who, body);
+  if (answer) {
+    return send(response, answer.status, answer.body);
   }
   const planMatch = /^GET \/v1\/director\/plans\/([\w-]{11})$/.exec(route);
   if (planMatch?.[1] === BROKEN) {
@@ -261,6 +283,8 @@ async function aiRoute(request: IncomingMessage, response: ServerResponse) {
       shotIndex: Number(body.shotIndex),
       fileId: String(body.fileId),
       kind: String(body.kind),
+      score: null,
+      createdAt: new Date().toISOString(),
     };
     takes.push(take);
     return send(response, 201, takeOut(take));
@@ -284,14 +308,93 @@ function takeOut(take: (typeof takes)[number]) {
     shotIndex: take.shotIndex,
     fileId: take.fileId,
     kind: take.kind,
-    status: "pending",
+    status: take.score === null ? "pending" : "ready",
     error: null,
     bestStartMs: null,
     bestEndMs: null,
-    score: null,
+    score: take.score,
     feedback: null,
-    createdAt: new Date().toISOString(),
+    createdAt: take.createdAt,
   };
+}
+
+function cutOut(cut: (typeof cuts)[number]) {
+  const body = cut.body as { title: string; fileId: string; picks: unknown[] };
+  return {
+    id: cut.id,
+    planId: cut.plan.id,
+    videoId: cut.plan.videoId,
+    templateTitle: PLAN.title,
+    title: body.title,
+    picks: body.picks,
+    fileId: body.fileId,
+    durationMs: 9000,
+    publishStatus: "none",
+    youtubeVideoId: null,
+    visibility: null,
+    createdAt: cut.createdAt,
+  };
+}
+
+function failure(status: number, code: string) {
+  return { status, body: { defined: true, code, status, message: code, data: { params: {} } } };
+}
+
+/** The AI service's library: a workspace's plans, and each member's one short of their own. */
+function libraryRoute(
+  route: string,
+  who: { org: string; user: string },
+  body: Record<string, unknown>,
+): { status: number; body: unknown } | null {
+  const own = plans.filter((p) => p.org === who.org);
+  if (route === "GET /v1/director/library") {
+    const indexUsed = own.some((p) => p.user === who.user);
+    return { status: 200, body: { templates: own.map(planOut), indexUsed } };
+  }
+  if (route !== "POST /v1/director/plans") {
+    return null;
+  }
+  const videoId = String(body.videoId);
+  const found = own.find((p) => p.videoId === videoId);
+  if (found) {
+    return { status: 200, body: planOut(found) };
+  }
+  if (plans.some((p) => p.user === who.user)) {
+    return failure(409, "DIRECTOR_INDEX_LIMIT");
+  }
+  const plan = { id: randomUUID(), org: who.org, user: who.user, videoId, status: "pending" };
+  plans.unshift({ ...plan, audioKey: null });
+  return { status: 200, body: planOut({ ...plan, audioKey: null }) };
+}
+
+/** The AI service's routes for cuts: each member's own, of their workspace's plans. */
+function directorCutRoute(
+  route: string,
+  who: { org: string; user: string },
+  body: Record<string, unknown>,
+): { status: number; body: unknown } | null {
+  const mine = cuts.filter((c) => c.org === who.org && c.user === who.user);
+  if (route === "POST /v1/director/cuts") {
+    const plan = plans.find((p) => p.org === who.org && p.videoId === body.videoId);
+    if (!plan) {
+      return failure(404, "DIRECTOR_PLAN_NOT_FOUND");
+    }
+    const createdAt = new Date().toISOString();
+    if (JSON.stringify(body.picks).includes(SOMEONE_ELSES_TAKE)) {
+      return failure(404, "DIRECTOR_TAKE_NOT_FOUND");
+    }
+    const cut = { id: randomUUID(), org: who.org, user: who.user, plan, body, createdAt };
+    cuts.unshift(cut);
+    return { status: 201, body: cutOut(cut) };
+  }
+  if (route === "GET /v1/director/cuts") {
+    return { status: 200, body: mine.map(cutOut) };
+  }
+  const ofPlan = /^GET \/v1\/director\/plans\/([\w-]{11})\/cuts$/.exec(route);
+  if (ofPlan) {
+    return { status: 200, body: mine.filter((c) => c.plan.videoId === ofPlan[1]).map(cutOut) };
+  }
+  return null;
 }
 
 async function listen(server: Server) {
@@ -344,6 +447,7 @@ async function expectError(promise: Promise<unknown>, code: string) {
   );
   expect(error, `expected ${code}`).toBeInstanceOf(ORPCError);
   expect((error as ORPCError<string, unknown>).code).toBe(code);
+  return error as ORPCError<string, unknown>;
 }
 
 async function sql(query: string, params: unknown[] = []) {
@@ -474,15 +578,18 @@ describe("the Shorts feed", () => {
   });
 });
 
-describe("Director", () => {
-  it("asks the AI service for a plan once the short is one, as the member in their workspace", async () => {
+describe("Director's library", () => {
+  it("indexes a short from any kind of link, as the member in their workspace", async () => {
     const { session, me } = await signedIn();
     await expectError(session.rpc.director.plan({ videoId: VIDEO }), "DIRECTOR_PLAN_NOT_FOUND");
-    const plan = await session.rpc.director.requestPlan({ videoId: VIDEO });
+    const plan = await session.rpc.director.index({ url: `https://youtu.be/${VIDEO}` });
     expect(plan).toMatchObject({
       videoId: VIDEO,
+      source: "user",
       status: "pending",
+      stage: "queued",
       plan: null,
+      audio: { status: "none", url: null },
       createdAt: expect.any(Date),
     });
     expect(aiCalls.at(-1)).toMatchObject({
@@ -491,19 +598,63 @@ describe("Director", () => {
       user: me.id,
       body: { videoId: VIDEO },
     });
+    for (const url of [`https://www.youtube.com/shorts/${VIDEO}`, `youtube.com/watch?v=${VIDEO}`]) {
+      await expect(session.rpc.director.index({ url })).resolves.toMatchObject({ id: plan.id });
+    }
     await expect(session.rpc.director.plan({ videoId: VIDEO })).resolves.toMatchObject({
       id: plan.id,
     });
+    await expect(session.rpc.director.library()).resolves.toEqual({
+      templates: [expect.objectContaining({ id: plan.id })],
+      indexUsed: true,
+    });
   });
 
-  it("refuses shorts that are too long or aren't there, before the AI service hears of them", async () => {
+  it("refuses links that aren't a short Director can film, before the AI service hears of them", async () => {
     const { session } = await signedIn();
     const before = aiCalls.length;
-    await expectError(session.rpc.director.requestPlan({ videoId: LONG }), "SHORT_TOO_LONG");
-    await expectError(session.rpc.director.requestPlan({ videoId: GONE }), "SHORT_NOT_FOUND");
+    const tooLong = await expectError(
+      session.rpc.director.index({ url: `https://www.youtube.com/watch?v=${LONG}` }),
+      "DIRECTOR_TOO_LONG",
+    );
+    expect(tooLong.data).toMatchObject({ params: { maxSeconds: 180 } });
+    for (const url of [`https://youtu.be/${GONE}`, "https://example.com/watch?v=x"]) {
+      await expectError(session.rpc.director.index({ url }), "DIRECTOR_VIDEO_UNAVAILABLE");
+    }
     expect(aiCalls.length).toBe(before);
   });
 
+  it("passes on a second short of the member's own as DIRECTOR_INDEX_LIMIT", async () => {
+    const { session } = await signedIn();
+    await session.rpc.director.index({ url: VIDEO });
+    await expectError(session.rpc.director.index({ url: "Short2xxxxx" }), "DIRECTOR_INDEX_LIMIT");
+  });
+
+  it("lists the workspace's templates, with a short-lived link to each one's audio", async () => {
+    const { session, me } = await signedIn();
+    const org = String(me.activeOrganizationId);
+    const silent = readyTemplate(org, "SeedSilent1");
+    const sung = readyTemplate(org, "SeedSinger1", "seed-audio/SeedSinger1.m4a");
+    const { templates, indexUsed } = await session.rpc.director.library();
+    expect(indexUsed).toBe(false);
+    expect(templates.map((plan) => [plan.id, plan.source, plan.audio.status])).toEqual([
+      [sung.id, "seed", "ready"],
+      [silent.id, "seed", "none"],
+    ]);
+    expect(templates[1]?.audio.url).toBeNull();
+    const audio = new URL(String(templates[0]?.audio.url));
+    expect(audio.pathname).toContain("seed-audio/SeedSinger1.m4a");
+    expect(audio.searchParams.get("X-Amz-Expires")).toBe("3600");
+    // Another workspace has none of them.
+    const other = await signedIn();
+    await expect(other.session.rpc.director.library()).resolves.toEqual({
+      templates: [],
+      indexUsed: false,
+    });
+  });
+});
+
+describe("Director", () => {
   it("passes on the scene check, and parses what comes back", async () => {
     const { session } = await signedIn();
     const image = "/9j/".padEnd(200, "A");
@@ -521,7 +672,7 @@ describe("Director", () => {
 
   it("adds a take from the member's own ready upload, handing the AI service a read of it", async () => {
     const { session, me } = await signedIn();
-    await session.rpc.director.requestPlan({ videoId: VIDEO });
+    await session.rpc.director.index({ url: VIDEO });
     const { file } = await session.rpc.files.createUpload({
       purpose: "director-take-video",
       filename: "shot-1.webm",
@@ -634,6 +785,145 @@ describe("Director", () => {
   });
 });
 
+describe("Director's shots and cuts", () => {
+  /** A take of the member's in the AI service, scored as its review would. */
+  function scoredTake(org: string, user: string, score: number | null, at: string) {
+    const take = {
+      id: randomUUID(),
+      org,
+      user,
+      videoId: "ShotsShort1",
+      shotIndex: 0,
+      fileId: randomUUID(),
+      kind: "video",
+      score,
+      createdAt: at,
+    };
+    takes.push(take);
+    return take;
+  }
+
+  it("picks each shot's best take, the newest of a tie, and flags a retake below 60", async () => {
+    const { session, me } = await signedIn();
+    const org = String(me.activeOrganizationId);
+    const plan = readyTemplate(org, "ShotsShort1");
+    const low = scoredTake(org, me.id, 45, "2026-10-18T10:00:00Z");
+    const tied = scoredTake(org, me.id, 59, "2026-10-18T10:01:00Z");
+    const newest = scoredTake(org, me.id, 59, "2026-10-18T10:02:00Z");
+    const [shot] = await session.rpc.director.shots({ videoId: "ShotsShort1" });
+    expect(shot).toMatchObject({ index: 0, pickedTakeId: newest.id, needsRetake: true });
+    expect(shot?.takes.map((take) => take.id)).toEqual([newest.id, tied.id, low.id]);
+    const good = scoredTake(org, me.id, 60, "2026-10-18T09:00:00Z");
+    await expect(session.rpc.director.shots({ videoId: "ShotsShort1" })).resolves.toMatchObject([
+      { pickedTakeId: good.id, needsRetake: false },
+    ]);
+    // Before the plan is ready there are no shots to show.
+    plan.status = "analyzing";
+    await expectError(
+      session.rpc.director.shots({ videoId: "ShotsShort1" }),
+      "DIRECTOR_PLAN_NOT_READY",
+    );
+  });
+
+  async function readyUpload(session: Awaited<ReturnType<typeof signedIn>>["session"]) {
+    const { file } = await session.rpc.files.createUpload({
+      purpose: "director-cut-video",
+      filename: "my-cut.mp4",
+      contentType: "video/mp4",
+      size: 5000,
+    });
+    return file;
+  }
+
+  async function markReady(fileId: string) {
+    // What apps/worker does once it has checked the upload.
+    await sql(
+      "UPDATE files.file SET status = 'ready', content_type = 'video/mp4', size = 5000, ready_at = now() WHERE id = $1",
+      [fileId],
+    );
+  }
+
+  it("saves a cut from the member's own ready upload, and lists it", async () => {
+    const { session, me } = await signedIn();
+    readyTemplate(String(me.activeOrganizationId), "CutsShort01");
+    const take = randomUUID();
+    const file = await readyUpload(session);
+    const input = { videoId: "CutsShort01", picks: { 0: take }, fileId: file.id, title: "Mine" };
+    // Not checked yet: no cut.
+    await expectError(session.rpc.director.saveCut(input), "FILE_NOT_READY");
+    await markReady(file.id);
+    const cut = await session.rpc.director.saveCut(input);
+    expect(cut).toEqual({
+      id: expect.any(String),
+      planId: expect.any(String),
+      videoId: "CutsShort01",
+      templateTitle: "Pen drop",
+      title: "Mine",
+      picks: { 0: take },
+      fileId: file.id,
+      durationMs: 9000,
+      createdAt: expect.any(Date),
+      publish: { status: "none", youtubeVideoId: null, visibility: null },
+    });
+    expect(aiCalls.at(-1)).toMatchObject({
+      route: "POST /v1/director/cuts",
+      user: me.id,
+      body: { picks: [{ shotIndex: 0, takeId: take }], fileId: file.id, title: "Mine" },
+    });
+    await expect(session.rpc.director.cuts({ videoId: "CutsShort01" })).resolves.toEqual([cut]);
+    await expect(session.rpc.director.media()).resolves.toEqual([cut]);
+    // A pick that isn't the member's take of that shot, as the AI service says.
+    await expectError(
+      session.rpc.director.saveCut({ ...input, picks: { 0: SOMEONE_ELSES_TAKE } }),
+      "DIRECTOR_TAKE_NOT_FOUND",
+    );
+  });
+
+  it("refuses a cut of someone else's file, or of a file that isn't a cut", async () => {
+    const { session, me } = await signedIn();
+    readyTemplate(String(me.activeOrganizationId), "CutsShort02");
+    const file = await readyUpload(session);
+    await markReady(file.id);
+    const input = {
+      videoId: "CutsShort02",
+      picks: { 0: randomUUID() },
+      fileId: file.id,
+      title: "Theirs",
+    };
+    const before = aiCalls.length;
+    const other = await signedIn();
+    await expectError(other.session.rpc.director.saveCut(input), "FILE_NOT_FOUND");
+    const { file: take } = await session.rpc.files.createUpload({
+      purpose: "director-take-video",
+      filename: "take.webm",
+      contentType: "video/webm",
+      size: 1000,
+    });
+    await expectError(
+      session.rpc.director.saveCut({ ...input, fileId: take.id }),
+      "FILE_NOT_FOUND",
+    );
+    // Past what the worker can scan (ClamAV's default stream limit), it never uploads.
+    const tooBig = await expectError(
+      session.rpc.files.createUpload({
+        purpose: "director-cut-video",
+        filename: "long.mp4",
+        contentType: "video/mp4",
+        size: 100_000_001,
+      }),
+      "FILE_TOO_LARGE",
+    );
+    expect(tooBig.data).toMatchObject({ params: { maxBytes: 100_000_000 } });
+    // Nothing picked, or a title too long for YouTube, isn't a cut either.
+    await expectError(session.rpc.director.saveCut({ ...input, picks: {} }), "VALIDATION_FAILED");
+    await expectError(
+      session.rpc.director.saveCut({ ...input, title: "x".repeat(101) }),
+      "VALIDATION_FAILED",
+    );
+    expect(aiCalls.length).toBe(before);
+  });
+});
+
 // The call itself (the relay to Gemini) is unit-tested against a stand-in for the Live
 // API (src/modules/live/live.test.ts); this is who may start one, through the real server.
 describe("Director's live call", () => {
@@ -671,7 +961,7 @@ describe("Director's live call", () => {
       route: "GET /v1/director/plans/LiveVideo01",
       user: me.id,
     });
-    await session.rpc.director.requestPlan({ videoId: VIDEO });
+    await session.rpc.director.index({ url: VIDEO });
     expect(await call(session.cookies(), VIDEO)).toEqual({
       code: 1008,
       received: [{ type: "error", code: "DIRECTOR_PLAN_NOT_FOUND" }],

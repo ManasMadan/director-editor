@@ -1,7 +1,9 @@
 """Director against real Postgres and Redis, with a local Gemini API that speaks its real
-protocol (tests/fakes.py): plans, scene checks, takes and their reviews, budgets, every
-way a model call can fail, tenancy, and the worker's dispatch."""
+protocol (tests/fakes.py): plans, the library and its one-short-per-member limit, scene
+checks, takes and their reviews, cuts, budgets, every way a model call can fail, tenancy,
+and the worker's dispatch."""
 
+import asyncio
 import base64
 import os
 import subprocess
@@ -14,11 +16,21 @@ from uuid import UUID, uuid4
 import httpx2 as httpx
 import pytest
 from fastapi.testclient import TestClient
+from psycopg.types.json import Jsonb
 from pydantic import TypeAdapter, ValidationError
+from sqlalchemy.exc import IntegrityError
 
+from app.db.models import DirectorPlan
 from app.director import PLANNER_RETRIES, Director, ReviewInterrupted
+from app.errors import AppError
 from app.queues import JobLike
-from app.schemas import DirectorPlanOut, DirectorTakeOut, SceneCheck
+from app.schemas import (
+    DirectorCutOut,
+    DirectorLibraryOut,
+    DirectorPlanOut,
+    DirectorTakeOut,
+    SceneCheck,
+)
 from app.settings import get_settings
 from app.worker import director_processor
 from tests.fakes import (
@@ -229,16 +241,45 @@ def plan_of(client: TestClient, org: UUID, user: UUID) -> DirectorPlanOut:
     return DirectorPlanOut.model_validate_json(response.content)
 
 
-def request_plan(client: TestClient, org: UUID, user: UUID) -> DirectorPlanOut:
-    response = client.post(
-        "/v1/director/plans", json={"videoId": VIDEO}, headers=headers(org, user)
-    )
+def index(client: TestClient, org: UUID, user: UUID, video: str = VIDEO) -> httpx.Response:
+    return client.post("/v1/director/plans", json={"videoId": video}, headers=headers(org, user))
+
+
+def index_plan(client: TestClient, org: UUID, user: UUID, video: str = VIDEO) -> DirectorPlanOut:
+    response = index(client, org, user, video)
     assert response.status_code == 200, response.text
     return DirectorPlanOut.model_validate_json(response.content)
 
 
+def library(client: TestClient, org: UUID, user: UUID) -> DirectorLibraryOut:
+    response = client.get("/v1/director/library", headers=headers(org, user))
+    assert response.status_code == 200, response.text
+    return DirectorLibraryOut.model_validate_json(response.content)
+
+
+def insert_plan(
+    org: UUID,
+    video: str,
+    *,
+    source: str = "seed",
+    status: str = "ready",
+    created_by: UUID | None = None,
+) -> UUID:
+    """A plan written straight to the database, as a seeded template is copied in."""
+    [(plan_id,)] = as_org(
+        org,
+        """INSERT INTO ai.director_plan
+             (org_id, created_by, video_id, source, status, stage, plan, model, updated_at)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, 'seed-model', now())
+           RETURNING id""",
+        (org, created_by, video, source, status, status, Jsonb(PLAN)),
+    )
+    assert isinstance(plan_id, UUID)
+    return plan_id
+
+
 def ready_plan(client: TestClient, org: UUID, user: UUID) -> DirectorPlanOut:
-    plan = request_plan(client, org, user)
+    plan = index_plan(client, org, user)
     on_app_loop(client, lambda: director().analyze(org, plan.id, user))
     return plan_of(client, org, user)
 
@@ -324,17 +365,23 @@ def spend_the_month(org: UUID) -> None:
 # ------------------------------------------------------------------------------- plans
 
 
-def test_requesting_a_plan_queues_its_analysis_once(client: TestClient) -> None:
+def test_indexing_a_short_queues_its_analysis_once(client: TestClient) -> None:
     org, user = new_org()
     events = subscribe(f"realtime:org:{org}")
-    plan = request_plan(client, org, user)
+    plan = index_plan(client, org, user)
     assert (plan.videoId, plan.status, plan.plan) == (VIDEO, "pending", None)
+    assert (plan.source, plan.stage, plan.audioStatus, plan.audioKey) == (
+        "user",
+        "queued",
+        "none",
+        None,
+    )
     job_id = f"{plan.id}-{round(plan.updatedAt.timestamp() * 1000)}"
     job = stored_job(f"{{ai-director}}:ai-director:{job_id}")
     assert job[b"name"] == b"plan"
     assert published(events) == [{"type": "director.changed"}]
     # Asking again, or from another member, changes nothing and queues nothing.
-    again = request_plan(client, org, uuid4())
+    again = index_plan(client, org, uuid4())
     assert again.id == plan.id
     assert published(events) == []
 
@@ -344,7 +391,7 @@ def test_the_analysis_watches_the_short_and_stores_the_plan(
 ) -> None:
     org, user = new_org()
     plan = ready_plan(client, org, user)
-    assert plan.status == "ready"
+    assert (plan.status, plan.stage) == ("ready", "ready")
     assert plan.model == GEMINI_MODEL
     assert plan.plan is not None
     assert [shot.kind for shot in plan.plan.shots] == ["video", "photo"]
@@ -364,7 +411,7 @@ def test_the_analysis_watches_the_short_and_stores_the_plan(
     # A ready plan isn't analyzed again, nor queued again when asked for.
     on_app_loop(client, lambda: director().analyze(org, plan.id, user))
     assert len(gemini[0].received) == 1
-    assert request_plan(client, org, user).status == "ready"
+    assert index_plan(client, org, user).status == "ready"
 
 
 def test_a_plan_with_no_one_in_it_is_accepted(
@@ -554,7 +601,7 @@ def test_an_outage_before_the_last_attempt_leaves_the_plan_analyzing_for_the_ret
 ) -> None:
     gemini[1][GEMINI_PATH] = gemini_error(503, "UNAVAILABLE")
     org, user = new_org()
-    plan = request_plan(client, org, user)
+    plan = index_plan(client, org, user)
     with pytest.raises(Exception, match="503"):
         on_app_loop(client, lambda: director().analyze(org, plan.id, user, final=False))
     assert plan_of(client, org, user).status == "analyzing"
@@ -565,15 +612,15 @@ def test_an_outage_fails_the_plan_for_a_retry_and_asking_again_requeues_it(
 ) -> None:
     gemini[1][GEMINI_PATH] = gemini_error(500, "INTERNAL")
     org, user = new_org()
-    plan = request_plan(client, org, user)
+    plan = index_plan(client, org, user)
     with pytest.raises(Exception, match="500"):
         on_app_loop(client, lambda: director().analyze(org, plan.id, user))
     assert (plan_of(client, org, user).status, plan_of(client, org, user).error) == (
         "failed",
         "DIRECTOR_ANALYSIS_FAILED",
     )
-    retried = request_plan(client, org, user)
-    assert (retried.status, retried.error) == ("pending", None)
+    retried = index_plan(client, org, user)
+    assert (retried.status, retried.stage, retried.error) == ("pending", "queued", None)
     job = stored_job(
         f"{{ai-director}}:ai-director:{plan.id}-{round(retried.updatedAt.timestamp() * 1000)}"
     )
@@ -585,7 +632,7 @@ def test_an_answer_that_breaks_the_plan_s_contract_fails_it(
 ) -> None:
     gemini[1][GEMINI_PATH] = gemini_output({"title": "No shots"})
     org, user = new_org()
-    plan = request_plan(client, org, user)
+    plan = index_plan(client, org, user)
     # Not retried: another try would break it the same way, at the same cost.
     on_app_loop(client, lambda: director().analyze(org, plan.id, user))
     assert plan_of(client, org, user).error == "DIRECTOR_ANALYSIS_FAILED"
@@ -610,6 +657,269 @@ def test_a_short_that_needs_more_than_a_plan_may_spend_fails_it(
     assert (plan.status, plan.error) == ("failed", "DIRECTOR_ANALYSIS_FAILED")
     # What it used is counted all the same.
     assert usage(org, "director-plan") == 10_000_000
+
+
+# ------------------------------------------------------------------------------- the library
+
+OTHER = "Other_Short"
+
+
+def test_a_member_indexes_one_short_of_their_own(client: TestClient) -> None:
+    org, user = new_org()
+    assert library(client, org, user).indexUsed is False
+    plan = index_plan(client, org, user)
+    assert library(client, org, user).indexUsed is True
+    # The same short again is the same plan; another one is past the limit.
+    assert index_plan(client, org, user).id == plan.id
+    refused = index(client, org, user, OTHER)
+    assert (refused.status_code, error_of(refused).code) == (409, "DIRECTOR_INDEX_LIMIT")
+    assert [t.videoId for t in library(client, org, user).templates] == [VIDEO]
+
+
+def test_a_failed_index_doesn_t_count(
+    client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    gemini[1][GEMINI_PATH] = gemini_error(403, "PERMISSION_DENIED", "The video is private.")
+    org, user = new_org()
+    failed = ready_plan(client, org, user)
+    assert (failed.status, failed.stage) == ("failed", "failed")
+    assert library(client, org, user).indexUsed is False
+    _ = index_plan(client, org, user, OTHER)
+    # Trying the failed one again would be a second short of their own.
+    refused = index(client, org, user)
+    assert error_of(refused).code == "DIRECTOR_INDEX_LIMIT"
+    assert plan_of(client, org, user).status == "failed"
+
+
+def test_two_index_requests_at_once_count_once(client: TestClient) -> None:
+    """A double-click or two tabs: the same short is one plan; two different ones are one
+    plan and a refusal, whichever way the race goes."""
+
+    async def twice(
+        org: UUID, user: UUID, first: str, second: str
+    ) -> list[DirectorPlan | BaseException]:
+        return list(
+            await asyncio.gather(
+                director().index(org, user, first, None),
+                director().index(org, user, second, None),
+                return_exceptions=True,
+            )
+        )
+
+    org, user = new_org()
+    same = on_app_loop(client, lambda: twice(org, user, VIDEO, VIDEO))
+    plans = [plan for plan in same if isinstance(plan, DirectorPlan)]
+    assert len(plans) == 2
+    assert plans[0].id == plans[1].id
+
+    other, member = new_org()
+    different = on_app_loop(client, lambda: twice(other, member, VIDEO, OTHER))
+    refused = [error for error in different if isinstance(error, AppError)]
+    assert [error.code for error in refused] == ["DIRECTOR_INDEX_LIMIT"]
+    assert len(library(client, other, member).templates) == 1
+
+
+def test_a_member_s_index_requests_take_turns(client: TestClient) -> None:
+    """Each request holds the member's lock for its whole claim, so a second one (a double
+    click, another tab) starts only once the first has committed and sees its plan: the
+    same short is answered with that plan, never refused."""
+    org, user = new_org()
+    portal = client.portal
+    assert portal is not None
+    with migrator() as db, db.transaction():
+        db.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s::text, 0))", (str(user),))
+        db.execute("SELECT set_config('app.org_id', %s, true)", (str(org),))
+        [first] = db.execute(
+            """INSERT INTO ai.director_plan (org_id, created_by, video_id, updated_at)
+               VALUES (%s, %s, %s, now()) RETURNING id""",
+            (org, user, VIDEO),
+        ).fetchall()
+        second = portal.start_task_soon(lambda: director().index(org, user, VIDEO, None))
+        _wait_for_a_lock_wait("advisory")
+    plan = second.result(timeout=10)
+    assert plan.id == first[0]
+
+
+def test_an_index_counts_in_every_workspace(client: TestClient) -> None:
+    """A member's one short of their own is one across all their workspaces."""
+    org, user = new_org()
+    _ = index_plan(client, org, user)
+    other, _ = new_org()
+    assert library(client, other, user).indexUsed is True
+    refused = index(client, other, user, OTHER)
+    assert error_of(refused).code == "DIRECTOR_INDEX_LIMIT"
+
+
+def test_an_index_racing_another_is_refused_by_the_database(client: TestClient) -> None:
+    """The check before the insert can't see another request's uncommitted plan; the
+    partial unique index can, and its refusal is the same DIRECTOR_INDEX_LIMIT."""
+    org, user = new_org()
+    portal = client.portal
+    assert portal is not None
+    with migrator() as db, db.transaction():
+        db.execute("SELECT set_config('app.org_id', %s, true)", (str(org),))
+        db.execute(
+            """INSERT INTO ai.director_plan (org_id, created_by, video_id, updated_at)
+               VALUES (%s, %s, %s, now())""",
+            (org, user, OTHER),
+        )
+        racing = portal.start_task_soon(lambda: director().index(org, user, VIDEO, None))
+        _wait_for_a_lock_wait("transactionid")
+    error = racing.exception(timeout=10)
+    assert isinstance(error, AppError)
+    assert error.code == "DIRECTOR_INDEX_LIMIT"
+
+
+def test_an_index_the_database_refuses_otherwise_is_not_the_limit(client: TestClient) -> None:
+    """A user deleted while they asked (the plan's creator must exist) fails as a bug."""
+    org, _ = new_org()
+    with pytest.raises(IntegrityError, match="director_plan_created_by_fkey"):
+        on_app_loop(client, lambda: director().index(org, uuid4(), VIDEO, None))
+
+
+def _wait_for_a_lock_wait(locktype: str) -> None:
+    """Until the service waits on a lock of this type that the test's transaction holds:
+    one not yet granted (pg_locks, which any role may read; pg_stat_activity hides other
+    roles' sessions)."""
+    deadline = time.monotonic() + 10
+    with migrator() as db:
+        while time.monotonic() < deadline:
+            row = db.execute(
+                "SELECT count(*) FROM pg_locks WHERE NOT granted AND locktype = %s", (locktype,)
+            ).fetchone()
+            if row is not None and row[0] == 1:
+                return
+            time.sleep(0.05)
+    raise AssertionError("the index never waited on the other plan")
+
+
+def test_seeded_templates_are_in_the_library_and_count_for_no_one(client: TestClient) -> None:
+    org, user = new_org()
+    seed = insert_plan(org, "Seed_Short1")
+    # Even one in a member's name (the index only counts their own shorts).
+    _ = insert_plan(org, "Seed_Short2", created_by=user)
+    shelf = library(client, org, user)
+    assert [(t.videoId, t.source, t.stage) for t in shelf.templates] == [
+        ("Seed_Short2", "seed", "ready"),
+        ("Seed_Short1", "seed", "ready"),
+    ]
+    assert shelf.indexUsed is False
+    # Indexing a seeded short is its plan, and still not the member's own.
+    assert index_plan(client, org, user, "Seed_Short1").id == seed
+    assert library(client, org, user).indexUsed is False
+    plan = index_plan(client, org, user)
+    assert library(client, org, user).templates[0].id == plan.id
+    assert library(client, org, user).indexUsed is True
+    # Another workspace sees none of it.
+    other, member = new_org()
+    assert library(client, other, member) == DirectorLibraryOut(templates=[], indexUsed=False)
+
+
+# ------------------------------------------------------------------------------- cuts
+
+
+def save_cut(
+    client: TestClient,
+    org: UUID,
+    user: UUID,
+    picks: list[tuple[int, UUID]],
+    *,
+    file_id: UUID | None = None,
+) -> httpx.Response:
+    return client.post(
+        "/v1/director/cuts",
+        json={
+            "videoId": VIDEO,
+            "title": "My look",
+            "fileId": str(file_id or new_file(user, "director-cut-video")),
+            "picks": [{"shotIndex": shot, "takeId": str(take)} for shot, take in picks],
+        },
+        headers=headers(org, user),
+    )
+
+
+def cuts_of(client: TestClient, org: UUID, user: UUID, path: str) -> list[DirectorCutOut]:
+    response = client.get(path, headers=headers(org, user))
+    assert response.status_code == 200, response.text
+    return _CUTS.validate_json(response.content)
+
+
+_CUTS = TypeAdapter(list[DirectorCutOut])
+
+
+def test_a_cut_keeps_its_picks_and_how_long_they_last(
+    client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    org, user = new_org()
+    _ = ready_plan(client, org, user)
+    gemini[1][GEMINI_PATH] = gemini_output(REVIEW)
+    with serve_files({"/t": ("video/webm", b"\x1a\x45\xdf\xa3")}) as files:
+        reviewed = add_take(client, org, user, f"{files.url}/t")
+        on_app_loop(client, lambda: director().review(org, reviewed.id, f"{files.url}/t", user))
+    unreviewed = add_take(client, org, user, "http://storage/t")
+    photo = add_take(
+        client, org, user, "http://storage/p", shot=1, kind="photo", content_type="image/jpeg"
+    )
+
+    # The reviewed take's best part (1.25 s to 4.5 s), then the photo's 2 seconds.
+    response = save_cut(client, org, user, [(0, reviewed.id), (1, photo.id)])
+    assert response.status_code == 201, response.text
+    cut = DirectorCutOut.model_validate_json(response.content)
+    assert (cut.videoId, cut.templateTitle, cut.title, cut.durationMs) == (
+        VIDEO,
+        "Get ready with me",
+        "My look",
+        5_250,
+    )
+    assert (cut.publishStatus, cut.youtubeVideoId, cut.visibility) == ("none", None, None)
+    # A take not reviewed yet lasts as long as its shot (4 seconds).
+    second = DirectorCutOut.model_validate_json(
+        save_cut(client, org, user, [(0, unreviewed.id)]).content
+    )
+    assert second.durationMs == 4_000
+    assert [c.id for c in cuts_of(client, org, user, f"/v1/director/plans/{VIDEO}/cuts")] == [
+        second.id,
+        cut.id,
+    ]
+    assert [c.id for c in cuts_of(client, org, user, "/v1/director/cuts")] == [second.id, cut.id]
+    # Each member's cuts are their own; another workspace has none of them.
+    teammate = uuid4()
+    with migrator() as db:
+        db.execute(
+            'INSERT INTO auth."user" (id, name, email, updated_at) VALUES (%s, %s, %s, now())',
+            (teammate, "T", f"{teammate}@test.dev"),
+        )
+    assert cuts_of(client, org, teammate, "/v1/director/cuts") == []
+    other, member = new_org()
+    assert cuts_of(client, other, member, "/v1/director/cuts") == []
+
+
+def test_a_cut_s_picks_are_the_member_s_takes_of_those_shots(client: TestClient) -> None:
+    org, user = new_org()
+    response = save_cut(client, org, user, [(0, uuid4())])
+    assert error_of(response).code == "DIRECTOR_PLAN_NOT_FOUND"
+    _ = index_plan(client, org, user)
+    assert error_of(save_cut(client, org, user, [(0, uuid4())])).code == "DIRECTOR_PLAN_NOT_READY"
+    plan_id = plan_of(client, org, user).id
+    on_app_loop(client, lambda: director().analyze(org, plan_id, user))
+    take = add_take(client, org, user, "http://storage/t")
+    teammate = uuid4()
+    with migrator() as db:
+        db.execute(
+            'INSERT INTO auth."user" (id, name, email, updated_at) VALUES (%s, %s, %s, now())',
+            (teammate, "T", f"{teammate}@test.dev"),
+        )
+    for picks, code in [
+        ([(5, take.id)], "DIRECTOR_SHOT_NOT_FOUND"),
+        ([(1, take.id)], "DIRECTOR_TAKE_NOT_FOUND"),
+        ([(0, uuid4())], "DIRECTOR_TAKE_NOT_FOUND"),
+        ([(0, take.id), (0, take.id)], "VALIDATION_FAILED"),
+    ]:
+        assert error_of(save_cut(client, org, user, picks)).code == code, picks
+    # Someone else's take is never theirs to pick.
+    refused = save_cut(client, org, teammate, [(0, take.id)])
+    assert error_of(refused).code == "DIRECTOR_TAKE_NOT_FOUND"
+    assert cuts_of(client, org, user, "/v1/director/cuts") == []
 
 
 # ------------------------------------------------------------------------------- scene checks
@@ -644,7 +954,7 @@ def test_a_scene_check_says_where_to_go(
 
 def test_a_scene_check_needs_a_ready_plan_a_real_shot_and_a_jpeg(client: TestClient) -> None:
     org, user = new_org()
-    _ = request_plan(client, org, user)
+    _ = index_plan(client, org, user)
     assert error_of(check(client, org, user)).code == "DIRECTOR_PLAN_NOT_READY"
     plan_id = plan_of(client, org, user).id
     on_app_loop(client, lambda: director().analyze(org, plan_id, user))
@@ -876,7 +1186,7 @@ def test_the_worker_runs_both_director_jobs(
     client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
 ) -> None:
     org, user = new_org()
-    plan = request_plan(client, org, user)
+    plan = index_plan(client, org, user)
     process = director_processor(director())
     meta = {"requestId": "req-1", "userId": str(user), "orgId": str(org)}
     job: JobLike = Job(
@@ -908,7 +1218,7 @@ def test_the_worker_process_plans_queued_shorts(
     client: TestClient, extra_env: dict[str, str]
 ) -> None:
     org, user = new_org()
-    plan = request_plan(client, org, user)
+    plan = index_plan(client, org, user)
     worker = subprocess.Popen(
         [sys.executable, "-m", "app.worker"], env={**os.environ, **ENV, **extra_env}
     )

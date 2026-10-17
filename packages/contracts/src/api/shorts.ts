@@ -14,7 +14,7 @@ const errors = errorsOf(
   "SHORT_NOT_FOUND",
 );
 
-/** Director films shorts: anything longer is refused (SHORT_TOO_LONG). */
+/** Director films shorts: anything longer is refused (DIRECTOR_TOO_LONG). */
 export const SHORT_MAX_SECONDS = 180;
 export const SHORTS_PAGE_SIZE = 12;
 export const SAVED_SHORTS_LIMIT = 50;

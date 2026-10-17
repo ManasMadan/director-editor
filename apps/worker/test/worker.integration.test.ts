@@ -679,25 +679,28 @@ describe("uploads", { tags: ["files"] }, () => {
     expect(await storage.head(`files/${fileId}`)).toBeNull();
   });
 
-  it("keeps a Director video byte for byte, as the type its bytes say", async () => {
-    // A WebM's EBML header (doc type "webm"), the start of its segment, and some payload.
-    const webm = Buffer.concat([
-      Buffer.from(
-        "1a45dfa39f4286810142f7810142f2810442f381084282847765626d4287810242858102",
-        "hex",
-      ),
-      Buffer.from("18538067", "hex"),
-      Buffer.alloc(512, 7),
-    ]);
-    const { fileId } = await upload(webm, "video/mp4", webm.length, "director-take-video");
-    await files.check(fileId);
-    expect(await storage.read(`files/${fileId}`, 10_000_000)).toEqual(webm);
-    expect(await row(fileId)).toMatchObject({
-      status: "ready",
-      content_type: "video/webm",
-      size: webm.length,
-    });
-  });
+  it.each(["director-take-video", "director-cut-video"] as const)(
+    "keeps a Director video (%s) byte for byte, as the type its bytes say",
+    async (purpose) => {
+      // A WebM's EBML header (doc type "webm"), the start of its segment, and some payload.
+      const webm = Buffer.concat([
+        Buffer.from(
+          "1a45dfa39f4286810142f7810142f2810442f381084282847765626d4287810242858102",
+          "hex",
+        ),
+        Buffer.from("18538067", "hex"),
+        Buffer.alloc(512, 7),
+      ]);
+      const { fileId } = await upload(webm, "video/mp4", webm.length, purpose);
+      await files.check(fileId);
+      expect(await storage.read(`files/${fileId}`, 10_000_000)).toEqual(webm);
+      expect(await row(fileId)).toMatchObject({
+        status: "ready",
+        content_type: "video/webm",
+        size: webm.length,
+      });
+    },
+  );
 
   it("rejects a virus, whatever it claims to be, and deletes it", async () => {
     const { fileId } = await upload(Buffer.from(EICAR));

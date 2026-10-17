@@ -12,9 +12,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn, until } from "../../../test/stand-in";
 import { errorCode } from "../../errors";
 import { useCheckSceneMutation } from "./check-scene";
+import { useIndexShortMutation } from "./index-short";
 import { latestTakes, takeInProgress } from "./latest";
 import { useDirectorPlanQuery } from "./plan";
-import { useRequestDirectorPlanMutation } from "./request-plan";
 import { useSubmitTakeMutation } from "./submit-take";
 import { useDirectorTakesQuery } from "./takes";
 
@@ -23,10 +23,13 @@ const videoId = videoIdSchema.parse("dQw4w9WgXcQ");
 const plan = (status: DirectorPlan["status"]): DirectorPlan => ({
   id: directorPlanIdSchema.parse(id(1)),
   videoId,
+  source: "user",
   status,
+  stage: "queued",
   error: null,
   plan: null,
   model: null,
+  audio: { status: "none", url: null },
   createdAt: new Date(0),
   updatedAt: new Date(0),
 });
@@ -120,50 +123,49 @@ describe("a short's plan", () => {
     }
   });
 
-  it("shows the plan a request starts at once, without asking for it again", async () => {
+  it("shows the plan indexing starts at once, without asking for it again", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     const api = standIn((os) => ({
       director: {
         plan: os.director.plan.handler(() => {
           throw new ORPCError("DIRECTOR_PLAN_NOT_FOUND");
         }),
-        requestPlan: os.director.requestPlan.handler(({ input }) => ({
-          ...plan("pending"),
-          videoId: input.videoId,
-        })),
+        index: os.director.index.handler(({ input }) => {
+          expect(input).toEqual({ url: `https://youtu.be/${videoId}` });
+          return plan("pending");
+        }),
       },
     }));
     const { result } = renderHook(
-      () => ({ plan: useDirectorPlanQuery(videoId), request: useRequestDirectorPlanMutation() }),
+      () => ({ plan: useDirectorPlanQuery(videoId), index: useIndexShortMutation() }),
       api,
     );
     await until(() => expect(result.current.plan.error).not.toBeNull());
-    await expect(result.current.request.mutateAsync({ videoId })).resolves.toMatchObject({
-      videoId,
-      status: "pending",
-    });
+    await expect(
+      result.current.index.mutateAsync({ url: `https://youtu.be/${videoId}` }),
+    ).resolves.toMatchObject({ videoId, status: "pending" });
     await until(() => expect(result.current.plan.data?.status).toBe("pending"));
-    expect(api.calls).toEqual(["director/plan", "director/requestPlan"]);
+    expect(api.calls).toEqual(["director/plan", "director/index"]);
   });
 
-  it("is left as it was when the request is refused", async () => {
+  it("is left as it was when indexing is refused", async () => {
     const api = standIn((os) => ({
       director: {
         plan: os.director.plan.handler(() => {
           throw new ORPCError("DIRECTOR_PLAN_NOT_FOUND");
         }),
-        requestPlan: os.director.requestPlan.handler(() => {
-          throw new ORPCError("SHORT_TOO_LONG");
+        index: os.director.index.handler(() => {
+          throw new ORPCError("DIRECTOR_INDEX_LIMIT");
         }),
       },
     }));
     const { result } = renderHook(
-      () => ({ plan: useDirectorPlanQuery(videoId), request: useRequestDirectorPlanMutation() }),
+      () => ({ plan: useDirectorPlanQuery(videoId), index: useIndexShortMutation() }),
       api,
     );
     await until(() => expect(result.current.plan.error).not.toBeNull());
-    const error = await result.current.request.mutateAsync({ videoId }).catch((e: unknown) => e);
-    expect(errorCode(error)).toBe("SHORT_TOO_LONG");
+    const error = await result.current.index.mutateAsync({ url: videoId }).catch((e: unknown) => e);
+    expect(errorCode(error)).toBe("DIRECTOR_INDEX_LIMIT");
     expect(result.current.plan.data).toBeUndefined();
   });
 });

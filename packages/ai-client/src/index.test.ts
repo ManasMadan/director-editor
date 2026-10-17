@@ -15,10 +15,14 @@ const caller = { userId: "user-1", orgId: "org-1", requestId: "req-1" };
 const plan = {
   id: "0b6f1c9e-8d4a-4f3e-9a2b-1c2d3e4f5a6b",
   videoId: VIDEO,
+  source: "user",
   status: "pending",
+  stage: "queued",
   error: null,
   plan: null,
   model: null,
+  audioStatus: "none",
+  audioKey: null,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
 };
@@ -33,6 +37,20 @@ const take = {
   bestEndMs: null,
   score: null,
   feedback: null,
+  createdAt: "2026-01-01T00:00:00Z",
+};
+const cut = {
+  id: "0b6f1c9e-8d4a-4f3e-9a2b-1c2d3e4f5a6e",
+  planId: plan.id,
+  videoId: VIDEO,
+  templateTitle: "Pen drop",
+  title: "My pen drop",
+  picks: [{ shotIndex: 0, takeId: take.id }],
+  fileId: "0b6f1c9e-8d4a-4f3e-9a2b-1c2d3e4f5a6f",
+  durationMs: 4000,
+  publishStatus: "none",
+  youtubeVideoId: null,
+  visibility: null,
   createdAt: "2026-01-01T00:00:00Z",
 };
 const scene = {
@@ -123,18 +141,23 @@ describe("each call", () => {
 describe("Director's calls", () => {
   it("return what the service answered", async () => {
     handler = (request, response) => {
-      if (request.url === "/v1/director/scene-checks") {
-        json(response, 200, scene);
-      } else if (request.url === "/v1/director/takes") {
-        json(response, 201, take);
-      } else if (request.url?.endsWith("/takes")) {
-        json(response, 200, [take]);
-      } else {
-        json(response, 200, plan);
-      }
+      const answers: Record<string, [number, unknown]> = {
+        "/v1/director/scene-checks": [200, scene],
+        "/v1/director/takes": [201, take],
+        [`/v1/director/plans/${VIDEO}/takes`]: [200, [take]],
+        "/v1/director/library": [200, { templates: [plan], indexUsed: true }],
+        "/v1/director/cuts": request.method === "POST" ? [201, cut] : [200, [cut]],
+        [`/v1/director/plans/${VIDEO}/cuts`]: [200, [cut]],
+      };
+      const [status, payload] = answers[request.url ?? ""] ?? [200, plan];
+      json(response, status, payload);
     };
     const { director } = client();
-    await expect(director.requestPlan(caller, VIDEO)).resolves.toEqual(plan);
+    await expect(director.index(caller, VIDEO)).resolves.toEqual(plan);
+    await expect(director.library(caller)).resolves.toEqual({
+      templates: [plan],
+      indexUsed: true,
+    });
     await expect(director.getPlan(caller, VIDEO)).resolves.toEqual(plan);
     await expect(
       director.checkScene(caller, { videoId: VIDEO, shotIndex: 0, image: "a".repeat(100) }),
@@ -150,12 +173,26 @@ describe("Director's calls", () => {
       }),
     ).resolves.toEqual(take);
     await expect(director.listTakes(caller, VIDEO)).resolves.toEqual([take]);
+    await expect(
+      director.createCut(caller, {
+        videoId: VIDEO,
+        title: cut.title,
+        fileId: cut.fileId,
+        picks: cut.picks,
+      }),
+    ).resolves.toEqual(cut);
+    await expect(director.listCuts(caller, VIDEO)).resolves.toEqual([cut]);
+    await expect(director.listMedia(caller)).resolves.toEqual([cut]);
     expect(seen.map(({ method, path }) => `${method} ${path}`)).toEqual([
       "POST /v1/director/plans",
+      "GET /v1/director/library",
       `GET /v1/director/plans/${VIDEO}`,
       "POST /v1/director/scene-checks",
       "POST /v1/director/takes",
       `GET /v1/director/plans/${VIDEO}/takes`,
+      "POST /v1/director/cuts",
+      `GET /v1/director/plans/${VIDEO}/cuts`,
+      "GET /v1/director/cuts",
     ]);
   });
 
@@ -169,7 +206,7 @@ describe("Director's calls", () => {
           issues: [{ code: "too_big", path: ["videoId"] }],
         }),
       );
-    const error = await failed(client().director.requestPlan(caller, VIDEO));
+    const error = await failed(client().director.index(caller, VIDEO));
     expect(error).toMatchObject({
       status: 422,
       code: "VALIDATION_FAILED",

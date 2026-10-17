@@ -61,12 +61,18 @@ export const ERROR_CODES = {
   AI_BUDGET_EXCEEDED: 429,
   // Shorts (YouTube) and Director
   SHORT_NOT_FOUND: 404,
-  /** Director films shorts, not long videos (params: maxSeconds). */
-  SHORT_TOO_LONG: 422,
+  /** A member indexes one short of their own; the seeded templates don't count. */
+  DIRECTOR_INDEX_LIMIT: 409,
+  /** The link isn't a YouTube video, or YouTube won't show it (private, removed). */
+  DIRECTOR_VIDEO_UNAVAILABLE: 422,
+  /** Director films Shorts, not long videos (params: maxSeconds). */
+  DIRECTOR_TOO_LONG: 422,
   DIRECTOR_PLAN_NOT_FOUND: 404,
   /** The plan is still being worked out, or its analysis failed. */
   DIRECTOR_PLAN_NOT_READY: 409,
   DIRECTOR_SHOT_NOT_FOUND: 404,
+  /** A cut picks a take that isn't the member's take of that shot of the plan. */
+  DIRECTOR_TAKE_NOT_FOUND: 404,
   /** A photo for a video shot, or the other way round. */
   DIRECTOR_TAKE_KIND_MISMATCH: 422,
   // The next three are only ever a plan's or take's error, never an HTTP answer.
@@ -88,7 +94,7 @@ export const ERROR_PARAMS = {
   RATE_LIMITED: z.object({ retryAfterSeconds: z.number().int().nonnegative() }),
   FILE_TYPE_NOT_ALLOWED: z.object({ types: z.string() }),
   FILE_TOO_LARGE: z.object({ maxBytes: z.number().int() }),
-  SHORT_TOO_LONG: z.object({ maxSeconds: z.number().int() }),
+  DIRECTOR_TOO_LONG: z.object({ maxSeconds: z.number().int() }),
 } as const satisfies Partial<Record<ErrorCode, z.ZodObject>>;
 
 type ParamsFree = Record<string, string | number>;

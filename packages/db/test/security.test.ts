@@ -195,6 +195,32 @@ describe("least privilege", () => {
     });
   });
 
+  it("lets only the AI service ask whether a member has used their index", async () => {
+    const asked = "SELECT ai.index_used($1) AS used";
+    await asRole("app_ai", async (client) => {
+      await expect(client.query(asked, [userId])).resolves.toMatchObject({
+        rows: [{ used: false }],
+      });
+    });
+    await asRole("app_api", async (client) => {
+      await expect(client.query(asked, [userId])).rejects.toThrow(/permission denied/);
+    });
+  });
+
+  it("lets the API read Director's cuts and nothing else of the AI service's", async () => {
+    await asRole("app_api", async (client) => {
+      await expect(client.query("SELECT id FROM ai.director_cut")).resolves.toMatchObject({
+        rowCount: 0,
+      });
+      await expect(
+        client.query("UPDATE ai.director_cut SET publish_status = 'published' WHERE false"),
+      ).rejects.toThrow(/permission denied/);
+      await expect(client.query("SELECT id FROM ai.director_plan")).rejects.toThrow(
+        /permission denied/,
+      );
+    });
+  });
+
   it("denies schema changes to service roles", async () => {
     await asRole("app_api", async (client) => {
       await expect(client.query("CREATE TABLE app.nope (id int)")).rejects.toThrow(
