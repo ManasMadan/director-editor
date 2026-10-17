@@ -35,6 +35,17 @@ describe("the environment", () => {
     );
   });
 
+  it("takes a BigQuery dataset name, and refuses one BigQuery wouldn't", async () => {
+    const { env } = await load({ BIGQUERY_DATASET: "director_events" });
+    expect(env.BIGQUERY_DATASET).toBe("director_events");
+    for (const name of ["director.events", "director-events", "a".repeat(1025)]) {
+      vi.resetModules();
+      await expect(load({ BIGQUERY_DATASET: name })).rejects.toThrow(
+        "Invalid environment variables",
+      );
+    }
+  });
+
   it.each([
     [
       "the mock Google's YouTube",

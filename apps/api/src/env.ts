@@ -106,7 +106,10 @@ export const envSchema = {
   // Optional: product analytics (src/modules/analytics), streamed into this BigQuery
   // dataset's `events` table for a Looker Studio report. Reuses GOOGLE_CLOUD_PROJECT,
   // above. Unset: analytics is off, nothing is written anywhere.
-  BIGQUERY_DATASET: z.string().min(1).optional(),
+  BIGQUERY_DATASET: z
+    .string()
+    .regex(/^[A-Za-z0-9_]{1,1024}$/, "a BigQuery dataset name (letters, digits, underscores)")
+    .optional(),
 };
 
 export const env = createEnv({
