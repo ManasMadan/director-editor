@@ -1,7 +1,9 @@
--- Director keeps only the starter features it uses. This is the contract step for the
--- ones it removed (todos, the documents assistant, MCP and its OAuth provider, API
--- keys, billing, outbound webhooks, in-app and push notifications, phone numbers): the
--- release before this one already stopped reading every table and column dropped here.
+-- Director keeps only the starter features it uses, and drops the tables and the column
+-- of the ones it removed (todos, the documents assistant, MCP and its OAuth provider, API
+-- keys, billing, outbound webhooks, in-app and push notifications, phone numbers) in one
+-- step rather than expand then contract. Production holds no data in any of them, so
+-- nothing is lost; the cost is that pods of the previous release may error on them until
+-- the rollout replaces those pods.
 SET lock_timeout = '5s';
 
 -- Functions over the dropped tables go first; the purges keep their names and grants
@@ -59,7 +61,7 @@ REVOKE USAGE ON SCHEMA auth FROM app_ai;
 REVOKE SELECT (organization_id, user_id, role) ON auth.member FROM app_notifications;
 REVOKE USAGE ON SCHEMA notifications, webhooks FROM app_api;
 
--- Nothing in this release or the one before reads these.
+-- Empty in production; the previous release's pods may error on them until replaced.
 -- squawk-ignore ban-drop-table
 DROP TABLE
   ai.chunk,
@@ -87,6 +89,7 @@ DROP TABLE
 
 DROP SCHEMA billing;
 
--- Phone numbers went with SMS; nothing reads the column.
+-- Empty in production (phone numbers went with SMS); the previous release's pods may
+-- error on it until replaced.
 -- squawk-ignore ban-drop-column
 ALTER TABLE auth."user" DROP COLUMN phone_number;
