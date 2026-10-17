@@ -3,12 +3,9 @@
  * APP_PATHS need a session; GUEST_PATHS are pointless with one.
  */
 export const APP_PATHS = [
-  "/dashboard",
   "/settings",
-  "/invitations",
-  "/notifications",
-  // Director: the Shorts feed and filming one.
-  "/home",
+  // Director: the library of Shorts to film, and filming one.
+  "/library",
   "/shorts",
   "/saved",
   "/director",
@@ -18,7 +15,10 @@ export const APP_PATHS = [
  * Full-screen pages that bring their own chrome (the YouTube-style feed and Director's
  * camera), so the site header and the page column stay out of their way.
  */
-export const IMMERSIVE_PATHS = ["/home", "/shorts", "/saved", "/director"];
+export const IMMERSIVE_PATHS = ["/library", "/shorts", "/saved", "/director"];
+
+/** Where a signed-in person lands: after signing in, and from the site's own links. */
+export const HOME_PATH = "/library";
 export const GUEST_PATHS = [
   "/sign-in",
   "/sign-up",

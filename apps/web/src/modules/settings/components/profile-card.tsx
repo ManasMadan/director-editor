@@ -113,7 +113,7 @@ function ProfileForm({ initial }: { initial: { name: string; locale: Locale; tim
       toast.error(errorMessage(error));
       return;
     }
-    // Session first: PreferenceSync treats the saved language as the truth.
+    // The session first, so nothing renders from the old one after the refresh.
     await refetchSession();
     setPreferenceCookie("locale", values.locale);
     setPreferenceCookie("tz", values.timezone);

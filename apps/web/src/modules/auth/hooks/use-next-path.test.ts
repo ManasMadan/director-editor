@@ -15,6 +15,6 @@ describe("safeNextPath", () => {
     "/\\/evil.com",
     "javascript:alert(1)",
   ])("rejects %s", (next) => {
-    expect(safeNextPath(next)).toBe("/dashboard");
+    expect(safeNextPath(next)).toBe("/library");
   });
 });

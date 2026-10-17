@@ -1,10 +1,10 @@
 {
   "common": {
-    "appName": "Director-editor",
+    "appName": "Director",
     "signIn": "Sign in",
     "signUp": "Create account",
     "signOut": "Sign out",
-    "dashboard": "Dashboard",
+    "library": "Library",
     "settings": "Settings",
     "email": "Email",
     "password": "Password",
@@ -24,19 +24,18 @@
       "dark": "Dark",
       "system": "System"
     },
-    "language": "Language",
     "captchaFailed": "The security check couldn't load. Check your connection, allow challenges.cloudflare.com if you use a blocker, and reload.",
     "director": "Director"
   },
   "meta": {
-    "title": "Director-editor",
-    "description": "Ship your idea this weekend, on a foundation that scales."
+    "title": "Director",
+    "description": "Pick a Short you love, and Director walks you through shooting your own take on it."
   },
   "home": {
-    "title": "Ship your idea this weekend.",
-    "subtitle": "Auth, database, typed API, jobs, AI and deploys are already wired. Start building the part that matters.",
+    "title": "Remake any Short, shot by shot.",
+    "subtitle": "Director breaks a Short into its shots, guides you through filming each one, and reviews every take.",
     "cta": "Get started",
-    "ctaSignedIn": "Open dashboard"
+    "ctaSignedIn": "Open your library"
   },
   "auth": {
     "signInTitle": "Welcome back",
@@ -76,8 +75,7 @@
     "nameMin": "Enter your name",
     "code": "Enter the 6-digit code",
     "required": "Required",
-    "tooLong": "Too long (max {max})",
-    "phone": "Enter the number with its country code, like +14155550123"
+    "tooLong": "Too long (max {max})"
   },
   "authErrors": {
     "INVALID_EMAIL_OR_PASSWORD": "That email and password don't match.",
@@ -100,25 +98,7 @@
     "PASSKEY_CANCELLED": "The passkey prompt was closed before finishing. Try again, or use your password.",
     "ORGANIZATION_NEEDS_OWNER": "You own a shared workspace. Make someone else its owner before deleting your account.",
     "generic": "Something went wrong. Please try again.",
-    "ENTITLEMENT_REQUIRED": "Your plan's member limit is reached. Upgrade in billing settings to invite more people.",
     "SIGN_IN_INCOMPLETE": "The sign-in didn't finish. Please try again."
-  },
-  "nav": {
-    "dashboard": "Dashboard",
-    "settings": "Settings",
-    "security": "Security"
-  },
-  "dashboard": {
-    "greeting": "Hi {name}",
-    "todos": {
-      "title": "Todos",
-      "description": "Stored in Postgres, served through the typed API, isolated per workspace.",
-      "placeholder": "What needs doing?",
-      "add": "Add",
-      "empty": "Nothing to do. Add your first todo above.",
-      "delete": "Delete {title}",
-      "loadMore": "Load more"
-    }
   },
   "settings": {
     "title": "Settings",
@@ -208,34 +188,9 @@
         "title": "Confirm it's you",
         "body": "For your security, sign in again to see or change this.",
         "action": "Sign in again"
-      },
-      "phone": {
-        "title": "Phone number",
-        "description": "Get sign-in security alerts by text as well as by email.",
-        "none": "No phone number yet.",
-        "add": "Add a phone number",
-        "change": "Change number",
-        "remove": "Remove",
-        "removed": "Phone number removed",
-        "number": "Phone number",
-        "sendCode": "Text me a code",
-        "codeSent": "We texted a code to {phoneNumber}.",
-        "code": "Code from the text",
-        "verify": "Verify",
-        "verified": "Phone number saved",
-        "resend": "Send a new code",
-        "cancel": "Cancel"
       }
     },
     "personalTitle": "Your account"
-  },
-  "invitations": {
-    "title": "You're invited",
-    "description": "Join {organizationName} to start collaborating.",
-    "accept": "Accept invitation",
-    "decline": "Decline",
-    "accepted": "You joined {organizationName}",
-    "invalid": "This invitation is invalid or has expired."
   },
   "legal": {
     "terms": "Terms of service",
@@ -250,10 +205,6 @@
     "errorTitle": "Something went wrong",
     "errorDescription": "An unexpected error occurred. Try again, and contact support with the reference below if it keeps happening.",
     "home": "Go home"
-  },
-  "updateRequired": {
-    "title": "Update required",
-    "description": "A newer version of the app is available. Please update to continue."
   },
   "email": {
     "footer": "You received this email because of activity on your {appName} account.",
@@ -279,19 +230,6 @@
         "heading": "Confirm your new email address",
         "body": "Enter this code to confirm the change."
       }
-    },
-    "todoReminder": {
-      "subject": "Reminder: {title}",
-      "greeting": "Hi {name},",
-      "greetingNoName": "Hi,",
-      "body": "This is your reminder for “{title}”."
-    },
-    "orgInvitation": {
-      "subject": "You're invited to a workspace on Director-editor",
-      "heading": "Join “{organizationName}”",
-      "body": "“{inviterName}” invited you to collaborate in the workspace “{organizationName}”.",
-      "cta": "Accept invitation",
-      "expires": "This invitation expires in {days, plural, one {# day} other {# days}}."
     },
     "securityAlert": {
       "email-changed": {
@@ -319,61 +257,7 @@
         "body": "A new passkey was added to your account. It can be used to sign in without a password."
       },
       "notYou": "If this wasn't you, reset your password now and sign out of devices you don't recognise.",
-      "cta": "Review security settings",
-      "phone-added": {
-        "subject": "A phone number was added",
-        "body": "A phone number was added to your account. Security alerts and codes will also be texted to it."
-      },
-      "phone-removed": {
-        "subject": "Your phone number was removed",
-        "body": "The phone number on your account was removed or changed. Texts no longer go to the previous number."
-      },
-      "api-key-created": {
-        "subject": "An API key was created in your workspace",
-        "body": "An admin created the API key “{label}”. It can act in the workspace without signing in until it expires or is revoked."
-      },
-      "webhook-endpoint-created": {
-        "subject": "A webhook endpoint was added to your workspace",
-        "body": "An admin added a webhook endpoint at {label}. The workspace's events are now sent there."
-      }
-    },
-    "webhookDisabled": {
-      "subject": "Webhook endpoint turned off: {url}",
-      "heading": "We stopped sending to a webhook endpoint",
-      "body": "{url} failed every delivery for several days, so it has been turned off. Events that happen while it's off aren't sent.",
-      "cta": "Open webhook settings"
-    },
-    "digest": {
-      "subject": "Your daily summary",
-      "heading": "Here's what happened",
-      "intro": "{count, plural, one {# update} other {# updates}} since your last summary."
-    },
-    "unsubscribe": "Don't want these emails? Unsubscribe",
-    "paymentFailed": {
-      "subject": "Payment failed for {organizationName}",
-      "heading": "We couldn't take your payment",
-      "body": "The renewal payment of {amount} for {organizationName} didn't go through. We'll try again over the next few days; update the payment method to keep your plan.",
-      "cta": "Update payment method"
-    }
-  },
-  "notification": {
-    "webhooks": {
-      "endpoint-disabled": {
-        "title": "A webhook endpoint was turned off",
-        "body": "{url} kept failing, so we stopped sending to it. Fix it and turn it back on in webhook settings."
-      }
-    },
-    "todo": {
-      "reminder": {
-        "title": "Reminder",
-        "body": "{title}"
-      }
-    },
-    "billing": {
-      "payment-failed": {
-        "title": "A payment failed",
-        "body": "The renewal payment of {amount} didn't go through. Update the payment method to keep your plan."
-      }
+      "cta": "Review security settings"
     }
   },
   "errors": {
@@ -395,15 +279,6 @@
     "TOO_MANY_REDIRECTS": "The address redirected too many times.",
     "UPSTREAM_UNAVAILABLE": "A service we depend on is unavailable. Please try again.",
     "NO_ACTIVE_ORGANIZATION": "Choose a workspace first.",
-    "TODO_NOT_FOUND": "That todo no longer exists.",
-    "TODO_VERSION_CONFLICT": "Someone else changed this todo. We've loaded the latest version.",
-    "WEBHOOK_ENDPOINT_NOT_FOUND": "That webhook endpoint doesn't exist.",
-    "WEBHOOK_DELIVERY_NOT_FOUND": "That delivery doesn't exist.",
-    "WEBHOOK_URL_NOT_ALLOWED": "Use a public https:// URL. Private and internal addresses can't receive webhooks.",
-    "WEBHOOK_ENDPOINT_LIMIT": "This workspace already has {max} webhook endpoints. Delete one to add another.",
-    "UNSUBSCRIBE_LINK_INVALID": "This unsubscribe link isn't valid. Change what you receive in notification settings instead.",
-    "PHONE_CODE_INVALID": "That code isn't right, or it expired. Check the text or send a new code.",
-    "PHONE_NUMBER_TAKEN": "That number is already on an account.",
     "FILE_NOT_FOUND": "That file doesn't exist, or it isn't yours.",
     "FILE_TYPE_NOT_ALLOWED": "That kind of file isn't allowed here. Use one of: {types}.",
     "FILE_TOO_LARGE": "That file is too big. The limit is {maxBytes, number, ::unit/byte unit-width-narrow compact-short}.",
@@ -411,9 +286,6 @@
     "FILE_UNREADABLE": "That file couldn't be read. It may be damaged; try another.",
     "FILE_NOT_UPLOADED": "The file didn't finish uploading. Try again.",
     "FILE_NOT_READY": "That file is still being checked. Try again in a moment.",
-    "ENTITLEMENT_REQUIRED": "Your plan doesn't include this. Upgrade in billing settings to use it.",
-    "ALREADY_SUBSCRIBED": "This workspace already has a paid plan. Manage it from billing settings.",
-    "NO_SUBSCRIPTION": "This workspace doesn't have a paid plan yet.",
     "AI_BUDGET_EXCEEDED": "You've used this month's AI allowance. It resets on the 1st.",
     "SHORT_NOT_FOUND": "That short isn't on YouTube, or it's private.",
     "SHORT_TOO_LONG": "Director works with shorts up to {maxSeconds, number} seconds long. Pick a shorter video.",
@@ -424,9 +296,6 @@
     "DIRECTOR_VIDEO_UNREADABLE": "Director couldn't watch this short. It may be private, age-restricted or removed.",
     "DIRECTOR_ANALYSIS_FAILED": "Director couldn't work out how to film this short. Try again.",
     "DIRECTOR_REVIEW_FAILED": "Director couldn't review this take. Record it again.",
-    "API_KEY_NOT_FOUND": "That API key doesn't exist in this workspace.",
-    "API_KEY_LIMIT_REACHED": "This workspace has as many API keys as it can have. Revoke one you no longer use.",
-    "API_KEY_SCOPE_MISSING": "This API key doesn't have the {scope} scope.",
     "METHOD_NOT_SUPPORTED": "That isn't supported here.",
     "TIMEOUT": "That took too long. Try again.",
     "PAYLOAD_TOO_LARGE": "That's too much data to send at once.",
@@ -435,79 +304,7 @@
     "FILE_SIZE_MISMATCH": "The uploaded file isn't the size that was announced. Try uploading it again."
   },
   "workspace": {
-    "switcher": {
-      "label": "Workspace",
-      "create": "New workspace",
-      "personal": "Personal"
-    },
-    "create": {
-      "title": "New workspace",
-      "description": "A shared space for a team: its own todos, members and settings.",
-      "name": "Workspace name",
-      "submit": "Create workspace",
-      "created": "Workspace created"
-    },
-    "nav": {
-      "general": "General",
-      "members": "Members",
-      "webhooks": "Webhooks",
-      "apiKeys": "API keys",
-      "audit": "Audit log"
-    },
-    "general": {
-      "title": "Workspace",
-      "description": "Settings for everyone in {name}.",
-      "name": "Name",
-      "saved": "Workspace saved",
-      "personalNote": "This is your personal workspace. It can't be shared or deleted.",
-      "delete": {
-        "title": "Delete workspace",
-        "description": "Deletes the workspace and everything in it for all members. This can't be undone.",
-        "confirm": "Type the workspace name to confirm",
-        "action": "Delete workspace",
-        "deleted": "Workspace deleted"
-      }
-    },
-    "members": {
-      "title": "Members",
-      "description": "People who can work in {name}.",
-      "you": "You",
-      "role": {
-        "owner": "Owner",
-        "admin": "Admin",
-        "member": "Member",
-        "unknown": "No access (unknown role)"
-      },
-      "roleLabel": "Role for {name}",
-      "remove": "Remove",
-      "removed": "Member removed",
-      "roleChanged": "Role updated",
-      "leave": "Leave workspace",
-      "left": "You left the workspace",
-      "invite": {
-        "title": "Invite someone",
-        "email": "Email",
-        "role": "Role",
-        "submit": "Send invitation",
-        "sent": "Invitation sent to {email}"
-      },
-      "pending": {
-        "title": "Pending invitations",
-        "empty": "No pending invitations.",
-        "cancel": "Cancel",
-        "cancelled": "Invitation cancelled",
-        "invited": "Invited as {role}"
-      }
-    },
     "audit": {
-      "title": "Audit log",
-      "description": "Everything that changed in this workspace, and who changed it.",
-      "empty": "Nothing has happened here yet.",
-      "system": "System",
-      "loadMore": "Load more",
-      "when": "When",
-      "who": "Who",
-      "what": "What",
       "events": {
         "todo": {
           "created": {
@@ -612,286 +409,14 @@
           }
         }
       }
-    },
-    "webhooks": {
-      "title": "Webhooks",
-      "description": "Send this workspace's events to your own systems. Every request is signed (Standard Webhooks).",
-      "empty": "No endpoints yet.",
-      "add": "Add endpoint",
-      "url": "Endpoint URL",
-      "urlHint": "A public https:// address that accepts POST requests.",
-      "descriptionLabel": "Description",
-      "events": "Events",
-      "allEvents": "All events",
-      "create": "Add endpoint",
-      "created": "Endpoint added",
-      "secret": {
-        "title": "Signing secret",
-        "once": "Copy it now: it won't be shown again. Use it to verify each request's webhook-signature header.",
-        "copy": "Copy",
-        "copied": "Copied",
-        "done": "I've saved it",
-        "rotate": "Rotate secret",
-        "rotated": "New secret created. The old one keeps signing deliveries next to it for {hours, number} hours: switch your receiver to the new secret before then."
-      },
-      "status": {
-        "enabled": "Active",
-        "manual": "Turned off",
-        "failing": "Turned off: kept failing"
-      },
-      "enable": "Turn on",
-      "disable": "Turn off",
-      "test": "Send test event",
-      "testSent": "Test event sent",
-      "delete": "Delete",
-      "deleted": "Endpoint deleted",
-      "back": "All endpoints",
-      "deliveries": {
-        "title": "Recent deliveries",
-        "empty": "Nothing sent yet.",
-        "event": "Event",
-        "result": "Result",
-        "attempts": "{count, plural, one {# attempt} other {# attempts}}",
-        "pending": "Sending…",
-        "succeeded": "Delivered",
-        "failed": "Failed",
-        "redeliver": "Send again",
-        "redelivered": "Queued to send again",
-        "loadMore": "Load more",
-        "error": {
-          "timeout": "timed out",
-          "connection_failed": "couldn't connect",
-          "destination_not_allowed": "address not allowed",
-          "response_too_large": "response too large",
-          "endpoint_disabled": "endpoint turned off"
-        }
-      },
-      "eventLabels": {
-        "todo": {
-          "created": {
-            "v1": "A todo is created"
-          },
-          "completed": {
-            "v1": "A todo is completed"
-          },
-          "deleted": {
-            "v1": "A todo is deleted"
-          }
-        },
-        "org": {
-          "member_added": {
-            "v1": "Someone joins the workspace"
-          },
-          "member_removed": {
-            "v1": "Someone leaves or is removed"
-          }
-        }
-      }
-    },
-    "apiKeys": {
-      "title": "API keys",
-      "description": "Let scripts and other services use this workspace through the REST API. A key acts as the person who created it, only in this workspace and only within its scopes.",
-      "empty": "No API keys yet.",
-      "reference": "API reference",
-      "add": "Create an API key",
-      "name": "Name",
-      "nameHint": "Where it's used, like “CI” or “Zapier”, so you know what breaks if you revoke it.",
-      "scopesLabel": "Scopes",
-      "scopesHint": "Give each key only what it needs.",
-      "scopesRequired": "Choose at least one scope.",
-      "scopes": {
-        "todos:read": "Read todos",
-        "todos:write": "Create, change and delete todos",
-        "audit:read": "Read the audit log"
-      },
-      "expiry": "Expires",
-      "expiryDays": "In {days, number} days",
-      "create": "Create key",
-      "created": "API key created",
-      "key": {
-        "title": "Your new API key",
-        "once": "Copy it now: it won't be shown again. Send it in the x-api-key header.",
-        "copy": "Copy",
-        "copied": "Copied",
-        "done": "I've saved it"
-      },
-      "createdBy": "Created by {name} on {date}",
-      "createdByGone": "Created on {date} by an account that no longer exists",
-      "lastUsed": "last used {when}",
-      "neverUsed": "never used",
-      "expires": "expires {date}",
-      "noExpiry": "never expires",
-      "revoke": "Revoke",
-      "revokeTitle": "Revoke “{name}”?",
-      "revokeDescription": "Anything using this key stops working immediately. This can't be undone.",
-      "revoked": "“{name}” was revoked"
-    },
-    "noOrganization": "You're no longer in that workspace; switched to {name}."
-  },
-  "notificationCenter": {
-    "open": "Notifications",
-    "unread": "{count, plural, one {# unread notification} other {# unread notifications}}",
-    "title": "Notifications",
-    "empty": "You're all caught up.",
-    "markAllRead": "Mark all as read",
-    "viewAll": "See all notifications",
-    "loadMore": "Load more"
-  },
-  "notificationSettings": {
-    "title": "Notifications",
-    "description": "Choose what reaches you, and where. Sign-in codes and security alerts are always sent.",
-    "channels": {
-      "in_app": "In the app",
-      "email": "Email",
-      "push": "Push",
-      "sms": "Text message"
-    },
-    "categories": {
-      "workspace": {
-        "title": "Workspace",
-        "description": "Things that need an admin, like a webhook that keeps failing."
-      },
-      "activity": {
-        "title": "Activity",
-        "description": "Reminders and updates about your work."
-      },
-      "security": {
-        "title": "Security",
-        "description": "Sign-in codes and alerts about changes to your account."
-      },
-      "invitations": {
-        "title": "Invitations",
-        "description": "Invitations to join a workspace."
-      },
-      "billing": {
-        "title": "Billing",
-        "description": "Failed payments and changes to your plan."
-      }
-    },
-    "digest": {
-      "title": "Daily digest",
-      "description": "Get one email a day with everything non-urgent, instead of one email each."
-    },
-    "quietHours": {
-      "title": "Quiet hours",
-      "description": "Push notifications and texts wait until quiet hours end (in your time zone).",
-      "enable": "Pause push and texts at night",
-      "start": "From",
-      "end": "Until"
-    },
-    "saved": "Notification settings saved",
-    "browserPush": {
-      "title": "Push on this browser",
-      "description": "Get notifications from this site even when it isn't open. Each browser is turned on separately.",
-      "enable": "Send push notifications to this browser",
-      "enabled": "Push notifications are on for this browser",
-      "disabled": "Push notifications are off for this browser",
-      "blocked": "Notifications are blocked for this site. Allow them in your browser's site settings, then come back here.",
-      "unsupported": "This browser doesn't support push notifications."
     }
-  },
-  "unsubscribe": {
-    "title": "Unsubscribe",
-    "confirm": "Stop “{category}” emails",
-    "description": "You'll stop getting {category} emails. Sign-in codes and security alerts still arrive.",
-    "done": "Done. You won't get {category} emails anymore.",
-    "manage": "Manage all notification settings",
-    "missing": "This page needs the link from one of our emails."
-  },
-  "captcha": {
-    "title": "Security check",
-    "description": "Complete the check to continue in the app.",
-    "invalidReturn": "This page works only when the app opens it.",
-    "backToApp": "Back to the app"
-  },
-  "sms": {
-    "phoneCode": "{code} is your Director-editor verification code. It expires in {expiresInMinutes, number} minutes. Don't share it with anyone.",
-    "securityAlert": {
-      "email-changed": "Director-editor: the email address on your account was changed. Not you? Reset your password now.",
-      "password-changed": "Director-editor: your password was changed. Not you? Reset your password now.",
-      "password-reset": "Director-editor: your password was reset. Not you? Contact support now.",
-      "two-factor-enabled": "Director-editor: two-step verification was turned on for your account.",
-      "two-factor-disabled": "Director-editor: two-step verification was turned off. Not you? Reset your password now.",
-      "passkey-added": "Director-editor: a passkey was added to your account. Not you? Reset your password now.",
-      "phone-added": "Director-editor: this number was added to your account for security texts.",
-      "phone-removed": "Director-editor: this number was removed from your account. Not you? Reset your password now."
-    }
-  },
-  "billing": {
-    "title": "Billing",
-    "description": "The plan for {name}. Everyone in the workspace gets what it includes.",
-    "disabled": "Billing is off on this deployment: everything is included.",
-    "plans": {
-      "free": "Free",
-      "pro": "Pro"
-    },
-    "current": "Current plan",
-    "membersLimit": "{used, number} of {limit, number} members",
-    "membersUnlimited": "{used, plural, one {# member} other {# members}}, no limit",
-    "webhooks": "Webhooks",
-    "included": "Included",
-    "notIncluded": "Not included",
-    "upgrade": {
-      "title": "Upgrade to Pro",
-      "description": "Unlimited members and webhooks, billed per member.",
-      "monthly": "Upgrade, billed monthly",
-      "yearly": "Upgrade, billed yearly"
-    },
-    "manage": "Manage billing",
-    "status": {
-      "trialing": "Free trial until {date}",
-      "active": "Renews on {date}",
-      "past_due": "The last payment failed. Update the payment method to keep Pro.",
-      "canceling": "Cancelled: Pro stays until {date}",
-      "unpaid": "Payments failed, so the plan has lapsed.",
-      "canceled": "Cancelled"
-    },
-    "seats": "{seats, plural, one {# seat} other {# seats}}",
-    "invoices": {
-      "title": "Invoices",
-      "empty": "No invoices yet.",
-      "view": "View",
-      "status": {
-        "paid": "Paid",
-        "open": "Due",
-        "void": "Void",
-        "draft": "Draft",
-        "uncollectible": "Uncollectible"
-      }
-    },
-    "checkoutDone": "Thanks! Your plan will update in a moment.",
-    "limitReached": "Your plan allows {limit, number} members. Upgrade in billing settings to invite more.",
-    "upgradeForWebhooks": "Webhooks are part of Pro. Upgrade in billing settings to send events to your endpoints."
-  },
-  "mobile": {
-    "tabs": {
-      "todos": "Todos",
-      "settings": "Settings"
-    },
-    "settings": {
-      "account": "Account",
-      "signedInAs": "Signed in as {email}",
-      "workspace": "Workspace",
-      "language": "Language",
-      "notifications": "Notifications",
-      "enablePush": "Get notifications on this device",
-      "pushEnabled": "Notifications are on for this device.",
-      "pushDenied": "Notifications are turned off for this app in your device's settings.",
-      "pushUnavailable": "Notifications need a real device, not a simulator or the web.",
-      "version": "Version {version}"
-    },
-    "languages": {
-      "en": "English",
-      "es": "Español"
-    },
-    "captchaCancelled": "The security check wasn't finished. Try again."
   },
   "shorts": {
     "title": "Shorts",
     "homeTitle": "Home",
     "savedTitle": "You",
     "brand": "Director",
-    "off": "Director isn't set up in this workspace yet.",
+    "off": "Director isn't set up yet.",
     "nav": {
       "label": "Main",
       "home": "Home",
@@ -947,7 +472,7 @@
       "empty": "Nothing here yet. Like or save a short from the feed."
     },
     "account": "Your account",
-    "leave": "Back to the dashboard"
+    "leave": "Go to settings"
   },
   "director": {
     "title": "Director",

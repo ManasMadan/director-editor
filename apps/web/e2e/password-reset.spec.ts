@@ -25,7 +25,7 @@ test("reset a forgotten password; every device is signed out", async ({ page, br
 
   // Both previously signed-in devices lost their sessions.
   for (const device of [page, phone.page]) {
-    await device.goto("/dashboard");
+    await device.goto("/library");
     await expect(device).toHaveURL(/\/sign-in/);
   }
 

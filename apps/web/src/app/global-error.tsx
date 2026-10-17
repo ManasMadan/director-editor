@@ -19,7 +19,6 @@ interface Catalog {
 
 const catalogs: Record<Locale, () => Promise<Catalog>> = {
   en: () => import("@repo/i18n/messages/en.json"),
-  es: () => import("@repo/i18n/messages/es.json"),
 };
 
 interface Copy {

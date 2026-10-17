@@ -5,14 +5,14 @@
  * 1. A per-request nonce for the Content-Security-Policy, so the policy can forbid
  *    inline scripts except Next's own (which receive the nonce).
  * 2. Early redirects based on whether a session cookie is present: signed-out visitors
- *    to app pages go to sign-in, signed-in visitors to auth pages go to the dashboard.
+ *    to app pages go to sign-in, signed-in visitors to auth pages go to the library.
  *    A present cookie can still be expired or revoked; the API rejects it and the client
  *    then signs out (packages/client). This check is only about not flashing the wrong page.
  */
 import { getSessionCookie } from "better-auth/cookies";
 import { type NextRequest, NextResponse } from "next/server";
 import { env } from "@/env";
-import { APP_PATHS, GUEST_PATHS, matchesPath } from "@/lib/routes";
+import { APP_PATHS, GUEST_PATHS, HOME_PATH, matchesPath } from "@/lib/routes";
 
 /** Where Director's pose model comes from (src/modules/director/lib/pose.ts). */
 const POSE_MODEL_ORIGINS = "https://cdn.jsdelivr.net https://storage.googleapis.com";
@@ -29,7 +29,7 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
   if (signedIn && matchesPath(pathname, GUEST_PATHS)) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return NextResponse.redirect(new URL(HOME_PATH, request.url));
   }
 
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
@@ -44,7 +44,7 @@ export function proxy(request: NextRequest) {
     "style-src 'self' 'unsafe-inline'",
     `img-src 'self' data: blob: https:${storage}`,
     "font-src 'self'",
-    // The push service worker (public/sw.js).
+    // Workers from this site only (none from elsewhere).
     "worker-src 'self'",
     // The API is on this origin; Turnstile (captcha) needs its origin when enabled;
     // Director's pose model loads its runtime from jsDelivr and its weights from Google.

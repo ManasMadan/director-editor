@@ -22,7 +22,7 @@ export function DirectorGate({ children }: { children: ReactNode }) {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-4 p-8 text-center">
         <p className="max-w-sm text-studio-foreground/80">{t("off")}</p>
-        <Link href="/dashboard" className={buttonVariants({ variant: "secondary" })}>
+        <Link href="/settings" className={buttonVariants({ variant: "secondary" })}>
           {t("leave")}
         </Link>
       </div>

@@ -11,9 +11,9 @@ import {
 } from "./support";
 
 test.describe("sign-up and verification", () => {
-  test("sign up, verify by email, land on the dashboard", async ({ page }) => {
-    const user = await signUp(page);
-    await expect(page.getByRole("heading", { name: `Hi ${user.name}` })).toBeVisible();
+  test("sign up, verify by email, land in the library", async ({ page }) => {
+    await signUp(page);
+    await expect(page).toHaveTitle("Library · Director");
   });
 
   test("a wrong code is rejected and a new one can be requested", async ({ page }) => {
@@ -36,7 +36,7 @@ test.describe("sign-up and verification", () => {
     const second = await inbox.nextCode();
     await page.getByLabel("Verification code").fill(second);
     await page.getByRole("button", { name: "Continue" }).click();
-    await expect(page).toHaveURL(/\/dashboard/);
+    await expect(page).toHaveURL(/\/library/);
   });
 
   test("an existing email can't sign up twice", async ({ page, browser }) => {
@@ -50,7 +50,7 @@ test.describe("sign-up and verification", () => {
     // better-auth hides whether the email exists: the flow continues to verification,
     // and no session is created for the impostor.
     await expect(other.page).toHaveURL(/\/verify-email/);
-    await other.page.goto("/dashboard");
+    await other.page.goto("/library");
     await expect(other.page).toHaveURL(/\/sign-in/);
     await other.context.close();
   });
@@ -71,7 +71,7 @@ test.describe("sign-up and verification", () => {
     await signIn(page, user, { expectUrl: /\/verify-email/ });
     await page.getByLabel("Verification code").fill(await inbox.nextCode());
     await page.getByRole("button", { name: "Continue" }).click();
-    await expect(page).toHaveURL(/\/dashboard/);
+    await expect(page).toHaveURL(/\/library/);
   });
 
   test("forms validate with the server's rules before submitting", async ({ page }) => {
@@ -99,8 +99,8 @@ test.describe("sign-in and sign-out", () => {
     await thief.context.addCookies(stolen);
     const me = await thief.page.request.get("/api/v1/me");
     expect(me.status()).toBe(401);
-    await thief.page.goto("/dashboard");
-    await expect(thief.page).toHaveURL(/\/sign-in\?next=%2Fdashboard/);
+    await thief.page.goto("/library");
+    await expect(thief.page).toHaveURL(/\/sign-in\?next=%2Flibrary/);
     await thief.context.close();
   });
 
@@ -148,9 +148,9 @@ test.describe("sign-in and sign-out", () => {
   test("signed-in users skip the auth pages", async ({ page }) => {
     await signUp(page);
     await page.goto("/sign-in");
-    await expect(page).toHaveURL(/\/dashboard/);
+    await expect(page).toHaveURL(/\/library/);
     await page.goto("/sign-up");
-    await expect(page).toHaveURL(/\/dashboard/);
+    await expect(page).toHaveURL(/\/library/);
   });
 
   test("a session revoked elsewhere sends this device to sign-in instead of looping", async ({
@@ -165,29 +165,10 @@ test.describe("sign-in and sign-out", () => {
     await expect(page.getByText("Signed out").first()).toBeVisible();
 
     await laptop.page.reload();
-    await expect(laptop.page).toHaveURL(/\/sign-in\?next=%2Fdashboard/);
+    await expect(laptop.page).toHaveURL(/\/sign-in\?next=%2Flibrary/);
     // The stale cookie is gone, so the sign-in page stays put.
     await laptop.page.waitForTimeout(500);
     await expect(laptop.page).toHaveURL(/\/sign-in/);
     await laptop.context.close();
-  });
-});
-
-test.describe("language", () => {
-  test.use({ locale: "es-ES" });
-  test("renders in the browser's language, and emails match", async ({ page }) => {
-    await page.goto("/sign-in");
-    await expect(page.getByText("Bienvenido de nuevo")).toBeVisible();
-    await expect(page.locator("html")).toHaveAttribute("lang", "es");
-
-    const user = newUser();
-    const inbox = await mailbox(user.email);
-    await page.goto("/sign-up");
-    await page.getByLabel("Nombre completo").fill(user.name);
-    await page.getByLabel("Correo electrónico").fill(user.email);
-    await page.getByLabel("Contraseña").fill(user.password);
-    await page.getByRole("button", { name: "Crear cuenta" }).click();
-    const email = await inbox.next();
-    expect(email.Subject).toBe("Verifica tu correo");
   });
 });

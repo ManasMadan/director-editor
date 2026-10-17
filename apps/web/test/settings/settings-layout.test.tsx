@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { commands, userEvent } from "vitest/browser";
+import { userEvent } from "vitest/browser";
 import { SettingsLayout } from "@/modules/settings";
 import { currentUrl, renderPage } from "../render";
 import { signUp } from "../users";
-import { teamWorkspace } from "../workspace/support";
 
 const tabs = (page: Awaited<ReturnType<typeof renderPage>>, nav: string) =>
   page
@@ -13,7 +12,7 @@ const tabs = (page: Awaited<ReturnType<typeof renderPage>>, nav: string) =>
     .map((link) => link.textContent);
 
 describe("the settings tabs", () => {
-  it("offers owners every workspace tab, billing included, and marks the current one", async () => {
+  it("offers the account's tabs, no workspace ones, and marks the current one", async () => {
     await signUp();
     const page = await renderPage(
       <SettingsLayout>
@@ -22,16 +21,8 @@ describe("the settings tabs", () => {
       { url: "/settings" },
     );
     await expect.element(page.getByText("profile form")).toBeVisible();
-    await expect.element(page.getByRole("link", { name: "Billing" })).toBeVisible();
-    expect(tabs(page, "Your account")).toEqual(["Profile", "Security", "Notifications"]);
-    expect(tabs(page, "Workspace")).toEqual([
-      "General",
-      "Members",
-      "Webhooks",
-      "API keys",
-      "Audit log",
-      "Billing",
-    ]);
+    expect(tabs(page, "Your account")).toEqual(["Profile", "Security"]);
+    expect(page.getByRole("navigation", { name: "Workspace" }).query()).toBeNull();
     await expect
       .element(page.getByRole("link", { name: "Profile" }))
       .toHaveAttribute("aria-current", "page");
@@ -39,26 +30,20 @@ describe("the settings tabs", () => {
       page.getByRole("link", { name: "Security" }).element().getAttribute("aria-current"),
     ).toBeNull();
 
-    await userEvent.click(page.getByRole("link", { name: "Members" }));
-    await expect.poll(currentUrl).toBe("/settings/members");
+    await userEvent.click(page.getByRole("link", { name: "Security" }));
+    await expect.poll(currentUrl).toBe("/settings/security");
   });
 
-  it("marks a nested page's tab, and shows members only the tabs they can use", async () => {
-    const user = await signUp();
-    const workspace = await teamWorkspace();
-    await commands.sql(
-      "UPDATE auth.member SET role = 'member' WHERE organization_id = $1 AND user_id = $2",
-      [workspace.id, user.id],
-    );
+  it("marks a nested page's tab", async () => {
+    await signUp();
     const page = await renderPage(
       <SettingsLayout>
-        <p>members list</p>
+        <p>sessions</p>
       </SettingsLayout>,
-      { url: "/settings/members/invite" },
+      { url: "/settings/security/sessions" },
     );
     await expect
-      .element(page.getByRole("link", { name: "Members" }))
+      .element(page.getByRole("link", { name: "Security" }))
       .toHaveAttribute("aria-current", "page");
-    await expect.poll(() => tabs(page, "Workspace")).toEqual(["General", "Members"]);
   });
 });

@@ -34,11 +34,11 @@ describe("the profile", () => {
 
     await userEvent.fill(name, "Ada Lovelace");
     await userEvent.click(page.getByLabelText("Language"));
-    await userEvent.click(page.getByRole("option", { name: "español" }));
+    await userEvent.click(page.getByRole("option", { name: "English" }));
     await userEvent.selectOptions(page.getByLabelText("Time zone"), "Europe/Madrid");
     await userEvent.click(save);
     await expect.element(page.getByText("Profile saved")).toBeVisible();
-    expect(document.cookie).toContain("locale=es");
+    expect(document.cookie).toContain("locale=en");
     expect(document.cookie).toContain("tz=Europe%2FMadrid");
     expect(router.refreshes).toBe(1);
     await expect.element(save).toBeDisabled();
@@ -46,7 +46,7 @@ describe("the profile", () => {
     const me = await currentSession();
     expect(me.user).toMatchObject({
       name: "Ada Lovelace",
-      locale: "es",
+      locale: "en",
       timezone: "Europe/Madrid",
     });
   });

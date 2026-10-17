@@ -9,7 +9,7 @@ import { type AbstractIntlMessages, NextIntlClientProvider } from "next-intl";
 import { ThemeProvider } from "next-themes";
 import type { ReactNode } from "react";
 import { authClient } from "@/lib/auth-client";
-import { GUEST_PATHS, matchesPath } from "@/lib/routes";
+import { GUEST_PATHS, HOME_PATH, matchesPath } from "@/lib/routes";
 
 interface ProvidersProps {
   locale: Locale;
@@ -39,7 +39,7 @@ export function Providers({ locale, timeZone, messages, nonce, children }: Provi
           options={{ getLocale: () => locale }}
           // The session ended (signed out elsewhere, expired, revoked). Signing out clears
           // the now-useless cookie; otherwise the proxy would still see it and bounce the
-          // user from /sign-in back to the dashboard.
+          // user from /sign-in back to the library.
           // Several requests can fail together; only one redirect is wanted, and never
           // from an auth page (that would nest ?next= inside ?next=).
           onUnauthenticated={async () => {
@@ -51,7 +51,8 @@ export function Providers({ locale, timeZone, messages, nonce, children }: Provi
             router.replace(`/sign-in?next=${encodeURIComponent(pathname + search)}`);
           }}
           onOutdated={() => window.location.reload()}
-          // Removed from the active workspace (or it was deleted): move to another one.
+          // No active workspace (it was deleted, or the session never had one): move to
+          // the account's own.
           onNoOrganization={async () => {
             // Several requests can fail together; switch once.
             if (switchingWorkspace) {
@@ -64,7 +65,7 @@ export function Providers({ locale, timeZone, messages, nonce, children }: Provi
               return;
             }
             await authClient.organization.setActive({ organizationId: next.id });
-            window.location.assign("/dashboard");
+            window.location.assign(HOME_PATH);
           }}
         >
           {children}

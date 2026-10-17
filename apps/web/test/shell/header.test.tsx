@@ -8,9 +8,7 @@ import { signIn, signUp } from "../users";
 describe("the site header", () => {
   it("offers sign in to visitors", async () => {
     const page = await renderPage(<SiteHeader />, { url: "/" });
-    await expect
-      .element(page.getByRole("link", { name: "Director-editor" }))
-      .toHaveAttribute("href", "/");
+    await expect.element(page.getByRole("link", { name: "Director" })).toHaveAttribute("href", "/");
     await expect
       .element(page.getByRole("link", { name: "Sign in" }))
       .toHaveAttribute("href", "/sign-in");
@@ -28,19 +26,21 @@ describe("the site header", () => {
     await expect.element(page.getByRole("link", { name: "Sign in" })).toBeVisible();
   });
 
-  it("shows the account's menu, and the dashboard as home", async () => {
+  it("shows the account's menu, and the library as home", async () => {
     const user = await signUp();
     const page = await renderPage(<SiteHeader />, { url: "/settings" });
     await expect
-      .element(page.getByRole("link", { name: "Director-editor" }))
-      .toHaveAttribute("href", "/dashboard");
+      .element(page.getByRole("link", { name: "Director" }))
+      .toHaveAttribute("href", "/library");
+    // One workspace each, kept out of sight: no switcher, no language menu.
+    expect(page.getByRole("button", { name: "Workspace" }).query()).toBeNull();
+    expect(page.getByRole("button", { name: "Language" }).query()).toBeNull();
     await userEvent.click(page.getByRole("button", { name: user.name }));
     await expect.element(page.getByText(user.email)).toBeVisible();
   });
 
   it.each([
-    ["Dashboard", "/dashboard"],
-    ["Director", "/home"],
+    ["Library", "/library"],
     ["Settings", "/settings"],
   ])("goes to %s", async (item, path) => {
     const user = await signUp();
@@ -52,7 +52,7 @@ describe("the site header", () => {
 
   it("signs out with a full page load", async () => {
     const user = await signUp();
-    const page = await renderPage(<SiteHeader />, { url: "/dashboard" });
+    const page = await renderPage(<SiteHeader />, { url: "/settings" });
     await userEvent.click(page.getByRole("button", { name: user.name }));
     await userEvent.click(page.getByRole("menuitem", { name: "Sign out" }));
     await expect.poll(commands.hardNavigations).toEqual([`${window.location.origin}/`]);
@@ -64,7 +64,7 @@ describe("the site header", () => {
     const image = `${window.location.origin}/picture.png`;
     await commands.sql('UPDATE auth."user" SET image = $1 WHERE id = $2', [image, user.id]);
     await signIn(user);
-    const page = await renderPage(<SiteHeader />, { url: "/dashboard" });
+    const page = await renderPage(<SiteHeader />, { url: "/settings" });
     await expect.element(page.getByRole("button", { name: user.name })).toBeVisible();
     await expect
       .poll(

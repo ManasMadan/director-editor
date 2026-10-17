@@ -24,10 +24,10 @@ const render = async () =>
 
 describe("the root layout", () => {
   it("renders the page in the request's language, inside the app shell", async () => {
-    request.cookies.set("locale", "es");
+    request.cookies.set("locale", "en");
     request.headers.set("x-nonce", "abc123");
     const html = await render();
-    expect(html).toMatch(/<html lang="es" dir="ltr"/);
+    expect(html).toMatch(/<html lang="en" dir="ltr"/);
     expect(html).toContain("--font-geist-sans");
     expect(html).toContain("<main");
     expect(html).toContain("page content");
@@ -43,7 +43,7 @@ describe("the root layout", () => {
 
   it("titles pages after the site", async () => {
     expect(await generateMetadata()).toEqual({
-      title: { default: "Director-editor", template: "%s · Director-editor" },
+      title: { default: "Director", template: "%s · Director" },
       description: expect.any(String),
     });
   });

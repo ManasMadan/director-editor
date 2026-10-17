@@ -10,13 +10,13 @@ const FIRST = /^GRWM for the office in summer time!/;
 describe("the Shorts home", () => {
   it("shows the most watched shorts, each opening in the player", async () => {
     await signUp();
-    const page = await renderPage(<HomePage />, { url: "/home" });
+    const page = await renderPage(<HomePage />, { url: "/library" });
     const card = page.getByRole("link", { name: FIRST });
     await expect.element(card).toHaveAttribute("href", "/shorts/HasaZYkwYds");
     await expect.element(card).toMatchTextContent(/1\.8M views$/);
     await expect
       .element(page.getByRole("link", { name: "Director" }))
-      .toHaveAttribute("href", "/home");
+      .toHaveAttribute("href", "/library");
     await expect
       .element(page.getByRole("link", { name: "Your account" }))
       .toHaveAttribute("href", "/settings");
@@ -36,7 +36,7 @@ describe("the Shorts home", () => {
 
   it("shows a topic's shorts when its chip is picked", async () => {
     await signUp();
-    const page = await renderPage(<HomePage />, { url: "/home" });
+    const page = await renderPage(<HomePage />, { url: "/library" });
     await expect.element(page.getByRole("link", { name: /Dropped my pen/ })).toBeVisible();
     await expect
       .element(page.getByRole("button", { name: "All" }))
@@ -63,7 +63,7 @@ describe("the Shorts home", () => {
         ? { items: feed.items.slice(2, 3), nextPageToken: null }
         : { items: feed.items.slice(0, 2), nextPageToken: "page-2" },
     );
-    const page = await renderPage(<HomePage />, { url: "/home" });
+    const page = await renderPage(<HomePage />, { url: "/library" });
     await expect.element(page.getByRole("link", { name: /Dropped my pen/ })).toBeVisible();
     expect(page.getByRole("link", { name: /One tip that changed my mornings/ }).query()).toBeNull();
     await userEvent.click(page.getByRole("button", { name: "Show more" }));
@@ -83,7 +83,7 @@ describe("the Shorts home", () => {
             nextPageToken: null,
           },
     );
-    const page = await renderPage(<HomePage />, { url: "/home" });
+    const page = await renderPage(<HomePage />, { url: "/library" });
     const card = page.getByRole("link", { name: FIRST });
     await expect.element(card).toBeVisible();
     await expect.element(card).not.toMatchTextContent(/views/);
@@ -94,7 +94,7 @@ describe("the Shorts home", () => {
   it("says why the feed didn't load", async () => {
     await signUp();
     await commands.failRequests("/rpc/shorts/feed");
-    const page = await renderPage(<HomePage />, { url: "/home" });
+    const page = await renderPage(<HomePage />, { url: "/library" });
     await expect
       .element(page.getByRole("alert"))
       .toHaveTextContent("We can't reach the server. Check your connection and try again.");
@@ -102,7 +102,7 @@ describe("the Shorts home", () => {
 
   it("opens a short from a pasted link", async () => {
     await signUp();
-    const page = await renderPage(<HomePage />, { url: "/home" });
+    const page = await renderPage(<HomePage />, { url: "/library" });
     const open = page.getByRole("button", { name: "Open" });
     await expect.element(open).toBeDisabled();
     await userEvent.fill(
@@ -115,7 +115,7 @@ describe("the Shorts home", () => {
 
   it("says when a pasted link isn't a short", async () => {
     await signUp();
-    const page = await renderPage(<HomePage />, { url: "/home" });
+    const page = await renderPage(<HomePage />, { url: "/library" });
     const input = page.getByLabelText("Paste a Shorts link");
     await userEvent.fill(input, "https://example.com/video");
     await userEvent.click(page.getByRole("button", { name: "Open" }));
@@ -123,6 +123,6 @@ describe("the Shorts home", () => {
       .element(page.getByRole("alert"))
       .toHaveTextContent("That short isn't on YouTube, or it's private.");
     await expect.element(input).toHaveAttribute("aria-invalid", "true");
-    expect(currentUrl()).toBe("/home");
+    expect(currentUrl()).toBe("/library");
   });
 });

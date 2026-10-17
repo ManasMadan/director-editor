@@ -1,7 +1,8 @@
 /**
  * Starts what the browser tests talk to: two builds of the real API, one with every
- * optional feature on (billing against the fake Stripe, files on the local RustFS, the
- * AI stand-in, Google sign-in, Director's Shorts feed from the mock YouTube) and one with every feature off except captcha, both on one
+ * optional feature on (files on the local RustFS, the AI stand-in, Google sign-in,
+ * Director's Shorts feed from the mock YouTube) and one with every feature off except
+ * captcha, both on one
  * cloned database. The browser reaches them on its own origin, through the proxy in
  * vitest.config.ts, exactly like the site does through the gateway.
  */
@@ -10,9 +11,8 @@ import { mkdirSync, openSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { createTestDatabase, prepareTemplate } from "@repo/db/testing";
 import { startFakeGoogle } from "@repo/fake-google";
-import { startFakeStripe } from "@repo/fake-stripe";
 import { startFakeAi } from "./fake-ai";
-import { API, CAPTCHA, REDIS_URL, type Services, SITE, STRIPE, VAPID_PUBLIC_KEY } from "./services";
+import { API, CAPTCHA, REDIS_URL, type Services, SITE } from "./services";
 
 const ROOT = join(import.meta.dirname, "../../..");
 const API_DIR = join(ROOT, "apps/api");
@@ -72,16 +72,6 @@ async function start(): Promise<Services> {
 
   await prepareTemplate();
   const database = await createTestDatabase();
-  const stripe = await startFakeStripe({
-    secretKey: STRIPE.secretKey,
-    webhookSecret: STRIPE.webhookSecret,
-    // Subscriptions are set up in the database by the tests; Stripe's events go nowhere.
-    webhookUrl: "http://127.0.0.1:9/",
-    prices: {
-      [STRIPE.monthly]: { interval: "month", unitAmount: 1_200 },
-      [STRIPE.yearly]: { interval: "year", unitAmount: 12_000 },
-    },
-  });
   const ai = await startFakeAi();
   const google = await startFakeGoogle({ apiKey: "web-tests-youtube-key" });
 
@@ -97,7 +87,6 @@ async function start(): Promise<Services> {
     MINIMUM_CLIENT_VERSION: "1.0.0",
     API_DATABASE_URL: database.urlFor("app_api"),
     REDIS_URL,
-    VAPID_PUBLIC_KEY,
   };
   const off = {
     GOOGLE_CLIENT_ID: "",
@@ -105,10 +94,6 @@ async function start(): Promise<Services> {
     TURNSTILE_SITE_KEY: "",
     TURNSTILE_SECRET_KEY: "",
     S3_BUCKET: "",
-    STRIPE_SECRET_KEY: "",
-    STRIPE_PRICE_PRO_MONTHLY: "",
-    STRIPE_PRICE_PRO_YEARLY: "",
-    STRIPE_API_URL: "",
     AI_URL: "",
     AI_SERVICE_SECRET: "",
     YOUTUBE_API_KEY: "",
@@ -119,10 +104,6 @@ async function start(): Promise<Services> {
       GOOGLE_CLIENT_ID: "web-tests.apps.googleusercontent.com",
       GOOGLE_CLIENT_SECRET: "web-tests-secret",
       S3_BUCKET: process.env.S3_BUCKET ?? "uploads",
-      STRIPE_SECRET_KEY: STRIPE.secretKey,
-      STRIPE_PRICE_PRO_MONTHLY: STRIPE.monthly,
-      STRIPE_PRICE_PRO_YEARLY: STRIPE.yearly,
-      STRIPE_API_URL: stripe.url,
       AI_URL: ai.url,
       AI_SERVICE_SECRET: ai.secret,
       YOUTUBE_API_KEY: "web-tests-youtube-key",
@@ -161,7 +142,6 @@ async function start(): Promise<Services> {
 
   return {
     databaseUrl: database.urlFor("postgres"),
-    stripeUrl: stripe.url,
     aiUrl: ai.url,
     async close() {
       await Promise.all(
@@ -173,7 +153,6 @@ async function start(): Promise<Services> {
             }),
         ),
       );
-      await stripe.close();
       await ai.close();
       await google.close();
       await database.drop();

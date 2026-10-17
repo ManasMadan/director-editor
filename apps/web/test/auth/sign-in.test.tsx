@@ -66,7 +66,7 @@ describe("sign in", () => {
     await signOut();
     const page = await renderPage(<SignInPage />, { url: "/sign-in" });
     await userEvent.click(page.getByRole("button", { name: "Sign in with a passkey" }));
-    await expect.poll(currentUrl).toBe("/dashboard");
+    await expect.poll(currentUrl).toBe("/library");
 
     // A fresh authenticator has no passkey for this site: the prompt ends without one.
     cleanup();

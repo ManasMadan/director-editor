@@ -62,7 +62,7 @@ describe("the Shorts player", () => {
       .toHaveAttribute("href", `/director/${PEN.videoId}`);
     await expect
       .element(page.getByRole("link", { name: "Home", exact: true }).first())
-      .toHaveAttribute("href", "/home");
+      .toHaveAttribute("href", "/library");
     await expect
       .element(page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Shorts" }))
       .toHaveAttribute("aria-current", "page");

@@ -19,12 +19,11 @@ import {
   expect,
   type Page,
 } from "@playwright/test";
-import { todoIdSchema, userIdSchema } from "@repo/contracts/ids";
 import { totp } from "@repo/testing/totp";
 import { Redis } from "ioredis";
 import { FAKE_TURNSTILE } from "../test/turnstile";
 
-// Authenticator codes (RFC 6238), shared with the mobile suite.
+// Authenticator codes (RFC 6238).
 export { totp };
 
 const MAILPIT = process.env.MAILPIT_URL ?? "http://localhost:58025";
@@ -148,7 +147,7 @@ export async function signUp(
   await expect(page).toHaveURL(/\/verify-email/);
   await page.getByLabel("Verification code").fill(await inbox.nextCode());
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page).toHaveURL(options.expectUrl ?? /\/dashboard/);
+  await expect(page).toHaveURL(options.expectUrl ?? /\/library/);
   return user;
 }
 
@@ -159,23 +158,16 @@ export async function signIn(page: Page, user: User, options: { expectUrl?: RegE
   await page.getByLabel("Email").fill(user.email);
   await page.getByLabel("Password").fill(user.password);
   await page.getByRole("main").getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page).toHaveURL(options.expectUrl ?? /\/dashboard/);
+  await expect(page).toHaveURL(options.expectUrl ?? /\/library/);
 }
 
 export async function signOut(page: Page, user: User) {
+  // The library and the other full-screen pages bring their own chrome; the account menu
+  // is in the site header, which settings shows.
+  await page.goto("/settings");
   await page.getByRole("button", { name: user.name }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page).toHaveURL(`${BASE_URL}/`);
-}
-
-/** Calls a better-auth endpoint as the page's signed-in user (for setup the UI doesn't offer yet). */
-export async function authApi<T = unknown>(page: Page, path: string, body: unknown): Promise<T> {
-  const response = await page.request.post(`/api/auth${path}`, {
-    data: body,
-    headers: { origin: BASE_URL },
-  });
-  expect(response.ok(), `${path} → ${response.status()} ${await response.text()}`).toBe(true);
-  return (await response.json()) as T;
 }
 
 /** Turns on two-step verification through settings; returns the secret and backup codes. */
@@ -303,78 +295,10 @@ export async function expireCodes(email: string) {
   expect(expired, `a pending code for ${email}`).toBeGreaterThan(0);
 }
 
-// ---------------------------------------------------------------------------- workspaces
-
-/** Creates a team workspace through the header switcher and switches to it. */
-export async function createWorkspace(page: Page, name: string) {
-  await page.getByRole("button", { name: "Workspace", exact: true }).click();
-  await page.getByRole("menuitem", { name: "New workspace" }).click();
-  await page.getByLabel("Workspace name").fill(name);
-  await page.getByRole("button", { name: "Create workspace" }).click();
-  await expect(page.getByText("Workspace created")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Workspace", exact: true })).toContainText(name);
-}
-
-/** Invites `invitee` to the active workspace (Members page) and has them accept by email. */
-export async function inviteAndAccept(
-  owner: Page,
-  invitee: { page: Page; user: User },
-  role = "Member",
-) {
-  const inbox = await mailbox(invitee.user.email);
-  await owner.goto("/settings/members");
-  await owner.getByLabel("Email").fill(invitee.user.email);
-  if (role !== "Member") {
-    await owner.getByRole("combobox", { name: "Role" }).click();
-    await owner.getByRole("option", { name: role }).click();
-  }
-  await owner.getByRole("button", { name: "Send invitation" }).click();
-  await expect(owner.getByText(`Invitation sent to ${invitee.user.email}`)).toBeVisible();
-  const { Text } = await inbox.next();
-  const link = /(https?:\/\/\S+\/invitations\/[0-9a-f-]{36})/.exec(Text)?.[1];
-  expect(link, "an invitation link").toBeDefined();
-  await invitee.page.goto(new URL(link as string).pathname);
-  await invitee.page.getByRole("button", { name: "Accept invitation" }).click();
-  await expect(invitee.page).toHaveURL(/\/dashboard/);
-}
-
 /**
  * Waits until the page has rendered its data: no loading skeletons left. (Not
  * "networkidle": the realtime stream keeps a request open for as long as the page is.)
  */
 export async function settled(page: Page) {
   await expect(page.locator("[data-slot=skeleton]")).toHaveCount(0);
-}
-
-// ---------------------------------------------------------------------------- notifications
-
-/** Queues a reminder for the page's user, the way a producer service would. */
-export async function sendReminder(page: Page, title: string) {
-  const { createProducer } = await import("@repo/jobs");
-  const me = (await (await page.request.get("/api/v1/me")).json()) as { id: string };
-  const producer = createProducer("notifications-bulk", authStore());
-  await producer.add(
-    "send",
-    {
-      template: "todo.reminder",
-      to: { userId: userIdSchema.parse(me.id) },
-      data: { todoId: todoIdSchema.parse(randomUUID()), title },
-    },
-    { jobId: randomUUID() },
-  );
-  await producer.close();
-}
-
-// ---------------------------------------------------------------------------- billing
-
-/**
- * Puts the active workspace on Pro through the (fake) Stripe checkout, as a customer
- * would: billing settings → checkout → pay → back, until the plan shows.
- */
-export async function upgrade(page: Page, interval: "monthly" | "yearly" = "monthly") {
-  await page.goto("/settings/billing");
-  await page.getByRole("button", { name: `Upgrade, billed ${interval}` }).click();
-  await page.getByRole("button", { name: "Pay", exact: true }).click();
-  await expect(page).toHaveURL(/\/settings\/billing\?checkout=done/);
-  await expect(page.getByText("Pro", { exact: true })).toBeVisible({ timeout: 20_000 });
 }

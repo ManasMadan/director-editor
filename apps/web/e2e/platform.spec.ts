@@ -1,12 +1,4 @@
-import {
-  createWorkspace,
-  expect,
-  expectAccessible,
-  settled,
-  signOut,
-  signUp,
-  test,
-} from "./support";
+import { expect, expectAccessible, settled, signOut, signUp, test } from "./support";
 
 test("unknown pages show a translated 404", async ({ page }) => {
   const response = await page.goto("/does-not-exist");
@@ -35,29 +27,11 @@ test("no page logs errors or violates the CSP", async ({ page }) => {
   const problems: string[] = [];
   page.on("console", (message) => message.type() === "error" && problems.push(message.text()));
   page.on("pageerror", (error) => problems.push(error.message));
-  for (const path of [
-    "/",
-    "/sign-in",
-    "/sign-up",
-    "/forgot-password",
-    "/terms",
-    "/privacy",
-    "/unsubscribe",
-  ]) {
+  for (const path of ["/", "/sign-in", "/sign-up", "/forgot-password", "/terms", "/privacy"]) {
     await page.goto(path);
   }
   await signUp(page);
-  for (const path of [
-    "/dashboard",
-    "/settings",
-    "/settings/security",
-    "/settings/notifications",
-    "/settings/workspace",
-    "/settings/members",
-    "/settings/webhooks",
-    "/settings/audit",
-    "/notifications",
-  ]) {
+  for (const path of ["/library", "/saved", "/settings", "/settings/security"]) {
     await page.goto(path);
     await settled(page);
   }
@@ -67,14 +41,55 @@ test("no page logs errors or violates the CSP", async ({ page }) => {
 test("health, robots, sitemap and manifest", async ({ request }) => {
   expect(await (await request.get("/healthz")).json()).toEqual({ status: "ok" });
   const robots = await (await request.get("/robots.txt")).text();
-  expect(robots).toContain("Disallow: /dashboard");
+  expect(robots).toContain("Disallow: /library");
   expect(await (await request.get("/sitemap.xml")).text()).toContain("/terms");
-  expect((await (await request.get("/manifest.webmanifest")).json()).start_url).toBe("/dashboard");
+  const manifest = await (await request.get("/manifest.webmanifest")).json();
+  expect(manifest).toMatchObject({ name: "Director", start_url: "/library" });
 });
 
 test("the API docs are reachable on the same origin", async ({ request }) => {
   const spec = await (await request.get("/api/v1/openapi.json")).json();
-  expect(spec.paths["/todos"]).toBeDefined();
+  expect(spec.info.title).toBe("Director API");
+  expect(spec.paths["/me"]).toBeDefined();
+});
+
+test("the app is called Director everywhere a visitor or member looks", async ({ page }) => {
+  for (const path of ["/", "/sign-in"]) {
+    await page.goto(path);
+    await expect(page).toHaveTitle(/Director/);
+    await expect(page.locator("body")).not.toContainText("Director-editor");
+  }
+  await signUp(page);
+  await settled(page);
+  await expect(page).toHaveTitle(/Director/);
+  await expect(page.locator("body")).not.toContainText("Director-editor");
+  expect(await page.title()).not.toContain("Director-editor");
+});
+
+test("the landing page stays public, signed in or not", async ({ page }) => {
+  await signUp(page);
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/$/);
+  await page.getByRole("link", { name: "Open your library" }).click();
+  await expect(page).toHaveURL(/\/library/);
+});
+
+test("workspace pages are gone", async ({ page }) => {
+  await signUp(page);
+  for (const path of [
+    "/settings/workspace",
+    "/settings/members",
+    "/settings/billing",
+    "/settings/api-keys",
+    "/settings/webhooks",
+    "/settings/audit",
+    "/settings/notifications",
+    "/notifications",
+    "/dashboard",
+  ]) {
+    const response = await page.goto(path);
+    expect({ path, status: response?.status() }).toEqual({ path, status: 404 });
+  }
 });
 
 test.describe("accessibility (WCAG 2.2 AA)", () => {
@@ -96,18 +111,7 @@ test.describe("accessibility (WCAG 2.2 AA)", () => {
 
   test("signed-in pages", async ({ page }) => {
     await signUp(page);
-    await createWorkspace(page, "Accessible");
-    for (const path of [
-      "/dashboard",
-      "/settings",
-      "/settings/security",
-      "/settings/workspace",
-      "/settings/members",
-      "/settings/webhooks",
-      "/settings/audit",
-      "/settings/notifications",
-      "/notifications",
-    ]) {
+    for (const path of ["/library", "/saved", "/settings", "/settings/security"]) {
       await page.goto(path);
       await settled(page);
       await expectAccessible(page);
@@ -119,7 +123,7 @@ test.describe("accessibility (WCAG 2.2 AA)", () => {
     await page.goto("/sign-in");
     await expectAccessible(page);
     await signUp(page);
-    for (const path of ["/dashboard", "/settings/security"]) {
+    for (const path of ["/library", "/settings/security"]) {
       await page.goto(path);
       await settled(page);
       await expectAccessible(page);
@@ -175,5 +179,5 @@ test("keyboard users can sign in without a mouse", async ({ page }) => {
   await page.keyboard.press("Tab");
   await page.keyboard.type(user.password);
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page).toHaveURL(/\/library/);
 });

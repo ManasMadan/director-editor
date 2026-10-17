@@ -9,6 +9,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { HOME_PATH } from "@/lib/routes";
 import { BottomNav } from "../components/bottom-nav";
 import { DirectorGate } from "../components/director-gate";
 import { PlayerSlide } from "../components/player-slide";
@@ -72,7 +73,7 @@ function Player({ videoId }: { videoId: string | undefined }) {
   return (
     <div className="h-dvh snap-y snap-mandatory overflow-y-scroll [scrollbar-width:none]">
       <Link
-        href="/home"
+        href={HOME_PATH}
         aria-label={t("homeTitle")}
         className="fixed top-4 left-4 z-20 flex size-10 items-center justify-center rounded-full bg-studio/60 backdrop-blur"
       >

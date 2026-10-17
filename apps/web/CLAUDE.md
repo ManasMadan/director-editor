@@ -12,7 +12,7 @@ version renamed middleware to `src/proxy.ts`.
 - Browser tests (pages against the real API): `bun run --filter @repo/web test:integration`
   (one file: `bun run --cwd apps/web test:integration test/auth/sign-in.test.tsx`)
 - E2E against a running `bun dev`: `bun run --cwd apps/web test:e2e`
-  (one spec: `bun run --cwd apps/web test:e2e e2e/todos.spec.ts`)
+  (one spec: `bun run --cwd apps/web test:e2e e2e/auth.spec.ts`)
 - E2E on a fresh production build: `bun run test:e2e --app web`
 - Bundle budget (after `bun run --filter @repo/web build`): `bun run --cwd apps/web budget`
 
@@ -24,7 +24,7 @@ version renamed middleware to `src/proxy.ts`.
 - `src/proxy.ts`: session-cookie redirects and the CSP nonce.
 - `src/i18n/request.ts`: locale from the `locale` cookie, then Accept-Language.
 - `e2e/support.ts`: `newUser`, `signUp`, `signIn`, `mailbox` (Mailpit),
-  `expectAccessible`, `createWorkspace`, `inviteAndAccept`.
+  `expectAccessible`.
 
 ## Gotchas
 
