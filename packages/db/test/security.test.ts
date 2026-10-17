@@ -34,10 +34,14 @@ beforeAll(async () => {
     await api.organization.create({ data: { id, name: id, slug: id } });
   }
   await tenantTx(api, orgA, (tx) =>
-    tx.todo.create({ data: { orgId: orgA, createdById: userId, title: "A1" } }),
+    tx.shortReaction.create({
+      data: { orgId: orgA, userId, videoId: "aaaaaaaaaaa", kind: "like" },
+    }),
   );
   await tenantTx(api, orgB, (tx) =>
-    tx.todo.create({ data: { orgId: orgB, createdById: userId, title: "B1" } }),
+    tx.shortReaction.create({
+      data: { orgId: orgB, userId, videoId: "bbbbbbbbbbb", kind: "like" },
+    }),
   );
 });
 
@@ -59,18 +63,18 @@ describe("row-level security", () => {
   });
 
   it("shows a tenant only its own rows", async () => {
-    const rows = await withTenant(api, orgA).todo.findMany();
-    expect(rows.map((row) => row.title)).toEqual(["A1"]);
+    const rows = await withTenant(api, orgA).shortReaction.findMany();
+    expect(rows.map((row) => row.videoId)).toEqual(["aaaaaaaaaaa"]);
   });
 
   it("shows nothing when no tenant is set", async () => {
-    expect(await api.todo.count()).toBe(0);
+    expect(await api.shortReaction.count()).toBe(0);
   });
 
   it("rejects writing a row into another tenant", async () => {
     await expect(
-      withTenant(api, orgA).todo.create({
-        data: { orgId: orgB, createdById: userId, title: "sneaky" },
+      withTenant(api, orgA).shortReaction.create({
+        data: { orgId: orgB, userId, videoId: "ccccccccccc", kind: "save" },
       }),
     ).rejects.toThrow();
   });
@@ -78,9 +82,10 @@ describe("row-level security", () => {
   it("cannot update or delete another tenant's rows", async () => {
     const tenant = withTenant(api, orgA);
     expect(
-      (await tenant.todo.updateMany({ where: { orgId: orgB }, data: { completed: true } })).count,
+      (await tenant.shortReaction.updateMany({ where: { orgId: orgB }, data: { kind: "save" } }))
+        .count,
     ).toBe(0);
-    expect((await tenant.todo.deleteMany({ where: { orgId: orgB } })).count).toBe(0);
+    expect((await tenant.shortReaction.deleteMany({ where: { orgId: orgB } })).count).toBe(0);
   });
 
   it("blocks nested transactions on a tenant client, which would not be atomic", () => {
@@ -95,7 +100,7 @@ describe("row-level security", () => {
       Array.from({ length: 100 }, (_, i) => {
         const org = i % 2 === 0 ? orgA : orgB;
         return withTenant(api, org)
-          .todo.findMany()
+          .shortReaction.findMany()
           .then((rows) => rows.every((row) => row.orgId === org));
       }),
     );
@@ -123,9 +128,10 @@ describe("row-level security", () => {
       return rows.filter((row) => !(row.table in UNSCOPED_USER_TABLES));
     });
     const names = tables.map((table) => table.table);
-    // The shapes this must keep covering: a partitioned table and per-user tables.
+    // The shapes this must keep covering: a partitioned table, a tenant table and a
+    // per-user one.
     expect(names).toEqual(
-      expect.arrayContaining(["audit.audit_log", "files.file", "notifications.device"]),
+      expect.arrayContaining(["audit.audit_log", "app.short_reaction", "files.file"]),
     );
     for (const table of tables) {
       expect(table, `${table.table} must FORCE row-level security with a policy`).toMatchObject({
@@ -139,10 +145,10 @@ describe("row-level security", () => {
     const policies = await asRole("migrator", async (client) => {
       const { rows } = await client.query<{ table: string; expr: string }>(`
         SELECT schemaname || '.' || tablename AS table, coalesce(qual, '') || coalesce(with_check, '') AS expr
-        FROM pg_policies WHERE schemaname IN ('files', 'notifications')`);
+        FROM pg_policies WHERE schemaname = 'files'`);
       return rows;
     });
-    for (const table of ["files.file", "notifications.device", "notifications.notification"]) {
+    for (const table of ["files.file"]) {
       const rows = policies.filter((policy) => policy.table === table);
       expect(rows.length, `${table} needs a policy`).toBeGreaterThan(0);
       expect(rows.some((policy) => policy.expr.includes("app.user_id"))).toBe(true);
@@ -160,7 +166,9 @@ describe("least privilege", () => {
         /permission denied/,
       );
       await expect(client.query("SELECT * FROM auth.account")).rejects.toThrow(/permission denied/);
-      await expect(client.query("SELECT * FROM app.todo")).rejects.toThrow(/permission denied/);
+      await expect(client.query("SELECT * FROM app.short_reaction")).rejects.toThrow(
+        /permission denied/,
+      );
     });
   });
 
@@ -175,7 +183,15 @@ describe("least privilege", () => {
       await expect(client.query("DELETE FROM app.outbox_event WHERE false")).rejects.toThrow(
         /permission denied/,
       );
-      await expect(client.query("SELECT * FROM app.todo")).rejects.toThrow(/permission denied/);
+      await expect(client.query("SELECT * FROM app.short_reaction")).rejects.toThrow(
+        /permission denied/,
+      );
+    });
+  });
+
+  it("lets the AI service into its own schemas only", async () => {
+    await asRole("app_ai", async (client) => {
+      await expect(client.query(`SELECT id FROM auth."user"`)).rejects.toThrow(/permission denied/);
     });
   });
 
@@ -184,9 +200,9 @@ describe("least privilege", () => {
       await expect(client.query("CREATE TABLE app.nope (id int)")).rejects.toThrow(
         /permission denied/,
       );
-      await expect(client.query("ALTER TABLE app.todo DISABLE ROW LEVEL SECURITY")).rejects.toThrow(
-        /must be owner/,
-      );
+      await expect(
+        client.query("ALTER TABLE app.short_reaction DISABLE ROW LEVEL SECURITY"),
+      ).rejects.toThrow(/must be owner/);
     });
   });
 });

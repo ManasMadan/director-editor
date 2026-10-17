@@ -1,67 +1,6 @@
-// Owner: apps/webhooks (deliveries, inbound provider events, its outbox), with one
-// shared table: `endpoint` is organization configuration that apps/api edits for org
-// admins. The webhooks service only reads it, apart from marking an endpoint disabled
-// when it keeps failing (column-level grant). Endpoints and deliveries are tenant
-// tables: every role, including the webhooks service, reads them through row-level
-// security with app.org_id set.
+// Owner: apps/webhooks: inbound provider events (the mail server's) and its outbox.
 
-/// A customer's HTTPS endpoint that receives events for their organization.
-model WebhookEndpoint {
-  id                      String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  orgId                   String            @map("org_id") @db.Uuid
-  url                     String
-  description             String            @default("")
-  /// Subscribed event names (packages/contracts webhookEvents); empty means all of them.
-  events                  String[]
-  /// Signing secret (whsec_...), encrypted with ENCRYPTION_KEYS; shown to the admin once.
-  secret                  String
-  /// The secret before the last rotation, still signed with until the expiry below so
-  /// receivers can switch without dropping deliveries. Encrypted like `secret`.
-  previousSecret          String?           @map("previous_secret")
-  previousSecretExpiresAt DateTime?         @map("previous_secret_expires_at") @db.Timestamptz(3)
-  createdById             String?           @map("created_by_id") @db.Uuid
-  createdAt               DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt               DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
-  /// Set by an admin ("manual") or by the delivery service ("failing").
-  disabledAt              DateTime?         @map("disabled_at") @db.Timestamptz(3)
-  disabledReason          String?           @map("disabled_reason")
-  organization            Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  deliveries              WebhookDelivery[]
-
-  @@index([orgId])
-  @@map("endpoint")
-  @@schema("webhooks")
-}
-
-/// One event sent (or being sent) to one endpoint, with the outcome of the latest try.
-model WebhookDelivery {
-  id             String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  endpointId     String          @map("endpoint_id") @db.Uuid
-  orgId          String          @map("org_id") @db.Uuid
-  eventId        String          @map("event_id") @db.Uuid
-  eventName      String          @map("event_name")
-  /// The exact JSON body that is signed and sent on every attempt.
-  body           String
-  /// pending → succeeded | failed (retries exhausted)
-  status         String          @default("pending")
-  attempts       Int             @default(0)
-  lastAttemptAt  DateTime?       @map("last_attempt_at") @db.Timestamptz(3)
-  lastStatus     Int?            @map("last_status")
-  lastError      String?         @map("last_error")
-  lastDurationMs Int?            @map("last_duration_ms")
-  succeededAt    DateTime?       @map("succeeded_at") @db.Timestamptz(3)
-  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
-  endpoint       WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
-
-  /// One delivery per event per endpoint, however often the event is redelivered to us.
-  @@unique([endpointId, eventId])
-  @@index([endpointId, id(sort: Desc)])
-  @@index([orgId])
-  @@map("delivery")
-  @@schema("webhooks")
-}
-
-/// A verified event received from a provider (Stripe), stored once by its provider id.
+/// A verified event received from a provider (the mail server), stored once by its id.
 model WebhookInboundEvent {
   id              String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
   provider        String

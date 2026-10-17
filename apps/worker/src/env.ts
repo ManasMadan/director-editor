@@ -35,9 +35,9 @@ export const envSchema = {
   OUTBOX_RETENTION_DAYS: positive.default(7),
   PROCESSED_EVENT_RETENTION_DAYS: positive.default(30),
   AUDIT_RETENTION_MONTHS: positive.default(13),
-  // Webhook delivery logs and received provider events.
+  // Received provider events (the mail server's).
   WEBHOOK_HISTORY_DAYS: positive.default(30),
-  // Delivery log, and in-app notifications read longer ago than this.
+  // The email delivery log.
   NOTIFICATION_HISTORY_DAYS: positive.default(90),
 
   // Uploads: checked here when files are on (S3_BUCKET set).

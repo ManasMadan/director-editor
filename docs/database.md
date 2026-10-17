@@ -153,8 +153,8 @@ old release is serving. A flagged statement that is safe in context gets
 
 CI's integration job runs `packages/db/scripts/drift.ts` (`bun run --cwd packages/db
 drift`), which fails when the migrations, the Prisma schema and the migrated database
-disagree. Differences Prisma can't model are listed in its `IGNORED` with the reason
-(today, the pgvector HNSW index).
+disagree. It fails on any difference; something Prisma can't model needs a skip there,
+with the reason.
 
 ## Test databases
 

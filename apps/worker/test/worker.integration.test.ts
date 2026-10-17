@@ -307,21 +307,6 @@ describe("outbox relay, when things go wrong", () => {
     const { job } = await jobIn("events-audit", id as string);
     expect(job?.data.meta).toEqual({ requestId: "req-7", userId: actorId, orgId });
   });
-
-  it("nudges no screen for a todo event without an organization", async () => {
-    const [id] = await emit(1, null);
-    // Audited means relayed: its realtime job was queued in the same step.
-    await eventually(
-      () => audited([id as string]),
-      (found) => found.length === 1,
-    );
-    // Done jobs leave that queue at once; a failed one would stay.
-    const settled = await eventually(
-      () => jobIn("events-realtime", id as string),
-      ({ state }) => state === undefined,
-    );
-    expect(settled.state).toBeUndefined();
-  });
 });
 
 describe("audit log guarantees", () => {
@@ -422,43 +407,29 @@ describe("maintenance", () => {
     expect(remaining).toEqual([recent, pending].sort());
   });
 
-  it("purges old webhook deliveries, but keeps pending and recent ones", async () => {
-    const orgId = randomUUID();
-    const ids = await asRole("postgres", async (client) => {
-      await client.query(
-        `INSERT INTO auth.organization (id, name, slug, created_at) VALUES ($1::uuid, 'W', $1::text, now())`,
-        [orgId],
-      );
-      const endpoint = await client.query<{ id: string }>(
-        `INSERT INTO webhooks.endpoint (org_id, url, secret, updated_at)
-         VALUES ($1, 'https://example.com/hook', 's', now()) RETURNING id`,
-        [orgId],
-      );
-      const deliveries = await client.query<{ id: string; event_name: string }>(
-        `INSERT INTO webhooks.delivery (endpoint_id, org_id, event_id, event_name, body, status, created_at)
-         VALUES ($1, $2, uuidv7(), 'old-sent', '{}', 'succeeded', now() - interval '200 days'),
-                ($1, $2, uuidv7(), 'old-pending', '{}', 'pending', now() - interval '200 days'),
-                ($1, $2, uuidv7(), 'recent', '{}', 'failed', now())
-         RETURNING id, event_name`,
-        [endpoint.rows[0]?.id, orgId],
-      );
-      return deliveries.rows;
-    });
-    expect(ids).toHaveLength(3);
-
+  it("purges received provider events past the window, and keeps recent ones", async () => {
+    const provider = `test-${randomUUID()}`;
+    await asRole("postgres", (client) =>
+      client.query(
+        `INSERT INTO webhooks.inbound_event (provider, provider_event_id, type, payload, received_at)
+         VALUES ($1, 'old', 't', '{}', now() - interval '200 days'),
+                ($1, 'recent', 't', '{}', now())`,
+        [provider],
+      ),
+    );
     const result = await maintenance.run("outbox-retention");
     expect(result["webhooks.history"]).toBeGreaterThanOrEqual(1);
     const left = await asRole("postgres", async (client) => {
-      const { rows } = await client.query<{ event_name: string }>(
-        "SELECT event_name FROM webhooks.delivery WHERE org_id = $1 ORDER BY event_name",
-        [orgId],
+      const { rows } = await client.query<{ provider_event_id: string }>(
+        "SELECT provider_event_id FROM webhooks.inbound_event WHERE provider = $1",
+        [provider],
       );
-      return rows.map((row) => row.event_name);
+      return rows.map((row) => row.provider_event_id);
     });
-    expect(left).toEqual(["old-pending", "recent"]);
+    expect(left).toEqual(["recent"]);
   });
 
-  it("purges old notification history, but keeps unread notifications", async () => {
+  it("purges the email delivery log past the window", async () => {
     const userId = randomUUID();
     await asRole("app_api", (client) =>
       client.query(
@@ -466,41 +437,24 @@ describe("maintenance", () => {
         [userId, `${userId}@test.dev`],
       ),
     );
-    await asRole("postgres", async (client) => {
-      await client.query(
-        `INSERT INTO notifications.notification (user_id, template, data, read_at, created_at) VALUES
-         ($1, 'old-read', '{}', now() - interval '200 days', now() - interval '200 days'),
-         ($1, 'old-unread', '{}', NULL, now() - interval '200 days'),
-         ($1, 'recent-read', '{}', now() - interval '1 day', now() - interval '2 days')`,
-        [userId],
-      );
-      await client.query(
+    await asRole("postgres", (client) =>
+      client.query(
         `INSERT INTO notifications.delivery (idempotency_key, channel, template, user_id, status, created_at, updated_at) VALUES
          ($2, 'email', 't', $1, 'sent', now() - interval '200 days', now()),
          ($3, 'email', 't', $1, 'sent', now(), now())`,
         [userId, `old-${userId}`, `new-${userId}`],
-      );
-    });
+      ),
+    );
     const result = await maintenance.run("outbox-retention");
-    expect(result["notifications.history"]).toBeGreaterThanOrEqual(2);
-    const left = await asRole("postgres", async (client) => ({
-      notifications: (
-        await client.query<{ template: string }>(
-          "SELECT template FROM notifications.notification WHERE user_id = $1 ORDER BY template",
-          [userId],
-        )
-      ).rows.map((row) => row.template),
-      deliveries: (
-        await client.query<{ idempotency_key: string }>(
-          "SELECT idempotency_key FROM notifications.delivery WHERE user_id = $1",
-          [userId],
-        )
-      ).rows.map((row) => row.idempotency_key),
-    }));
-    expect(left).toEqual({
-      notifications: ["old-unread", "recent-read"],
-      deliveries: [`new-${userId}`],
+    expect(result["notifications.history"]).toBeGreaterThanOrEqual(1);
+    const left = await asRole("postgres", async (client) => {
+      const { rows } = await client.query<{ idempotency_key: string }>(
+        "SELECT idempotency_key FROM notifications.delivery WHERE user_id = $1",
+        [userId],
+      );
+      return rows.map((row) => row.idempotency_key);
     });
+    expect(left).toEqual([`new-${userId}`]);
   });
 
   it("purges expired database sessions and verifications", async () => {
