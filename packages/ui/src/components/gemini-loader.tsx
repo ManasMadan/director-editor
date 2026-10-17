@@ -2,9 +2,6 @@ import { cn } from "cn";
 import { SparkleIcon } from "lucide-react";
 import { useId } from "react";
 
-/** Announced when the caller has no caption of its own to show. */
-const DEFAULT_LABEL = "Loading";
-
 const SIZE_CLASSES = {
   sm: "size-6",
   md: "size-10",
@@ -13,17 +10,23 @@ const SIZE_CLASSES = {
 
 /**
  * The feel of Gemini's own loading state: an aurora glow turning behind a four-point
- * sparkle that gently pulses. `label` doubles as the caption under it and its accessible
- * name; without one, a visually-hidden default still gives screen readers something to
- * announce. Respects `prefers-reduced-motion`: the glow and sparkle hold still, gradient
- * and all, instead of animating.
+ * sparkle that gently pulses. `label` is the caller's translated text for what's
+ * loading; it is always the accessible name (set as `aria-label`, since `role="status"`
+ * doesn't take its name from content) and, with `showLabel`, is also drawn as a caption
+ * under the sparkle. Respects `prefers-reduced-motion`: the glow and sparkle hold still,
+ * gradient and all, instead of animating.
  */
 function GeminiLoader({
   label,
+  showLabel = false,
   size = "md",
   className,
   ...props
-}: React.ComponentProps<"div"> & { label?: string; size?: "sm" | "md" | "lg" }) {
+}: React.ComponentProps<"div"> & {
+  label: string;
+  showLabel?: boolean;
+  size?: "sm" | "md" | "lg";
+}) {
   const gradientId = useId();
   return (
     <div
@@ -31,11 +34,11 @@ function GeminiLoader({
       data-size={size}
       role="status"
       aria-live="polite"
-      aria-label={label ?? DEFAULT_LABEL}
+      aria-label={label}
       className={cn("inline-flex flex-col items-center gap-2", className)}
       {...props}
     >
-      <span className={cn("relative block", SIZE_CLASSES[size])}>
+      <span data-slot="gemini-loader-icon" className={cn("relative block", SIZE_CLASSES[size])}>
         {/* Nothing to look at itself: the sparkle below fills from this gradient by id. */}
         <svg aria-hidden width={0} height={0} className="absolute">
           <defs>
@@ -57,7 +60,7 @@ function GeminiLoader({
           className="relative size-full motion-safe:animate-[gemini-pulse_2.2s_ease-in-out_infinite]"
         />
       </span>
-      {label ? <span className="text-sm text-muted-foreground">{label}</span> : null}
+      {showLabel ? <span className="text-sm text-muted-foreground">{label}</span> : null}
     </div>
   );
 }
