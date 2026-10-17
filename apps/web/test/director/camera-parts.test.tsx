@@ -107,6 +107,7 @@ describe("the HUD", () => {
 describe("the dock", () => {
   const dock = (overrides: Partial<Parameters<typeof LiveDock>[0]> = {}) => ({
     idle: false,
+    onCall: vi.fn(),
     shutter: <span>shutter</span>,
     sharing: false,
     onShare: vi.fn(),
@@ -118,15 +119,19 @@ describe("the dock", () => {
     ...overrides,
   });
 
-  it("shares the screen, talks, pauses and ends", async () => {
+  it("calls Director, shares the screen, talks, pauses and ends", async () => {
+    const onCall = vi.fn();
     const onShare = vi.fn();
     const onListen = vi.fn();
     const onPause = vi.fn();
-    const page = await renderPage(<LiveDock {...dock({ onShare, onListen, onPause })} />);
+    const page = await renderPage(<LiveDock {...dock({ onCall, onShare, onListen, onPause })} />);
+    await userEvent.click(page.getByRole("button", { name: "Call Director" }));
     await userEvent.click(page.getByRole("button", { name: "Show Director your screen" }));
     await userEvent.click(page.getByRole("button", { name: "Talk to Director" }));
     await userEvent.click(page.getByRole("button", { name: "Pause Director" }));
-    expect([onShare, onListen, onPause].map((fn) => fn.mock.calls.length)).toEqual([1, 1, 1]);
+    expect([onCall, onShare, onListen, onPause].map((fn) => fn.mock.calls.length)).toEqual([
+      1, 1, 1, 1,
+    ]);
     await expect
       .element(page.getByRole("link", { name: "End the session" }))
       .toHaveAttribute("href", "/director/abc");

@@ -30,13 +30,17 @@ export interface StudioShot {
   audio: AudioMode;
 }
 
+/** A shot's camera screen. */
+export const shotPage = (videoId: string, index: number, audio: AudioMode) =>
+  `/director/${videoId}/shoot?shot=${index}&audio=${audio}` as const;
+
 /**
  * Where to go once a take is kept: the next shot, or, once all are in, the editor with
  * Director's cut of them, opened as a wrap.
  */
-function nextPage({ videoId, index, count, audio }: Omit<StudioShot, "shot">) {
+export function nextPage({ videoId, index, count, audio }: Omit<StudioShot, "shot">) {
   return index + 1 < count
-    ? (`/director/${videoId}/shoot?shot=${index + 1}&audio=${audio}` as const)
+    ? shotPage(videoId, index + 1, audio)
     : (`/director/${videoId}/review?audio=${audio}&wrap=1` as const);
 }
 

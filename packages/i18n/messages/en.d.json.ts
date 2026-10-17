@@ -793,6 +793,31 @@ declare const messages: {
         "title": "That's a wrap!",
         "body": "I cut your takes together, best moments first. Make any last changes, then tap Next."
       }
+    },
+    "call": {
+      "start": "Call Director",
+      "connecting": "Calling Director…",
+      "live": "On a call",
+      "controls": "Call controls",
+      "mute": "Mute your microphone",
+      "unmute": "Unmute your microphone",
+      "end": "End the call",
+      "you": "You said",
+      "director": "Director says",
+      "failed": {
+        "microphone": "Director can't hear you. Allow the microphone in your browser's settings, then call again.",
+        "dropped": "The call dropped.",
+        "RATE_LIMITED": "You've made all the calls you can for this hour.",
+        "TIMEOUT": "Calls last up to ten minutes. Call again to keep going.",
+        "CONFLICT": "You're already on a call with Director in another tab.",
+        "FEATURE_DISABLED": "Calls with Director aren't available here.",
+        "UPSTREAM_UNAVAILABLE": "Gemini can't take the call right now.",
+        "DIRECTOR_PLAN_NOT_FOUND": "Director hasn't finished planning this short yet.",
+        "DIRECTOR_SHOT_NOT_FOUND": "That shot isn't part of this plan.",
+        "UNAUTHENTICATED": "Sign in again to call Director.",
+        "other": "The call stopped unexpectedly."
+      },
+      "fallback": "Director Live is guiding you on this shot, and your takes are safe."
     }
   }
 };
