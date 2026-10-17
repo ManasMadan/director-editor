@@ -13,6 +13,7 @@ import { type IncomingMessage, STATUS_CODES } from "node:http";
 import type { Duplex } from "node:stream";
 import { DIRECTOR_MAX_SHOTS, type DirectorPlan, type ShotPlan } from "@repo/contracts/api";
 import { type UserId, type VideoId, videoIdSchema } from "@repo/contracts/ids";
+import { LIVE_PATH } from "@repo/contracts/live";
 import { required } from "@repo/contracts/objects";
 import { MINUTE_MS, SECOND_MS } from "@repo/contracts/time";
 import { AppError, describeError, isAppError } from "@repo/nest-common";
@@ -24,9 +25,8 @@ import type { OrgCaller } from "../../rpc/procedures";
 import type { GoogleAuth } from "./google-auth";
 import { CLIENT_MAX_PAYLOAD_BYTES } from "./live.messages";
 import { closeWithError, type LiveLog, LiveRelay } from "./live.relay";
-import { greetingMessage, type LiveModel, liveUrl, setupMessage } from "./live.setup";
+import { type LiveModel, liveUrl, setupMessage } from "./live.setup";
 
-export const LIVE_PATH = "/api/live";
 /** A call's longest. Cost grows with every second of audio and video, and a shot is short. */
 export const MAX_CALL_MS = 10 * MINUTE_MS;
 const FRAME_INTERVAL_MS = SECOND_MS;
@@ -124,7 +124,8 @@ function relayFor(
     url: upstream.url,
     auth: upstream.auth,
     setup: setupMessage(upstream.model, call.plan, call.shot),
-    greeting: greetingMessage(call.shot),
+    plan: call.plan,
+    shot: call.shot,
     maxDurationMs: MAX_CALL_MS,
     frameIntervalMs: FRAME_INTERVAL_MS,
     now: options.now,

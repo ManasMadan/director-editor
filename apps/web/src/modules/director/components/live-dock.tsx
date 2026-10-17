@@ -4,8 +4,9 @@ import { cn } from "@repo/ui/lib/utils";
 import { Mic, MicOff, Pause, Play, ScreenShare, ScreenShareOff, X } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import type { ListenState } from "../hooks/use-listening";
+import { CallButton } from "./live-call";
 import { GLASS } from "./live-hud";
 
 function DockButton({
@@ -104,12 +105,14 @@ export function Shutter({
 }
 
 /**
- * The frosted dock under the viewport, Gemini Live's way round: show Director the screen,
- * talk to it, the shutter in the middle, pause Director, end. When the member leaves the
- * screen alone it steps back (`idle`), all but the shutter.
+ * The frosted dock under the viewport, Gemini Live's way round: call Director, show it
+ * the screen, talk to it, the shutter in the middle, pause Director, end. When the member
+ * leaves the screen alone it steps back (`idle`), all but the shutter.
  */
 export function LiveDock({
   idle,
+  onCall,
+  callRef,
   shutter,
   sharing,
   onShare,
@@ -120,6 +123,8 @@ export function LiveDock({
   endHref,
 }: {
   idle: boolean;
+  onCall: () => void;
+  callRef?: Ref<HTMLButtonElement>;
   shutter: ReactNode;
   sharing: boolean;
   onShare: (() => void) | null;
@@ -154,6 +159,7 @@ export function LiveDock({
       )}
     >
       <div className={cn("flex gap-2.5", fade)}>
+        <CallButton onCall={onCall} ref={callRef} />
         {onShare ? (
           <DockButton
             label={sharing ? t("stopShare") : t("share")}

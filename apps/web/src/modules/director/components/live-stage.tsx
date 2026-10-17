@@ -31,21 +31,31 @@ export function LiveBackdrop({ stream }: { stream: MediaStream | null }) {
 /**
  * The viewport: the camera in a floating capsule with deep corners, lit from behind by an
  * aurora that breathes while Director talks or listens (`glowing`), and flashes on the
- * beat when a step changes (`beat` changes).
+ * beat when a step changes (`beat` changes). On a call (`full`) it takes the whole
+ * height, edge to edge on a phone, with the controls floating over it.
  */
 export function LiveViewport({
   glowing,
   recording,
   beat,
+  full = false,
   children,
 }: {
   glowing: boolean;
   recording: boolean;
   beat: number;
+  full?: boolean;
   children: ReactNode;
 }) {
   return (
-    <div className="live-motion relative mx-auto w-[min(calc(100vw-1.5rem),calc((100dvh-10.5rem)*9/16))]">
+    <div
+      className={cn(
+        "live-motion relative mx-auto transition-[width] duration-500",
+        full
+          ? "w-[min(100vw,calc(100dvh*9/16))]"
+          : "w-[min(calc(100vw-1.5rem),calc((100dvh-10.5rem)*9/16))]",
+      )}
+    >
       <div
         aria-hidden
         className={cn(
@@ -62,6 +72,7 @@ export function LiveViewport({
         className={cn(
           "relative aspect-9/16 overflow-hidden rounded-[2.25rem] bg-studio shadow-[0_30px_80px_-20px_rgb(0_0_0/0.8)] ring-1 transition-[box-shadow] duration-500",
           recording ? "ring-2 ring-record" : "ring-studio-foreground/15",
+          full && "max-sm:rounded-none",
         )}
       >
         {children}

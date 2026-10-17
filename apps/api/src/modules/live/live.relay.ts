@@ -1,26 +1,32 @@
 /**
  * One live call: the browser's socket on one side, Gemini's Live API (Vertex AI) on the
  * other. The browser's microphone and camera go up as realtime input; Gemini's voice, both
- * sides' transcripts and its tool calls come back down. The call ends when either side
- * closes, Gemini fails, or the call reaches its time limit; the browser hears why as an
- * `error` message just before its socket closes.
+ * sides' transcripts and its tool calls come back down. One call carries the whole short:
+ * when the browser moves to another shot, Gemini is told about it in a turn and keeps
+ * everything said so far. The call ends when either side closes, Gemini fails, or the
+ * call reaches its time limit; the browser hears why as an `error` message just before
+ * its socket closes.
  */
+import type { ShotPlan } from "@repo/contracts/api";
 import { ERROR_CODES, type ErrorCode } from "@repo/contracts/errors";
+import {
+  LIVE_TOOLS,
+  type LiveClientMessage,
+  type LiveServerMessage,
+  liveClientMessage,
+} from "@repo/contracts/live";
 import { PROVIDER_TIMEOUT_MS, SECOND_MS } from "@repo/contracts/time";
 import { describeError } from "@repo/nest-common";
 import { type RawData, WebSocket } from "ws";
 import type { GoogleAuth } from "./google-auth";
 import { SlidingBudget } from "./live.budget";
 import {
-  type ClientMessage,
-  clientMessageSchema,
-  type ServerMessage,
   toolArgsSchema,
   UPSTREAM_MAX_PAYLOAD_BYTES,
   type UpstreamMessage,
   upstreamMessageSchema,
 } from "./live.messages";
-import { LIVE_TOOLS } from "./live.setup";
+import { greetingMessage, shotMessage } from "./live.setup";
 
 /** How the relay reports what went wrong, for the service's log. */
 export type LiveLog = (
@@ -33,9 +39,11 @@ export interface RelayOptions {
   /** The Live API's WebSocket URL. */
   url: string;
   auth: GoogleAuth;
-  /** The first message upstream (setupMessage), and the turn that makes the director speak. */
+  /** The first message upstream (setupMessage, for `shot`). */
   setup: object;
-  greeting: object;
+  /** The plan the call directs, and the shot it starts on. */
+  plan: ShotPlan;
+  shot: number;
   maxDurationMs: number;
   /** Camera frames closer together than this are dropped: the Live API takes one a second. */
   frameIntervalMs: number;
@@ -63,7 +71,7 @@ export function closeWithError(client: WebSocket, code: ErrorCode) {
   if (client.readyState !== WebSocket.OPEN) {
     return;
   }
-  client.send(JSON.stringify({ type: "error", code } satisfies ServerMessage));
+  client.send(JSON.stringify({ type: "error", code } satisfies LiveServerMessage));
   // 1011: our side (or Gemini) failed; 1008: the call was refused or hit a limit.
   client.close(ERROR_CODES[code] >= 500 ? 1011 : 1008);
 }
@@ -96,11 +104,14 @@ export class LiveRelay {
   private readonly timer: NodeJS.Timeout;
   private setupTimer: NodeJS.Timeout | undefined;
   private readonly finished = Promise.withResolvers<void>();
+  /** The shot the browser is on, which Gemini directs. */
+  private shot: number;
 
   constructor(
     private readonly client: WebSocket,
     private readonly options: RelayOptions,
   ) {
+    this.shot = options.shot;
     this.timer = setTimeout(() => this.end("TIMEOUT"), options.maxDurationMs);
     this.audio = new SlidingBudget(AUDIO_WINDOW_BYTES, AUDIO_WINDOW_MS, options.now);
     this.turns = new SlidingBudget(TEXT_TURNS, TEXT_WINDOW_MS, options.now);
@@ -155,9 +166,12 @@ export class LiveRelay {
   }
 
   private fromClient(data: RawData, isBinary: boolean) {
-    const parsed = isBinary ? null : clientMessageSchema.safeParse(parseJson(textOf(data)));
+    const parsed = isBinary ? null : liveClientMessage.safeParse(parseJson(textOf(data)));
     if (!parsed?.success) {
       return this.end("VALIDATION_FAILED");
+    }
+    if (parsed.data.type === "shot") {
+      return this.moveTo(parsed.data.shot);
     }
     // Until Gemini has its setup, anything sent would be refused; a moment's audio is lost.
     if (this.ready) {
@@ -165,7 +179,27 @@ export class LiveRelay {
     }
   }
 
-  private forward(upstream: WebSocket, message: ClientMessage) {
+  /**
+   * The browser is on shot `index` now. A move costs a turn like a typed line does; before
+   * Gemini is ready it's only remembered, and the call opens on that shot instead.
+   */
+  private moveTo(index: number) {
+    if (index >= this.options.plan.shots.length) {
+      return this.end("DIRECTOR_SHOT_NOT_FOUND");
+    }
+    if (index === this.shot) {
+      return;
+    }
+    if (!this.turns.spend(1)) {
+      return this.end("DIRECTOR_CALL_TOO_FAST");
+    }
+    this.shot = index;
+    if (this.ready) {
+      this.toUpstream(shotMessage(this.options.plan, index));
+    }
+  }
+
+  private forward(upstream: WebSocket, message: Exclude<LiveClientMessage, { type: "shot" }>) {
     if (upstream.bufferedAmount > UPSTREAM_MAX_BUFFERED_BYTES) {
       const details = { bufferedBytes: upstream.bufferedAmount };
       this.options.log("warn", details, "live upstream fell behind");
@@ -174,7 +208,7 @@ export class LiveRelay {
     switch (message.type) {
       case "audio":
         if (!this.audio.spend(Buffer.byteLength(message.pcm16, "base64"))) {
-          return this.end("RATE_LIMITED");
+          return this.end("DIRECTOR_CALL_TOO_FAST");
         }
         return this.toUpstream({
           realtimeInput: { audio: { mimeType: "audio/pcm;rate=16000", data: message.pcm16 } },
@@ -191,7 +225,7 @@ export class LiveRelay {
       }
       case "text":
         if (!this.turns.spend(1)) {
-          return this.end("RATE_LIMITED");
+          return this.end("DIRECTOR_CALL_TOO_FAST");
         }
         return this.toUpstream({
           clientContent: {
@@ -216,7 +250,9 @@ export class LiveRelay {
       // ended (the browser hung up while setup was in flight) one that started.
       const justStarted = !this.ready;
       this.ready = upstream;
-      this.toUpstream(this.options.greeting);
+      const { plan, shot } = this.options;
+      // A browser that moved on while Gemini got ready opens on the shot it's on now.
+      this.toUpstream(this.shot === shot ? greetingMessage(shot) : shotMessage(plan, this.shot));
       if (justStarted && !this.ended) {
         this.options.onCallStarted();
       }
@@ -266,7 +302,7 @@ export class LiveRelay {
 
   // Both sockets are open whenever these run (the upstream has answered setup). One that
   // is closing drops what's sent, which is right: the call is ending anyway.
-  private toClient(message: ServerMessage) {
+  private toClient(message: LiveServerMessage) {
     this.client.send(JSON.stringify(message));
   }
 

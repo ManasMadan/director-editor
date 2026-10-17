@@ -5,15 +5,20 @@ import "../live.css";
 import { useApiErrorMessage } from "@repo/client";
 import { useDirectorPlanQuery } from "@repo/client/api/director/plan";
 import type { Shot, ShotPlan } from "@repo/contracts/api";
+import type { LiveTool } from "@repo/contracts/live";
 import { buttonVariants } from "@repo/ui/components/button";
-import { Spinner } from "@repo/ui/components/spinner";
+import { GeminiLoader } from "@repo/ui/components/gemini-loader";
 import { cn } from "@repo/ui/lib/utils";
 import { Camera, MonitorUp, SwitchCamera } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { DirectorGate, YouTubeEmbed } from "@/modules/shorts";
 import { DirectorsCut } from "../components/directors-cut";
 import { DoodleLayer } from "../components/doodle-layer";
+import { CallCaptions, CallDock, CallPill, useCallFailure } from "../components/live-call";
 import { DirectorCaption } from "../components/live-caption";
 import { LiveDock, Shutter } from "../components/live-dock";
 import {
@@ -28,13 +33,16 @@ import {
 } from "../components/live-hud";
 import { CountdownPulse, LiveBackdrop, LiveViewport } from "../components/live-stage";
 import { Teleprompter } from "../components/teleprompter";
+import { useLiveCall } from "../hooks/use-live-call";
 import { useSpeaking } from "../hooks/use-live-director";
 import { useSession } from "../hooks/use-session";
-import type { StudioShot } from "../hooks/use-studio";
+import { nextPage, type StudioShot, shotPage } from "../hooks/use-studio";
 import { parseAudio } from "../lib/audio";
+import { restCallAudio } from "../lib/call-audio";
 import { activeStep } from "../lib/timeline";
 
 type Session = ReturnType<typeof useSession>;
+type Call = ReturnType<typeof useLiveCall>;
 
 /** The original's audio, playing the shot's part while the member films along to it. */
 function OriginalAudio({ videoId, shot }: { videoId: string; shot: Shot }) {
@@ -79,15 +87,26 @@ function CameraBlocked({ session }: { session: Session }) {
   );
 }
 
+/** Both sides' words, while there's a call. */
+function OnCallCaptions({ call }: { call: Call | null }) {
+  return call ? <CallCaptions captions={call.captions} level={call.level} /> : null;
+}
+
 /** The top of the viewport: which take and shot size, the ready check, the tilt request. */
-function ViewportTop({ session, shot }: { session: Session; shot: Shot }) {
+function ViewportTop({ session, shot, call }: { session: Session; shot: Shot; call: Call | null }) {
   const t = useTranslations("director.shoot");
   const { studio, seen } = session;
   if (studio.phase !== "setup" && studio.phase !== "countdown") {
     return null;
   }
   return (
-    <div className="absolute inset-x-3 top-3 flex items-start justify-between gap-2">
+    <div
+      className={cn(
+        "absolute inset-x-3 flex items-start justify-between gap-2",
+        // On a call the header floats over the viewport's top.
+        call ? "top-16" : "top-3",
+      )}
+    >
       <div className="flex flex-col items-start gap-1.5">
         <StatusPill take={session.take} size={shot.framing.shotSize} />
         {seen.ask ? (
@@ -105,16 +124,32 @@ function ViewportTop({ session, shot }: { session: Session; shot: Shot }) {
   );
 }
 
-/** The foot of the viewport: Director's caption, or while recording, the step and the lines. */
-function ViewportFoot({ session, shot, voice }: { session: Session; shot: Shot; voice: boolean }) {
+/**
+ * The foot of the viewport: Director's caption (both sides', on a call), or while
+ * recording, the step and the lines.
+ */
+function ViewportFoot({
+  session,
+  shot,
+  voice,
+  call,
+}: {
+  session: Session;
+  shot: Shot;
+  voice: boolean;
+  call: Call | null;
+}) {
   const t = useTranslations("director");
   const talking = useSpeaking();
   const { studio } = session;
   const sharing = studio.camera.source === "screen";
+  // On a call the dock floats over the viewport's foot.
+  const bottom = call ? "bottom-28" : "bottom-3";
   if (studio.phase === "recording") {
     const step = shot.steps[activeStep(shot.steps, studio.seconds)];
     return (
-      <div className="live-motion absolute inset-x-3 bottom-3 flex flex-col gap-2">
+      <div className={cn("live-motion absolute inset-x-3 flex flex-col gap-2", bottom)}>
+        <OnCallCaptions call={call} />
         {step ? (
           <p
             key={step.atSeconds}
@@ -131,7 +166,7 @@ function ViewportFoot({ session, shot, voice }: { session: Session; shot: Shot; 
     );
   }
   return (
-    <div className="absolute inset-x-3 bottom-3 flex items-end gap-2">
+    <div className={cn("absolute inset-x-3 flex items-end gap-2", bottom)}>
       <div className="min-w-0 flex-1">
         {sharing ? (
           <p
@@ -144,12 +179,16 @@ function ViewportFoot({ session, shot, voice }: { session: Session; shot: Shot; 
             {t("live.screen.sharing")}
           </p>
         ) : null}
-        <DirectorCaption
-          line={studio.phase === "countdown" ? null : session.director.line}
-          talking={talking}
-          heard={session.voice.words}
-          listening={session.voice.state === "listening"}
-        />
+        {call ? (
+          <CallCaptions captions={call.captions} level={call.level} />
+        ) : (
+          <DirectorCaption
+            line={studio.phase === "countdown" ? null : session.director.line}
+            talking={talking}
+            heard={session.voice.words}
+            listening={session.voice.state === "listening"}
+          />
+        )}
       </div>
       {sharing ? null : (
         <button
@@ -170,7 +209,18 @@ function ViewportFoot({ session, shot, voice }: { session: Session; shot: Shot; 
 }
 
 /** Inside the capsule: the picture, the doodles, and whatever the moment needs over them. */
-function Viewport({ session, props }: { session: Session; props: StudioShot }) {
+function Viewport({
+  session,
+  props,
+  call,
+  frames,
+}: {
+  session: Session;
+  props: StudioShot;
+  call: Call | null;
+  /** Where the call reads the camera's picture from. */
+  frames: RefObject<HTMLVideoElement | null>;
+}) {
   const t = useTranslations("director");
   const errorMessage = useApiErrorMessage();
   const { studio, cut } = session;
@@ -181,7 +231,10 @@ function Viewport({ session, props }: { session: Session; props: StudioShot }) {
   return (
     <>
       <video
-        ref={camera.video}
+        ref={(element) => {
+          camera.video.current = element;
+          frames.current = element;
+        }}
         autoPlay
         muted
         playsInline
@@ -194,7 +247,7 @@ function Viewport({ session, props }: { session: Session; props: StudioShot }) {
       />
       {reviewing ? null : <DoodleLayer scene={session.scene} />}
       {blocked ? <CameraBlocked session={session} /> : null}
-      <ViewportTop session={session} shot={props.shot} />
+      <ViewportTop session={session} shot={props.shot} call={call} />
       <CountdownPulse seconds={studio.countdown} />
       {studio.phase === "recording" && props.audio === "original" ? (
         <OriginalAudio videoId={props.videoId} shot={props.shot} />
@@ -208,9 +261,16 @@ function Viewport({ session, props }: { session: Session; props: StudioShot }) {
           error={studio.submit.error ? errorMessage(studio.submit.error) : null}
           onAgain={() => session.actions.retake(cut)}
           onKeep={() => session.actions.use(cut)}
+          captions={<OnCallCaptions call={call} />}
+          raised={call !== null}
         />
       ) : (
-        <ViewportFoot session={session} shot={props.shot} voice={props.audio === "voice"} />
+        <ViewportFoot
+          session={session}
+          shot={props.shot}
+          voice={props.audio === "voice"}
+          call={call}
+        />
       )}
       {studio.failed ? (
         <p
@@ -264,60 +324,267 @@ function shareAction(camera: Session["studio"]["camera"]) {
   return camera.source === "screen" ? camera.stopSharing : () => void share();
 }
 
-function Studio(props: StudioShot) {
-  const session = useSession(props);
+type ToolHandler = (name: LiveTool) => void;
+
+/**
+ * What the shot's screen and the call above it share: the camera picture the call sends
+ * (`frames`), where Director's tool calls go (`tools`, the shot's screen fills it in), and
+ * holding Director's voice while a take records the member's.
+ */
+interface CallLink {
+  frames: RefObject<HTMLVideoElement | null>;
+  tools: RefObject<ToolHandler | null>;
+  hold: (on: boolean) => void;
+}
+
+/**
+ * The call with Director, held above the shot's own screen so one call lasts the whole
+ * short: moving to another shot tells the same call. A call that fails says why and hands
+ * the shot back to Director Live, with the take on screen and the takes already sent
+ * untouched; one that reaches its time limit just says so.
+ */
+function useShootCall(videoId: string, shotIndex: number) {
+  const t = useTranslations("director.call");
+  const failureMessage = useCallFailure();
+  const [calling, setCalling] = useState(false);
+  const frames = useRef<HTMLVideoElement | null>(null);
+  const tools = useRef<ToolHandler | null>(null);
+  const call = useLiveCall({
+    videoId,
+    shotIndex,
+    video: frames,
+    onTool: (name) => tools.current?.(name),
+    onEnd: (failure) => {
+      // At the top: at the foot it would cover the shutter the member is about to need.
+      if (failure === "TIMEOUT") {
+        toast(t("timeUp"), { position: "top-center" });
+      } else if (failure) {
+        toast.error(failureMessage(failure), {
+          description: t("fallback"),
+          position: "top-center",
+        });
+      }
+      setCalling(false);
+    },
+  });
+  const { state, start, hold } = call;
+  // A screen remounted mid-call (Strict Mode in development, Fast Refresh) calls again.
+  useEffect(() => {
+    if (calling && state === "idle") {
+      start();
+    }
+  }, [calling, state, start]);
+  useEffect(() => restCallAudio, []);
+  // Started from the tap itself, so the browser lets the call make sound.
+  const ring = () => {
+    setCalling(true);
+    start();
+  };
+  const link: CallLink = { frames, tools, hold };
+  return { call: calling ? call : null, ring, link };
+}
+
+/**
+ * Director's tool calls, done the way the member's own spoken requests are. Going back is
+ * only before a take (it would lose one recording or waiting to be kept), like skipping
+ * ahead. The same tool twice before the screen has re-rendered acts once: both would pass
+ * the same check against the same, not yet updated, screen.
+ */
+function useCallTools(props: StudioShot, session: Session, link: CallLink) {
+  const router = useRouter();
+  const { studio, requests } = session;
+  const setup = studio.phase === "setup";
+  const handlers: Record<LiveTool, () => void> = {
+    start_recording: requests.action,
+    stop_recording: requests.cut,
+    retake: requests.again,
+    // The take on screen is kept (and the next shot opens once it's sent); before a take,
+    // Director is skipping this shot.
+    next_shot: () => {
+      if (studio.phase === "preview") {
+        requests.keep();
+      }
+      if (setup) {
+        router.push(nextPage(props));
+      }
+    },
+    previous_shot: () => {
+      if (setup && props.index > 0) {
+        router.push(shotPage(props.videoId, props.index - 1, props.audio));
+      }
+    },
+  };
+  useLayoutEffect(() => {
+    let last: LiveTool | null = null;
+    link.tools.current = (name) => {
+      if (name !== last) {
+        last = name;
+        handlers[name]();
+      }
+    };
+  });
+  const { tools, hold } = link;
+  useLayoutEffect(
+    () => () => {
+      tools.current = null;
+    },
+    [tools],
+  );
+  const holding = studio.phase === "recording" && studio.micOn;
+  useEffect(() => hold(holding), [hold, holding]);
+}
+
+/** Above the viewport: the shots, Live (or the call), the countdown and Director's voice. */
+function StudioHeader({
+  session,
+  props,
+  call,
+}: {
+  session: Session;
+  props: StudioShot;
+  call: Call | null;
+}) {
   const talking = useSpeaking();
   const { studio, memory, actions } = session;
-  const { camera } = studio;
-  const recording = studio.phase === "recording";
-  const reviewing = studio.phase === "preview" || studio.phase === "sending";
   const listening = session.voice.state === "listening";
-  const step = activeStep(props.shot.steps, studio.seconds);
   return (
-    <div className="relative flex min-h-dvh flex-col items-center justify-center gap-3 overflow-hidden px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] text-studio-foreground">
-      <LiveBackdrop stream={camera.stream} />
-      <header className="live-motion relative grid w-full max-w-md grid-cols-[1fr_auto_1fr] items-center">
-        <ShotDots index={props.index} count={props.count} />
+    <header
+      className={cn(
+        "live-motion relative grid w-full max-w-md grid-cols-[1fr_auto_1fr] items-center",
+        call && "absolute inset-x-0 top-[max(0.75rem,env(safe-area-inset-top))] z-10 mx-auto px-3",
+      )}
+    >
+      <ShotDots index={props.index} count={props.count} />
+      {call ? (
+        <CallPill state={call.state} level={call.level} />
+      ) : (
         <LivePill
-          mode={liveMode(recording, session.paused)}
+          mode={liveMode(studio.phase === "recording", session.paused)}
           talking={talking || (listening && session.voice.words !== "")}
           seconds={studio.seconds}
           onDevice={session.seen.scene.offline}
         />
-        <div
-          className={cn(
-            "flex justify-end gap-2 transition-opacity duration-700",
-            session.idle && "opacity-0",
-          )}
-        >
-          <TimerButton
-            chosen={memory.countdown}
-            seconds={session.countdownFrom}
-            onChoose={actions.countdown}
-          />
-          <VoiceButton on={memory.speak} onToggle={() => actions.speak(!memory.speak)} />
-        </div>
-      </header>
-      <LiveViewport
-        glowing={talking || listening}
-        recording={recording}
-        beat={recording ? step + 1 : 0}
+      )}
+      <div
+        className={cn(
+          "flex justify-end gap-2 transition-opacity duration-700",
+          session.idle && "opacity-0",
+        )}
       >
-        <Viewport session={session} props={props} />
-      </LiveViewport>
-      <div className={cn("relative h-[5.75rem]", reviewing && "invisible")}>
-        <LiveDock
-          idle={session.idle}
-          shutter={<SessionShutter session={session} shot={props.shot} />}
-          sharing={camera.source === "screen"}
-          onShare={shareAction(camera)}
-          listen={session.voice.state}
-          onListen={() => actions.listen(!memory.listen)}
-          paused={session.paused}
-          onPause={() => actions.pause(!session.paused)}
-          endHref={`/director/${props.videoId}`}
+        <TimerButton
+          chosen={memory.countdown}
+          seconds={session.countdownFrom}
+          onChoose={actions.countdown}
+        />
+        {call ? null : (
+          <VoiceButton on={memory.speak} onToggle={() => actions.speak(!memory.speak)} />
+        )}
+      </div>
+    </header>
+  );
+}
+
+/**
+ * Where focus goes when the dock changes under the member's finger: to hang up once the
+ * call starts ringing, back to calling once it's over. Not when a shot's screen merely
+ * opens mid-call, or on first load.
+ */
+function useDockFocus(calling: boolean) {
+  const callButton = useRef<HTMLButtonElement>(null);
+  const endButton = useRef<HTMLButtonElement>(null);
+  const before = useRef(calling);
+  useEffect(() => {
+    if (before.current !== calling) {
+      (calling ? endButton : callButton).current?.focus();
+    }
+    before.current = calling;
+  }, [calling]);
+  return { callButton, endButton };
+}
+
+/** Under the viewport: Director Live's dock, or on a call, mute and hang up. */
+function StudioDock({
+  session,
+  props,
+  call,
+  ring,
+}: {
+  session: Session;
+  props: StudioShot;
+  call: Call | null;
+  ring: () => void;
+}) {
+  const { studio, memory, actions } = session;
+  const { camera } = studio;
+  const reviewing = studio.phase === "preview" || studio.phase === "sending";
+  const focus = useDockFocus(call !== null);
+  const shutter = <SessionShutter session={session} shot={props.shot} />;
+  if (call) {
+    // The review has its own buttons; mute and hang-up stay within reach beside them.
+    return (
+      <div className="absolute inset-x-0 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-10">
+        <CallDock
+          shutter={reviewing ? null : shutter}
+          muted={call.muted}
+          canMute={call.state === "live"}
+          onMute={call.toggleMute}
+          onEnd={call.end}
+          endRef={focus.endButton}
         />
       </div>
+    );
+  }
+  return (
+    <div className={cn("relative h-[5.75rem]", reviewing && "invisible")}>
+      <LiveDock
+        idle={session.idle}
+        onCall={ring}
+        callRef={focus.callButton}
+        shutter={shutter}
+        sharing={camera.source === "screen"}
+        onShare={shareAction(camera)}
+        listen={session.voice.state}
+        onListen={() => actions.listen(!memory.listen)}
+        paused={session.paused}
+        onPause={() => actions.pause(!session.paused)}
+        endHref={`/director/${props.videoId}`}
+      />
+    </div>
+  );
+}
+
+function Studio({
+  call,
+  ring,
+  link,
+  ...props
+}: StudioShot & { call: Call | null; ring: () => void; link: CallLink }) {
+  const session = useSession(props, call !== null);
+  useCallTools(props, session, link);
+  const talking = useSpeaking();
+  const { studio } = session;
+  const recording = studio.phase === "recording";
+  const listening = session.voice.state === "listening";
+  const step = activeStep(props.shot.steps, studio.seconds);
+  return (
+    <div
+      className={cn(
+        "relative flex min-h-dvh flex-col items-center justify-center gap-3 overflow-hidden px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] text-studio-foreground",
+        // On a call the camera has the whole screen, the controls floating over it.
+        call && "p-0",
+      )}
+    >
+      <LiveBackdrop stream={studio.camera.stream} />
+      <StudioHeader session={session} props={props} call={call} />
+      <LiveViewport
+        glowing={call ? call.speaking : talking || listening}
+        recording={recording}
+        beat={recording ? step + 1 : 0}
+        full={call !== null}
+      >
+        <Viewport session={session} props={props} call={call} frames={link.frames} />
+      </LiveViewport>
+      <StudioDock session={session} props={props} call={call} ring={ring} />
     </div>
   );
 }
@@ -332,18 +599,20 @@ function Shoot({
   audio: string | undefined;
 }) {
   const t = useTranslations("director");
+  const common = useTranslations("common");
   const plan = useDirectorPlanQuery(videoId);
-  if (plan.isPending) {
-    return (
-      <div className="flex h-dvh items-center justify-center bg-live-deep">
-        <Spinner />
-      </div>
-    );
-  }
   const ready: ShotPlan | null = plan.data?.status === "ready" ? plan.data.plan : null;
   const index = ready
     ? Math.min(ready.shots.length - 1, Math.max(0, Number.parseInt(shot ?? "0", 10) || 0))
     : 0;
+  const { call, ring, link } = useShootCall(videoId, index);
+  if (plan.isPending) {
+    return (
+      <div className="flex h-dvh items-center justify-center bg-live-deep">
+        <GeminiLoader label={common("loading")} />
+      </div>
+    );
+  }
   const current = ready?.shots[index];
   if (!ready || !current) {
     return (
@@ -355,7 +624,7 @@ function Shoot({
       </div>
     );
   }
-  // A fresh session per shot: its camera, recorder and guidance start over.
+  // A fresh screen per shot: its camera, recorder and guidance start over; the call goes on.
   return (
     <Studio
       key={index}
@@ -364,6 +633,9 @@ function Shoot({
       index={index}
       count={ready.shots.length}
       audio={parseAudio(audio, ready)}
+      call={call}
+      ring={ring}
+      link={link}
     />
   );
 }

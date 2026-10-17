@@ -75,6 +75,8 @@ export const ERROR_CODES = {
   DIRECTOR_TAKE_NOT_FOUND: 404,
   /** A photo for a video shot, or the other way round. */
   DIRECTOR_TAKE_KIND_MISMATCH: 422,
+  /** A live call sent more than a person could say or type (each second costs Gemini time). */
+  DIRECTOR_CALL_TOO_FAST: 429,
   // The next three are only ever a plan's or take's error, never an HTTP answer.
   /** Gemini couldn't watch the video (private, age-restricted, removed). */
   DIRECTOR_VIDEO_UNREADABLE: 422,
