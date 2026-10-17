@@ -37,13 +37,15 @@ private network between them, use it (`private_address`).
 - **Three servers** keep the cluster up when one fails (embedded etcd needs a
   majority, so two is no better than one). Add **agents** for more capacity.
 
-How much memory: the application and its data ask for about 7 GB on staging and about
-14 GB on production (`resources.requests` in `deploy/environments/<env>/`, summed over
-their replicas), the platform (Argo CD, cert-manager, Envoy Gateway, KEDA, Kyverno,
-CloudNativePG, the mail server) for about 2.5 GB more, observability for about 2 GB,
-and k3s itself for about 1 GB. So staging fits one machine of 16 GB (each preview it
-hosts can take up to 8 GB more, its quota), and production needs about 20 GB in all:
-three machines of 8 GB, or one of 32 GB. Four vCPUs per machine is a sensible floor.
+How much memory: the application and its data ask for about 7 GB on staging and, sized
+down to one replica of each service, about 5.5 GB on production (`resources.requests`
+in `deploy/environments/<env>/`, summed over their replicas), the platform (Argo CD,
+cert-manager, Envoy Gateway, KEDA, Kyverno, CloudNativePG, the mail server) for about
+2.5 GB more, observability for about 2 GB, and k3s itself for about 1 GB. So staging
+fits one machine of 16 GB (each preview it hosts can take up to 8 GB more, its quota),
+and production fits one too, with headroom for KEDA to scale a service out under load;
+raise the replicas and spread them over more, bigger machines once production needs
+more than one can give. Four vCPUs per machine is a sensible floor.
 Pods that don't fit stay Pending; `kubectl describe pod` says which resource ran out.
 
 Open these ports in the provider's firewall:

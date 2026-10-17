@@ -101,6 +101,8 @@ tests:
 
   - it: delivers directly unless a relay is set
     template: configmap.yaml
+    set:
+      relay.host: ""
     asserts:
       - notMatchRegex: { path: 'data["plan.ndjson"]', pattern: 'MtaRoute|MtaOutboundStrategy' }
 

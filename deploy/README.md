@@ -311,7 +311,8 @@ cluster when it creates it, so restoring means a new cluster from the backups.
    either way) and keep the new `backups.serverName`: it's where backups go now.
 
 The backups themselves are drilled every week where `postgres.drill.enabled` is on
-(staging and production, Sundays at 04:30 UTC, after the 03:00 base backup): a CronJob
+(staging, Sundays at 04:30 UTC, after the 03:00 base backup; off in production, a single
+machine with no disk to spare for a scratch cluster the size of the live one): a CronJob
 restores the latest base backup and the archived WAL into a scratch cluster,
 `<release>-postgres-drill`, the way the procedure above would, and checks it against the
 live database (the same tables, row-level security, policies, grants, functions and
@@ -340,7 +341,7 @@ disk on a one-node cluster. What each one needs to survive losing a node:
 
 | Part | Now | When its node is lost | The way to more |
 |---|---|---|---|
-| Postgres | `postgres.instances` (2 in production), placed on different nodes where there are several | on one node, both instances go with the disk: restore from the backups (and the offsite copy) | three nodes or more, so the instances really are on different disks; CloudNativePG fails over by itself |
+| Postgres | `postgres.instances` (1 in production; raise it, placed on different nodes, where there are several) | on one node, every instance goes with the disk: restore from the backups (and the offsite copy) | three nodes or more, so the instances really are on different disks; CloudNativePG fails over by itself |
 | Valkey | one pod, append-only file on its node | it stays Pending until the node is back, and queues, sessions and rate limits stop with it | `valkey.replication.enabled` in the environment's `data.yaml`: three nodes (`replication.replicas`, odd), each with a Sentinel that promotes a replica within seconds of the primary going, behind a proxy that the services' `REDIS_URL` already names, so nothing else changes. Needs three nodes or more to survive losing one; turning it on keeps the data (the first node is the old one) |
 | RustFS (uploads, backups) | one server each | uploads stop, and are only in the offsite copy | RustFS in distributed mode (four or more drives across nodes), or any S3 outside the cluster |
 | Stalwart | one pod on the mail node, which SPF and reverse DNS name | no mail leaves: sign-in codes, resets and invitations stop | a second mail node in SPF and the MX records, or a relay (`relay`, see Mail) |

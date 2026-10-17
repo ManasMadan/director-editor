@@ -23,5 +23,5 @@ creation_rules:
   - path_regex: (^|/)deploy/(environments/production/secrets|platform/secrets/production)/[^/]+\.sops\.yaml$
     encrypted_regex: ^(data|stringData)$
     age: >-
-      age1productionclusterpublickeyreplaceme,
-      age1yourpublickeyreplaceme
+      age1w3lcre8kqtejd0aj05lplq7kq9adwrqqtw6swg09zyjccdrfqgqsdvq6r3,
+      age1ms566265xdeayjus8p6gjulxcmdqm2wu7qjksgzzefxfgajy790qev69k8

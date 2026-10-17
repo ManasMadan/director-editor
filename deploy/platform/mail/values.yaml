@@ -58,12 +58,14 @@ webhook:
 # whose address is on blocklists (docs/new-project.md, Mail): any relay you run, or a
 # provider's. Empty host: direct delivery. With a username, the password is the
 # Secret's RELAY_PASSWORD. DKIM signing stays here, so SPF must allow the relay too.
+# Production runs on Google Compute Engine, which blocks outgoing port 25 for good, so
+# mail leaves through Resend (its API key is RELAY_PASSWORD).
 relay:
-  host: ""
+  host: smtp.resend.com
   port: 587
   # true for SMTPS (465); otherwise STARTTLS, which the relay must offer.
   implicitTls: false
-  username: ""
+  username: resend
 
 # The certificate for the server's name, from cert-manager.
 tls:

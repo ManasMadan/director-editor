@@ -211,7 +211,7 @@ In Kubernetes, CloudNativePG's Barman Cloud plugin backs up every environment th
 `postgres.backups.enabled` on (staging and production): WAL is archived as it's written
 and a base backup taken every day (the first right away), to a RustFS server of its own
 in the cluster that only Postgres can reach. They're kept for
-`postgres.backups.retention` (30 days in production), and any moment in that window can
+`postgres.backups.retention` (14 days in production), and any moment in that window can
 be restored.
 
 These are physical backups of the whole cluster, so unlike the drill's dump they carry
