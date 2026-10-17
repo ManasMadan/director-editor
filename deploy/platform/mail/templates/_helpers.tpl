@@ -104,9 +104,11 @@ password, which the plan init container writes in for @SMTP_PASSWORD@.
     "allowInvalidCerts" false
     "authUsername" $r.username
     "authSecret" (ternary (dict "@type" "EnvironmentVariable" "variableName" "RELAY_PASSWORD") (dict "@type" "None") (ne $r.username ""))))) -}}
-{{- /* Mail for our own domain stays local; everything else goes through the relay. */ -}}
+{{- /* Mail for our own domain stays local; everything else goes through the relay.
+       An expression's conditions are a map keyed by position, not a list: Stalwart
+       refuses a list as an invalid patch, and the server then never starts. */ -}}
 {{- $ops = append $ops (dict "@type" "update" "object" "MtaOutboundStrategy" "value" (dict "route" (dict
-    "match" (list (dict "if" "is_local_domain(rcpt_domain)" "then" "'local'"))
+    "match" (dict "0" (dict "if" "is_local_domain(rcpt_domain)" "then" "'local'"))
     "else" "'relay'"))) -}}
 {{- end -}}
 {{- range $i, $op := concat $ops .Values.extraPlan -}}
