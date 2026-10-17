@@ -1,7 +1,10 @@
 # Files
 
-Optional: files are on when `S3_BUCKET` is set. Off, their procedures answer
-`FEATURE_DISABLED` and clients hide them (`system.info`).
+Optional: files are on when the chosen `STORAGE_PROVIDER` has its bucket (`S3_BUCKET`
+for `s3`, `GCS_BUCKET` for `gcs`; `filesEnabled` in `packages/nest-common/src/storage.ts`
+decides, for the api and the worker alike). A half-configured provider (`gcs` without
+`GCS_BUCKET`, or the other provider's bucket set) stops the service at boot. Off, their
+procedures answer `FEATURE_DISABLED` and clients hide them (`system.info`).
 
 ## Upload flow
 
@@ -72,15 +75,19 @@ server the application has no keys to. Environments without ClamAV (kind, previe
 leave files off.
 
 In production, `STORAGE_PROVIDER=gcs` and `GCS_BUCKET` (api, worker) point at
-`director-media-…` instead: no `storage` Secret, no access keys. The VM's service
+`director-media-…` instead: no service gets the `storage` Secret (`storage: none` in
+`deploy/environments/production/stack.yaml`; the data chart's RustFS still runs, unused
+by the app), no access keys. The VM's service
 account needs `roles/storage.objectAdmin` on the bucket to read and write it, and
 `roles/iam.serviceAccountTokenCreator` on itself, since Application Default Credentials
 from the metadata server have no private key to sign a URL with: `getSignedUrl` falls
 back to the IAM Credentials API's `signBlob` instead. Pods reach the metadata server
 (169.254.169.254) through `allowMetadataServer: true` in the stack chart, since it's
-otherwise unreachable like the rest of `networkPolicy.privateRanges`. `web` needs no
-`STORAGE_ORIGIN` for this: GCS's signed URLs are on `storage.googleapis.com`, already
-allowed for Director's pose model.
+otherwise unreachable like the rest of `networkPolicy.privateRanges`. `web` gets
+`STORAGE_ORIGIN=https://storage.googleapis.com`, where GCS's signed URLs are: the CSP's
+`connect-src` already allows it for Director's pose model, but `media-src` (takes playing
+from storage) needs it too. Signed uploads bind Content-Type and Content-Length, as on
+S3 (`X-Goog-SignedHeaders=content-length;content-type;host`).
 
 ## Locally
 

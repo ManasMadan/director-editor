@@ -66,11 +66,38 @@ describe("optional features", () => {
     expect(features).toMatchObject({ google: true });
   });
 
+  it("turn files on with the chosen storage provider's bucket, whichever provider it is", async () => {
+    expect((await load({ STORAGE_PROVIDER: "s3", S3_BUCKET: "uploads" })).features.files).toBe(
+      true,
+    );
+    vi.resetModules();
+    vi.unstubAllEnvs();
+    const gcs = await load({
+      STORAGE_PROVIDER: "gcs",
+      S3_BUCKET: "",
+      GCS_BUCKET: "director-media",
+    });
+    expect(gcs.features.files).toBe(true);
+    vi.resetModules();
+    vi.unstubAllEnvs();
+    expect((await load({ STORAGE_PROVIDER: "s3", S3_BUCKET: "" })).features.files).toBe(false);
+  });
+
   it.each([
     [
       "Google sign-in",
       { GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "" },
       "Google sign-in (GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET) needs both of its variables set, or neither",
+    ],
+    [
+      "Cloud Storage without its bucket",
+      { STORAGE_PROVIDER: "gcs", S3_BUCKET: "", GCS_BUCKET: "" },
+      "STORAGE_PROVIDER=gcs needs GCS_BUCKET",
+    ],
+    [
+      "a Cloud Storage bucket with the S3 provider",
+      { STORAGE_PROVIDER: "s3", GCS_BUCKET: "director-media" },
+      "GCS_BUCKET is set but STORAGE_PROVIDER is s3",
     ],
   ])("refuse to start %s half configured", async (_, variables, message) => {
     await expect(load(variables)).rejects.toThrow(message);

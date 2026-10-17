@@ -7,6 +7,7 @@
  * from `system.info` to hide their UI.
  */
 import type { Feature } from "@repo/contracts/api";
+import { filesEnabled } from "@repo/nest-common";
 import { env } from "./env";
 
 function pair(name: string, a: string | undefined, b: string | undefined) {
@@ -17,7 +18,8 @@ function pair(name: string, a: string | undefined, b: string | undefined) {
 }
 
 const ai = pair("AI service (AI_URL/AI_SERVICE_SECRET)", env.AI_URL, env.AI_SERVICE_SECRET);
-const files = Boolean(env.S3_BUCKET);
+// The chosen storage provider's bucket; a half-configured provider throws here, at boot.
+const files = filesEnabled(env);
 
 export const features: Record<Feature, boolean> = {
   google: pair(

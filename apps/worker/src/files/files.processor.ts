@@ -76,7 +76,7 @@ export class FilesProcessor extends JobProcessor {
 
   async check(fileId: FileId) {
     if (!this.storage) {
-      throw new Error("files are off (no S3_BUCKET) but a file was queued");
+      throw new Error("files are off (no bucket for STORAGE_PROVIDER) but a file was queued");
     }
     const db = this.database.write;
     const file = await db.file.findUnique({ where: { id: fileId } });

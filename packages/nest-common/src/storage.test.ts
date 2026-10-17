@@ -1,20 +1,16 @@
+import { generateKeyPairSync } from "node:crypto";
+import { Storage as GcsClient } from "@google-cloud/storage";
+import { required } from "@repo/contracts/objects";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GcsClientLike, GcsFile } from "./storage";
-import { createStorage, GcsStorage, S3Storage } from "./storage";
+import { createStorage, filesEnabled, GcsStorage, S3Storage, storageBucket } from "./storage";
 
 afterEach(() => vi.unstubAllEnvs());
 
 describe("object storage configuration", () => {
-  it("is off without a bucket for the chosen provider", () => {
+  it("is off without a bucket", () => {
     expect(
       createStorage({ STORAGE_PROVIDER: "s3", S3_REGION: "us-east-1", S3_FORCE_PATH_STYLE: false }),
-    ).toBeNull();
-    expect(
-      createStorage({
-        STORAGE_PROVIDER: "gcs",
-        S3_REGION: "us-east-1",
-        S3_FORCE_PATH_STYLE: false,
-      }),
     ).toBeNull();
   });
 
@@ -64,32 +60,72 @@ describe("object storage configuration", () => {
     });
     expect(storage).toBeInstanceOf(GcsStorage);
   });
+
+  it("turns files on exactly when the chosen provider has its bucket", () => {
+    expect(storageBucket({ STORAGE_PROVIDER: "s3", S3_BUCKET: "uploads" })).toBe("uploads");
+    expect(storageBucket({ STORAGE_PROVIDER: "s3" })).toBeUndefined();
+    expect(storageBucket({ STORAGE_PROVIDER: "gcs", GCS_BUCKET: "director-media" })).toBe(
+      "director-media",
+    );
+    expect(filesEnabled({ STORAGE_PROVIDER: "s3", S3_BUCKET: "uploads" })).toBe(true);
+    expect(filesEnabled({ STORAGE_PROVIDER: "gcs", GCS_BUCKET: "director-media" })).toBe(true);
+    expect(filesEnabled({ STORAGE_PROVIDER: "s3" })).toBe(false);
+  });
+
+  it.each([
+    [
+      "gcs without its bucket",
+      { STORAGE_PROVIDER: "gcs" as const },
+      "STORAGE_PROVIDER=gcs needs GCS_BUCKET",
+    ],
+    [
+      "a GCS bucket with the s3 provider",
+      { STORAGE_PROVIDER: "s3" as const, GCS_BUCKET: "director-media" },
+      "GCS_BUCKET is set but STORAGE_PROVIDER is s3",
+    ],
+    [
+      "an S3 bucket with the gcs provider",
+      { STORAGE_PROVIDER: "gcs" as const, GCS_BUCKET: "director-media", S3_BUCKET: "uploads" },
+      "S3_BUCKET is set but STORAGE_PROVIDER is gcs",
+    ],
+  ])("refuses %s, instead of silently turning files off or ignoring it", (_, env, message) => {
+    expect(() => storageBucket(env)).toThrow(message);
+    expect(() => filesEnabled(env)).toThrow(message);
+    expect(() =>
+      createStorage({ ...env, S3_REGION: "us-east-1", S3_FORCE_PATH_STYLE: false }),
+    ).toThrow(message);
+  });
 });
 
 /** A fake `@google-cloud/storage` client: records every call, answers what the test sets up. */
 class FakeGcsClient implements GcsClientLike {
-  readonly signedUrlConfigs: unknown[] = [];
+  readonly signedUrlConfigs: Parameters<GcsFile["getSignedUrl"]>[0][] = [];
   readonly requestedKeys: string[] = [];
-  metadata: { size?: string | number; contentType?: string } = {};
+  /** The generation each download asked for (undefined: whatever is live). */
+  readonly downloads: (string | number | undefined)[] = [];
+  metadata: { size?: string | number; contentType?: string; generation?: string | number } = {};
 
   bucket(name: string) {
     expect(name).toBe("director-media");
     return {
-      file: (key: string) => {
+      file: (key: string, options?: { generation?: string | number }) => {
         this.requestedKeys.push(key);
-        return this.fakeFile();
+        return this.fakeFile(options?.generation);
       },
     };
   }
 
-  private fakeFile(): GcsFile {
+  private fakeFile(generation: string | number | undefined): GcsFile {
     return {
       getSignedUrl: async (config) => {
         this.signedUrlConfigs.push(config);
         return [`https://storage.googleapis.com/signed?action=${config.action}`];
       },
       getMetadata: async () => [this.metadata],
-      download: async () => [Buffer.from("take bytes")],
+      download: async () => {
+        this.downloads.push(generation);
+        return [Buffer.from("take bytes")];
+      },
       save: async () => undefined,
       rename: async () => undefined,
       delete: async () => undefined,
@@ -110,9 +146,15 @@ describe("GcsStorage", () => {
     });
     expect(client.requestedKeys).toEqual(["files/take-1"]);
     expect(client.signedUrlConfigs).toEqual([
-      expect.objectContaining({ version: "v4", action: "write", contentType: "video/webm" }),
+      expect.objectContaining({
+        version: "v4",
+        action: "write",
+        contentType: "video/webm",
+        // Signed, so the URL can't be reused to upload a file of any other size.
+        extensionHeaders: { "content-length": "1200000" },
+      }),
     ]);
-    const config = client.signedUrlConfigs[0] as { expires: Date };
+    const config = required(client.signedUrlConfigs[0], "the signed URL's config");
     expect(config.expires.getTime()).toBeGreaterThanOrEqual(before + 600_000);
     expect(upload.headers).toEqual({
       "Content-Type": "video/webm",
@@ -193,18 +235,21 @@ describe("GcsStorage", () => {
     await expect(storage.head("files/a")).rejects.toThrow("boom");
   });
 
-  it("reads an object within the limit", async () => {
+  it("reads an object within the limit, at the generation whose size it checked", async () => {
     const client = new FakeGcsClient();
-    client.metadata = { size: 10 };
+    client.metadata = { size: 10, generation: "1712345678901234" };
     const storage = new GcsStorage({ bucket: "director-media", client });
     expect((await storage.read("files/a", 100)).toString()).toBe("take bytes");
+    // An upload replacing the object in between can't slip a larger one past the check.
+    expect(client.downloads).toEqual(["1712345678901234"]);
   });
 
   it("refuses to read an object over the limit, without downloading it", async () => {
     const client = new FakeGcsClient();
-    client.metadata = { size: 10 };
+    client.metadata = { size: 10, generation: 1 };
     const storage = new GcsStorage({ bucket: "director-media", client });
     await expect(storage.read("files/a", 5)).rejects.toThrow("larger than 5 bytes");
+    expect(client.downloads).toEqual([]);
   });
 
   it("writes, moves and deletes an object", async () => {
@@ -218,5 +263,52 @@ describe("GcsStorage", () => {
   it("gives a direct gs:// reference another Google service can read with its own credentials", () => {
     const storage = new GcsStorage({ bucket: "director-media", client: new FakeGcsClient() });
     expect(storage.directUri("files/a")).toBe("gs://director-media/files/a");
+  });
+});
+
+describe("GcsStorage with the real @google-cloud/storage client", () => {
+  // A service account key made up here: signing is local with a private key, so nothing
+  // leaves the machine (in production the key-less metadata credentials sign through the
+  // IAM Credentials API instead, which the fake-client tests above stand in for).
+  const { privateKey } = generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
+    publicKeyEncoding: { type: "spki", format: "pem" },
+  });
+  const client = new GcsClient({
+    projectId: "director-test",
+    credentials: {
+      client_email: "media@director-test.iam.gserviceaccount.com",
+      private_key: privateKey,
+    },
+  });
+
+  it("signs an upload URL bound to the object, its type, its exact size and the expiry", async () => {
+    const storage = new GcsStorage({ bucket: "director-media", client });
+    const { url } = await storage.presignUpload({
+      key: "files/take-1",
+      contentType: "video/webm",
+      contentLength: 1_200_000,
+      expiresInSeconds: 600,
+    });
+    const signed = new URL(url);
+    expect(`${signed.origin}${signed.pathname}`).toBe(
+      "https://storage.googleapis.com/director-media/files/take-1",
+    );
+    expect(signed.searchParams.get("X-Goog-Algorithm")).toBe("GOOG4-RSA-SHA256");
+    expect(signed.searchParams.get("X-Goog-SignedHeaders")).toBe(
+      "content-length;content-type;host",
+    );
+    expect(signed.searchParams.get("X-Goog-Expires")).toBe("600");
+    expect(signed.searchParams.get("X-Goog-Signature")).toMatch(/^[0-9a-f]+$/);
+  });
+
+  it("signs a download URL for the object and the expiry", async () => {
+    const storage = new GcsStorage({ bucket: "director-media", client });
+    const { url } = await storage.presignDownload("files/take-1", { expiresInSeconds: 120 });
+    const signed = new URL(url);
+    expect(signed.pathname).toBe("/director-media/files/take-1");
+    expect(signed.searchParams.get("X-Goog-SignedHeaders")).toBe("host");
+    expect(signed.searchParams.get("X-Goog-Expires")).toBe("120");
   });
 });

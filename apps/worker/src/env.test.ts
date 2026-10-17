@@ -39,4 +39,32 @@ describe("worker environment", () => {
       (await load({ NODE_ENV: "production", S3_BUCKET: "", FILE_SCANNER: "none" })).S3_BUCKET,
     ).toBeUndefined();
   });
+
+  it("refuses unscanned uploads on Cloud Storage too", async () => {
+    await expect(
+      load({
+        NODE_ENV: "production",
+        STORAGE_PROVIDER: "gcs",
+        S3_BUCKET: "",
+        GCS_BUCKET: "director-media",
+        FILE_SCANNER: "none",
+      }),
+    ).rejects.toThrow("FILE_SCANNER=none is for development only: uploads must be scanned");
+  });
+
+  it.each([
+    [
+      { STORAGE_PROVIDER: "gcs", S3_BUCKET: "", GCS_BUCKET: "" },
+      "STORAGE_PROVIDER=gcs needs GCS_BUCKET",
+    ],
+    [
+      { STORAGE_PROVIDER: "s3", S3_BUCKET: "uploads", GCS_BUCKET: "director-media" },
+      "GCS_BUCKET is set but STORAGE_PROVIDER is s3",
+    ],
+  ])(
+    "refuses half-configured storage at boot, in development too (%o)",
+    async (variables, message) => {
+      await expect(load({ NODE_ENV: "development", ...variables })).rejects.toThrow(message);
+    },
+  );
 });
