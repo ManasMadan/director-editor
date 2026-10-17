@@ -16,7 +16,10 @@ postgres:
     enabled: false
 storage:
   uploads:
-    host: director-files.mmadan.in
+    # Under the site's own name, which is a level too deep for Cloudflare's free edge
+    # certificate: served by the gateway itself (the cluster's direct-zone).
+    host: files.director.mmadan.in
+    proxied: false
     corsOrigins: [https://director.mmadan.in]
     storage: { size: 25Gi }
   backups:

@@ -64,6 +64,10 @@ run "one_node_staging" {
     error_message = "no mail host or domain until mail is set up"
   }
   assert {
+    condition     = !contains(keys(module.bootstrap.cluster_annotations), "director-editor.dev/direct-zone")
+    error_message = "no direct zone unless one is given"
+  }
+  assert {
     condition = toset([for record in output.dns_records : "${record.name} ${record.type} ${record.content} ${record.proxied}"]) == toset([
       "staging.example.com A 203.0.113.10 true",
       "*.preview.example.com A 203.0.113.10 false",
@@ -150,6 +154,7 @@ run "production_with_ha_and_mail" {
     alert_email   = "ops@example.com"
     environment   = "production"
     site_host     = "app.example.com"
+    direct_zone   = "app.example.com"
     previews      = false
     observability = true
     nodes = {
@@ -176,6 +181,10 @@ run "production_with_ha_and_mail" {
   assert {
     condition     = module.bootstrap.cluster_annotations["director-editor.dev/alert-email"] == "ops@example.com"
     error_message = "the alerts add-on emails the address OpenTofu is given"
+  }
+  assert {
+    condition     = module.bootstrap.cluster_annotations["director-editor.dev/direct-zone"] == "app.example.com"
+    error_message = "the gateway learns the zone it serves without Cloudflare"
   }
   assert {
     condition     = length([for record in output.dns_records : record if record.name == "app.example.com" && record.proxied]) == 4

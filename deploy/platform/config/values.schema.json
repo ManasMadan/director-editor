@@ -15,6 +15,7 @@
         "serviceAnnotations": { "type": "object", "additionalProperties": { "type": "string" } },
         "trustedHops": { "type": ["integer", "string"] },
         "originPulls": { "type": ["boolean", "string"] },
+        "directZone": { "type": "string" },
         "proxy": {
           "type": "object",
           "additionalProperties": false,

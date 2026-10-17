@@ -35,8 +35,13 @@ spec:
   destinations:
     - server: "*"
       namespace: director-editor
-  # Namespaced resources only: the application never changes the cluster itself.
-  clusterResourceWhitelist: []
+  # Namespaced resources only, besides its own namespace: the envs ApplicationSet has
+  # Argo CD create it with the pod-security labels (CreateNamespace with
+  # managedNamespaceMetadata), which Argo CD applies as a Namespace of this project.
+  # The destinations above keep that to director-editor.
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject

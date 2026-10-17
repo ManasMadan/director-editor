@@ -138,6 +138,7 @@ module "bootstrap" {
     local.mail_host == null ? {} : { "mail-host" = local.mail_host },
     try(var.mail.domain, null) == null ? {} : { "mail-domain" = var.mail.domain },
     var.alert_email == null ? {} : { "alert-email" = var.alert_email },
+    var.direct_zone == null ? {} : { "direct-zone" = var.direct_zone },
   )
   # Argo CD goes on once every node is installed.
   depends_on = [module.k3s]

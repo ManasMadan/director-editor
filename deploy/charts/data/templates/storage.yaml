@@ -270,6 +270,9 @@ metadata:
     {{- include "data.labels" $ | nindent 4 }}
   annotations:
     director-editor.dev/external-dns: "true"
+    {{- if not $c.proxied }}
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
+    {{- end }}
 spec:
   parentRefs:
     {{- toYaml $.Values.gateway.parentRefs | nindent 4 }}

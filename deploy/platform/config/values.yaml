@@ -16,6 +16,13 @@ gateway:
   # cluster with no Cloudflare in front (and then trustedHops: 0); the cluster's
   # origin-pulls annotation.
   originPulls: true
+  # A zone under the domain whose hosts are reached directly, not through Cloudflare
+  # (e.g. app.example.com, for files.app.example.com): Cloudflare's free edge
+  # certificate covers one level below the zone only, so deeper names can't be proxied
+  # on that plan. The gateway serves *.<directZone> with a certificate of its own and
+  # drops the X-Forwarded-For their visitors send, as for previews. Empty: none. The
+  # cluster's direct-zone annotation.
+  directZone: ""
   # The gateway's proxies (Envoy). The image is Envoy Gateway's own default for its
   # version (Renovate moves the two together); CPU and memory requested and limited, as
   # for every container here.

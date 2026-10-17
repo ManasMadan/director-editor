@@ -125,6 +125,7 @@
             "bucket": { "$ref": "#/$defs/bucket" },
             "host": { "type": "string", "pattern": "^$|^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$" },
             "scheme": { "enum": ["https", "http"] },
+            "proxied": { "type": "boolean" },
             "corsOrigins": {
               "type": "array",
               "items": { "type": "string", "pattern": "^https?://[^/]+$" }
