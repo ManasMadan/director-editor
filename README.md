@@ -1,10 +1,11 @@
 # Director-editor
 
-A full-stack product starter you can demo in an afternoon and still run in production a
-year later: sign-up and sign-in (passwords with emailed verification codes, passkeys,
-two-factor, Google), workspaces with roles and invitations, billing, notifications on
-every channel, file uploads with virus scanning, an AI assistant over your documents, a
-mobile app, a REST API with keys, and the infrastructure to ship all of it.
+Director: pick a YouTube Short you love, and it plans your own take shot by shot, guides
+you through filming each one, reviews every take with Gemini and puts the short
+together. Under it, a full-stack starter built to run in production: sign-up and sign-in
+(passwords with emailed verification codes, passkeys, two-factor, Google), a personal
+workspace per account, email, file uploads with virus scanning, a REST API, and the
+infrastructure to ship all of it.
 
 Everything is in the repo and off by default. The core profile starts in minutes on a
 laptop; each optional feature switches on when its settings are present.
@@ -21,15 +22,15 @@ sops, age and gh), and runs setup when it's created.
 ```sh
 bun run setup     # once: .env with fresh secrets, dependencies, local services, migrations
 bun dev           # web :3000, api :3001, worker :3002, notifications :3003, webhooks :3004
-bun run db:seed   # optional: demo users, workspaces and data
+bun run db:seed   # optional: a demo user
 ```
 
 Open http://localhost:3000 and sign up. Verification codes and every other email land
 in Mailpit at http://localhost:58025. `bun dev:full` adds the AI service (:8000) and its
-worker, RustFS and ClamAV, the Stalwart mail server, Jaeger, the Expo bundler for the
-mobile app and the email previews (:3030). Uploads switch on with
-`bun run env:set S3_BUCKET=uploads`, and billing with the Stripe variables or the fake
-Stripe ([docs/files-and-billing.md](docs/files-and-billing.md)).
+worker, RustFS and ClamAV, the Stalwart mail server, Jaeger, the mock Google and the
+email previews (:3030). Uploads switch on with `bun run env:set S3_BUCKET=uploads`
+([docs/files.md](docs/files.md)); Director needs them and the AI service
+([docs/director.md](docs/director.md)).
 
 Local services run in Docker with memory limits on their own ports (55432 for
 Postgres, 56379 for Valkey, 5xxxx for the rest), so they sit beside other projects. The
@@ -55,28 +56,26 @@ staging and production.
 | Path | What |
 |---|---|
 | `apps/web` | Next.js, render-only: every read and write goes through the API |
-| `apps/api` | NestJS on Fastify: auth (better-auth), the oRPC API for web and mobile, REST at `/api/v1` with an OpenAPI document, an MCP server |
+| `apps/api` | NestJS on Fastify: auth (better-auth), the oRPC API for the web app, REST at `/api/v1` with an OpenAPI document, Director's live call relay |
 | `apps/worker` | Outbox relay, audit log, file scanning, scheduled jobs |
-| `apps/notifications` | Email, in-app, SMS and push, with preferences, digests and unsubscribe |
-| `apps/webhooks` | Inbound provider webhooks (Stripe) and signed outbound webhooks for customers |
-| `apps/ai` | Python: FastAPI, Pydantic AI, LangGraph, pgvector search, evals, an MCP server |
-| `apps/mobile` | Expo (iOS, Android, web) on the same API client and translations |
+| `apps/notifications` | Email: sign-in codes and security alerts |
+| `apps/webhooks` | Inbound provider webhooks (the mail server's bounces) |
+| `apps/ai` | Python: FastAPI and Pydantic AI on Gemini, Director's plans and take reviews |
 | `packages/*` | Contracts, the API client and hooks, database, jobs, i18n, email templates, UI kit, shared Nest plumbing |
 | `deploy/` | Container images, Helm charts, Argo CD, the local kind cluster |
 | `infra/tofu` | OpenTofu: k3s on machines you run anywhere, Cloudflare in front, the Argo CD bootstrap |
 
 ```mermaid
 flowchart LR
-  browser[Browser / mobile app] -->|pages| web[web]
+  browser[Browser] -->|pages| web[web]
   browser -->|/rpc, /api| api[api]
   api --> pg[(Postgres, row-level security)]
   api -->|outbox| pg
   worker[worker] -->|relays outbox| q[(Valkey queues)]
   q --> notifications[notifications]
-  q --> webhooks[webhooks]
-  api -->|documents, answers, streaming| ai[ai]
-  ai -->|indexing jobs| q
-  webhooks -->|Stripe events| q
+  api -->|plans, scene checks, reviews| ai[ai]
+  ai -->|Director jobs| q
+  webhooks[webhooks] -->|bounces| q
 ```
 
 Every tenant row is guarded by forced row-level security and each service connects as
@@ -92,7 +91,7 @@ a transactional outbox, so nothing is lost between a commit and a queue.
 | Types | `bun run check-types` |
 | Unit tests | `bun run test` |
 | Integration tests (real Postgres, Valkey, Mailpit) | `bun run test:integration` |
-| End-to-end (web, mobile, load smoke); stop `bun dev` first, it refuses busy ports | `bun run test:e2e` |
+| End-to-end (web, and the API's fuzzing); stop `bun dev` first, it refuses busy ports | `bun run test:e2e` |
 | Regenerate code after a schema or contract change | `bun run gen` |
 | New migration | `bun run db:migrate` |
 | Set a secret in `.env` | `bun run env:set KEY=value` |

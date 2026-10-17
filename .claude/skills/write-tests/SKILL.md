@@ -11,8 +11,7 @@ hand or checking its work. `.claude/rules/tests.md` has which kind of test goes 
 
 1. **Measure.** `bun run --filter @repo/<name> coverage` for one package (unit and
    integration together, so the full Docker profile must fit), or `bun run test:coverage`
-   for all of them; `bun run --cwd apps/ai coverage` for Python,
-   `bun run --filter @repo/mobile coverage` for mobile. They take minutes: run them in
+   for all of them; `bun run --cwd apps/ai coverage` for Python. They take minutes: run them in
    the background. Note every uncovered line and branch.
 2. **Pick the kind** for each gap:
    - pure logic: a unit test next to the file (`src/<file>.test.ts`);
@@ -20,7 +19,7 @@ hand or checking its work. `.claude/rules/tests.md` has which kind of test goes 
      in the package's `test/` (apps name them `*.integration.test.ts`), against the real
      service, as the service's own role, data from `factories(db)` in `@repo/db/testing`.
      In apps/api, `test/harness.ts` (`startApi(<redis db>)`, `createSession`);
-   - a user flow: a Playwright spec in `apps/web/e2e/` or `apps/mobile/e2e/`;
+   - a user flow: a Playwright spec in `apps/web/e2e/`;
    - a component: a story with a `play` function in `packages/ui`.
 3. **Write them.** Error branches too: the typed `AppError` codes, the early returns,
    another organization seeing nothing. Third parties through the local fakes, never

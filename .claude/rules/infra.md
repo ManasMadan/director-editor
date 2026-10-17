@@ -33,8 +33,8 @@ a real cluster or cloud account. The checks below are offline.
   `lint:shellcheck`). A chart script runs under `sh`, which its folder's `.shellcheckrc`
   tells shellcheck.
 - Everything runs in the cluster: no managed databases, caches, storage, secret
-  managers or mail services. Third-party APIs (AI providers, Twilio, push, Stripe,
-  Google, Turnstile) and Cloudflare in front (optional: `dns.provider = "rfc2136"` runs
+  managers or mail services. Third-party APIs (Gemini and YouTube, Google sign-in,
+  Turnstile) and Cloudflare in front (optional: `dns.provider = "rfc2136"` runs
   without it) are the exceptions; ask before adding a
   managed dependency.
 - Pin every version: images by tag (the Dockerfiles' base images by tag and digest,

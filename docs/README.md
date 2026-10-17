@@ -14,12 +14,12 @@ production release. `CLAUDE.md` is the same material condensed for Claude Code.
 | [database.md](database.md) | schemas and owners, roles, row-level security, migrations, test databases, the restore drill |
 | [codegen.md](codegen.md) | what `bun run gen` generates and from what, and the CI checks on it |
 | [jobs-and-events.md](jobs-and-events.md) | queues, typed jobs, the outbox and relay, the event catalog, adding a job or event |
-| [auth.md](auth.md) | sign-in methods, sessions, organizations and roles, API keys, OAuth for MCP, rate limits |
-| [notifications.md](notifications.md) | channels, templates, preferences, digests, quiet hours, unsubscribe, adding a notification |
-| [files-and-billing.md](files-and-billing.md) | the upload pipeline and storage; Stripe billing, plans and the fake Stripe |
-| [python-services.md](python-services.md) | apps/ai: the assistant, retrieval, summaries, the worker, the MCP server, evals |
+| [auth.md](auth.md) | sign-in methods, sessions, the personal workspace and roles, rate limits |
+| [notifications.md](notifications.md) | email: templates, delivery, suppression, adding a notification |
+| [files.md](files.md) | the upload pipeline and storage |
+| [python-services.md](python-services.md) | apps/ai: Director's service, the worker, budgets |
 | [director.md](director.md) | Director: the Shorts feed, Gemini's shot plans, the guided camera, take reviews and the finished short |
-| [web-and-mobile.md](web-and-mobile.md) | the render-only web app, packages/client and ui, the Expo app, EAS and OTA updates |
+| [web-and-mobile.md](web-and-mobile.md) | the render-only web app, packages/client and packages/ui |
 | [testing.md](testing.md) | every test layer and its command, the coverage rule, what CI runs and when |
 | [deploy.md](deploy.md) | images, environments, staging and production releases, rollback, previews |
 | [new-project.md](new-project.md) | everything a new app made from this director-editor needs once, in order |
@@ -27,8 +27,7 @@ production release. `CLAUDE.md` is the same material condensed for Claude Code.
 | [enhancements.md](enhancements.md) | what the template could do but doesn't yet, why, and what each would take |
 
 Elsewhere: [deploy/README.md](../deploy/README.md) (charts and GitOps),
-[infra/tofu/README.md](../infra/tofu/README.md) (k3s on your machines, Cloudflare),
-[apps/mobile/maestro/README.md](../apps/mobile/maestro/README.md) (native flows).
+[infra/tofu/README.md](../infra/tofu/README.md) (k3s on your machines, Cloudflare).
 
 ## Runbooks
 

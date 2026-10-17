@@ -8,7 +8,7 @@ paths:
 # Database and migrations
 
 - The schema is `packages/db/prisma/schema/*.prisma`, one file per Postgres schema
-  (`auth`, `app`, `audit`, `webhooks`, `notifications`, `files`, `billing`, `ai`) plus
+  (`auth`, `app`, `audit`, `webhooks`, `notifications`, `files`, `ai`) plus
   `base.prisma`. Conventions from `base.prisma`: `uuidv7()` ids, `Timestamptz(3)`,
   snake_case through `@map`/`@@map`, `@@schema` on every model.
 - Each Postgres schema has one owning service that writes to it. Other services get

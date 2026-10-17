@@ -20,9 +20,6 @@ The contract is the public API: the web app and the REST API at `/api/v1` depend
   the server gets a typed `VideoId` from the input and clients get one in the response.
   The brand is type-only (the OpenAPI document still says `uuid`). A new kind of id gets
   its schema and type in `src/ids.ts`; never `z.uuid()` for an id of a kind that has one.
-- API keys: a procedure callable with a key sets `base.meta({ apiKeyScope: "..." })`
-  with a scope from `API_KEY_SCOPES` in `src/api/scopes.ts`. No scope means keys get
-  `FORBIDDEN`. Add a scope only for data a third party should reach.
 - Rate limits: every procedure that changes something (any method but GET) sets
   `meta({ rateLimit })`: a `RateLimit` (`name`, `points`, `windowSeconds`, `per: "user"`
   or `"org"`) or `{ exempt: "why" }`. Everyday changes use `EVERYDAY_WRITES` from
@@ -49,4 +46,4 @@ The contract is the public API: the web app and the REST API at `/api/v1` depend
 - After any change run `bun run gen`, and commit the regenerated `apps/api/openapi.json`
   (the `codegen` CI job fails otherwise).
 - This package depends on `@orpc/contract` and `zod` only. No server code, no Node APIs:
-  web and mobile bundle it.
+  the web app bundles it.

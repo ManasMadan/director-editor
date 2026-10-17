@@ -75,8 +75,7 @@ that doesn't run in the organization's context, or runs in another one. That's a
 in the query, not missing data ([database.md](database.md)).
 
 **`FEATURE_DISABLED`.** The feature's variables aren't set: uploads need `S3_BUCKET`,
-billing the Stripe variables, the assistant the AI service
-([environment.md](environment.md)).
+Director the AI service, `YOUTUBE_API_KEY` and uploads ([environment.md](environment.md)).
 
 ## Tests
 

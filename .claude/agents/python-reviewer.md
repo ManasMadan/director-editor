@@ -24,13 +24,13 @@ Then `git diff master...HEAD -- apps/ai packages/ai-client` and `git status --sh
 2. **Models.** Request and response models in `app/schemas.py`, every field constrained
    (`Field(min_length=..., max_length=..., ge=..., le=...)`, `Literal` for enums): they
    are the runtime validation and the OpenAPI document. The API's limits equal them
-   (`apps/api/src/modules/ai/limits.test.ts`).
+   (`apps/api/src/modules/director/limits.test.ts`).
 3. **Async.** `async def` does no blocking I/O or CPU-heavy work (no sync DB driver, no
    `requests`, no `time.sleep`); blocking work is a plain `def` route or runs in a
    thread. Every outbound call has a timeout.
 4. **Tenancy.** Tenant data only through `tenant(org_id)` (`app/db/session.py`), with
    the org id from the verified caller, never from the body.
-5. **Auth.** Every route but health takes `CallerDep`; MCP tools sit behind a scope.
+5. **Auth.** Every route but health takes `CallerDep`.
 6. **Errors.** `AppError("<CODE>", status, params)` with a code that exists in
    `packages/contracts/src/errors.ts`; nothing leaks exception text to the client.
 7. **Settings.** New settings in `app/settings.py` with an `alias`, in `.env.example`
@@ -39,8 +39,8 @@ Then `git diff master...HEAD -- apps/ai packages/ai-client` and `git status --sh
 9. **Generated code.** Nothing edited under `app/contracts/` or `openapi.json` by hand;
    after a route or model change, `bun run gen` output is part of the change.
 10. **Tests.** Pure tests in `tests/test_units.py`; Postgres or Redis ones marked
-    `pytest.mark.integration`; model behaviour through the stand-ins and evals, not a
-    mocked provider. `bun run --filter @repo/ai check-types` and `lint` pass.
+    `pytest.mark.integration`; model behaviour through the local stand-ins that speak the
+    provider's protocol (`tests/fakes.py`), not a mocked provider. `bun run --filter @repo/ai check-types` and `lint` pass.
 
 ## Output
 

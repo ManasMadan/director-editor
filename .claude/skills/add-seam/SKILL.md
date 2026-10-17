@@ -11,8 +11,8 @@ the interface is, and the skill that swaps it. A seam is worth it only for somet
 that will change at scale; everything else is plain code.
 
 1. **The interface**, in the one place every caller reaches it: a shared concern in
-   `packages/nest-common/src/<concern>.ts` (like `storage.ts`, `crypto.ts`), one
-   service's in that service (like `apps/notifications/src/channels/sms/sms-transport.ts`),
+   `packages/nest-common/src/<concern>.ts` (like `storage.ts`), one service's in that
+   service (like `apps/notifications/src/channels/email/email-transport.ts`),
    Python in `apps/ai/app/`. The smallest set of methods the callers need, in the repo's
    terms, not the provider's.
 2. **The first implementation** in its own file, the provider's SDK imported only there.
@@ -22,7 +22,7 @@ that will change at scale; everything else is plain code.
    how to swap it: the files to add, the env to set, the tests to extend. The existing
    seams' headers are the model.
 4. **A local stand-in** that speaks the real protocol, for tests and local development
-   (Mailpit, `packages/fake-stripe`, the fake push server), refused in production at
+   (Mailpit, `packages/fake-google`), refused in production at
    boot.
 5. **Tests** against the interface: a contract test the next implementation reuses, and
    integration tests through the stand-in.

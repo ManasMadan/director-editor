@@ -1,6 +1,6 @@
 ---
 name: frontend-reviewer
-description: Reviews web and mobile UI changes - render-only web, data only through packages/client, accessibility, translations, the bundle budget, CSP, and the component library. Use proactively after a change to apps/web, apps/mobile or packages/ui.
+description: Reviews web UI changes - render-only web, data only through packages/client, accessibility, translations, the bundle budget, CSP, and the component library. Use proactively after a change to apps/web or packages/ui.
 tools: Read, Grep, Glob, Bash
 disallowedTools: Edit, Write, NotebookEdit
 model: sonnet
@@ -20,7 +20,7 @@ master...HEAD` and `git status --short`.
 1. **Render-only web.** No route handlers, server actions or `fetch` to the API;
    `bun run lint:boundaries` passes.
 2. **Data.** Only `@repo/client` hooks, imported by exact path; query keys from the
-   generated utils, never hand-written arrays (mobile included); errors rendered from
+   generated utils, never hand-written arrays; errors rendered from
    `errorMessageKey`, never `error.message`.
 3. **Structure.** Pages in `src/app` stay thin (a module's page and `pageTitle`); a
    module is used only through its `index.ts`; a missing primitive goes in
@@ -37,10 +37,7 @@ master...HEAD` and `git status --short`.
 7. **Security.** New third-party origins added to the CSP in `apps/web/src/proxy.ts`,
    and only what's needed. No `dangerouslySetInnerHTML` with user content. Redirect
    targets are same-origin paths.
-8. **Mobile.** Keys exist in the catalog (not type-checked there); nothing secret in
-   `EXPO_PUBLIC_*`; native changes (permissions, config plugins) called out, since they
-   need a store build.
-9. **Tests.** Pure hooks and helpers unit-tested; a user flow has a Playwright spec.
+8. **Tests.** Pure hooks and helpers unit-tested; a user flow has a Playwright spec.
 
 ## Output
 

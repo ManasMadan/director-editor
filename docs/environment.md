@@ -36,8 +36,8 @@ secret (32 random bytes). Re-running it keeps existing values.
 To set one value without opening `.env`:
 
 ```sh
-bun run env:set STRIPE_SECRET_KEY=sk_test_...
-echo "sk_test_..." | bun run env:set STRIPE_SECRET_KEY   # value from stdin, not argv
+bun run env:set GOOGLE_API_KEY=AIza...
+echo "AIza..." | bun run env:set GOOGLE_API_KEY   # value from stdin, not argv
 bun run env:unset OLD_VARIABLE
 ```
 
@@ -117,8 +117,8 @@ A second checkout on the same machine (a worktree) shares these services unless 
 (`<name>-stack<n>`, its own containers and volumes; not in `.env.example`, which leaves
 the name to `docker-compose.yml`), moves every port below and every app port in the next
 table by 100 × n, points the local URLs that name them at the new ones (`WEB_URL`,
-`BETTER_AUTH_URL`, `API_URL`, `AI_URL`, `APP_ORIGINS`, `EXPO_PUBLIC_API_URL`, the
-database, Valkey and Mailpit URLs, and `STRIPE_API_URL` when you set it), and writes the
+`BETTER_AUTH_URL`, `API_URL`, `AI_URL`, `GOOGLE_BASE_URL`, `YOUTUBE_API_URL`, the
+database, Valkey and Mailpit URLs), and writes the
 same values for its tests to `.env.stack`. Two checkouts on different stacks then run
 `bun dev` (or `dev:full`) and `bun run test:e2e` at the same time. Each stack takes its
 own share of Docker's memory, which `bun run db:up` checks before starting it. A Google

@@ -35,7 +35,7 @@ webhooks 3004, ai 8000; with `bun dev:full`, the email previews 3030 and the moc
 12112. On demand: Storybook 6006. Those are the defaults: each is a `*_PORT` in `.env`
 (`WEB_PORT`, `API_PORT`, ...), and nothing else may fix a local port
 (`scripts/ports.test.ts`). Uploads stay off until `S3_BUCKET` is set
-(docs/files-and-billing.md), even with `dev:full`.
+(docs/files.md), even with `dev:full`.
 
 ## Principles (non-negotiable)
 

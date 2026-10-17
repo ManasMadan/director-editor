@@ -18,7 +18,7 @@ paths:
   bodies and third-party responses are untrusted too.
 - Authorization is the procedure builder (`authed`, `fresh`, `inOrg`, `orgAdmin` in
   `apps/api/src/rpc/procedures.ts`) plus the service's own check for anything finer
-  (ownership, entitlements). A new procedure on tenant data is at least `inOrg`;
+  (ownership). A new procedure on tenant data is at least `inOrg`;
   anything that manages the workspace is `orgAdmin`.
 - A role is parsed with `parseOrgRole` from `@repo/contracts/roles`, never cast from the
   stored string (better-auth joins several with commas, and anything can be written
@@ -45,8 +45,8 @@ paths:
   interpolate input. In Python, bound parameters only.
 - Errors never leak internals: throw an `AppError` code; unknown errors become
   `INTERNAL` with the details only in the log.
-- Test-only stand-ins (loopback webhook targets, SMS to Mailpit, local AI models, fake
-  provider URLs) must be refused at boot in production. Keep those guards when you add
+- Test-only stand-ins (the mock Google, fake provider URLs, a plain-text SMTP URL) must
+  be refused at boot in production. Keep those guards when you add
   a new one.
 - Use the `security-reviewer` agent for changes to auth, procedures, webhooks, uploads
   or anything that fetches a URL.

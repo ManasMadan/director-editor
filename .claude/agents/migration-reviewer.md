@@ -37,8 +37,9 @@ Migrations already on master are out of scope, except to report that one was edi
    `CREATE INDEX CONCURRENTLY` alone in its migration; foreign keys and checks added
    `NOT VALID` with `VALIDATE CONSTRAINT` in a later migration; no column type change
    that rewrites the table; no `ALTER TABLE` that takes `ACCESS EXCLUSIVE` for longer
-   than a metadata change. Estimate the table's size class (auth users, todo, audit
-   log, notifications are large; lookup tables are small).
+   than a metadata change. Estimate the table's size class (auth users, short reactions,
+   Director's plans and takes, the audit log and the delivery log are large; lookup tables
+   are small).
 3. **Squawk.** Run `bun run db:lint` and report its output. Every
    `-- squawk-ignore <rule>` has a reason that holds (e.g. the table is created in the
    same migration).

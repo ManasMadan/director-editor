@@ -1,6 +1,6 @@
 ---
 name: swap-notification-templates
-description: Load notification templates from a database or CMS instead of code (editable emails and push copy, per-tenant branding). Use when the user wants non-developers to edit notification content or brand it per workspace. Not for debugging; when something fails, use the debug skill.
+description: Load email templates from a database or CMS instead of code (editable copy, per-tenant branding). Use when the user wants non-developers to edit notification content or brand it per workspace. Not for debugging; when something fails, use the debug skill.
 disable-model-invocation: true
 ---
 
@@ -19,18 +19,17 @@ disable-model-invocation: true
 1. Store templates (db-change skill; the `notifications` schema is the service's own).
 2. Implement `TemplateSource`: look up the stored template for `payload.template`
    (and the organization, for branding), cache it in Redis, and return a `BoundTemplate`
-   with the same `category` and only the channels it renders. Fall back to
+   that renders it. Fall back to
    `CodeTemplateSource` when no stored version exists, so every template keeps working.
-3. Bind the new class in `notifications.module.ts`. The dispatcher, channels and
-   preferences don't change.
+3. Bind the new class in `notifications.module.ts`. The dispatcher and the email
+   channel don't change.
 4. Validate stored content before rendering: the fields it may use are the template's
-   payload schema in `packages/jobs/src/queues.ts`. Keep using `context.unsubscribeUrl`
-   in emails the recipient can opt out of (the dispatcher supplies it).
+   payload schema in `packages/jobs/src/queues.ts`.
 
 ## Tests
 
-`apps/notifications/test/notifications.integration.test.ts` sends every channel through
-Mailpit and the fake push and SMS servers; add cases for a stored template and for the
+`apps/notifications/test/notifications.integration.test.ts` sends through Mailpit; add
+cases for a stored template and for the
 fallback. `packages/email/src/render.test.tsx` covers the code templates.
 
 ## Finish

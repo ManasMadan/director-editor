@@ -27,7 +27,7 @@ paths:
   `lint:boundaries`) fails when any other file under `src/modules` calls a model. Never
   query tenant tables with the bare client: RLS returns
   nothing, which looks like "not found", not like a bug.
-- Ids are branded (`OrgId`, `UserId`, `TodoId`, ...; `@repo/contracts/ids`): services
+- Ids are branded (`OrgId`, `UserId`, `VideoId`, ...; `@repo/contracts/ids`): services
   and repositories take the branded type, never `string`, and the procedures hand
   routers `context.orgId`, `context.userId` and `context.user.id` already branded.
   better-auth's ids are branded once in `src/auth/ids.ts` (`userIdOf`, `orgIdOf`,

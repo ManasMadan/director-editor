@@ -23,7 +23,7 @@ purpose; check with the user before moving mail to a managed service.
 
 1. A class implementing `EmailTransport` next to `SmtpTransport`. Send `idempotencyKey`
    as the provider's idempotency key (retried jobs must not double-send), pass
-   `headers` through (List-Unsubscribe), set a request timeout, and throw on non-2xx.
+   `headers` through, set a request timeout, and throw on non-2xx.
 2. A setting that chooses it, and its key, in `apps/notifications/src/env.ts`, with a
    boot-time check that the key is present, plus `.env.example` and
    `docs/environment.md`. Choose the transport in `email.module.ts`.
@@ -32,15 +32,12 @@ purpose; check with the user before moving mail to a managed service.
    `src/inbound/stalwart.routes.ts`, emitting `email.feedback_received.v1` (add the
    provider to that event's `provider` enum in packages/contracts).
 
-The SMS email sink (`apps/notifications/src/channels/sms/email-sink.ts`) always uses SMTP
-and is for development only.
-
 ## Tests
 
 `apps/notifications/test/notifications.integration.test.ts` reads delivered mail from
 Mailpit, and `test/stalwart.integration.test.ts` sends through a real Stalwart. For an
-HTTP provider, add a small local fake of its API (like `apps/notifications/test/fake-twilio.ts`)
-and a test that sends through it.
+HTTP provider, add a small local fake of its API (like `packages/fake-google`) and a test
+that sends through it.
 
 ## Finish
 

@@ -6,7 +6,6 @@ paths:
   - "SECURITY.md"
   - "deploy/README.md"
   - "infra/tofu/README.md"
-  - "apps/mobile/maestro/README.md"
 ---
 
 # Docs

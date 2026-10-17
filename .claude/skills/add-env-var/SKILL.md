@@ -12,9 +12,7 @@ A variable lives in up to six places, and all of them change together.
    - a Nest service: its `src/env.ts` (t3-env, zod). One several services share:
      a fragment in `packages/nest-common/src/env.ts`, spread into each;
    - web: `apps/web/src/env.ts` (server-only; the browser gets nothing);
-   - ai: a field in `apps/ai/app/settings.py` with `alias="<NAME>"` and a constraint;
-   - mobile: build-time in `apps/mobile/app.config.ts`, runtime `EXPO_PUBLIC_*` in
-     `src/lib/config.ts` (public: never a secret).
+   - ai: a field in `apps/ai/app/settings.py` with `alias="<NAME>"` and a constraint.
    Import `env`; never read `process.env` elsewhere.
 2. **A feature switch?** Optional features are on only when their variables are set:
    add it to `features` in `apps/api/src/features.ts` (both-or-neither for pairs) and

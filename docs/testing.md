@@ -2,15 +2,13 @@
 
 | Layer | Where | Command | Needs |
 |---|---|---|---|
-| Unit | `src/**/*.test.ts(x)` in each package, `apps/mobile/src`, `apps/ai/tests` (not marked `integration`) | `bun run test` | nothing (cached by turbo) |
+| Unit | `src/**/*.test.ts(x)` in each package, `apps/ai/tests` (not marked `integration`) | `bun run test` | nothing (cached by turbo) |
 | Integration | `test/` in each service, `packages/db/test`, `packages/nest-common/test`, `apps/web/test` (in Chromium), `apps/ai` tests marked `integration` | `bun run test:integration` | the core: Postgres, Valkey, Mailpit (started for you) |
 | Integration, file uploads | the suites tagged `files` in `apps/api`, `apps/worker`, `packages/nest-common` and `apps/web/test` | `bun run test:integration:files` | the core plus RustFS and ClamAV (started for you) |
 | Coverage | every suite merged, every file at 100% | `bun run test:coverage` | the full profile (`bun run db:up:full`) |
-| End to end | `apps/web/e2e`, `apps/mobile/e2e`, then the k6 smoke and the fuzzing | `bun run test:e2e` | `bun run db:up:full`, nothing else running on the stack's ports |
+| End to end | `apps/web/e2e`, then the fuzzing | `bun run test:e2e` | `bun run db:up:full`, nothing else running on the stack's ports |
 | Components | every story in `packages/ui` | `bun run --cwd packages/ui test:stories`, `test:visual` | Chromium; Docker for `test:visual` |
-| Load | `load/api.ts` (k6) | `bun run test:load` | a running API, Docker |
 | Fuzzing | every operation in `apps/api/openapi.json` and `apps/ai/openapi.json` (Schemathesis, `schemathesis.toml`) | `bun run test:fuzz` | a running API and AI service, uv |
-| Evals | `apps/ai/evals` | `bun run --cwd apps/ai evals` | nothing with the local stand-ins |
 | Restore drill | `scripts/restore-drill.ts` | `bun run db:restore-drill` | the local Postgres container |
 
 On commit, the pre-commit hook (`scripts/pre-commit.ts`) checks the staged files. First
@@ -60,10 +58,9 @@ with the job's own commands:
 | `uv sync --locked`, then `bun run gen` and nothing changed or added | setup, codegen | every push; codegen for the app |
 | `bun run lint` | lint | every push |
 | `bun run check-types`, `bun run type-coverage` | types | the app |
-| `bun scripts/push-coverage.ts`: every suite of the affected packages (unit, integration, browser, mobile, Python), the scripts' and hooks', every file under them at 100%, then diff-cover on the changed lines; with Stalwart up (`services.ts up --mail`), the real mail path's suites too | unit, components, integration, python, coverage | the app or the scripts |
+| `bun scripts/push-coverage.ts`: every suite of the affected packages (unit, integration, browser, Python), the scripts' and hooks', every file under them at 100%, then diff-cover on the changed lines; with Stalwart up (`services.ts up --mail`), the real mail path's suites too | unit, components, integration, python, coverage | the app or the scripts |
 | `bun run --cwd packages/ui test:visual` (the screenshots) | components | the app |
 | the migrations applied to an empty database, then `bun run --cwd packages/db drift` | integration | the app |
-| `uv run python -m evals` in `apps/ai`, with the local stand-ins | python | the app |
 | oasdiff (CI's image) on `apps/api` and `apps/ai`'s `openapi.json` against the push's base, and `scripts/events-compat.ts` | api-compat | the app |
 | `bun run db:lint` | migrations | the app |
 | `bun run charts:check` | charts | the charts |
@@ -108,10 +105,9 @@ What only CI checks, with the reason, is the `CI_ONLY` list in `scripts/pre-push
 printed after the summary: the container images and their smoke test (more than a 2 GB
 Docker VM holds), the kind deploy (8 GB of Docker memory), the OpenTofu plans and the
 nightly drift check (the cloud accounts' secrets), the pull request title (the
-commit-msg hook checks every commit's header), the nightly evals against a real model,
-the Claude review and the preview environments. The jobs that never run on a pull
-request (deploy, SBOM attestation, release, the mobile builds, Renovate, the Stripe
-contract check, the uptime probe) are in its `AFTER_MERGE` list. `scripts/pre-push.test.ts`
+commit-msg hook checks every commit's header), the Claude review and the preview
+environments. The jobs that never run on a pull request (deploy, SBOM attestation,
+release, Renovate, the uptime probe) are in its `AFTER_MERGE` list. `scripts/pre-push.test.ts`
 fails when any workflow gains a job that is in none of these lists, and when a job the
 hook mirrors gains a step that its `COUNTERPARTS` table doesn't map to a pre-push step
 (or to runner setup).
@@ -119,8 +115,7 @@ hook mirrors gains a step that its `COUNTERPARTS` table doesn't map to a pre-pus
 ## Unit
 
 Pure tests: no network, no services, so turbo caches them. Vitest in the TypeScript
-packages (the `unit` project in services), Jest with React Native Testing Library in
-`apps/mobile`, pytest in `apps/ai`.
+packages (the `unit` project in services), pytest in `apps/ai`.
 
 ## Integration
 
@@ -174,17 +169,13 @@ shell, for one).
   and `apps/ai/tests/__init__.py` for Python). A test that needs a feature turns it on
   itself.
 - Services are built in-process (`createApiServer()` and the like); emails are read
-  back from Mailpit, push and Twilio go to local fakes (`apps/notifications/test`), and
-  Stripe to `packages/fake-stripe`.
+  back from Mailpit, and Gemini and YouTube are `packages/fake-google`.
 - Nothing sleeps for a fixed time. A test waits for what it's waiting on:
   `eventually(read, done)` from `@repo/testing/eventually`, `vi.waitFor` or
   `expect.poll`. To show that something did not happen, it first waits for a signal that
   the work is over (the job completed, the delivery row written, Redis counting the
   subscriber), then checks once. A delay stays only where it stands in for slow work on
   purpose, with a comment saying so.
-
-A few tests need real third parties and are skipped without them
-(`E2E_CIMD_CLIENT_ID`, see [environment.md](environment.md#tests-and-tooling)).
 
 The real mail path runs against the Stalwart container (`bun run db:up:mail`) and is
 skipped unless its variables are set (see `.env.example`): with `STALWART_SMTP_URL`,
@@ -210,7 +201,7 @@ address.
   `test/render.tsx` inside the app's real providers, and driven like a user with
   `userEvent` and `page` locators from `vitest/browser`. They call the real API: the
   global setup builds apps/api and runs it twice, once with every optional feature on
-  (billing against the fake Stripe, files on RustFS, a stand-in for the AI service in
+  (files on RustFS, a stand-in for the AI service in
   `test/fake-ai.ts`, Google sign-in, Director's Shorts feed from the mock YouTube in
   `packages/fake-google`) and once with them all off except captcha, where
   Turnstile's script is a stand-in (`test/commands.ts`) and tokens are checked with
@@ -226,13 +217,12 @@ an authenticator code. Accounts come from `test/users.ts` (`signUp()` signs a ne
 verified user in on the page). Next.js's router exists only inside a Next server, so
 `renderPage` provides a stand-in: `router.push` and `<Link>` change the page's URL
 (`currentUrl()`), and leaving the page's path unmounts it, as in the app. Full-page
-navigations (`window.location.assign`, a redirect to Stripe or Google) are answered
+navigations (`window.location.assign`, a redirect to Google) are answered
 "204 No Content" so the test page stays, and `commands.hardNavigations()` lists them.
 
 Only the API runs, so what the other services would do is done by the test: the
-worker's realtime messages (`publishRealtime`), the notification service's in-app rows
-(SQL), a Stripe webhook's effect on the subscription (SQL; the fake Stripe's test hooks
-make invoices in any status). Uploads go to the real RustFS, sent from Node because its
+worker's and the AI service's realtime messages (`publishRealtime`), an upload's check
+(`checkUpload`), Director's answers (`fakeDirector`). Uploads go to the real RustFS, sent from Node because its
 bucket allows only the dev site's origin (`storageCors`).
 
 Each test starts signed out, with a client IP of its own (the API's auth rate limits
@@ -264,27 +254,27 @@ file below 100%, or one no test loads.
 
 - A source file is any `.ts`, `.tsx`, `.js`, `.mjs`, `.cjs` or `.py` file git tracks,
   wherever it is, except tests and what only they run (`test/`, `tests/`, `e2e/`,
-  `maestro/`, `visual/`, `*.test.*`, stories, `jest.setup.ts`), generated code
+  `visual/`, `*.test.*`, stories), generated code
   (`generated/`, `*.gen.ts`, `*.d.ts`, `en.d.json.ts`) and configs (`*.config.*`,
   `.storybook/`, `.dependency-cruiser.cjs`): `isSource` in `scripts/coverage.ts`. So
-  the evals, the web app's service worker, the packages' build scripts and presets, the
-  code generators, the load test and the images' checks count like the services, and a
+  the packages' build scripts and presets, the code generators and the images' checks
+  count like the services, and a
   new folder of code counts the day it lands; `scripts/coverage.test.ts` fails if the
   rule narrows to a list of folders again.
 - Every suite writes LCOV: each vitest package (`coverage()` in `packages/vitest-config`
   reports every workspace file its tests load, so a shared package gets credit from the
   apps that exercise it; code only, not an imported JSON file such as the i18n
-  messages), mobile's jest (`src/**`), bun (`bunfig.toml`), and the
-  Python service and its evals (`fail_under = 100`, branches included, in
+  messages), bun (`bunfig.toml`), and the Python service (`fail_under = 100`, branches
+  included, in
   `apps/ai/pyproject.toml`). Bun's runner answers for every source file no other suite
   owns (`BUN_OWNS` in `scripts/coverage.ts`): `scripts/`, `.claude/hooks/`, and the
   tooling outside the services' and packages' `src/`, whose tests are in `scripts/`
-  too (`check-peers.test.ts`, `load.test.ts`, `turbo-generators.test.ts`,
+  too (`check-peers.test.ts`, `turbo-generators.test.ts`,
   `build-presets.test.ts`, `package-scripts.test.ts`). Its report leaves out the
   services' and packages' `src/` (`coveragePathIgnorePatterns`: a script's test may load
   them, and their own suites cover them) and fails below 100% (`coverageThreshold`);
-  `bun scripts/coverage.ts --bun` checks only what it owns, branches too. Mobile's jest
-  fails below 100% too. The vitest runs write LCOV
+  `bun scripts/coverage.ts --bun` checks only what it owns, branches too. The vitest runs
+  write LCOV
   only: a run's own summary would count every file its tests load from other packages.
 - A NestJS package's `vitest.config.ts` also adds `decoratorMetadata()` from
   `packages/vitest-config`: the compiler turns every injected constructor parameter into
@@ -330,7 +320,7 @@ file below 100%, or one no test loads.
 |---|---|---|
 | `apps/web/src/lib/cookies.ts` | `biome-ignore lint/suspicious/noDocumentCookie` | the Cookie Store API isn't in every browser yet |
 | `packages/db/prisma/migrations/20261010121359_director/migration.sql` | `-- squawk-ignore` (`adding-foreign-key-constraint`, `constraint-missing-not-valid`, `require-concurrent-index-creation`) | every flagged statement acts on a table the same migration creates: it is empty and no running release reads it, so nothing waits on a scan; the foreign keys hold writes on the tables they point at only until the migration commits, bounded by `lock_timeout` |
-| `packages/db/prisma/migrations/20261018120000_remove_starter_features/migration.sql` | `-- squawk-ignore` (`ban-drop-table`, `ban-drop-column`) | the contract step for the starter features Director removed: the release before it already stopped reading every table and the column it drops |
+| `packages/db/prisma/migrations/20261018120000_remove_starter_features/migration.sql` | `-- squawk-ignore` (`ban-drop-table`, `ban-drop-column`) | drops the tables and column of the starter features Director removed: production holds no data in them, and pods of the previous release may error on them until the rollout replaces them |
 | `packages/ui/src/components/field.tsx` | `biome-ignore lint/a11y/useSemanticElements` | `Field` is a `div` with the group role: a fieldset brings its own border, padding and minimum width into every form row (`FieldSet` is the fieldset, for a group of fields) |
 | `packages/ui/src/components/input-otp.tsx` | `biome-ignore lint/a11y/useSemanticElements` | the separator holds an icon, which an `hr` can't |
 | `packages/ui/src/components/label.tsx` | `biome-ignore lint/a11y/noLabelWithoutControl` | `Label` is a wrapper: the caller ties it to its control (`htmlFor`, or the control inside it) through props the rule can't see |
@@ -338,7 +328,6 @@ file below 100%, or one no test loads.
 | `.claude/hooks/lib.ts` | `biome-ignore lint/suspicious/noUndeclaredEnvVars` | Claude Code sets `CLAUDE_PROJECT_DIR` for its hooks, which turbo never runs |
 | `.claude/hooks/session-start.ts` | `biome-ignore lint/suspicious/noUndeclaredEnvVars` | Claude Code sets `CLAUDE_ENV_FILE` for its session-start hook, which turbo never runs |
 | `.github/workflows/deploy.yml` | `# zizmor: ignore[dangerous-triggers]` | `workflow_run` is how a deploy follows CI on master; the job that checks out the run's commit runs only for this repository's own push (`scripts/workflows.test.ts` checks) |
-| `.github/workflows/mobile.yml` | `# zizmor: ignore[dangerous-triggers]` | the same, for the app updates that follow CI and the store builds that follow a release |
 | `.devcontainer/Dockerfile` | `# hadolint ignore=DL3066` | `USER node` by name, not its id: the dev container features the image takes (docker-in-docker, for one) find the user to set up by its name |
 | `deploy/docker/ai.Dockerfile` | `# hadolint ignore=DL3008` | ffmpeg comes from trixie's apt mirror, which doesn't keep old versions: a pin would go stale and fail the build instead of catching a real regression |
 | `.github/zizmor.yml` | `self-repository` off | GitHub's `uses: $/...` syntax for this repository's own actions, which actionlint (in the same lint job) doesn't read yet |
@@ -347,10 +336,7 @@ file below 100%, or one no test loads.
 | `biome.jsonc` | `noDuplicateCustomProperties` off in `packages/ui/src/styles/theme.css` | the theme sets each variable once per variant (light, dark), and Biome reads the blocks as one rule |
 | `biome.jsonc` | `useImportType` and `noStaticOnlyClass` off in the Nest services and `packages/nest-common` | Nest's dependency injection needs the imported class at run time, which `import type` erases; a module is a class with only a decorator and static members |
 | `biome.jsonc` | `noConsole` off in `scripts/`, the hooks, config files and the API's command-line scripts | they talk to whoever runs them through the console |
-| `apps/ai/app/embeddings.py` | `# noqa: SIM905` | a stop-word list reads as prose on one line |
 | `apps/ai/app/audio.py` | `# pyright: ignore[reportMissingTypeStubs]` on the import, `# pyright: ignore[reportUnknownMemberType]` on the upload | google-cloud-storage ships no stubs |
-| `apps/ai/app/documents.py` | `# pyright: ignore[reportMissingTypeStubs]` | langgraph ships no stubs |
-| `apps/ai/app/summaries.py` | `# pyright: ignore[reportMissingTypeStubs, reportUnknownMemberType]` | langgraph ships no stubs, and its graph, config and checkpointer types are unknown |
 | `apps/ai/app/queues.py` | `# pyright: ignore[reportMissingTypeStubs, reportUnknownMemberType, reportArgumentType]` | bullmq ships no stubs and leaves job data untyped |
 | `apps/ai/app/main.py` | `# pyright: ignore[reportUnknownMemberType]` | redis-py's options are untyped |
 | `apps/ai/app/worker.py` | `# pyright: ignore[reportUnknownMemberType]` | redis-py's options are untyped |
@@ -358,10 +344,8 @@ file below 100%, or one no test loads.
 | `apps/ai/app/settings.py` | `# pyright: ignore[reportCallIssue]` | pydantic-settings fills the fields from the environment |
 | `apps/ai/app/log.py` | `typing.cast()` | structlog's `get_logger()` is typed `Any` and hands back a lazy proxy that takes its class from `configure_logging`, which runs later; there is nothing to check at import, and checking the proxy would bind it before it's configured |
 | `apps/ai/app/telemetry.py` | `# pyright: ignore[reportUnknownMemberType]` | the Redis instrumentor's `instrument()` is untyped |
-| `apps/ai/evals/__main__.py` | `# pyright: ignore[reportAssignmentType]` | pydantic-evals' report type is wider than what it returns |
 | `apps/ai/tests/conftest.py` | `# pyright: ignore[reportUnknownMemberType]` | redis-py's options are untyped |
 | `apps/ai/tests/support.py` | `# pyright: ignore[reportUnknownMemberType]` | redis-py's options and handlers are untyped |
-| `apps/ai/tests/test_evals.py` | `# pyright: ignore[reportArgumentType]` | these checks never read spans, so none are passed |
 
 ## Type-coverage exceptions
 
@@ -376,20 +360,17 @@ better-typed call can say it instead.
 | `packages/i18n/src/loosely.ts` | `loosely`'s `t as LooseTranslate` | a key known only at run time can't be paired with its arguments at compile time; the ICU test checks them instead |
 | `packages/db/src/tenancy.ts` | `asTx`'s `tx as Tx` | `Tx` is a brand only the transaction helpers may give a client, so there is nothing to check at run time |
 | `packages/nest-common/src/env.ts` | `forService`'s `Object.fromEntries(...) as {...}` | TypeScript can't type an object whose keys are built from a generic string (`${service}_DATABASE_URL`), and each service's env schema needs its own names typed |
-| `apps/mobile/src/components/ui/text.tsx` | `webRole`'s `role as Role` | react-native's `Role` leaves out the roles only react-native-web renders (`blockquote`, `code`), which the web build needs |
 | `packages/contracts/src/api/base.ts` | `errorsOf`'s `Object.fromEntries(...) as {...}` | TypeScript can't type an object built from a list of keys, and oRPC clients need each code's own entry to type its error |
 
 ## End to end
 
 `bun run test:e2e` (`scripts/e2e.ts`) tests exactly what it just built:
 
-1. builds api, worker, notifications, webhooks and web for production, and the mobile
-   app for the web;
-2. starts the fake Stripe, those services, the AI service and its worker, the web app and
-   the mobile web build, all with `NODE_ENV=test` (production refuses the local stand-ins
-   the suite uses), logging to `logs/`;
-3. runs the web Playwright suite, the mobile one, then the k6 smoke and the
-   [fuzzing](#fuzzing);
+1. builds api, worker, notifications, webhooks and web for production;
+2. starts those services, the AI service and its worker, and the web app, all with
+   `NODE_ENV=test` (production refuses the local stand-ins the suite uses), logging to
+   `logs/`;
+3. runs the web Playwright suite, then the [fuzzing](#fuzzing);
 4. stops everything.
 
 Everything listens on this checkout's ports (its `.env`'s `*_PORT`, else
@@ -409,9 +390,7 @@ than rerunning the job.
 
 ```sh
 bun run test:e2e                                    # everything
-bun run test:e2e --app web e2e/assistant.spec.ts    # one app; the rest goes to Playwright
-bun run test:e2e --app mobile                       # the mobile screens, rendered for the web
-bun run test:e2e --app load                         # the k6 smoke on its own
+bun run test:e2e --app web e2e/settings.spec.ts     # one suite; the rest goes to Playwright
 bun run test:e2e --app fuzz                         # the fuzzing on its own
 bun run --cwd apps/web test:e2e                     # against a stack you're already running (bun dev)
 ```
@@ -420,22 +399,6 @@ bun run --cwd apps/web test:e2e                     # against a stack you're alr
 CI runs the suite with the captcha on, with Cloudflare's always-pass test keys (in
 `ci.yml`'s e2e job), so the widget and the token check run too; locally
 `apps/web/e2e/captcha.spec.ts` skips unless you set them (`.env.example`).
-
-## Mobile
-
-- `bun run --cwd apps/mobile test`: Jest. Screen tests (`src/screens-tests/`) open the
-  whole app at a URL with `openApp` (`test/app.ts`, on expo-router's `renderRouter`), so
-  routing, the protected routes and the real auth and API clients all run. The network is
-  faked at `fetch` with `fakeApi` (`test/fake-api.ts`), which answers each path the way
-  the API does; only native modules without a JavaScript stand-in (secure storage, push,
-  the passkey prompt, the build's manifest) are mocked, in `jest.setup.ts`.
-- `bun run test:e2e --app mobile`: the app's screens rendered with react-native-web and
-  driven by Playwright (`apps/mobile/e2e`), against the API on the mobile web build's own
-  origin. With the captcha on (CI's test keys), sign-up and resending a code open the web
-  app's captcha page in a popup, which passes and closes by itself. Passkeys go through
-  Chrome's virtual authenticator (`addPasskeyAuthenticator` in `e2e/support.ts`).
-- Maestro flows for what only a native build can check, run by hand
-  (`apps/mobile/maestro/README.md`).
 
 ## API client
 
@@ -462,22 +425,6 @@ with the committed baselines, in the Playwright Docker image;
 version, and `scripts/pins.test.ts` fails when it isn't: the baselines depend on that
 exact browser build.
 
-## Load
-
-```sh
-bun run test:load                                # smoke: a few requests a second for 30 s
-PROFILE=load bun run test:load                   # ramps to TARGET_RPS (default 200) and holds it
-PROFILE=load DURATION=30m bun run test:load      # soak
-```
-
-It signs in `LOAD_USERS` users first through the API's own auth
-(`bun run --cwd apps/api load:users`, sessions in `load/.sessions.json`, since sign-in is
-rate limited per IP), then runs k6 in Docker against `BASE_URL` (default the API's port on the host,
-`http://host.docker.internal:<API_PORT>`). The traffic is signed-in users reading and changing
-todos over `/api/v1`, which exercises the session, membership, row-level security,
-optimistic versions and the outbox. The thresholds in `load/api.ts` are the latency and
-error budget; the run fails when one does.
-
 ## Fuzzing
 
 `bun run test:fuzz` (`scripts/fuzz.ts`) runs [Schemathesis](https://schemathesis.readthedocs.io)
@@ -497,16 +444,15 @@ bun run test:e2e --app fuzz      # builds and starts the stack itself, then fuzz
   per operation, so a run sends the same requests every time and takes a minute or two.
   A failure prints the request as a `curl` command to reproduce it.
 - Each API operation is fuzzed on its own, as a signed-in user of its own (apps/api's
-  `load:users`): most writes share one per-user rate limit, which would otherwise answer
-  429 to nearly everything after the first few operations. Limits counted per hour (file
-  uploads, documents, phone codes) still answer 429 once spent, which the document
-  declares. The users are on the Free plan, so the webhook operations mostly answer 402.
+  `load:users`, sessions in `.fuzz/sessions.json`): most writes share one per-user rate
+  limit, which would otherwise answer 429 to nearly everything after the first few
+  operations. Limits counted per hour (file uploads, Director's plans and takes) still
+  answer 429 once spent, which the document declares.
 - The AI service is called the way the API calls it, with a short-lived token signed
   with `AI_SERVICE_SECRET` for the first of those users.
 - What the API does on purpose that Schemathesis can't read is configured in
-  `schemathesis.toml`, each with a comment saying why: the assistant's answer streams
-  server-sent events whose data oRPC documents decoded, so its schema check is off. The
-  realtime stream never ends, so `scripts/fuzz.ts` leaves it out.
+  `schemathesis.toml`, each with a comment saying why. The realtime stream never ends,
+  so `scripts/fuzz.ts` leaves it out.
 
 CI runs it in the end-to-end job, on the second shard, against the stack that job
 already built and started.
@@ -515,8 +461,6 @@ already built and started.
 
 `bun run test` and `bun run test:integration` include `apps/ai`. The integration tests run
 the worker as a subprocess and check the SQLAlchemy models against the migrated database.
-The evals run on every change with the local stand-ins; see
-[python-services.md](python-services.md#evals).
 
 ## Static checks
 
@@ -531,7 +475,7 @@ The evals run on every change with the local stand-ins; see
 | `bun run lint:renovate` | `renovate.json5`, with Renovate's config validator in strict mode, so a broken or outdated setting fails here instead of Renovate quietly stopping. It also refuses any other config file Renovate would read first (`renovate.json`, `.renovaterc*`, `.github/renovate.json5` and the like), tracked or not, since a stray copy would quietly replace the real one. The version is the one `renovate.yml` runs Renovate at, read from that workflow: a local `renovate-config-validator` of it, else the `renovate/renovate` image in Docker (a large pull, once; about two seconds after that) |
 | `bun run lint:unused` | knip (`knip.jsonc`): unused files, exports and dependencies, and dependencies used but not declared |
 | `bun run lint:markers` | no `ponytail:` markers in tracked source (`scripts/check-markers.ts`): a comment says why in plain words |
-| `bun run lint:patterns` | code shapes Biome can't see (`scripts/check-patterns.ts`): in services' and packages' `src/`, `scripts/`, `load/` and `turbo/generators/`, parsed JSON cast to a type, a type argument on `$queryRaw`, an optional chain three deep, a role compared with `"member"`, an error sent without `sendError`; in tests, a fixed sleep outside a polling loop |
+| `bun run lint:patterns` | code shapes Biome can't see (`scripts/check-patterns.ts`): in services' and packages' `src/`, `scripts/` and `turbo/generators/`, parsed JSON cast to a type, a type argument on `$queryRaw`, an optional chain three deep, a role compared with `"member"`, an error sent without `sendError`; in tests, a fixed sleep outside a polling loop |
 | `bun run check-types` | tsc everywhere, basedpyright (strict) for Python |
 | `bun run db:lint` | Squawk on new migrations |
 | `bun run --cwd apps/web budget` | first-load JavaScript per route, after `next build` |
@@ -552,12 +496,12 @@ for those areas.
 | Job | Runs |
 |---|---|
 | Lint and boundaries | `bun run lint` (Biome, boundaries, knip, markers, suppressions, the linters of the workflows, shell scripts, Dockerfiles, OpenTofu and Renovate's config, each package's lint) |
-| Type-check | `bun run check-types`, then `bun run type-coverage` (strict: no `any`, type assertion or non-null `!` in any workspace's source, the repo's scripts, the load test or the code generators, but the Type-coverage exceptions) |
+| Type-check | `bun run check-types`, then `bun run type-coverage` (strict: no `any`, type assertion or non-null `!` in any workspace's source, the repo's scripts or the code generators, but the Type-coverage exceptions) |
 | Unit tests | `bun run test` |
 | Components | the stories with coverage, `test:visual` |
 | Integration tests | migrations, the drift check, then every package's `coverage` except Python's and the stories', and the scripts' and hooks' |
 | End-to-end tests | `bun run test:e2e` (the fuzzing on the second shard), the bundle budget, the restore drill |
-| Python service | ruff, basedpyright, pytest, the evals with stand-ins, then every test with coverage |
+| Python service | ruff, basedpyright, pytest, then every test with coverage |
 | Coverage | the reports of the three jobs above merged: `bun scripts/coverage.ts`, then diff-cover at 100% against the base branch (pull requests) |
 | Generated code is committed | `bun run gen`, then no diff |
 | API compatibility | oasdiff against the base branch's `apps/api/openapi.json` and `apps/ai/openapi.json`, and the event catalog's compatibility (pull requests) |
@@ -592,7 +536,6 @@ pull request until someone reviewed it; the weekly run scans every image and rep
 | When (UTC) | What |
 |---|---|
 | 02:43 daily | `kind.yml`: the kind deploy and smoke test |
-| 03:23 daily | `ci.yml` on `master`, with the load test at `PROFILE=load` (`LOAD_TARGET_RPS`, default 50) instead of the smoke, and the evals against `EVAL_MODEL` when that variable is set |
+| 03:23 daily | `ci.yml` on `master` |
 | 04:30 daily | Renovate |
 | 04:17 Mondays | `security.yml`, for vulnerabilities published against unchanged code |
-| 05:41 Wednesdays | `stripe.yml`: the fake Stripe's contract against Stripe's test mode, when `STRIPE_CONTRACT_SECRET_KEY` is set |

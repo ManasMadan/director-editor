@@ -43,11 +43,11 @@ broken pagination, off-by-one on limits. Then:
 5. **Events and jobs.** Events are emitted with `emitEvent(tx, ...)` in the same
    transaction; payload changes are additive or a new version. Producers set `jobId`;
    consumers call `parseJob` and are idempotent.
-6. **Seams.** Providers (email, SMS, push, storage, templates, translations, event bus)
+6. **Seams.** Providers (email, storage, file scanning, templates, translations, event bus)
    are called through their interface. No provider SDK imported outside its adapter.
-7. **i18n.** No user-facing literals in web, mobile, email, push or SMS. Keys exist in
-   every catalog. ICU arguments, not string concatenation.
-8. **Boundaries.** No app imports another app. Web and mobile import no backend
+7. **i18n.** No user-facing literals in the web app or emails. Keys exist in the
+   catalog. ICU arguments, not string concatenation.
+8. **Boundaries.** No app imports another app. The web app imports no backend
    packages. Modules import other modules only through `index.ts`. Web stays
    render-only (no route handlers, no server actions).
 9. **One implementation.** New helpers that duplicate something in `packages/*`

@@ -25,15 +25,14 @@ against their checksums.
 - [ ] Create the repository from this one (it's a template repository once its settings
       are applied, see step 3): `gh repo create <owner>/<name> --template
       ManasMadan/director-editor --public --clone`.
-- [ ] Rename the owner, repository, product and mobile app: `bun run rename <name>
+- [ ] Rename the owner, repository and product: `bun run rename <name>
       --owner <owner> --product "<Product>" --bundle-id <com.example.app>`. It rewrites
       every tracked file (the repository in Argo CD's `repoURL`s and the bootstrap, the
       image registry `ghcr.io/<owner>/<name>`, `CODEOWNERS` and the security links, the
-      product name in auth, the API docs and the UI's messages, the mobile bundle id and
-      URL scheme, and the `director-editor` name in compose, kind, Kubernetes labels and
+      product name in auth, the API docs and the UI's messages, and the `director-editor`
+      name in compose, kind, Kubernetes labels and
       resources, cookies and test addresses), then fails naming any line it couldn't.
-      The bundle id can't change once the app is in a store. Then `bun install` and
-      review the diff. In Claude Code, `/new-project` walks this list with you.
+      Then `bun install` and review the diff. In Claude Code, `/new-project` walks this list with you.
 - [ ] Your domains in `deploy/environments/{staging,production}/`: `site.host`,
       `storage.uploads.host` and `corsOrigins` (data.yaml), `EMAIL_FROM`. The
       `example.com` values there are placeholders.
@@ -49,8 +48,10 @@ against their checksums.
       the local services and migrates. `bun run doctor` checks the toolchain and warns
       about variables in `.env` that `.env.example` no longer has (after pulling a
       change that removed some): delete those lines by hand. A `.env` from an older
-      checkout of this repository may still have `EMAIL_PROVIDER`, `RESEND_API_KEY`,
-      `RESEND_WEBHOOK_SECRET` and `STRIPE_MOCK_PORT`: nothing reads them any more.
+      checkout of this repository may still have the variables of removed features
+      (`STRIPE_*`, `ENCRYPTION_KEYS`, `UNSUBSCRIBE_SECRET`, `VAPID_*`, `TWILIO_*`,
+      `FCM_*`, `APNS_*`, `SMS_PROVIDER`, `APP_ORIGINS`, `EXPO_*`, `AI_MODEL`,
+      `AI_EMBEDDINGS`, among others): nothing reads them any more.
 - [ ] `bun run dev`, then the tests (`CLAUDE.md` has the commands).
 
 ## 3. The GitHub repository
@@ -132,17 +133,12 @@ metadata:
   name: director-editor-api
 stringData:
   BETTER_AUTH_SECRET: ""   # openssl rand -base64 48
-  ENCRYPTION_KEYS: ""      # echo "$(date +%Y-%m):$(openssl rand -base64 32)"; the same in webhooks
-  UNSUBSCRIBE_SECRET: ""   # openssl rand -base64 32; the same in notifications
   AI_SERVICE_SECRET: ""    # openssl rand -base64 32; the same in ai
+  YOUTUBE_API_KEY: ""      # the Shorts feed (YouTube Data API v3); Director is off without it
   # GOOGLE_CLIENT_ID: ""           # Google sign-in (step 6)
   # GOOGLE_CLIENT_SECRET: ""
   # TURNSTILE_SITE_KEY: ""         # tofu output -json turnstile
   # TURNSTILE_SECRET_KEY: ""
-  # STRIPE_SECRET_KEY: ""          # billing: sk_live_… (sk_test_… on staging)
-  # STRIPE_PRICE_PRO_MONTHLY: ""   # price_…
-  # STRIPE_PRICE_PRO_YEARLY: ""
-  # VAPID_PUBLIC_KEY: ""           # browser push: the public half of notifications' pair
 ```
 
 `deploy/environments/<env>/secrets/notifications.sops.yaml`:
@@ -153,22 +149,7 @@ kind: Secret
 metadata:
   name: director-editor-notifications
 stringData:
-  UNSUBSCRIBE_SECRET: ""   # the api's value
   SMTP_URL: ""             # smtps://no-reply%40<email domain>:<SMTP_PASSWORD>@<mail host>:465 (not for previews: their mail stays in their own Mailpit)
-  # SMS_PROVIDER: twilio           # with the three below
-  # TWILIO_ACCOUNT_SID: ""         # AC…
-  # TWILIO_AUTH_TOKEN: ""
-  # TWILIO_FROM: ""                # +E.164 number, or a Messaging Service SID (MG…)
-  # FCM_PROJECT_ID: ""             # Android push: from the Firebase service account JSON
-  # FCM_CLIENT_EMAIL: ""
-  # FCM_PRIVATE_KEY: ""
-  # APNS_KEY_ID: ""                # iOS push: the .p8 key's id (step 6)
-  # APNS_TEAM_ID: ""
-  # APNS_PRIVATE_KEY: ""           # the .p8 file's contents
-  # APNS_BUNDLE_ID: ""             # com.directoreditor.app, or yours after the rename
-  # VAPID_PUBLIC_KEY: ""           # browser push: bunx web-push generate-vapid-keys
-  # VAPID_PRIVATE_KEY: ""
-  # VAPID_SUBJECT: ""              # mailto:you@<domain>
 ```
 
 `deploy/environments/<env>/secrets/webhooks.sops.yaml`:
@@ -179,9 +160,7 @@ kind: Secret
 metadata:
   name: director-editor-webhooks
 stringData:
-  ENCRYPTION_KEYS: ""            # the api's value
   STALWART_WEBHOOK_SECRET: ""    # the mail server's (its platform Secret below)
-  # STRIPE_WEBHOOK_SECRET: ""    # whsec_…, from the webhook endpoint (step 6)
 ```
 
 `deploy/environments/<env>/secrets/ai.sops.yaml` (the AI worker uses it too):
@@ -193,10 +172,7 @@ metadata:
   name: director-editor-ai
 stringData:
   AI_SERVICE_SECRET: ""    # the api's value
-  AI_MODEL: ""             # e.g. anthropic:claude-sonnet-5; production refuses local:*
-  AI_EMBEDDINGS: ""        # a real embedding model; production refuses hashing
-  ANTHROPIC_API_KEY: ""    # or OPENAI_API_KEY, for the provider AI_MODEL names
-  # AI_FALLBACK_MODEL: ""
+  GOOGLE_API_KEY: ""       # the Gemini API key, for DIRECTOR_MODEL (docs/environment.md)
 ```
 
 `deploy/platform/secrets/<env>/stalwart.sops.yaml` (the mail server; the full list of
@@ -318,39 +294,6 @@ Each is optional; turn on the ones you use, per environment.
       `http://localhost:3000/api/auth/callback/google` for local development), and the
       site's origin as an authorized JavaScript origin. Its id and secret go in the api's
       Secret (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`).
-- [ ] **Stripe.** Two recurring prices for the Pro plan (monthly and yearly), then a
-      webhook endpoint at `https://<site host>/webhooks/stripe` (Developers, Webhooks)
-      listening to exactly these events, the ones
-      `apps/api/src/modules/billing/billing-events.processor.ts` acts on:
-      `checkout.session.completed`, `customer.subscription.created`,
-      `customer.subscription.updated`, `customer.subscription.deleted`,
-      `customer.subscription.paused`, `customer.subscription.resumed`, `invoice.paid` and
-      `invoice.payment_failed` (it re-syncs the subscription on any `invoice.*` event and
-      tells the owners about a failed payment). Its signing secret (`whsec_…`) goes in the
-      webhooks Secret, the key and prices in the api's. Staging uses test mode.
-- [ ] **The mobile app on EAS.** An expo.dev account, then:
-      - `(cd apps/mobile && bunx eas-cli init)` creates the project and prints its id: the
-        `EAS_PROJECT_ID` repository variable. A robot token from expo.dev is the
-        `EXPO_TOKEN` secret. Until the variable is set, `mobile.yml` does nothing.
-      - `EXPO_PUBLIC_API_URL` per EAS environment (`development`, `preview`,
-        `production`), the site's origin for each:
-        `(cd apps/mobile && bunx eas-cli env:create --environment production --name EXPO_PUBLIC_API_URL --value https://<site host> --visibility plaintext)`.
-      - Store credentials: an Apple Developer account and a Google Play developer
-        account, the apps created in App Store Connect and the Play Console, then
-        `(cd apps/mobile && bunx eas-cli credentials)` for the signing certificates, and
-        an App Store Connect API key and a Play service account for `eas submit`.
-      - Push: an APNs key (`.p8`, Apple Developer, Keys, with Apple Push Notifications)
-        gives `APNS_KEY_ID`, `APNS_TEAM_ID` and `APNS_PRIVATE_KEY`; a Firebase project
-        with the Android app, and a service account's JSON key, gives `FCM_PROJECT_ID`,
-        `FCM_CLIENT_EMAIL` and `FCM_PRIVATE_KEY`. Both go in notifications' Secret.
-      - Optional, links that open the app and its passkeys: the team id, bundle id,
-        package and signing fingerprints in each environment's web `env`, the
-        fingerprints in its api's, and the team id and fingerprints in the EAS environment
-        ([web-and-mobile.md](web-and-mobile.md), "Universal links and App Links"). Off
-        until set; set all four or none, since a partial set stops the web app.
-      - The bundle id, package and scheme in `apps/mobile/app.config.ts` can't change
-        after the first store release: rename them before it.
-
 ## 7. The first deploy: check what only a real cluster shows
 
 CI tests everything it can against local stand-ins (kind, fake providers, a local
@@ -374,7 +317,7 @@ Stalwart and RustFS); these need the real environment, once:
 - [ ] Re-encryption: `kubectl -n director-editor create job --from=cronjob/director-editor-reencrypt
       reencrypt-$(date +%s)` completes (the rotate-secrets runbook).
 - [ ] Third-party providers you turned on, each with a real account once: Google
-      sign-in, Stripe test mode, Twilio, push on real devices, the AI provider.
+      sign-in, YouTube, Gemini.
 
 These, and what CI can't check in the app itself, are listed with how to check each in
 [testing.md](testing.md#not-tested-automatically).

@@ -54,7 +54,7 @@ else's. Limit it to one attempt per failure, so it can't loop.
 ## Blocking egress in every CI job
 
 Every job runs `step-security/harden-runner` first. The jobs whose traffic is known
-(`changes`, `pr-title`, `ci-ok` and the weekly Stripe check) block anything outside
+(`changes`, `pr-title` and `ci-ok`) block anything outside
 their allowlists; the others only audit.
 
 Not done because each remaining job's real destinations (Docker Hub, ghcr.io, quay.io,
@@ -85,8 +85,7 @@ still blocks before making it the default.
 
 ## Search
 
-There is no search across a workspace's own data (todos, documents, files). The AI
-service's pgvector search covers the assistant's passages, which is a different job.
+There is no search across a workspace's own data (saved shorts, plans, files).
 
 Not done because what to search, and how results should rank, depends on the product
 built on the template; a generic search over every table would mostly be in the way.
@@ -94,5 +93,5 @@ built on the template; a generic search over every table would mostly be in the 
 To do it: start with Postgres full-text search, a generated `tsvector` column with a GIN
 index on each table worth searching, queried inside the tenant context so row-level
 security still applies. Add a `search` procedure to the contracts, a client hook and a
-command palette in the web and mobile shells. Move to a dedicated engine only once
+command palette in the web app's shell. Move to a dedicated engine only once
 Postgres measurably can't keep up.

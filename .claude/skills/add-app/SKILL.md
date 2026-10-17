@@ -63,8 +63,8 @@ apps/worker is the one to copy.
    agent checks them).
 
 A Python service copies `apps/ai` instead (its `pyproject.toml`, `deploy/docker/
-ai.Dockerfile`, the `python` CI job). A new client app copies `apps/web` or `apps/mobile`
-and talks to the API only through `packages/client`.
+ai.Dockerfile`, the `python` CI job). A new client app copies `apps/web` and talks to the API
+only through `packages/client`.
 
 ## Done when
 

@@ -16,8 +16,8 @@ audit log, checks uploads (ClamAV) and runs scheduled maintenance.
   `EventBus` seam (BullMQ today).
 - `src/audit/audit.processor.ts`: event to audit row, deduplicated on the event id.
 - `src/maintenance/maintenance.processor.ts`: `SCHEDULES` (cron, UTC) and `run()`.
-- `src/files/`: upload scanning and storage cleanup.
-- `src/realtime/`: pushes `todo.*` events to connected clients.
+- `src/files/`: upload scanning and storage cleanup; a checked upload nudges the
+  uploader's screens (`src/realtime/publish.ts`).
 
 ## Gotchas
 

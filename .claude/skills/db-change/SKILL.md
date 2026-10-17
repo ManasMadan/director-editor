@@ -9,7 +9,7 @@ description: Change the database schema safely (new table or column, index, RLS 
    data; `docs/database.md` lists the owners). Follow `base.prisma`: `uuidv7()` ids,
    `timestamptz(3)`, `@map`/`@@map` to snake_case, `@@schema` on every model. A tenant
    table has `orgId` with an `organization` relation `onDelete: Cascade` and an index on
-   `[orgId, id(sort: Desc)]`, like `Todo` in `app.prisma`.
+   `[orgId, id(sort: Desc)]`, like `ShortReaction` in `app.prisma`.
 2. `bun run db:migrate`. Prisma asks for a name, writes
    `packages/db/prisma/migrations/<timestamp>_<name>/migration.sql` and applies it.
 3. Prisma can't express policies, grants or functions: append them to that

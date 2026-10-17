@@ -3,8 +3,8 @@
 Everything runs on k3s on machines you run (one node or several; `infra/tofu` sets
 them up), and on kind locally, from the same charts. Nothing is a managed service:
 Postgres, Valkey, object storage, mail and observability all run in the cluster.
-Cloudflare stays in front (DNS, proxy, WAF), and third-party APIs (AI models, Twilio,
-APNs/FCM, Stripe, Google, Turnstile) stay external.
+Cloudflare stays in front (DNS, proxy, WAF), and third-party APIs (Gemini and YouTube,
+Google sign-in, Turnstile) stay external.
 
 ```
 deploy/
@@ -102,10 +102,11 @@ There are two kinds of secret, and each has one home:
   read or change one, and no password ever changes under a running database. They're
   never in git and nobody needs to know them. After a restore into a new cluster, the
   new ones are set on the restored roles (see Backups).
-- **Everything else** (auth and encryption keys, API keys, the mail server's and
-  Cloudflare's credentials): committed to this repository encrypted with SOPS and age,
-  and decrypted by Argo CD into the cluster. They must survive the cluster (losing
-  `ENCRYPTION_KEYS` makes stored data unreadable), come from outside it, or both.
+- **Everything else** (auth keys, provider API keys, the mail server's and Cloudflare's
+  credentials): committed to this repository encrypted with SOPS and age, and decrypted
+  by Argo CD into the cluster. They must survive the cluster (losing
+  `BETTER_AUTH_SECRET` makes what better-auth encrypted unreadable), come from outside
+  it, or both.
 
 | Secret | Keys | From |
 |---|---|---|
@@ -126,16 +127,13 @@ There are two kinds of secret, and each has one home:
 
 What each service's Secret holds, at least:
 
-- `api`: `BETTER_AUTH_SECRET`, `ENCRYPTION_KEYS`, `UNSUBSCRIBE_SECRET`,
-  `AI_SERVICE_SECRET`; and whatever it uses of `GOOGLE_CLIENT_*`, `TURNSTILE_*`,
-  `STRIPE_*`, `VAPID_PUBLIC_KEY`.
-- `notifications`: `UNSUBSCRIBE_SECRET` (the api's), `SMTP_URL` =
+- `api`: `BETTER_AUTH_SECRET`, `AI_SERVICE_SECRET`; and whatever it uses of `GOOGLE_CLIENT_*`, `TURNSTILE_*`,
+  `YOUTUBE_API_KEY`.
+- `notifications`: `SMTP_URL` =
   `smtps://no-reply%40<email domain>:<SMTP_PASSWORD>@<mail host>:465` (the mail
-  server's submission account); and `TWILIO_*`, `FCM_*`, `APNS_*`, `VAPID_*` as used.
-- `webhooks`: `ENCRYPTION_KEYS` (the api's), `STALWART_WEBHOOK_SECRET` (the mail
-  server's), `STRIPE_WEBHOOK_SECRET` with billing.
-- `ai`: `AI_SERVICE_SECRET` (the api's), the model provider's key and `AI_MODEL`,
-  `AI_EMBEDDINGS`.
+  server's submission account).
+- `webhooks`: `STALWART_WEBHOOK_SECRET` (the mail server's).
+- `ai`: `AI_SERVICE_SECRET` (the api's) and `GOOGLE_API_KEY`, for `DIRECTOR_MODEL`.
 
 Plain settings shared by every environment (URLs between services, the site's origin,
 ports) are in the stack chart's values; per-environment ones go in
@@ -229,7 +227,7 @@ replace it, because it leaked or someone who had it left:
 ## Re-encrypting after a key rotation
 
 The stack has a suspended CronJob, `<release>-reencrypt`, that never runs on its own.
-After rotating `BETTER_AUTH_SECRETS` or `ENCRYPTION_KEYS` (the rotate-secrets skill),
+After rotating `BETTER_AUTH_SECRETS` (the rotate-secrets skill),
 start a Job from it:
 
 ```sh
