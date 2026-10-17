@@ -4,7 +4,7 @@ import { isErrorCode } from "./errors";
 import { fileContentPath } from "./files";
 import { fileIdSchema } from "./ids";
 import { entriesOf, fieldOf, hasKey, keysOf, required } from "./objects";
-import { pageInput, toPage } from "./pagination";
+import { page, pageInput, toPage } from "./pagination";
 
 describe("toPage", () => {
   const rows = ["a", "b", "c"].map((id) => ({ id }));
@@ -22,6 +22,19 @@ describe("toPage", () => {
     expect(pageInput.safeParse({ limit: 101 }).success).toBe(false);
     expect(pageInput.safeParse({ limit: 0 }).success).toBe(false);
     expect(pageInput.safeParse({ cursor: "not-a-uuid" }).success).toBe(false);
+  });
+});
+
+describe("page", () => {
+  it("describes a page of items and the cursor to the next one", () => {
+    const pageOfIds = page(fileIdSchema);
+    const id = fileIdSchema.parse("01890a5d-ac96-774b-bcce-b302099a8057");
+    expect(pageOfIds.parse({ items: [id], nextCursor: null })).toEqual({
+      items: [id],
+      nextCursor: null,
+    });
+    expect(pageOfIds.safeParse({ items: ["not-an-id"], nextCursor: null }).success).toBe(false);
+    expect(pageOfIds.safeParse({ items: [], nextCursor: "not-a-uuid" }).success).toBe(false);
   });
 });
 
