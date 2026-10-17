@@ -297,10 +297,16 @@ async def _take_turns(session: AsyncSession, user_id: UUID) -> None:
     """Holds the user's lock until the session's transaction ends, so their index requests
     (a double click, two tabs) claim one at a time: each sees what the one before it
     committed, and the same short twice is one plan, not a refusal. A transaction-scoped
-    lock, so it holds behind a transaction-mode pooler too."""
+    lock, so it holds behind a transaction-mode pooler too. Its key names its purpose, so
+    another lock on the same user never queues behind index requests."""
     _ = await session.execute(
-        select(func.pg_advisory_xact_lock(func.hashtextextended(str(user_id), 0)))
+        select(func.pg_advisory_xact_lock(func.hashtextextended(index_lock_key(user_id), 0)))
     )
+
+
+def index_lock_key(user_id: UUID) -> str:
+    """The advisory lock a user's index requests take turns on."""
+    return f"ai.director-index:{user_id}"
 
 
 def _violates(error: IntegrityError, index: str) -> bool:

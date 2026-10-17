@@ -21,7 +21,7 @@ from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from app.db.models import DirectorPlan
-from app.director import PLANNER_RETRIES, Director, ReviewInterrupted
+from app.director import PLANNER_RETRIES, Director, ReviewInterrupted, index_lock_key
 from app.errors import AppError
 from app.queues import JobLike
 from app.schemas import (
@@ -727,7 +727,9 @@ def test_a_member_s_index_requests_take_turns(client: TestClient) -> None:
     portal = client.portal
     assert portal is not None
     with migrator() as db, db.transaction():
-        db.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s::text, 0))", (str(user),))
+        db.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s::text, 0))", (index_lock_key(user),)
+        )
         db.execute("SELECT set_config('app.org_id', %s, true)", (str(org),))
         [first] = db.execute(
             """INSERT INTO ai.director_plan (org_id, created_by, video_id, updated_at)
