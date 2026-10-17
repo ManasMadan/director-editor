@@ -55,6 +55,29 @@ async def test_fetch_audio_returns_none_when_the_upload_fails() -> None:
     assert await fetch_audio(VIDEO, BUCKET, run=_writes_the_file, upload=upload) is None
 
 
+async def test_fetch_audio_returns_none_when_the_runner_raises() -> None:
+    # yt-dlp missing or not executable: create_subprocess_exec raises instead of
+    # returning an exit code.
+    async def run(args: list[str]) -> tuple[int, bytes]:
+        raise FileNotFoundError("yt-dlp: not found")
+
+    async def upload(bucket: str, key: str, path: Path) -> None:
+        pytest.fail("never uploads when the runner couldn't even start")
+
+    assert await fetch_audio(VIDEO, BUCKET, run=run, upload=upload) is None
+
+
+@pytest.mark.parametrize("malformed", ["../evil/xyz", "short"])
+async def test_fetch_audio_refuses_a_malformed_video_id(malformed: str) -> None:
+    async def run(args: list[str]) -> tuple[int, bytes]:
+        pytest.fail("never runs yt-dlp for an id that failed validation")
+
+    async def upload(bucket: str, key: str, path: Path) -> None:
+        pytest.fail("never uploads for an id that failed validation")
+
+    assert await fetch_audio(malformed, BUCKET, run=run, upload=upload) is None
+
+
 async def test_run_yt_dlp_runs_a_real_subprocess_and_reports_its_exit() -> None:
     # A harmless process standing in for yt-dlp: no network, no binary this test depends on.
     code, stderr = await run_yt_dlp(

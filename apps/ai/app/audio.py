@@ -9,6 +9,7 @@ logged and swallowed, never raised: a short with no audio capture still gets its
 """
 
 import asyncio
+import re
 import tempfile
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -16,6 +17,7 @@ from pathlib import Path
 from google.cloud import storage  # pyright: ignore[reportMissingTypeStubs]
 
 from app.log import log
+from app.schemas import VIDEO_ID_PATTERN
 
 type Runner = Callable[[list[str]], Awaitable[tuple[int | None, bytes]]]
 type Uploader = Callable[[str, str, Path], Awaitable[None]]
@@ -55,6 +57,11 @@ async def fetch_audio(
     """Downloads `video_id`'s audio with yt-dlp and uploads it to `bucket`, returning its
     object key (`audio/{video_id}.m4a`). Any failure is logged and answered with None,
     never raised: a short with no audio capture still gets its shot plan."""
+    if not re.fullmatch(VIDEO_ID_PATTERN, video_id):
+        # Also what keeps it out of the temp file path and the GCS key below: a malformed
+        # id never reaches either, so there's nothing there to escape with.
+        log.warning("refusing to fetch audio for a malformed video id")
+        return None
     key = f"audio/{video_id}.m4a"
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / f"{video_id}.m4a"
@@ -67,7 +74,12 @@ async def fetch_audio(
             str(Path(tmp) / f"{video_id}.%(ext)s"),
             f"https://www.youtube.com/watch?v={video_id}",
         ]
-        code, stderr = await run(args)
+        try:
+            code, stderr = await run(args)
+        except Exception:
+            # yt-dlp missing, not executable, or otherwise unable to start.
+            log.exception("couldn't run yt-dlp", video_id=video_id)
+            return None
         if code != 0:
             log.warning(
                 "yt-dlp failed to fetch a short's audio",
