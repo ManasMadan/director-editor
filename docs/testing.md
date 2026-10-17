@@ -358,7 +358,6 @@ better-typed call can say it instead.
 
 | File | Line | Why |
 |---|---|---|
-| `packages/i18n/src/index.ts` | `bundledMessages`' `catalogs[locale] as Messages` | a translation has English's keys and arguments in other words, and TypeScript can only read a message's arguments from English's literal text; the ICU test checks every catalog's arguments against English |
 | `packages/i18n/src/loosely.ts` | `loosely`'s `t as LooseTranslate` | a key known only at run time can't be paired with its arguments at compile time; the ICU test checks them instead |
 | `packages/db/src/tenancy.ts` | `asTx`'s `tx as Tx` | `Tx` is a brand only the transaction helpers may give a client, so there is nothing to check at run time |
 | `packages/nest-common/src/env.ts` | `forService`'s `Object.fromEntries(...) as {...}` | TypeScript can't type an object whose keys are built from a generic string (`${service}_DATABASE_URL`), and each service's env schema needs its own names typed |

@@ -45,10 +45,7 @@ const catalogs = { en } satisfies Record<Locale, Catalog>;
 
 /** Messages shipped in this package. */
 export const bundledMessages: MessageSource = {
-  // Typed as English, whose literal text gives each key's arguments: every catalog has
-  // English's keys (Catalog, above) and the same arguments (index.test.ts), in its words.
-  // type-coverage:ignore-next-line
-  load: async (locale) => catalogs[locale] as Messages,
+  load: async (locale) => catalogs[locale],
 };
 
 export type Translator = ReturnType<typeof createTranslator<Messages>>;
