@@ -22,7 +22,7 @@ from uuid import UUID
 
 import httpx
 from google.genai.types import MediaResolution
-from pydantic_ai import Agent, AgentRunResult, BinaryContent, VideoUrl
+from pydantic_ai import Agent, BinaryContent, VideoUrl
 from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError
 from pydantic_ai.models import Model
 from pydantic_ai.models.google import GoogleModel, GoogleModelSettings
@@ -231,8 +231,37 @@ def create_director_model(settings: Settings) -> GoogleModel | None:
 
 def create_index_model(settings: Settings, model_name: str) -> GoogleModel:
     """A Gemini model for indexing (writing a plan unattended): INDEX_MODEL or, once its
-    retries are spent, INDEX_FALLBACK_MODEL (see `Director._run_planner`)."""
+    retries are spent, INDEX_FALLBACK_MODEL (see `index_short`)."""
     return create_google_model(settings, model_name)
+
+
+# Answered unattended (no member waiting): a plan watches the whole short and thinks.
+PLANNER_SETTINGS = GoogleModelSettings(
+    thinking="medium",
+    timeout=WATCH_TIMEOUT_SECONDS,
+    google_video_resolution=MediaResolution.MEDIA_RESOLUTION_MEDIUM,
+)
+
+
+def create_planner_agent(model: Model) -> Agent[None, ShotPlanDraft]:
+    """An agent that writes a shot plan from a video, over `model`. `index_short` runs
+    one of these as the primary attempt and one as the fallback; `Director` builds its
+    pair from INDEX_MODEL and INDEX_FALLBACK_MODEL at start-up, and the seed-building
+    script (apps/ai/scripts/build_seeds.py) builds its own the same way, so the prompt
+    and model settings are written once.
+
+    ShotPlanDraft, not ShotPlan: Vertex AI answers 400 INVALID_ARGUMENT to a schema with
+    a minItems/maxItems anywhere in it (app/schemas.py's module comment), which the real
+    ShotPlan's Field constraints would put there. `index_short`'s `repair_plan` call
+    turns the draft this agent returns into a real ShotPlan, restoring those constraints
+    and validating against them."""
+    return Agent(
+        model,
+        output_type=ShotPlanDraft,
+        instructions=PLAN_INSTRUCTIONS,
+        model_settings=PLANNER_SETTINGS,
+        defer_model_check=True,
+    )
 
 
 def youtube_video(video_id: str) -> VideoUrl:
@@ -316,6 +345,50 @@ def best_range(review: TakeReview, kind: str) -> tuple[int | None, int | None]:
     return (start_ms, end_ms) if end_ms > start_ms else (None, None)
 
 
+async def index_short(
+    planner: Agent[None, ShotPlanDraft],
+    planner_name: str,
+    planner_fallback: Agent[None, ShotPlanDraft],
+    fallback_name: str,
+    video_id: str,
+    usage: RunUsage,
+    usage_limits: UsageLimits,
+) -> tuple[ShotPlan, str]:
+    """Watches `video_id` with `planner` and returns its repaired shot plan and the name
+    of whichever model actually wrote it: `planner_name`, or `fallback_name` once
+    `planner`'s retries are spent or it refuses in a way `planner_fallback` might not
+    (`_falls_back_to_the_other_model`). Retries a transient failure (a 5xx or 429) on
+    `planner` a couple more times with a short backoff before falling back, with no retry
+    on `planner_fallback` first. Anything else (a refusal about the video, a broken
+    contract) isn't retried and doesn't fall back: a different model watching the same
+    video wouldn't fix what's wrong with the video.
+
+    One implementation of "index a short into a usable plan", shared by the plan job
+    (`Director.analyze`, whose planner and its fallback it builds once at start-up from
+    INDEX_MODEL and INDEX_FALLBACK_MODEL) and the seed-building script
+    (apps/ai/scripts/build_seeds.py, which builds its own pair from `create_index_model`
+    and a budget of its own instead of a reservation's)."""
+    messages = [youtube_video(video_id), "Write the shot plan for this short."]
+    last_error: Exception | None = None
+    for attempt in range(PLANNER_RETRIES + 1):
+        try:
+            result = await planner.run(messages, usage=usage, usage_limits=usage_limits)
+            return repair_plan(result.output, None), planner_name
+        except Exception as error:
+            last_error = error
+            if _falls_back_to_the_other_model(error):
+                break
+            if not retryable(error):
+                raise
+            if attempt < PLANNER_RETRIES:
+                await asyncio.sleep(PLANNER_RETRY_BACKOFF_SECONDS * (attempt + 1))
+    log.warning(
+        "falling back to the index fallback model", video_id=video_id, error=str(last_error)
+    )
+    result = await planner_fallback.run(messages, usage=usage, usage_limits=usage_limits)
+    return repair_plan(result.output, None), fallback_name
+
+
 class Director:
     def __init__(
         self,
@@ -340,35 +413,13 @@ class Director:
         self._queue = queue
         self._redis = redis
         self._http = http
-        planner_settings = GoogleModelSettings(
-            thinking="medium",
-            timeout=WATCH_TIMEOUT_SECONDS,
-            google_video_resolution=MediaResolution.MEDIA_RESOLUTION_MEDIUM,
-        )
-        # ShotPlanDraft, not ShotPlan: Vertex AI answers 400 INVALID_ARGUMENT to a schema
-        # with a minItems/maxItems anywhere in it (app/schemas.py's module comment), which
-        # the real ShotPlan's Field constraints would put there. repair_plan turns the
-        # draft `_run_planner` returns into a real ShotPlan, restoring those constraints
-        # and validating against them.
-        self._planner = Agent(
-            index_model,
-            output_type=ShotPlanDraft,
-            instructions=PLAN_INSTRUCTIONS,
-            model_settings=planner_settings,
-            defer_model_check=True,
-        )
-        # Tried once, after `_run_planner` gives up on `self._planner` (INDEX_MODEL):
+        self._planner = create_planner_agent(index_model)
+        # Tried once, after `index_short` gives up on `self._planner` (INDEX_MODEL):
         # INDEX_MODEL's video calls fail intermittently (a 500) and usually succeed on a
         # retry, but not always, and a refusal that's about the model itself (a bad key,
         # an auth error, a model it doesn't recognize) goes straight to the fallback
         # instead, since retrying the same model and key wouldn't change the answer.
-        self._planner_fallback = Agent(
-            index_fallback_model,
-            output_type=ShotPlanDraft,
-            instructions=PLAN_INSTRUCTIONS,
-            model_settings=planner_settings,
-            defer_model_check=True,
-        )
+        self._planner_fallback = create_planner_agent(index_fallback_model)
         self._scout = Agent(
             model,
             output_type=SceneCheck,
@@ -467,16 +518,21 @@ class Director:
             return
         usage = RunUsage()
         try:
-            result, answering_model = await self._run_planner(
-                video_id, usage, UsageLimits(total_tokens_limit=reservation.tokens)
-            )
-            # Gemini's plan validates field by field but can still be inconsistent with
-            # itself (overlapping shots, a script line past its shot's end, more shots or
-            # steps than the prompt asked for, since their limit reaches it as prose, not
-            # as a schema bound); the video's own length isn't known here (Gemini watches
+            # index_short: retries, falls back, and repairs what Gemini's plan validates
+            # field by field but can still leave inconsistent with itself (overlapping
+            # shots, a script line past its shot's end, more shots or steps than the
+            # prompt asked for). The video's own length isn't known here (Gemini watches
             # it by URL, never downloaded), so the repair only clamps source ranges to
             # MAX_SHORT_SECONDS.
-            repaired = repair_plan(result.output, None)
+            repaired, answering_model = await index_short(
+                self._planner,
+                self._index_model_name,
+                self._planner_fallback,
+                self._index_fallback_model_name,
+                video_id,
+                usage,
+                UsageLimits(total_tokens_limit=reservation.tokens),
+            )
         except Exception as error:
             # Includes the run's token cap: a short needing more would spend it again.
             refused = _refusal_code(error) if isinstance(error, ModelHTTPError) else None
@@ -502,38 +558,6 @@ class Director:
                 )
             )
         await publish_to_org(self._redis, org_id, CHANGED)
-
-    async def _run_planner(
-        self, video_id: str, usage: RunUsage, usage_limits: UsageLimits
-    ) -> tuple[AgentRunResult[ShotPlanDraft], str]:
-        """Runs the planner and the name of whichever model answered. Retries a transient
-        failure (a 5xx or 429) on INDEX_MODEL a couple more times with a short backoff;
-        falls back to INDEX_FALLBACK_MODEL, with no retry first, on a refusal that's about
-        the model itself rather than the video (`_falls_back_to_the_other_model`) or once
-        INDEX_MODEL's retries are spent. Anything else (a refusal about the video, a
-        broken contract) isn't retried and doesn't fall back: a different model watching
-        the same video wouldn't fix what's wrong with the video."""
-        messages = [youtube_video(video_id), "Write the shot plan for this short."]
-        last_error: Exception | None = None
-        for attempt in range(PLANNER_RETRIES + 1):
-            try:
-                result = await self._planner.run(messages, usage=usage, usage_limits=usage_limits)
-                return result, self._index_model_name
-            except Exception as error:
-                last_error = error
-                if _falls_back_to_the_other_model(error):
-                    break
-                if not retryable(error):
-                    raise
-                if attempt < PLANNER_RETRIES:
-                    await asyncio.sleep(PLANNER_RETRY_BACKOFF_SECONDS * (attempt + 1))
-        log.warning(
-            "falling back to the index fallback model",
-            video_id=video_id,
-            error=str(last_error),
-        )
-        result = await self._planner_fallback.run(messages, usage=usage, usage_limits=usage_limits)
-        return result, self._index_fallback_model_name
 
     async def _fail_plan(self, org_id: UUID, plan_id: UUID, code: ErrorCode) -> None:
         async with tenant(org_id) as session:

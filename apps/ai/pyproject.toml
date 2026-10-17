@@ -87,7 +87,7 @@ DEP002 = ["psycopg"]
 # keeps the generated OpenAPI schema (and therefore the TypeScript types) precise.
 typeCheckingMode = "strict"
 pythonVersion = "3.14"
-include = ["app", "tests"]
+include = ["app", "tests", "scripts"]
 reportUnusedCallResult = false
 # A job or code added on the TypeScript side regenerates a Literal; every `match` over it
 # must then handle the new value.
@@ -99,6 +99,7 @@ reportUnnecessaryTypeIgnoreComment = true
 executionEnvironments = [
   { root = "tests", extraPaths = ["."] },
   { root = "app", extraPaths = ["."] },
+  { root = "scripts", extraPaths = ["."] },
 ]
 
 [tool.pytest.ini_options]
