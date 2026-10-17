@@ -39,7 +39,10 @@ fixes for what usually goes wrong.
    run on the pull request that can run on your machine, for the areas you changed
    (`scripts/pre-push.ts`, see [docs/testing.md](docs/testing.md#before-a-push)). That can
    take a while for a change to shared code, and the end-to-end suite in it needs
-   `bun dev` stopped; `git push --no-verify` skips it and leaves CI to decide.
+   `bun dev` stopped; `git push --no-verify` skips it and leaves CI to decide. And
+   when a pull, merge, rebase or branch switch changes `bun.lock`, they run
+   `bun install --frozen-lockfile` (`scripts/sync-install.ts`), so `node_modules` never
+   falls behind the lockfile.
 4. Open a pull request. It's squash-merged, so its title becomes the one commit on
    master and follows
    [Conventional Commits](https://www.conventionalcommits.org) with a workspace scope:

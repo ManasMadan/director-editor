@@ -1,0 +1,2 @@
+# A merge or pull that changes bun.lock reinstalls the dependencies (scripts/sync-install.ts).
+bun scripts/sync-install.ts ORIG_HEAD HEAD

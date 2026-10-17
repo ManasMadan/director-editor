@@ -1,0 +1,5 @@
+# A branch switch that changes bun.lock reinstalls the dependencies
+# (scripts/sync-install.ts). The third argument is 1 for a branch checkout, 0 for files.
+if [ "$3" = "1" ]; then
+  bun scripts/sync-install.ts "$1" "$2"
+fi
