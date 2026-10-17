@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from app.heartbeat import HEARTBEAT, alive
 from app.settings import get_settings
+from tests.fakes import otlp_collector, serve
 from tests.support import ENV, body, error_of, headers, new_org
 
 pytestmark = pytest.mark.integration
@@ -118,13 +119,17 @@ def test_the_worker_runs_and_stops_cleanly_without_director_s_model(client: Test
     assert client is not None
     # Whatever an earlier worker left: this one must prove itself.
     HEARTBEAT.unlink(missing_ok=True)
-    worker = subprocess.Popen([sys.executable, "-m", "app.worker"], env={**os.environ, **ENV})
-    try:
-        deadline = time.monotonic() + 20
-        while time.monotonic() < deadline and not alive():
-            time.sleep(0.2)
-        # Its liveness probe passes once its loop runs.
-        assert alive()
-    finally:
-        worker.terminate()
-        assert worker.wait(timeout=10) == 0
+    with serve({"/v1/traces": otlp_collector, "/v1/metrics": otlp_collector}) as collector:
+        # With a collector configured, as in production: it starts its exporters and still
+        # runs and stops cleanly. (An idle worker records nothing, so nothing is sent.)
+        env = {**os.environ, **ENV, "OTEL_EXPORTER_OTLP_ENDPOINT": collector.url}
+        worker = subprocess.Popen([sys.executable, "-m", "app.worker"], env=env)
+        try:
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline and not alive():
+                time.sleep(0.2)
+            # Its liveness probe passes once its loop runs.
+            assert alive()
+        finally:
+            worker.terminate()
+            assert worker.wait(timeout=10) == 0

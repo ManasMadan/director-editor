@@ -56,6 +56,11 @@ GEMINI_MODEL = "gemini-test"
 GEMINI_PATH = f"/v1beta/models/{GEMINI_MODEL}:generateContent"
 
 
+def otlp_collector(_body: bytes) -> Reply:
+    """An OpenTelemetry collector's OTLP/HTTP endpoint, accepting everything."""
+    return 200, {}
+
+
 def gemini_output(args: Mapping[str, object], *, tokens: int = 1_000) -> Callable[[bytes], Reply]:
     """The Gemini API's generateContent answering with Pydantic AI's output tool
     (`final_result`) called with `args`, having used `tokens` tokens."""
