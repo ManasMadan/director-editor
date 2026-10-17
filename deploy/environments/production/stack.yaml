@@ -25,5 +25,13 @@ services:
     autoscaling: { minReplicas: 1, maxReplicas: 3 }
   api:
     autoscaling: { minReplicas: 1, maxReplicas: 3 }
+  ai:
+    env:
+      # The production express key addresses every Vertex AI model by its full resource
+      # name, which needs the project; not a secret.
+      GOOGLE_CLOUD_PROJECT: project-18e15b18-c92e-44bb-9bf
+  ai-worker:
+    env:
+      GOOGLE_CLOUD_PROJECT: project-18e15b18-c92e-44bb-9bf
   clamav:
     enabled: true

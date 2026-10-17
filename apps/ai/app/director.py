@@ -194,18 +194,45 @@ def _google_provider(settings: Settings) -> GoogleProvider | GoogleCloudProvider
     )
 
 
+def _model_address(settings: Settings, model_name: str) -> str:
+    """What to send Gemini for `model_name` (a short name, e.g. "gemini-4-argon"). On
+    Vertex, an API key drops any project or location from the request unless the model is
+    addressed by its full resource name, which Vertex always routes to us-central1
+    otherwise; the resource name reaches VERTEX_LOCATION instead (task-2.1.1b-brief.md's
+    "Why"). On the Gemini API, the bare name, as before."""
+    if not settings.google_vertex:
+        return model_name
+    project = settings.google_cloud_project
+    if project is None:
+        # Settings._vertex_has_a_project refuses this at boot; a model built another way
+        # (bypassing get_settings()) would be the only way to reach this.
+        raise RuntimeError("GOOGLE_VERTEX=true without GOOGLE_CLOUD_PROJECT")
+    return (
+        f"projects/{project}/locations/{settings.vertex_location}"
+        f"/publishers/google/models/{model_name}"
+    )
+
+
+def create_google_model(settings: Settings, model_name: str) -> GoogleModel:
+    """Builds a Gemini model for `model_name` (the short name every caller passes, kept
+    short everywhere the service records or reports a model: DirectorPlan.model, the usage
+    ledger, logs). Every GoogleModel( the service builds goes through this, so Vertex's
+    addressing (`_model_address`) applies once, everywhere."""
+    return GoogleModel(_model_address(settings, model_name), provider=_google_provider(settings))
+
+
 def create_director_model(settings: Settings) -> GoogleModel | None:
     """The Gemini model Director's scene checks and reviews use; None when DIRECTOR_MODEL
     isn't set."""
     if not settings.director_model:
         return None
-    return GoogleModel(settings.director_model, provider=_google_provider(settings))
+    return create_google_model(settings, settings.director_model)
 
 
 def create_index_model(settings: Settings, model_name: str) -> GoogleModel:
     """A Gemini model for indexing (writing a plan unattended): INDEX_MODEL or, once its
     retries are spent, INDEX_FALLBACK_MODEL (see `Director._run_planner`)."""
-    return GoogleModel(model_name, provider=_google_provider(settings))
+    return create_google_model(settings, model_name)
 
 
 def youtube_video(video_id: str) -> VideoUrl:
@@ -295,15 +322,20 @@ class Director:
         model: Model,
         model_name: str,
         index_model: Model,
+        index_model_name: str,
         index_fallback_model: Model,
+        index_fallback_model_name: str,
         budgets: Budgets,
         queue: DirectorQueue,
         redis: Redis,
         http: httpx.AsyncClient,
     ) -> None:
+        # The short names the caller built each model from, not `index_model.model_name`:
+        # on Vertex that property is the full resource name (create_google_model), and
+        # DirectorPlan.model and the usage ledger must keep the short one (task-2.1.1b).
         self._model_name = model_name
-        self._index_model_name = index_model.model_name
-        self._index_fallback_model_name = index_fallback_model.model_name
+        self._index_model_name = index_model_name
+        self._index_fallback_model_name = index_fallback_model_name
         self._budgets = budgets
         self._queue = queue
         self._redis = redis
@@ -754,7 +786,9 @@ def create_director(
         model,
         settings.director_model,
         create_index_model(settings, settings.index_model),
+        settings.index_model,
         create_index_model(settings, settings.index_fallback_model),
+        settings.index_fallback_model,
         Budgets(
             monthly=settings.monthly_tokens_per_org,
             per_plan=settings.director_tokens_per_plan,
