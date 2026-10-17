@@ -1089,29 +1089,29 @@
         "overhead": "Sujeta el teléfono en alto"
       },
       "framing": {
-        "in-frame": "Estás en cuadro",
-        "not-seen": "Entra en el cuadro",
-        "come-closer": "Acércate",
-        "step-back": "Aléjate un paso",
-        "step-left": "Muévete a tu izquierda",
-        "step-right": "Muévete a tu derecha",
-        "aim-left": "Apunta un poco a la izquierda",
-        "aim-right": "Apunta un poco a la derecha"
+        "in-frame": "¡Sales en la imagen!",
+        "not-seen": "¡Entra en la imagen!",
+        "come-closer": "Acércate un poquito",
+        "step-back": "Da un pasito atrás",
+        "step-left": "Muévete un poquito a tu izquierda",
+        "step-right": "Muévete un poquito a tu derecha",
+        "aim-left": "Gira el teléfono un poco a la izquierda",
+        "aim-right": "Gira el teléfono un poco a la derecha"
       },
       "pose": {
-        "matched": "Pose lograda",
-        "match": "Imita la silueta",
+        "matched": "¡Igual que tu amiguito!",
+        "match": "Copia la pose de tu amiguito",
         "loading": "Cargando la guía de pose…",
         "failed": "No se pudo cargar la guía de pose. Puedes grabar igualmente."
       },
       "scene": {
-        "checking": "Revisando tu lugar…",
-        "inPlace": "Buen lugar.",
+        "checking": "Buscando tu sitio…",
+        "inPlace": "¡Sitio perfecto!",
         "lighting": {
           "good": "Buena luz",
-          "too-dark": "Aquí está demasiado oscuro",
-          "too-bright": "Aquí hay demasiada luz",
-          "backlit": "Tienes la luz detrás"
+          "too-dark": "Un poco oscuro aquí",
+          "too-bright": "Mucha luz aquí",
+          "backlit": "La luz está detrás de ti"
         }
       },
       "countdown": "{seconds, number}",
@@ -1167,7 +1167,6 @@
       "storyboard": "Guion gráfico",
       "watchShot": "Ver la toma {index, number}: {title}",
       "shots": "{count, plural, one {# toma} other {# tomas}}",
-      "mix": "{videos, plural, =0 {ningún vídeo} one {# vídeo} other {# vídeos}} · {photos, plural, =0 {ninguna foto} one {# foto} other {# fotos}}",
       "playing": "Reproduciendo la toma {index, number}: {title}",
       "watchAll": "Ver el short entero"
     },
@@ -1261,29 +1260,29 @@
         }
       },
       "say": {
-        "first": "¡Hola, soy tu director! Empezamos con: {title}. {scene}. Vamos a hacerlo precioso.",
-        "back": "¡Bienvenido de nuevo! {title}. {scene}.",
-        "backLight": "¡Bienvenido de nuevo! La última vez {problem, select, dark {había poca luz} bright {había demasiada luz} other {tenías la luz detrás}}, así que busquemos un buen sitio. {title}.",
-        "backThing": "¡Bienvenido de nuevo! ¿Traes otra vez tu {thing}? Quedó genial la última vez. {title}.",
-        "next": "¡Seguimos! {title}. {scene}.",
-        "offline": "Gemini no responde, así que te guío con lo que ve la cámara.",
-        "ready": "¡Ese es el plano! Di acción, levanta la mano o pulsa grabar.",
-        "inPlace": "¡Buen sitio! Justo ahí.",
-        "matched": "¡Pose lograda! Mantenla.",
-        "match": "Ahora imita la silueta.",
-        "rolling": "Silencio en el set. Grabamos en {seconds, number}.",
+        "first": "¡Hola! Soy tu director y esto va a ser divertido. Primero: {title}. {scene}.",
+        "back": "¡Qué bien verte otra vez! {title}. {scene}.",
+        "backLight": "¡Hola otra vez! La última vez {problem, select, dark {estaba un poco oscuro} bright {había demasiada luz} other {la luz venía de detrás}}, así que busquemos un sitio con buena luz. {title}.",
+        "backThing": "¡Hola otra vez! ¿Tienes tu {thing}? Quedó genial la última vez. {title}.",
+        "next": "¡Bien, la siguiente! {title}. {scene}.",
+        "offline": "Ahora no llego a Gemini, así que te ayudo con la cámara. ¡Sin problema!",
+        "ready": "¡Te ves genial! Cuando quieras, di acción, levanta una mano bien alto o toca el botón rojo.",
+        "inPlace": "¡Sitio perfecto! Quédate ahí.",
+        "matched": "¡Sí! ¡Así mismo!",
+        "match": "Ahora copia la pose de mi amiguito.",
+        "rolling": "¡Prepárate! Empezamos en {seconds, number}.",
         "count": "{seconds, number}",
         "action": "¡Acción!",
         "cut": "¡Corten!",
-        "backToOne": "A posiciones. ¡Otra vez!",
-        "wrap": "¡Y se acabó el rodaje! Vamos a ver lo que hemos hecho.",
-        "heard": "Entendido.",
+        "backToOne": "¡Tranquilo! Probemos una vez más.",
+        "wrap": "¡Terminamos! Lo lograste. ¡Veamos lo que hiciste!",
+        "heard": "¡Entendido!",
         "light": {
-          "too-dark": "Aquí está un poco oscuro. Ponte frente a una ventana o enciende una lámpara.",
-          "too-bright": "Hay mucha luz. Apártate un poco del sol.",
-          "backlit": "Tienes la luz detrás. Gírate para que te dé en la cara."
+          "too-dark": "Está un poco oscuro. ¿Puedes mirar hacia una ventana o encender una lámpara?",
+          "too-bright": "¡Uy, cuánta luz! Gírate un poco para que no te dé el sol.",
+          "backlit": "La luz está detrás de ti. Date la vuelta para que te ilumine la cara."
         },
-        "thing": "{role, select, pet {¡Veo un {thing}! ¿Coprotagonista?} prop {Anda, un {thing}. Puede ser un buen accesorio.} glare {Cuidado con esa {thing}: las pantallas dan reflejos.} other {Bonito {thing} al fondo. Da profundidad.}}"
+        "thing": "{role, select, pet {¡Ay, un {thing}! ¿Lo sacamos en el vídeo?} prop {¡Oh, un {thing}! Puede ser divertido sostenerlo.} glare {Ese {thing} puede brillar demasiado. ¿Lo apagamos?} other {Ese {thing} queda bonito detrás de ti.}}"
       },
       "thing": {
         "plant": "planta",
@@ -1323,7 +1322,7 @@
         "later": "Gemini revisa la toma entera cuando te la quedas.",
         "again": "Otra vez",
         "keep": "Me la quedo",
-        "ship": "Nada que corregir. ¡Publícalo!",
+        "ship": "Nada que arreglar. ¡Perfecto!",
         "praise": {
           "framing": "¡El encuadre, perfecto!",
           "steady": "Cámara firme como una roca. Precioso.",
@@ -1333,15 +1332,15 @@
           "effort": "¡Me encanta tu entrega!"
         },
         "tip": {
-          "longer": "La próxima vez aguanta un momento más.",
-          "too-dark": "Busca un poco más de luz y lucirá mucho más.",
-          "too-bright": "Sal un poco del deslumbramiento.",
-          "backlit": "Gírate hacia la luz para que te veamos la cara.",
-          "steady": "Pega los codos al cuerpo para que no se mueva.",
-          "framing": "Quédate dentro de la silueta.",
-          "energy": "Prueba con más energía, ¡como si hablaras a la última fila!",
-          "angle": "Cuida el ángulo del teléfono: mantén el horizonte recto.",
-          "pose": "Imita la silueta un poco mejor."
+          "longer": "La próxima vez, mantén el último momento un poquito más.",
+          "too-dark": "Con un poco más de luz, ¡vas a brillar!",
+          "too-bright": "Aléjate un poco del sol fuerte.",
+          "backlit": "Mira hacia la luz para que veamos tu cara.",
+          "steady": "Apoya el teléfono o sujétalo con las dos manos para que no se mueva.",
+          "framing": "Intenta ponerte donde está tu amiguito.",
+          "energy": "¡Una gran sonrisa y un poco más de energía!",
+          "angle": "Mantén el teléfono recto, como un cuadro en la pared.",
+          "pose": "Copia un poco mejor la pose de tu amiguito."
         }
       },
       "screen": {

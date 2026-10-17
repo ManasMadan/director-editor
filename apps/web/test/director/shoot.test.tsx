@@ -257,7 +257,9 @@ describe("Director Live", () => {
     expect(document.querySelector("video:not(.blur-3xl)")?.className).toContain("-scale-x-100");
     await expect
       .poll(() => said())
-      .toContain("Hi, I'm your director! First up: Walk in. By a window. Let's make it gorgeous.");
+      .toContain(
+        "Hi! I'm your director, and this is going to be fun. First up: Walk in. By a window.",
+      );
     await expect.element(page.getByText("Live")).toBeVisible();
 
     // Director's doodles are drawn over the camera.
@@ -309,7 +311,7 @@ describe("Director Live", () => {
       },
     });
     await caption(page, "Move about three meters left, to the window.").toBeVisible();
-    expect(said()).toContain("The light's behind you. Turn so it falls on your face.");
+    expect(said()).toContain("The light is behind you. Turn around so it shines on your face.");
     await commands.fakeDirector(videoId, {
       scene: {
         inPlace: true,
@@ -320,7 +322,7 @@ describe("Director Live", () => {
         lighting: "good",
       },
     });
-    await caption(page, "Great spot! Right there.").toBeVisible();
+    await caption(page, "Perfect spot! Stay right there.").toBeVisible();
   });
 
   it("points out what's in the frame, and asks the member to step in", async () => {
@@ -332,10 +334,10 @@ describe("Director Live", () => {
       { shots: [planShot({ ...walkIn, sceneLandmark: null, pose: walkIn.pose })] },
       { shot: "0", audio: "voice" },
     );
-    await caption(page, "Step into the frame").toBeVisible();
+    await caption(page, "Step into the picture!").toBeVisible();
     await expect
       .poll(() => said(), { timeout: 15_000 })
-      .toContain("Nice plant back there. Good depth.");
+      .toContain("That plant looks nice behind you.");
   });
 
   it("films along to the original: no microphone, the original playing, every step called", async () => {
@@ -363,7 +365,7 @@ describe("Director Live", () => {
       .poll(() => said())
       .toEqual(
         expect.arrayContaining([
-          "Quiet on set. Rolling in 3.",
+          "Get ready! Here we go in 3.",
           "2",
           "1",
           "Action! Walk towards the camera.",
@@ -436,7 +438,7 @@ describe("Director Live", () => {
     ears().hear("cut");
     await expect.element(page.getByLabelText("Best moment, on loop")).toBeVisible();
     ears().hear("go again");
-    await expect.poll(() => said()).toContain("Back to one. Let's go again!");
+    await expect.poll(() => said()).toContain("No worries! Let's try that one more time.");
     await expect.element(page.getByText("Take 2 • Medium shot")).toBeVisible();
     // The recogniser stops by itself on silence: it's started again.
     const listening = ears();
@@ -522,13 +524,15 @@ describe("Director Live", () => {
     const { videoId } = await openShoot({ shots: [walkIn] }, { shot: "0", audio: "voice" });
     await expect
       .poll(() => said())
-      .toContain("Hi, I'm your director! First up: Walk in. By a window. Let's make it gorgeous.");
+      .toContain(
+        "Hi! I'm your director, and this is going to be fun. First up: Walk in. By a window.",
+      );
     await cleanupPage();
     const page = await renderPage(<ShootPage videoId={videoId} shot="0" audio="voice" />, {
       url: `/director/${videoId}/shoot`,
     });
     await expect.element(page.getByText("Live")).toBeVisible();
-    await expect.poll(() => said()).toContain("Welcome back! Walk in. By a window.");
+    await expect.poll(() => said()).toContain("Welcome back, superstar! Walk in. By a window.");
   });
 });
 

@@ -30,7 +30,9 @@ const frameOf = (element: HTMLVideoElement) =>
  *
  * When Gemini can't answer (no allowance left, rate-limited, down), the guide says so
  * (`offline`) and stops asking; the camera screen then guides from what the phone sees
- * itself, and nothing breaks. The camera screen is mounted afresh for each shot, so a shot
+ * itself, and nothing breaks. `guiding` says whether Gemini is still walking the member
+ * to the spot: false once they're there, it's out of reach, or the shot's checks are spent,
+ * when its last direction is no longer worth waiting on. The camera screen is mounted afresh for each shot, so a shot
  * never shows another's check.
  */
 export function useSceneGuide(
@@ -45,6 +47,7 @@ export function useSceneGuide(
   const check = useCheckSceneMutation();
   const [scene, setScene] = useState<SceneCheck | null>(null);
   const [offline, setOffline] = useState(false);
+  const [spent, setSpent] = useState(false);
   const busy = useRef(false);
   const checks = useRef(0);
   const failures = useRef(0);
@@ -71,6 +74,7 @@ export function useSceneGuide(
         return;
       }
       checks.current += 1;
+      setSpent(checks.current >= MOST_CHECKS);
       setScene(await mutateAsync({ videoId, shotIndex, image }));
       failures.current = 0;
     } catch {
@@ -98,5 +102,5 @@ export function useSceneGuide(
     }
   }, [looking, moved, look]);
 
-  return { scene, offline };
+  return { scene, offline, guiding: looking && !spent };
 }

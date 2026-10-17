@@ -40,7 +40,6 @@ describe("Director's page for a ready plan", () => {
     await expect.element(page.getByText("GRWM")).toBeVisible();
     await expect.element(page.getByText("01:15")).toBeVisible();
     await expect.element(page.getByText("2 shots", { exact: true })).toBeVisible();
-    await expect.element(page.getByText("1 video · 1 photo")).toBeVisible();
     await expect.element(page.getByText("You need 2 shots: 1 video and 1 photo.")).toBeVisible();
     await expect.element(page.getByText("Coffee, a window and a smile.")).toBeVisible();
     // The whole short loops, muted, until a shot is picked.
@@ -94,7 +93,7 @@ describe("Director's page for a ready plan", () => {
     const page = await showPlan(videoId);
     await expect.element(page.getByText(note)).toBeVisible();
     expect(page.getByRole("radio").query()).toBeNull();
-    await expect.element(page.getByText("1 video · no photos")).toBeVisible();
+    await expect.element(page.getByText("You need 1 shot: 1 video and no photos.")).toBeVisible();
     await userEvent.click(page.getByRole("button", { name: "Use template" }));
     expect(currentUrl()).toBe(`/director/${videoId}/shoot?shot=0&audio=original`);
   });

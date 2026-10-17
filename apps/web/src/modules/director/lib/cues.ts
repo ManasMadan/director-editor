@@ -5,21 +5,25 @@
  * talks over itself, never nags with the same line, and lets the member finish speaking.
  *
  * - One line at a time: after a cue, others wait a breath (`GAP_SECONDS`) unless they
- *   matter more, which is how "Great spot!" can cut off a direction that's now stale.
+ *   matter more, which is how "Perfect spot!" can cut off a direction that's now stale.
  * - No nagging: each cue has a cooldown before it may be said again.
  * - Turn-taking: when the member speaks, Director holds its next line for the same breath.
  *
  * The words come in already translated (`Words`), so this stays free of the UI.
  */
 import type { SceneCheck } from "@repo/contracts/api";
-import type { Light } from "./frame-stats";
+import { judgedLight, type Light } from "./frame-stats";
 import type { FramingHint } from "./framing";
 import type { Seen } from "./things";
 import type { TiltHint } from "./tilt";
 
-/** A breath between lines, in seconds. */
-export const GAP_SECONDS = 3.5;
-const DEFAULT_COOLDOWN = 15;
+/**
+ * A breath between lines, in seconds, and how long before a nudge comes back. Generous:
+ * Director talks to someone filming for the first time, who needs room to try things and
+ * hates being told twice.
+ */
+export const GAP_SECONDS = 4.5;
+const DEFAULT_COOLDOWN = 25;
 /** Said once a session. */
 const ONCE = Number.POSITIVE_INFINITY;
 
@@ -45,7 +49,7 @@ export interface Words {
   match: string;
   action: string;
   count: (seconds: number) => string;
-  /** The countdown's first number, said the way a set calls it: "Quiet on set. Rolling in 3". */
+  /** The countdown's first number, said as one line: "Get ready! Here we go in 3". */
   rolling: (seconds: number) => string;
   light: Record<LightProblem, string>;
   framing: Record<Exclude<FramingHint, "in-frame">, string>;
@@ -95,9 +99,9 @@ function setupCues(p: Perception, words: Words): Cue[] {
     return [cue("ready", words.ready, 9, "cheer", 30)];
   }
   const cues: Cue[] = [];
-  const light = p.light && p.light !== "good" ? p.light : p.scene?.lighting;
+  const light = judgedLight(p.light, p.scene);
   if (light && light !== "good") {
-    cues.push(cue(`light:${light}`, words.light[light], 7, "warn", 20));
+    cues.push(cue(`light:${light}`, words.light[light], 7, "warn", 30));
   }
   if (p.scene?.inPlace) {
     cues.push(cue("scene:in-place", words.inPlace, 8, "cheer", ONCE));

@@ -4,6 +4,7 @@
  * what Director says, what it remembers, and the screen's own behaviour (the wake lock,
  * the buzz, the controls stepping back).
  */
+import { useLayoutEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { useListening } from "@/modules/director/hooks/use-listening";
@@ -171,6 +172,33 @@ describe("useListening", () => {
     await expect.poll(() => hook.current.words).toBe("");
   });
 
+  it("hands a phrase heard right as the screen changes to the handlers of that screen", async () => {
+    fakeRecognizer();
+    const heardBy: number[] = [];
+    let screen = 0;
+    let spoken = false;
+    const hook = await renderHook(() => {
+      const mine = screen;
+      const listening = useListening(true, "en", {
+        onPhrase: () => heardBy.push(mine),
+        onInterrupt: vi.fn(),
+      });
+      // The member speaks in the same moment the screen changes (a "go again" as the take's
+      // review appears): before any effect after paint has run.
+      useLayoutEffect(() => {
+        if (mine > 0 && !spoken) {
+          spoken = true;
+          FakeRecognizer.last?.hear("go again");
+        }
+      });
+      return listening;
+    });
+    await expect.poll(() => hook.current.state).toBe("listening");
+    screen = 1;
+    hook.rerender();
+    expect(heardBy).toEqual([1]);
+  });
+
   it("keeps listening through other errors, and says when the microphone is refused", async () => {
     fakeRecognizer();
     const hook = await renderHook(() =>
@@ -240,7 +268,7 @@ describe("useLiveDirector", () => {
     await expect
       .poll(said)
       .toContain(
-        "Welcome back! Last time the light was a little dark, so let's find a good spot. The walk-in.",
+        "Welcome back! Last time it was a little dark, so let's find a spot with nice light. The walk-in.",
       );
     dark.unmount();
     await renderHook(() =>
@@ -254,7 +282,7 @@ describe("useLiveDirector", () => {
     );
     await expect
       .poll(said)
-      .toContain("Welcome back! Bring your plant again? It looked great last time. The walk-in.");
+      .toContain("Welcome back! Got your plant? It looked great last time. The walk-in.");
   });
 
   it("has nothing to repeat before it has said anything, and goes quiet when its voice is off", async () => {

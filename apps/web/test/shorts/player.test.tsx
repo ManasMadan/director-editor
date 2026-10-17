@@ -7,7 +7,7 @@ import { api, signUp } from "../users";
 import { editShorts, type Feed } from "./support";
 
 const PEN = { videoId: "kJQP7kiw5Fk", title: "Dropped my pen… had to check the kicks" };
-const GRWM = { videoId: "jNQXAC9IVRw", title: "GRWM: fall layers, piece by piece" };
+const GRWM = { videoId: "HasaZYkwYds", title: "GRWM for the office in summer time!" };
 
 const slideTitles = () =>
   [...document.querySelectorAll("section[aria-label]")]

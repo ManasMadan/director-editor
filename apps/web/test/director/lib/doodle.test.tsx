@@ -51,6 +51,8 @@ const scene = (overrides: Partial<DoodleScene> = {}): DoodleScene => ({
   person: null,
   framing: null,
   scene: null,
+  light: null,
+  guided: false,
   move: null,
   recording: false,
   subject: true,
@@ -88,10 +90,11 @@ const sticker = (kind: Sticker["kind"], born: number, label = ""): Sticker => ({
   label,
 });
 
-/** A canvas that notes each line's colour, each fill's, and each word it writes. */
+/** A canvas that notes each line's colour (and how faded), each fill's, and each word it writes. */
 function draw(doodles: DoodleScene, time = 1) {
   const { ctx } = canvasOf(WIDTH, HEIGHT);
   const strokes: string[] = [];
+  const alphas: number[] = [];
   const fills: string[] = [];
   const words: { text: string; color: string }[] = [];
   const stroke = ctx.stroke.bind(ctx);
@@ -99,6 +102,7 @@ function draw(doodles: DoodleScene, time = 1) {
   const fillText = ctx.fillText.bind(ctx);
   vi.spyOn(ctx, "stroke").mockImplementation(() => {
     strokes.push(String(ctx.strokeStyle));
+    alphas.push(ctx.globalAlpha);
     stroke();
   });
   vi.spyOn(ctx, "fill").mockImplementation(() => {
@@ -112,7 +116,7 @@ function draw(doodles: DoodleScene, time = 1) {
   const clearRect = vi.spyOn(ctx, "clearRect");
   const arc = vi.spyOn(ctx, "arc");
   drawDoodles({ ctx, width: WIDTH, height: HEIGHT, font: "sans-serif" }, doodles, COLORS, time);
-  return { strokes, fills, words, clearRect, arc, ctx };
+  return { strokes, alphas, fills, words, clearRect, arc, ctx };
 }
 
 const texts = (drawn: ReturnType<typeof draw>) => drawn.words.map((word) => word.text);
@@ -122,36 +126,117 @@ afterEach(() => {
 });
 
 describe("Director's doodles", () => {
-  it("draws the body to step into, a ghost of it first, in the waiting colour", () => {
+  it("draws the buddy to copy in one pen line, smiling, with no words", () => {
     const drawn = draw(scene({ target: BODY, framing: "come-closer" }));
     expect(drawn.clearRect).toHaveBeenCalledWith(0, 0, WIDTH, HEIGHT);
-    // The ghost's head is a filled circle; the outline's head an ellipse.
-    expect(drawn.arc).toHaveBeenCalledOnce();
-    expect(drawn.fills).toContain(COLORS.waiting);
-    expect(new Set(drawn.strokes)).toEqual(new Set([COLORS.shade, COLORS.waiting]));
+    // Its head and two dot eyes; one line, no dark edge drawn under it.
+    expect(drawn.arc).toHaveBeenCalledTimes(3);
+    expect(drawn.fills).toEqual([COLORS.ink]);
+    expect(new Set(drawn.strokes)).toEqual(new Set([COLORS.ink, COLORS.waiting]));
     expect(drawn.words).toEqual([]);
   });
 
-  it("locks the outline once matched, without the ghost while recording", () => {
+  it("blinks now and then, and keeps its eyes open with reduced motion", () => {
+    expect(draw(scene({ target: BODY }), 3.45).fills).toEqual([]);
+    expect(draw(scene({ target: BODY, still: true }), 3.45).fills).toEqual([COLORS.ink]);
+  });
+
+  it("cheers in the locked colour once matched, faded back while recording", () => {
+    const drawn = draw(scene({ matched: true, mirrored: true, recording: true, target: BODY }));
+    // Happy ^ ^ eyes are lines, so nothing is filled.
+    expect(drawn.fills).toEqual([]);
+    expect(new Set(drawn.strokes)).toEqual(new Set([COLORS.locked]));
+    expect(new Set(drawn.alphas)).toEqual(new Set([0.55]));
+    const setUp = draw(scene({ matched: true, target: BODY }));
+    expect(new Set(setUp.alphas)).toEqual(new Set([1]));
+  });
+
+  it("looks around with a ? while it can't see the member", () => {
+    // Still or moving, and on the left or (mirrored) right of the frame.
+    for (const [still, mirrored] of [
+      [false, false],
+      [true, true],
+    ]) {
+      const drawn = draw(scene({ target: BODY, framing: "not-seen", still, mirrored }));
+      expect(drawn.words).toEqual([{ text: "?", color: COLORS.ink }]);
+    }
+  });
+
+  it("worries when the light needs fixing, with a sun by its head", () => {
+    // On either side of the frame: the sun goes where there's more room.
+    for (const mirrored of [false, true]) {
+      const drawn = draw(scene({ target: BODY, light: "too-dark", framing: "not-seen", mirrored }));
+      expect(drawn.strokes).toContain(COLORS.pop);
+      // The light comes first: no "?" on top of the worry.
+      expect(drawn.words).toEqual([]);
+    }
+    expect(draw(scene({ target: BODY, light: "good" })).strokes).not.toContain(COLORS.pop);
+  });
+
+  it("draws a buddy without a head when the plan gives none, and no face", () => {
     const drawn = draw(
       scene({
-        matched: true,
-        mirrored: true,
-        recording: true,
-        target: { left_hip: { x: 0.3, y: 0.6 }, right_hip: { x: 0.2, y: 0.6 } },
+        target: {
+          left_hip: { x: 0.3, y: 0.6 },
+          right_hip: { x: 0.2, y: 0.6 },
+          left_knee: { x: 0.3, y: 0.75 },
+        },
+        framing: "not-seen",
       }),
     );
     expect(drawn.arc).not.toHaveBeenCalled();
-    expect(drawn.fills).toEqual([]);
-    expect(drawn.strokes).toContain(COLORS.locked);
+    expect(drawn.words).toEqual([]);
+    expect(drawn.strokes).toContain(COLORS.ink);
   });
 
-  it("draws the ghost of a body without a head when the plan gives none", () => {
-    const drawn = draw(
-      scene({ target: { left_hip: { x: 0.3, y: 0.6 }, right_hip: { x: 0.2, y: 0.6 } } }),
+  it("draws only the walk while it walks the member to their spot, the buddy once there", () => {
+    const thing = { key: "cup", label: "cup", box: { x: 0.1, y: 0.1, width: 0.2, height: 0.2 } };
+    const walk = draw(scene({ target: BODY, highlights: [thing], scene: check(), guided: true }));
+    expect(walk.arc).not.toHaveBeenCalled();
+    expect(walk.words).toEqual([]);
+    expect(new Set(walk.strokes)).toEqual(new Set([COLORS.waiting]));
+    const there = draw(
+      scene({ target: BODY, highlights: [thing], scene: check({ inPlace: true }), guided: true }),
     );
-    expect(drawn.arc).not.toHaveBeenCalled();
-    expect(drawn.strokes).toContain(COLORS.waiting);
+    expect(there.strokes).toContain(COLORS.ink);
+    expect(texts(there)).toEqual(["cup"]);
+    // Gemini out of reach, or its checks spent: its last direction no longer hides the buddy.
+    const unguided = draw(scene({ target: BODY, highlights: [thing], scene: check() }));
+    expect(new Set(unguided.strokes)).toEqual(new Set([COLORS.ink, COLORS.waiting, COLORS.pop]));
+    expect(texts(unguided)).toEqual(["cup"]);
+  });
+
+  it("gives the buddy round hands, and draws it where the mirrored preview shows the pose", () => {
+    const hands = { ...BODY, left_wrist: { x: 0.34, y: 0.55 }, right_wrist: { x: 0.16, y: 0.55 } };
+    const drawn = draw(scene({ target: hands, mirrored: true }));
+    // Head, two hands, two eyes.
+    expect(drawn.arc).toHaveBeenCalledTimes(5);
+    const [x] = drawn.arc.mock.calls[0] ?? [];
+    expect(Math.abs((x ?? 0) - (1 - BODY.nose.x) * WIDTH)).toBeLessThan(1);
+  });
+
+  it("leaves the canvas as it found it: no shadow, fade or dashes carried over", () => {
+    const { ctx } = draw(
+      scene({
+        target: BODY,
+        light: "too-dark",
+        recording: true,
+        horizon: { roll: 8, level: false },
+        stickers: [sticker("cut", 0.95, "Cut!")],
+      }),
+    );
+    expect([ctx.shadowBlur, ctx.globalAlpha, ctx.getLineDash()]).toEqual([0, 1, []]);
+  });
+
+  it("holds the buddy still with reduced motion: no breath, hop or wobble", () => {
+    const at = (time: number) =>
+      draw(scene({ target: BODY, matched: true, still: true }), time).arc.mock.calls;
+    expect(at(1.3)).toEqual(at(2.9));
+  });
+
+  it("puts the sun high in the frame for a shot without a buddy", () => {
+    const drawn = draw(scene({ light: "backlit" }));
+    expect(new Set(drawn.strokes)).toEqual(new Set([COLORS.waiting, COLORS.pop]));
   });
 
   it("lassos where a shot without a body goes, and draws nothing of it while sharing", () => {
@@ -222,7 +307,7 @@ describe("Director's doodles", () => {
       scene({ subject: false, move: "orbit", labels: { spot: "", meters: null, move: "Orbit" } }),
     );
     expect(texts(drawn)).toEqual(["Orbit"]);
-    expect(new Set(drawn.strokes)).toEqual(new Set([COLORS.shade, COLORS.ink]));
+    expect(new Set(drawn.strokes)).toEqual(new Set([COLORS.ink]));
   });
 
   it("arrows a straight camera move, holding still with reduced motion, and none for none", () => {
