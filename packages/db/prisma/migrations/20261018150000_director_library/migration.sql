@@ -6,6 +6,12 @@ SET lock_timeout = '5s';
 -- index is built, so that index can't be raced by a write between the two. The table is
 -- small (a workspace's library: six seeds and what its members indexed), so the build
 -- takes milliseconds, bounded by the lock timeout above.
+--
+-- During the rollout the previous release still runs against this schema. It ignores the
+-- new columns, but its request_plan doesn't know the one-short limit: asking for a second
+-- short in a member's name hits the unique index and answers 500 (an unhandled integrity
+-- error) until the new release replaces it. A short window, and the release is marked as
+-- a breaking change.
 ALTER TABLE "ai"."director_plan" ADD COLUMN     "audio_key" TEXT,
 ADD COLUMN     "audio_status" TEXT NOT NULL DEFAULT 'none',
 ADD COLUMN     "source" TEXT NOT NULL DEFAULT 'user',
@@ -51,15 +57,15 @@ ALTER TABLE "ai"."director_cut" ADD CONSTRAINT "director_cut_user_id_fkey" FOREI
 ALTER TABLE "ai"."director_cut" ADD CONSTRAINT "director_cut_file_id_fkey" FOREIGN KEY ("file_id") REFERENCES "files"."file"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- squawk-ignore constraint-missing-not-valid
-ALTER TABLE ai.director_cut
-  ADD CONSTRAINT director_cut_publish_status_check
-    CHECK (publish_status IN ('none', 'uploading', 'published', 'failed')),
-  ADD CONSTRAINT director_cut_visibility_check
-    CHECK (visibility IN ('private', 'unlisted', 'public')),
-  ADD CONSTRAINT director_cut_youtube_video_id_check
-    CHECK (youtube_video_id ~ '^[A-Za-z0-9_-]{11}$'),
-  ADD CONSTRAINT director_cut_duration_ms_check CHECK (duration_ms >= 0),
-  ADD CONSTRAINT director_cut_picks_check CHECK (jsonb_typeof(picks) = 'array');
+ALTER TABLE ai.director_cut ADD CONSTRAINT director_cut_publish_status_check CHECK (publish_status IN ('none', 'uploading', 'published', 'failed'));
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE ai.director_cut ADD CONSTRAINT director_cut_visibility_check CHECK (visibility IN ('private', 'unlisted', 'public'));
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE ai.director_cut ADD CONSTRAINT director_cut_youtube_video_id_check CHECK (youtube_video_id ~ '^[A-Za-z0-9_-]{11}$');
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE ai.director_cut ADD CONSTRAINT director_cut_duration_ms_check CHECK (duration_ms >= 0);
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE ai.director_cut ADD CONSTRAINT director_cut_picks_check CHECK (jsonb_typeof(picks) = 'array');
 
 -- On a table with rows: NOT VALID, so adding them scans nothing. Every existing row holds
 -- its column's default, which passes, and every write from now on is checked; a later
@@ -81,20 +87,12 @@ ALTER TABLE ai.director_plan NO FORCE ROW LEVEL SECURITY;
 -- A plan that's already finished reads as finished, not as queued.
 UPDATE ai.director_plan SET stage = status WHERE status IN ('ready', 'failed');
 
--- Until now every short a member opened got a plan in their name, so a member may have
--- several; from now on a member indexes one. Each keeps their newest; the older ones stay
--- in the workspace's library, in nobody's name, rather than failing the index below.
-UPDATE ai.director_plan AS older
-   SET created_by = NULL
- WHERE older.source = 'user'
-   AND older.status <> 'failed'
-   AND EXISTS (
-     SELECT 1 FROM ai.director_plan AS newer
-      WHERE newer.created_by = older.created_by
-        AND newer.source = 'user'
-        AND newer.status <> 'failed'
-        AND newer.id > older.id
-   );
+-- Until now opening a short was enough to give it a plan in your name, so none of these
+-- plans is a short someone chose to index. They stay in their workspaces' libraries in
+-- nobody's name, so every member starts with their one index unused (the demo account
+-- included). That covers a plan of a short that's also a seeded template: it counts for
+-- no one now, and stays that workspace's plan of it ((org_id, video_id) is unique).
+UPDATE ai.director_plan SET created_by = NULL WHERE source = 'user' AND created_by IS NOT NULL;
 
 ALTER TABLE ai.director_plan FORCE ROW LEVEL SECURITY;
 
@@ -102,6 +100,29 @@ ALTER TABLE ai.director_plan FORCE ROW LEVEL SECURITY;
 -- the ACCESS EXCLUSIVE lock this migration took at the top guarantees (see there).
 -- squawk-ignore require-concurrent-index-creation
 CREATE UNIQUE INDEX "director_plan_one_user_index" ON "ai"."director_plan"("created_by") WHERE (source = 'user' AND status <> 'failed');
+
+-- ---------------------------------------------------------------------------- the limit
+-- Whether a member has a short of their own that hasn't failed, in any workspace: the
+-- limit (the index above) is across all of a member's workspaces, but the AI service sees
+-- one workspace at a time (row-level security). Owned by the tables' owner, so it reads
+-- past row-level security; it answers only yes or no.
+CREATE OR REPLACE FUNCTION ai.index_used(user_id uuid) RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM ai.director_plan AS plan
+     WHERE plan.created_by = index_used.user_id
+       AND plan.source = 'user'
+       AND plan.status <> 'failed'
+  );
+$$;
+REVOKE EXECUTE ON FUNCTION ai.index_used(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION ai.index_used(uuid) TO app_ai;
+
+-- SECURITY DEFINER functions run as the table's owner (migrator), which forced row-level
+-- security still applies to. The owner could turn it off anyway, so this grants nothing
+-- new; it lets ai.index_used read every workspace's plans. Read only: writes still need
+-- the workspace in app.org_id.
+CREATE POLICY owner_functions ON ai.director_plan FOR SELECT TO migrator USING (true);
 
 -- ---------------------------------------------------------------------------- tenancy
 -- Every role sees only the organization in app.org_id.

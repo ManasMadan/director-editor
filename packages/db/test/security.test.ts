@@ -195,6 +195,18 @@ describe("least privilege", () => {
     });
   });
 
+  it("lets only the AI service ask whether a member has used their index", async () => {
+    const asked = "SELECT ai.index_used($1) AS used";
+    await asRole("app_ai", async (client) => {
+      await expect(client.query(asked, [userId])).resolves.toMatchObject({
+        rows: [{ used: false }],
+      });
+    });
+    await asRole("app_api", async (client) => {
+      await expect(client.query(asked, [userId])).rejects.toThrow(/permission denied/);
+    });
+  });
+
   it("lets the API read Director's cuts and nothing else of the AI service's", async () => {
     await asRole("app_api", async (client) => {
       await expect(client.query("SELECT id FROM ai.director_cut")).resolves.toMatchObject({
