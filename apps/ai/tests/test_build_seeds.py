@@ -298,18 +298,24 @@ def test_the_command_leaves_templates_json_alone_when_a_seed_cant_be_indexed(
     gemini[1][FALLBACK_PATH] = MODEL_REFUSED
     committed = TEMPLATES_PATH.read_bytes()
 
-    run = subprocess.run(
-        [sys.executable, "-m", "scripts.build_seeds"],
-        cwd=TEMPLATES_PATH.parents[2],
-        env={**os.environ, **gemini_env(gemini[0].url)},
-        capture_output=True,
-        text=True,
-        timeout=60,
-        check=False,
-    )
+    try:
+        run = subprocess.run(
+            [sys.executable, "-m", "scripts.build_seeds"],
+            cwd=TEMPLATES_PATH.parents[2],
+            env={**os.environ, **gemini_env(gemini[0].url)},
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        written = TEMPLATES_PATH.read_bytes()
+    finally:
+        # Should a later change ever let the script write here, the test still leaves
+        # the committed file as it found it (and fails on the check below).
+        _ = TEMPLATES_PATH.write_bytes(committed)
 
     assert run.returncode != 0
     assert "ModelHTTPError" in run.stderr
-    assert TEMPLATES_PATH.read_bytes() == committed
+    assert written == committed
     # It got as far as asking Gemini (both models) for the first seed, then stopped.
     assert [path for path, _ in gemini[0].received] == [GEMINI_PATH, FALLBACK_PATH]
