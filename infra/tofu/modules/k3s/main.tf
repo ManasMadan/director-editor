@@ -127,6 +127,11 @@ locals {
       token        = name == local.first ? random_password.token.result : node.role == "server" ? local.join_token : local.node_token
     },
     node.private_address != null ? { "node-external-ip" = node.address } : null,
+    # k3s advertises the API at the external address when there is one, and pods reach
+    # the API through it. Where the public address is NAT in front of the machine rather
+    # than on its interface (Google Compute Engine, AWS), the machine can't reach itself
+    # there, so every pod's API call times out: servers advertise the private address.
+    node.private_address != null && node.role == "server" ? { "advertise-address" = node.private_address } : null,
     name != local.first ? { server = local.join_url } : null,
     node.role == "server" ? {
       "agent-token" = random_password.agent_token.result
@@ -177,6 +182,9 @@ locals {
     "curl -sfL --retry 5 -o /tmp/k3s-install.sh '${var.installer.url}'",
     "echo '${var.installer.sha256}  /tmp/k3s-install.sh' | sha256sum -c -",
     "INSTALL_K3S_VERSION='${var.k3s_version}' INSTALL_K3S_EXEC='${node.role}' sh /tmp/k3s-install.sh",
+    # The installer leaves a running k3s alone when its binary and unit haven't changed,
+    # so a change to config.yaml alone would wait for the next reboot.
+    "$sudo systemctl restart ${node.role == "server" ? "k3s" : "k3s-agent"}",
   ]) }
 
   # What changes on a node reinstalls it (in place: k3s restarts, its pods keep running).
