@@ -38,5 +38,13 @@ services:
     # from its certificates (apps/api/src/auth/auth.ts).
     # env:
     #   ANDROID_CERT_FINGERPRINTS: AB:CD:...
+  ai:
+    env:
+      # The production express key addresses every Vertex AI model by its full resource
+      # name (task 2.1.1b), which needs the project; not a secret.
+      GOOGLE_CLOUD_PROJECT: project-18e15b18-c92e-44bb-9bf
+  ai-worker:
+    env:
+      GOOGLE_CLOUD_PROJECT: project-18e15b18-c92e-44bb-9bf
   clamav:
     enabled: true

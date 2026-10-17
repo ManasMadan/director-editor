@@ -8,7 +8,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable, Generator, Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from uuid import UUID, uuid4
 
 import httpx2 as httpx
@@ -398,20 +398,10 @@ def test_a_plan_with_no_speech_is_accepted(
 
 
 @contextmanager
-def _client_with_index_fallback(
-    monkeypatch: pytest.MonkeyPatch, gemini_url: str, fallback_model: str
-) -> Generator[TestClient]:
-    """A client whose INDEX_FALLBACK_MODEL is distinct from INDEX_MODEL and
-    DIRECTOR_MODEL (both GEMINI_MODEL, as `extra_env`'s are), so a retry/fallback test can
-    tell which model actually answered."""
-    for key, value in {
-        **ENV,
-        "DIRECTOR_MODEL": GEMINI_MODEL,
-        "INDEX_MODEL": GEMINI_MODEL,
-        "INDEX_FALLBACK_MODEL": fallback_model,
-        "GOOGLE_API_KEY": "test-key",
-        "GOOGLE_BASE_URL": gemini_url,
-    }.items():
+def _client_with_env(monkeypatch: pytest.MonkeyPatch, env: dict[str, str]) -> Generator[TestClient]:
+    """A fresh client under exactly `ENV` plus `env`, for a test whose settings can't vary
+    through `extra_env` alone (a distinct fallback model, Vertex AI)."""
+    for key, value in {**ENV, **env}.items():
         monkeypatch.setenv(key, value)
     get_settings.cache_clear()
     redis_client().flushdb()  # pyright: ignore[reportUnknownMemberType]  # untyped options
@@ -420,6 +410,24 @@ def _client_with_index_fallback(
     with TestClient(app) as test_client:
         yield test_client
     get_settings.cache_clear()
+
+
+def _client_with_index_fallback(
+    monkeypatch: pytest.MonkeyPatch, gemini_url: str, fallback_model: str
+) -> AbstractContextManager[TestClient]:
+    """A client whose INDEX_FALLBACK_MODEL is distinct from INDEX_MODEL and
+    DIRECTOR_MODEL (both GEMINI_MODEL, as `extra_env`'s are), so a retry/fallback test can
+    tell which model actually answered."""
+    return _client_with_env(
+        monkeypatch,
+        {
+            "DIRECTOR_MODEL": GEMINI_MODEL,
+            "INDEX_MODEL": GEMINI_MODEL,
+            "INDEX_FALLBACK_MODEL": fallback_model,
+            "GOOGLE_API_KEY": "test-key",
+            "GOOGLE_BASE_URL": gemini_url,
+        },
+    )
 
 
 def test_the_planner_retries_then_falls_back_to_the_index_fallback_model(
@@ -467,6 +475,42 @@ def test_a_refusal_about_the_model_falls_back_without_retrying(
     paths = [path for path, _ in gemini[0].received]
     assert paths.count(GEMINI_PATH) == 1  # no retry on the primary
     assert paths.count(fallback_path) == 1
+
+
+def test_indexing_on_vertex_addresses_the_model_by_its_resource_name(
+    monkeypatch: pytest.MonkeyPatch, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    """An API key drops the project/location from the request unless the model is
+    addressed by its full resource name (task 2.1.1b-brief.md's "Why"); the plan and the
+    usage ledger still record INDEX_MODEL's short name, never the resource path."""
+    vertex_path = (
+        "/v1beta1/projects/test-project/locations/global/publishers/google/models/"
+        f"{GEMINI_MODEL}:generateContent"
+    )
+    gemini[1][vertex_path] = gemini_output(PLAN)
+    with _client_with_env(
+        monkeypatch,
+        {
+            "DIRECTOR_MODEL": GEMINI_MODEL,
+            "INDEX_MODEL": GEMINI_MODEL,
+            "INDEX_FALLBACK_MODEL": GEMINI_MODEL,
+            "GOOGLE_API_KEY": "test-key",
+            "GOOGLE_BASE_URL": gemini[0].url,
+            "GOOGLE_VERTEX": "true",
+            "GOOGLE_CLOUD_PROJECT": "test-project",
+        },
+    ) as test_client:
+        org, user = new_org()
+        plan = ready_plan(test_client, org, user)
+
+    assert plan.status == "ready"
+    assert plan.model == GEMINI_MODEL
+    assert usage_models(org, "director-plan") == {GEMINI_MODEL}
+    paths = [path for path, _ in gemini[0].received]
+    assert paths.count(vertex_path) == 1
+    # Never GEMINI_PATH: that's the Gemini API's path (`v1beta`, the bare name), not
+    # Vertex's (`v1beta1`, the full resource name).
+    assert GEMINI_PATH not in paths
 
 
 def test_a_plan_nobody_asked_for_is_not_found(client: TestClient) -> None:

@@ -15,7 +15,7 @@ from pydantic import ValidationError
 
 from app.assistant import Deps, create_agent, local_extractive
 from app.auth import verify
-from app.director import create_director_model, youtube_video
+from app.director import create_director_model, create_index_model, youtube_video
 from app.documents import Passage, create_summaries
 from app.embeddings import HashingEmbedder
 from app.errors import AppError
@@ -91,11 +91,53 @@ def test_director_needs_its_gemini_key() -> None:
 def test_director_calls_vertex_ai_when_asked() -> None:
     director = {"DIRECTOR_MODEL": "gemini-3.5-flash", "GOOGLE_API_KEY": "key"}
     gemini_api = create_director_model(_settings(**director))
-    vertex = create_director_model(_settings(**director, GOOGLE_VERTEX="true"))
+    vertex = create_director_model(
+        _settings(**director, GOOGLE_VERTEX="true", GOOGLE_CLOUD_PROJECT="p")
+    )
     assert gemini_api is not None
     assert gemini_api.system == "google"
+    assert gemini_api.model_name == "gemini-3.5-flash"
     assert vertex is not None
     assert vertex.system == "google-cloud"
+    # An API key drops the project/location from the request unless the model is
+    # addressed by its full resource name, which is the only way to reach a location
+    # other than us-central1 (task 2.1.1b-brief.md's "Why").
+    assert (
+        vertex.model_name == "projects/p/locations/global/publishers/google/models/gemini-3.5-flash"
+    )
+
+
+def test_vertex_needs_the_cloud_project() -> None:
+    assert _settings(GOOGLE_VERTEX="true", GOOGLE_CLOUD_PROJECT="p").google_cloud_project == "p"
+    with pytest.raises(ValidationError, match="GOOGLE_VERTEX=true needs GOOGLE_CLOUD_PROJECT"):
+        _settings(GOOGLE_VERTEX="true")
+
+
+def test_the_index_model_addresses_vertex_at_its_configured_location() -> None:
+    settings = _settings(
+        GOOGLE_VERTEX="true",
+        GOOGLE_CLOUD_PROJECT="p",
+        GOOGLE_API_KEY="key",
+        VERTEX_LOCATION="us-east5",
+    )
+    model = create_index_model(settings, "gemini-4-argon")
+    assert (
+        model.model_name == "projects/p/locations/us-east5/publishers/google/models/gemini-4-argon"
+    )
+    # The Gemini API (no Vertex): the bare name, as before.
+    gemini_api = create_index_model(_settings(GOOGLE_API_KEY="key"), "gemini-4-argon")
+    assert gemini_api.model_name == "gemini-4-argon"
+
+
+def test_vertex_without_a_project_is_a_configuration_bug() -> None:
+    """Settings refuses GOOGLE_VERTEX=true without GOOGLE_CLOUD_PROJECT at boot
+    (test_vertex_needs_the_cloud_project); only a Settings built another way, bypassing
+    that validator, could reach the model factory with it unset."""
+    bypassed = Settings.model_construct(
+        google_vertex=True, google_cloud_project=None, vertex_location="global"
+    )
+    with pytest.raises(RuntimeError, match="GOOGLE_CLOUD_PROJECT"):
+        create_index_model(bypassed, "gemini-4-argon")
 
 
 def test_youtube_videos_go_without_a_container_type() -> None:
