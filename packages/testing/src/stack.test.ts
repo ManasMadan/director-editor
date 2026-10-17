@@ -51,16 +51,23 @@ describe("a stack of local services", () => {
       EMAIL_PREVIEW_PORT: "3130",
       STORYBOOK_PORT: "6106",
       GOOGLE_FAKE_PORT: "12212",
-      // The site and its auth origin, the web server's upstreams, and the mock Google.
+      // The site and its auth origin, and the web server's upstreams.
       WEB_URL: "http://localhost:3100",
       BETTER_AUTH_URL: "http://localhost:3100",
       API_URL: "http://localhost:3101",
       AI_URL: "http://localhost:8100",
-      GOOGLE_BASE_URL: "http://localhost:12212",
     });
-    // A local URL set by hand in .env follows its port too.
-    expect(stackValues({ AI_URL: "http://127.0.0.1:8000" }, example, 1)).toMatchObject({
+    // A local URL set by hand in .env follows its port too: the mock Google's, when a
+    // test points Gemini at it (the example leaves GOOGLE_BASE_URL empty: real Google).
+    expect(
+      stackValues(
+        { AI_URL: "http://127.0.0.1:8000", GOOGLE_BASE_URL: "http://localhost:12112" },
+        example,
+        1,
+      ),
+    ).toMatchObject({
       AI_URL: "http://127.0.0.1:8100",
+      GOOGLE_BASE_URL: "http://localhost:12212",
     });
   });
 
