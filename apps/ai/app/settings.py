@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     # Another endpoint for the Gemini API: a gateway, or locally the mock Google
     # (packages/fake-google), which production refuses.
     google_base_url: AnyHttpUrl | None = Field(default=None, alias="GOOGLE_BASE_URL")
+    # Gemini through Vertex AI (express mode: GOOGLE_API_KEY is a Vertex key, bound to a
+    # service account) instead of the Gemini API. Vertex bills through Cloud Billing, so a
+    # project's Cloud credits pay for it; the Gemini API bills separately.
+    google_vertex: bool = Field(default=False, alias="GOOGLE_VERTEX")
     # A plan watches the whole short (about 300 tokens a second) and thinks; a scene check
     # looks at one frame; a review watches one take.
     director_tokens_per_plan: int = Field(

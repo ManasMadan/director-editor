@@ -42,7 +42,9 @@ Director is on when the API has `YOUTUBE_API_KEY` and the `ai` and `files` featu
 the AI service has `DIRECTOR_MODEL` and `GOOGLE_API_KEY` ([environment.md](environment.md)).
 For the real APIs: empty `GOOGLE_BASE_URL`, set `YOUTUBE_API_URL` back to Google's, set
 real keys and a real `DIRECTOR_MODEL` (`gemini-3.5-flash`). Production refuses the mock
-(both URLs must be HTTPS there).
+(both URLs must be HTTPS there). Set `GOOGLE_VERTEX=true` to call Gemini through Vertex
+AI instead of the Gemini API: `GOOGLE_API_KEY` then needs to be a Vertex key bound to a
+service account, and usage bills through Cloud Billing rather than the Gemini API.
 
 If the Expo app's bundler won't start (`bun dev:full` stops with it), run the rest with
 `bunx turbo run dev --filter='!@repo/mobile'`.

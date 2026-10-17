@@ -15,6 +15,7 @@ from pydantic import ValidationError
 
 from app.assistant import Deps, create_agent, local_extractive
 from app.auth import verify
+from app.director import create_director_model, youtube_video
 from app.documents import Passage, create_summaries
 from app.embeddings import HashingEmbedder
 from app.errors import AppError
@@ -85,6 +86,23 @@ def test_director_needs_its_gemini_key() -> None:
     assert _settings(DIRECTOR_MODEL="gemini-3.5-flash", GOOGLE_API_KEY="key").director_model
     with pytest.raises(ValidationError, match="DIRECTOR_MODEL needs GOOGLE_API_KEY"):
         _settings(DIRECTOR_MODEL="gemini-3.5-flash")
+
+
+def test_director_calls_vertex_ai_when_asked() -> None:
+    director = {"DIRECTOR_MODEL": "gemini-3.5-flash", "GOOGLE_API_KEY": "key"}
+    gemini_api = create_director_model(_settings(**director))
+    vertex = create_director_model(_settings(**director, GOOGLE_VERTEX="true"))
+    assert gemini_api is not None
+    assert gemini_api.system == "google"
+    assert vertex is not None
+    assert vertex.system == "google-cloud"
+
+
+def test_youtube_videos_go_without_a_container_type() -> None:
+    video = youtube_video("jNQXAC9IVRw")
+    assert video.url == "https://www.youtube.com/watch?v=jNQXAC9IVRw"
+    assert video.is_youtube
+    assert video.media_type == "video/*"
 
 
 async def test_hashing_embeddings_put_similar_wording_close() -> None:
