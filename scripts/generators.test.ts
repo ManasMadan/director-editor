@@ -17,7 +17,10 @@ describe("the generators check", () => {
     const { run, calls, options } = fakeRun(passing);
     expect(generators(["--in-place"], run)).toBe(0);
     expect(calls).toEqual([
-      'bunx turbo gen api-feature --args smoke-notes smoke-note todo {"title":"Smoke"}',
+      "cp turbo/generators/smoke/smoke-note.prisma packages/db/prisma/schema/smoke-note.prisma",
+      "cp -R turbo/generators/smoke/29991231000000_smoke_note packages/db/prisma/migrations/",
+      "bun run gen",
+      'bunx turbo gen api-feature --args smoke-notes smoke-note smokeNote {"title":"Smoke"}',
       "bunx turbo gen package --args smoke-kit A package the generators check makes.",
       "bun run lint",
       "bun run check-types",
@@ -25,7 +28,7 @@ describe("the generators check", () => {
       "bunx vitest run --project integration test/api.integration.test.ts -t smoke-notes",
     ]);
     expect(options.map((option) => option.cwd)).toEqual([
-      ...Array(5).fill(ROOT),
+      ...Array(8).fill(ROOT),
       join(ROOT, "apps/api"),
     ]);
     expect(printed()).toContain("both generators write code that passes");

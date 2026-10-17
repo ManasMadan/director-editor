@@ -14,9 +14,14 @@ import { join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { fail, ok, ROOT, type Run, runMain, runSync } from "./lib";
 
-/** An api feature over the todo table, and a package: names nothing else uses. */
+/**
+ * An api feature over a throwaway tenant table, and a package: names nothing else uses.
+ * The table (turbo/generators/smoke) goes into the copy's schema and migrations first,
+ * since the generator works over a table that already exists.
+ */
 const FEATURE_NAME = "smoke-notes";
-const FEATURE = [FEATURE_NAME, "smoke-note", "todo", '{"title":"Smoke"}'];
+const FEATURE = [FEATURE_NAME, "smoke-note", "smokeNote", '{"title":"Smoke"}'];
+const SMOKE = "turbo/generators/smoke";
 const PACKAGE = ["smoke-kit", "A package the generators check makes."];
 
 /** Runs a command that must pass, and returns its output; throws when it fails. */
@@ -74,6 +79,17 @@ function step(run: Run, label: string, cwd: string, [command = "", ...args]: str
 function check(run: Run, dir: string) {
   const api = join(dir, "apps/api");
   const steps: [string, string, string[]][] = [
+    [
+      "add the throwaway table's model",
+      dir,
+      ["cp", `${SMOKE}/smoke-note.prisma`, "packages/db/prisma/schema/smoke-note.prisma"],
+    ],
+    [
+      "add the throwaway table's migration",
+      dir,
+      ["cp", "-R", `${SMOKE}/29991231000000_smoke_note`, "packages/db/prisma/migrations/"],
+    ],
+    ["generate the database client", dir, ["bun", "run", "gen"]],
     ["generate an api feature", dir, ["bunx", "turbo", "gen", "api-feature", "--args", ...FEATURE]],
     ["generate a package", dir, ["bunx", "turbo", "gen", "package", "--args", ...PACKAGE]],
     ["lint", dir, ["bun", "run", "lint"]],
