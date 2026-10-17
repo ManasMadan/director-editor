@@ -514,11 +514,28 @@ tests:
           path: "spec.jobTemplate.spec.template.spec.containers[0].env"
           content: { name: RCLONE_CONFIG_OFFSITE_ENDPOINT, value: https://s3.elsewhere.example }
         documentIndex: 1
+      - contains:
+          path: "spec.jobTemplate.spec.template.spec.containers[0].env"
+          content: { name: RCLONE_CONFIG_OFFSITE_PROVIDER, value: Other }
+        documentIndex: 0
       - equal:
           path: "spec.jobTemplate.spec.template.spec.containers[0].args[2]"
           value: "offsite:copies/production/uploads"
         documentIndex: 1
       - equal: { path: spec.concurrencyPolicy, value: Forbid }
+
+  - it: tells rclone which S3 implementation the offsite copy is on
+    template: offsite.yaml
+    set:
+      postgres.backups.enabled: true
+      offsite.endpoint: https://storage.googleapis.com
+      offsite.provider: GCS
+      offsite.bucket: copies
+      offsite.prefix: production
+    asserts:
+      - contains:
+          path: "spec.jobTemplate.spec.template.spec.containers[0].env"
+          content: { name: RCLONE_CONFIG_OFFSITE_PROVIDER, value: GCS }
 
   - it: refuses to render without an offsite copy where one is required
     template: offsite.yaml

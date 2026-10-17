@@ -177,6 +177,9 @@ offsite:
   # e.g. https://s3.backups.example.net
   endpoint: ""
   region: us-east-1
+  # rclone's name for the S3 implementation behind the endpoint. GCS needs its own:
+  # under the generic one its S3 API refuses rclone's request signatures.
+  provider: Other
   bucket: ""
   # A folder of the bucket for this environment: <bucket>/<prefix>/{backups,uploads}.
   prefix: ""

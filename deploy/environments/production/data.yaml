@@ -30,5 +30,6 @@ offsite:
   required: true
   endpoint: https://storage.googleapis.com
   region: auto
+  provider: GCS
   bucket: director-editor-offsite-1053522546520
   prefix: production
