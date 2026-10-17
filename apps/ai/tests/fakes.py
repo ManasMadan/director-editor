@@ -9,6 +9,11 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from google.api_core.client_options import ClientOptions
+from google.auth.credentials import AnonymousCredentials
+from google.cloud.bigquery import Client as BigQueryClient
+from pydantic import BaseModel, Field
+
 type Reply = tuple[int, dict[str, object]]
 
 
@@ -97,6 +102,52 @@ def gemini_error(status: int, reason: str, message: str = "") -> Callable[[bytes
         return status, {"error": {"code": status, "message": message or reason, "status": reason}}
 
     return reply
+
+
+BIGQUERY_PROJECT = "test-project"
+BIGQUERY_DATASET = "director"
+# tabledata.insertAll on the events table, as google-cloud-bigquery's client asks for it.
+INSERT_ALL = (
+    f"/bigquery/v2/projects/{BIGQUERY_PROJECT}/datasets/{BIGQUERY_DATASET}"
+    "/tables/events/insertAll?prettyPrint=false"
+)
+
+
+def bigquery_inserted(_body: bytes) -> Reply:
+    """insertAll accepting every row."""
+    return 200, {"kind": "bigquery#tableDataInsertAllResponse"}
+
+
+def bigquery_client(fake: Fake) -> Callable[[str], BigQueryClient]:
+    """What app/analytics.py builds its client with, pointed at `fake`: anonymous, so it
+    never looks for Application Default Credentials (nor the GCE metadata server)."""
+
+    def build(project: str) -> BigQueryClient:
+        return BigQueryClient(
+            project=project,
+            credentials=AnonymousCredentials(),
+            client_options=ClientOptions(api_endpoint=fake.url),
+        )
+
+    return build
+
+
+class _InsertedRow(BaseModel):
+    values: dict[str, object] = Field(alias="json")
+
+
+class _InsertAll(BaseModel):
+    rows: list[_InsertedRow]
+
+
+def inserted_rows(fake: Fake) -> list[dict[str, object]]:
+    """Every row the stand-in BigQuery was asked to insert, in order."""
+    return [
+        row.values
+        for path, body in fake.received
+        if path == INSERT_ALL
+        for row in _InsertAll.model_validate_json(body).rows
+    ]
 
 
 @contextmanager

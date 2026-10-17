@@ -115,6 +115,7 @@ has a `swap-*` skill in `.claude/skills`.
 | Notification templates | in code | a database, edited without a deploy | `apps/notifications/src/dispatch/templates.ts` | `swap-notification-templates` |
 | Translations | JSON bundled in `packages/i18n` | a database plus Redis cache | `packages/nest-common/src/i18n.ts` | `swap-translations` |
 | Realtime fan-out | pub/sub on the shared Valkey | a dedicated Redis or NATS | `packages/nest-common/src/realtime.ts` | `swap-realtime` |
+| Product analytics | BigQuery, streamed one event at a time | a managed pipeline (Segment, PostHog) or a different warehouse | `packages/nest-common/src/analytics.ts`, `apps/ai/app/analytics.py` | `swap-analytics` |
 | DNS and certificates' DNS-01 | Cloudflare, with its proxy in front | a name server of our own (RFC 2136, built in), or another provider | `dns` in `infra/tofu/envs/k3s`, and the cluster's `dns-*` annotations the platform add-ons read | `swap-dns` |
 
 Some growth steps don't need an interface, because they're configuration or a move:

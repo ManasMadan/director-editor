@@ -38,6 +38,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.analytics import Analytics, AnalyticsEvent, Recorder, create_analytics
 from app.contracts.error_response import ErrorCode
 from app.contracts.realtime_message import DirectorChanged
 from app.db.models import DirectorCut, DirectorPlan, DirectorTake
@@ -388,6 +389,7 @@ class Director:
         queue: DirectorQueue,
         redis: Redis,
         http: httpx.AsyncClient,
+        analytics: Analytics | None,
     ) -> None:
         # The short names the caller built each model from, not `index_model.model_name`:
         # on Vertex that property is the full resource name (create_google_model), and
@@ -399,6 +401,7 @@ class Director:
         self._queue = queue
         self._redis = redis
         self._http = http
+        self._events = Recorder(analytics)
         planner_settings = GoogleModelSettings(
             thinking="medium",
             timeout=WATCH_TIMEOUT_SECONDS,
@@ -737,6 +740,8 @@ class Director:
             ).one()
             shot = _shot(plan, take.shot_index)
             kind = take.kind
+            # For the analytics event: the take's own user, since a job may not name one.
+            reviewer, video_id = take.user_id, plan.video_id
             take.status, take.updated_at = "reviewing", func.now()
         await publish_to_org(self._redis, org_id, CHANGED)
         try:
@@ -794,6 +799,12 @@ class Director:
                 )
             )
         await publish_to_org(self._redis, org_id, CHANGED)
+        # Only here, once the score is stored: a review that fails or is retried isn't one.
+        self._events.record(
+            AnalyticsEvent(
+                kind="take_reviewed", user_id=reviewer, video_id=video_id, score=review.score
+            )
+        )
 
     # ------------------------------------------------------------------------ cuts
 
@@ -953,4 +964,5 @@ def create_director(
         queue,
         redis,
         http,
+        create_analytics(settings),
     )

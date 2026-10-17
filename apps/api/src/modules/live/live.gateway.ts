@@ -50,6 +50,8 @@ export interface LiveOptions {
   log: LiveLog;
   /** The clock camera frames are paced by (Date.now). */
   now: () => number;
+  /** Records that a call reached Gemini and started (fire-and-forget analytics). */
+  recordCallStarted(userId: UserId, videoId: VideoId): void;
 }
 
 /** The upstream for the environment's settings; null turns the feature off. */
@@ -115,7 +117,7 @@ function refuseCall(log: LiveLog, client: WebSocket, error: unknown) {
 function relayFor(
   client: WebSocket,
   upstream: LiveUpstream,
-  call: { plan: ShotPlan; shot: number },
+  call: { plan: ShotPlan; shot: number; userId: UserId; videoId: VideoId },
   options: LiveOptions,
 ) {
   return new LiveRelay(client, {
@@ -127,6 +129,42 @@ function relayFor(
     frameIntervalMs: FRAME_INTERVAL_MS,
     now: options.now,
     log: options.log,
+    onCallStarted: () => options.recordCallStarted(call.userId, call.videoId),
+  });
+}
+
+/**
+ * Node hands every upgrade to an "upgrade" listener once there is one; this keeps the
+ * others (an h2c upgrade to /rpc, say) on Fastify's routing as ordinary requests.
+ */
+function registerUpgrade(
+  fastify: FastifyInstance,
+  sockets: WebSocketServer,
+  allowedOrigins: ReadonlySet<string>,
+  options: Pick<LiveOptions, "log">,
+  call: (client: WebSocket, headers: Headers, url: URL) => void,
+) {
+  Object.assign(fastify.server, { shouldUpgradeCallback: isLiveUpgrade });
+  fastify.server.on("upgrade", (request, socket, head) => {
+    // Node takes its own error handler off a socket it hands over: without one, a client
+    // resetting the connection would crash the process. ws adds its own once it upgrades.
+    const onError = (error: Error) =>
+      options.log("warn", { err: describeError(error) }, "live upgrade socket failed");
+    socket.on("error", onError);
+    // Only a Node without shouldUpgradeCallback (older than 24.9) sends any other path here.
+    if (!isLiveUpgrade(request)) {
+      return refuse(socket, 404);
+    }
+    const origin = request.headers.origin;
+    if (origin !== undefined && !allowedOrigins.has(origin)) {
+      return refuse(socket, 403);
+    }
+    const url = new URL(required(request.url, "the upgrade's URL"), "http://localhost");
+    const headers = toHeaders(request);
+    sockets.handleUpgrade(request, socket, head, (client) => {
+      socket.off("error", onError);
+      call(client, headers, url);
+    });
   });
 }
 
@@ -163,7 +201,12 @@ export function mountLive(fastify: FastifyInstance, options: LiveOptions) {
       if (client.readyState !== WebSocket.OPEN) {
         return; // hung up while the plan loaded
       }
-      await relayFor(client, upstream, { plan, shot: query.data.shot }, options).run();
+      await relayFor(
+        client,
+        upstream,
+        { plan, shot: query.data.shot, userId: caller.userId, videoId: query.data.videoId },
+        options,
+      ).run();
     } catch (error) {
       refuseCall(options.log, client, error);
     } finally {
@@ -173,30 +216,13 @@ export function mountLive(fastify: FastifyInstance, options: LiveOptions) {
     }
   }
 
-  // Node hands every upgrade to an "upgrade" listener once there is one; this keeps the
-  // others (an h2c upgrade to /rpc, say) on Fastify's routing as ordinary requests.
-  Object.assign(fastify.server, { shouldUpgradeCallback: isLiveUpgrade });
-  fastify.server.on("upgrade", (request, socket, head) => {
-    // Node takes its own error handler off a socket it hands over: without one, a client
-    // resetting the connection would crash the process. ws adds its own once it upgrades.
-    const onError = (error: Error) =>
-      options.log("warn", { err: describeError(error) }, "live upgrade socket failed");
-    socket.on("error", onError);
-    // Only a Node without shouldUpgradeCallback (older than 24.9) sends any other path here.
-    if (!isLiveUpgrade(request)) {
-      return refuse(socket, 404);
-    }
-    const origin = request.headers.origin;
-    if (origin !== undefined && !allowedOrigins.has(origin)) {
-      return refuse(socket, 403);
-    }
-    const url = new URL(required(request.url, "the upgrade's URL"), "http://localhost");
-    const headers = toHeaders(request);
-    sockets.handleUpgrade(request, socket, head, (client) => {
-      socket.off("error", onError);
-      void call(client, headers, url);
-    });
-  });
+  registerUpgrade(
+    fastify,
+    sockets,
+    allowedOrigins,
+    options,
+    (client, headers, url) => void call(client, headers, url),
+  );
 
   // Open calls would hold the server's close until they end; end them first.
   fastify.addHook("preClose", async () => {

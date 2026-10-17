@@ -70,4 +70,4 @@ them, but each is a plain Markdown checklist you can follow by hand.
 | [rollback](../.claude/skills/rollback/SKILL.md) | undoing a bad deploy in staging or production |
 | [preview](../.claude/skills/preview/SKILL.md) | a pull request's own environment, and why one isn't up |
 | [rotate-secrets](../.claude/skills/rotate-secrets/SKILL.md) | rotating every kind of secret and key, in `.env` and in the SOPS files |
-| `swap-*` (10) | moving a seam to another implementation; the README's "Scaling path" names each |
+| `swap-*` (11) | moving a seam to another implementation; the README's "Scaling path" names each |

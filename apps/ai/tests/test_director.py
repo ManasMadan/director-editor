@@ -20,6 +20,7 @@ from psycopg.types.json import Jsonb
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.exc import IntegrityError
 
+from app import analytics
 from app.db.models import DirectorPlan
 from app.director import PLANNER_RETRIES, Director, ReviewInterrupted, index_lock_key
 from app.errors import AppError
@@ -34,12 +35,18 @@ from app.schemas import (
 from app.settings import get_settings
 from app.worker import director_processor
 from tests.fakes import (
+    BIGQUERY_DATASET,
+    BIGQUERY_PROJECT,
     GEMINI_MODEL,
     GEMINI_PATH,
+    INSERT_ALL,
     Fake,
     Reply,
+    bigquery_client,
+    bigquery_inserted,
     gemini_error,
     gemini_output,
+    inserted_rows,
     serve,
     serve_files,
 )
@@ -1018,6 +1025,48 @@ def test_a_take_is_reviewed_and_keeps_its_best_part(
     assert {"type": "director.changed"} in published(events)
     # Reviewed once: running the job again leaves it.
     on_app_loop(client, lambda: director().review(org, take.id, "http://unused", user))
+
+
+@pytest.fixture
+def bigquery(monkeypatch: pytest.MonkeyPatch) -> Iterator[Fake]:
+    """Analytics on, into a stand-in BigQuery. Ask for it before `client`, so the service
+    starts with the dataset set."""
+    with serve({INSERT_ALL: bigquery_inserted}) as fake:
+        monkeypatch.setenv("BIGQUERY_DATASET", BIGQUERY_DATASET)
+        monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", BIGQUERY_PROJECT)
+        monkeypatch.setattr(analytics, "Client", bigquery_client(fake))
+        yield fake
+
+
+def test_a_reviewed_take_is_counted_with_its_score_and_a_failed_one_is_not(
+    bigquery: Fake,
+    client: TestClient,
+    gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]],
+) -> None:
+    org, user = new_org()
+    _ = ready_plan(client, org, user)
+    gemini[1][GEMINI_PATH] = gemini_output(REVIEW)
+    with serve_files({"/take.webm": ("video/webm", b"\x1a\x45\xdf\xa3")}) as files:
+        failed = add_take(client, org, user, f"{files.url}/gone.webm")
+        on_app_loop(
+            client, lambda: director().review(org, failed.id, f"{files.url}/gone.webm", user)
+        )
+        take = add_take(client, org, user, f"{files.url}/take.webm")
+        # The job's user is optional; the event names the take's own.
+        on_app_loop(client, lambda: director().review(org, take.id, f"{files.url}/take.webm", None))
+    # Written in the background, after the review has already returned.
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and not inserted_rows(bigquery):
+        time.sleep(0.05)
+    [row] = inserted_rows(bigquery)
+    assert {key: value for key, value in row.items() if key != "time"} == {
+        "kind": "take_reviewed",
+        "user_id": str(user),
+        "template_id": None,
+        "video_id": VIDEO,
+        "score": 82,
+        "detail": None,
+    }
 
 
 def test_a_photo_take_has_no_best_part(

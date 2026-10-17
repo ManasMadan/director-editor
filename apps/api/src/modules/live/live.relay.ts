@@ -41,6 +41,8 @@ export interface RelayOptions {
   frameIntervalMs: number;
   now: () => number;
   log: LiveLog;
+  /** Called once, when Gemini's setup completes and the call truly starts (analytics). */
+  onCallStarted: () => void;
 }
 
 /** 16 kHz, 16-bit mono: what a microphone sends in real time. */
@@ -209,8 +211,15 @@ export class LiveRelay {
     const message = parsed.data;
     if (message.setupComplete) {
       clearTimeout(this.setupTimer);
+      // Vertex shouldn't send setupComplete twice, but recording the call only once if
+      // it ever does costs nothing and keeps the count honest. Nor is a call that already
+      // ended (the browser hung up while setup was in flight) one that started.
+      const justStarted = !this.ready;
       this.ready = upstream;
       this.toUpstream(this.options.greeting);
+      if (justStarted && !this.ended) {
+        this.options.onCallStarted();
+      }
     }
     if (message.serverContent) {
       this.relayContent(message.serverContent);

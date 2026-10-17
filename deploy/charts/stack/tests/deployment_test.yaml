@@ -108,6 +108,33 @@ tests:
           path: "spec.template.spec.containers[0].env"
           content: { name: GOOGLE_CLOUD_PROJECT, value: test-project }
 
+  - it: gives the api the BigQuery dataset its analytics events are streamed into
+    set:
+      services.api.env.BIGQUERY_DATASET: test-dataset
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: BIGQUERY_DATASET, value: test-dataset }
+
+  - it: gives the ai service the same BigQuery dataset, for take reviews
+    set:
+      services.ai.env.BIGQUERY_DATASET: test-dataset
+    documentSelector: { path: metadata.name, value: demo-ai }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: BIGQUERY_DATASET, value: test-dataset }
+
+  - it: gives the ai-worker, which runs the take reviews, the same BigQuery dataset
+    set:
+      services.ai-worker.env.BIGQUERY_DATASET: test-dataset
+    documentSelector: { path: metadata.name, value: demo-ai-worker }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: BIGQUERY_DATASET, value: test-dataset }
+
   - it: leaves variables with an empty value unset
     set:
       env.SENTRY_DSN: ""

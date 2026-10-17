@@ -80,6 +80,13 @@ class Settings(BaseSettings):
         default="gemini-3.1-pro-preview", min_length=1, alias="INDEX_FALLBACK_MODEL"
     )
 
+    # Product analytics (app/analytics.py): take reviews, with their scores, streamed into
+    # this BigQuery dataset's `events` table in GOOGLE_CLOUD_PROJECT, the same table
+    # apps/api writes to. A dataset name is letters, digits and underscores. Unset: off.
+    bigquery_dataset: str | None = Field(
+        default=None, pattern=r"^[A-Za-z0-9_]{1,1024}$", alias="BIGQUERY_DATASET"
+    )
+
     @model_validator(mode="after")
     def _production_uses_real_providers(self) -> Self:
         if (
@@ -104,6 +111,13 @@ class Settings(BaseSettings):
         # yet (.env.example's default) must still boot.
         if self.google_vertex and self.google_api_key and not self.google_cloud_project:
             raise ValueError("GOOGLE_VERTEX=true needs GOOGLE_CLOUD_PROJECT")
+        return self
+
+    @model_validator(mode="after")
+    def _analytics_has_a_project(self) -> Self:
+        # A dataset with no project to find it in: fail at boot, not at every event.
+        if self.bigquery_dataset and not self.google_cloud_project:
+            raise ValueError("BIGQUERY_DATASET needs GOOGLE_CLOUD_PROJECT")
         return self
 
 
