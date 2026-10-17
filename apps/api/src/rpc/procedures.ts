@@ -209,7 +209,7 @@ async function signedIn(auth: Auth, headers: Headers) {
  *   - an API key (`x-api-key`): its workspace, as its creator, and only for procedures
  *     whose contract names a scope the key has (see modules/api-keys).
  */
-function orgCallerFor(
+export function orgCallerFor(
   auth: Auth,
   memberships: Memberships,
   authenticateApiKey: AuthenticateApiKey,

@@ -2,8 +2,10 @@
  * Builds the API application: Nest modules, better-auth under /api/auth, and the oRPC
  * router under /rpc and /api/v1. main.ts starts it; integration tests build it in-process.
  */
+import { HOUR_S } from "@repo/contracts/time";
 import { loosely } from "@repo/i18n";
 import {
+  createRateLimiter,
   createServer,
   DATABASE,
   type Database,
@@ -14,6 +16,7 @@ import {
   type Redis,
   row,
 } from "@repo/nest-common";
+import type { FastifyInstance } from "fastify";
 import { Logger } from "nestjs-pino";
 import * as z from "zod";
 import { AppModule } from "./app.module";
@@ -22,10 +25,12 @@ import { mountAuth } from "./auth/auth.routes";
 import { env } from "./env";
 import { mountMcp } from "./mcp";
 import { ApiKeysService } from "./modules/api-keys";
+import { DirectorService } from "./modules/director";
 import { FilesService, mountFileContent } from "./modules/files";
+import { createGoogleAuth, liveUpstream, mountLive } from "./modules/live";
 import { mountOneClickUnsubscribe, NotificationsService } from "./modules/notifications";
 import { TodoService } from "./modules/todo";
-import { createProcedures } from "./rpc/procedures";
+import { type AuthenticateApiKey, createProcedures, orgCallerFor } from "./rpc/procedures";
 import { createRouter } from "./rpc/router";
 import { mountRpc } from "./rpc/rpc.routes";
 
@@ -47,6 +52,15 @@ export function createApiServer() {
       const database = app.get<Database>(DATABASE);
       const i18n = app.get<I18n>(I18N);
       const apiKeys = app.get(ApiKeysService);
+      const authenticateApiKey: AuthenticateApiKey = (key, scope) =>
+        apiKeys.authenticate(key, scope);
+      mountDirectorCall(fastify, {
+        // Calls are for signed-in people: an API key is refused (no scope names a call).
+        caller: orgCallerFor(auth, memberships, authenticateApiKey),
+        director: app.get(DirectorService),
+        redis: app.get<Redis>(REDIS),
+        logger,
+      });
       mountMcp(fastify, {
         siteUrl: env.BETTER_AUTH_URL,
         keys: () => auth.api.getJwks(),
@@ -73,12 +87,7 @@ export function createApiServer() {
       await mountRpc(
         fastify,
         createRouter(
-          createProcedures(
-            auth,
-            memberships,
-            (key, scope) => apiKeys.authenticate(key, scope),
-            app.get<Redis>(REDIS),
-          ),
+          createProcedures(auth, memberships, authenticateApiKey, app.get<Redis>(REDIS)),
           app,
         ),
         {
@@ -91,5 +100,40 @@ export function createApiServer() {
         },
       );
     },
+  });
+}
+
+/** Director's live video call (/api/live), on when GOOGLE_CLOUD_PROJECT is set. */
+function mountDirectorCall(
+  fastify: FastifyInstance,
+  deps: {
+    caller: ReturnType<typeof orgCallerFor>;
+    director: DirectorService;
+    redis: Redis;
+    logger: Logger;
+  },
+) {
+  // Each call is minutes of Gemini audio and video: a few an hour is plenty to film a short.
+  const calls = createRateLimiter(deps.redis, {
+    name: "director-calls",
+    points: 20,
+    windowSeconds: HOUR_S,
+    onRedisError: "deny",
+  });
+  mountLive(fastify, {
+    allowedOrigins: [env.WEB_URL, ...env.APP_ORIGINS],
+    caller: (headers) => deps.caller(headers, undefined),
+    plan: (caller, videoId) => deps.director.plan(caller.userId, caller.orgId, videoId),
+    spendCallLimit: async (userId) => {
+      await calls.take(userId);
+    },
+    upstream: liveUpstream({
+      project: env.GOOGLE_CLOUD_PROJECT,
+      location: env.LIVE_LOCATION,
+      model: env.LIVE_MODEL,
+      auth: createGoogleAuth(env.GOOGLE_ACCESS_TOKEN),
+    }),
+    log: (level, details, message) => deps.logger[level](details, message),
+    now: Date.now,
   });
 }

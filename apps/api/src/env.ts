@@ -122,6 +122,25 @@ export const envSchema = {
   YOUTUBE_API_KEY: z.string().min(1).optional(),
   // Test hook: where YouTube's API lives (the tests' stand-in).
   YOUTUBE_API_URL: z.url().default("https://www.googleapis.com/youtube/v3"),
+  // Optional: Director's live video call (Gemini Live on Vertex AI, /api/live). On when
+  // the Google Cloud project is set; the machine's service account pays for the calls.
+  GOOGLE_CLOUD_PROJECT: z
+    .string()
+    .regex(/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/, "a Google Cloud project id")
+    .optional(),
+  /** The Vertex AI region the calls go to (it names the endpoint's host). */
+  LIVE_LOCATION: z
+    .string()
+    .regex(/^[a-z]+-[a-z]+\d+$/, "a Vertex AI region, e.g. us-central1")
+    .default("us-central1"),
+  /** The Live API model, by its Vertex AI name. */
+  LIVE_MODEL: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9.-]*$/, "a model name")
+    .default("gemini-live-2.5-flash-native-audio"),
+  // Local development only: a Google access token (`gcloud auth print-access-token`) in
+  // place of the GCE metadata server's. Production refuses it.
+  GOOGLE_ACCESS_TOKEN: z.string().min(1).optional(),
 };
 
 export const env = createEnv({
@@ -143,4 +162,9 @@ if (env.NODE_ENV === "production" && env.WEBHOOK_ALLOWED_PRIVATE_ADDRESSES.lengt
 // The local mock Google (packages/fake-google) is plain HTTP: production never reads it.
 if (env.NODE_ENV === "production" && !env.YOUTUBE_API_URL.startsWith("https://")) {
   throw new Error("YOUTUBE_API_URL must be HTTPS in production");
+}
+
+// A pasted token expires within the hour; production uses the machine's service account.
+if (env.NODE_ENV === "production" && env.GOOGLE_ACCESS_TOKEN) {
+  throw new Error("GOOGLE_ACCESS_TOKEN is for local development only");
 }

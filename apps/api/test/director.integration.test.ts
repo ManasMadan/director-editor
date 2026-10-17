@@ -10,6 +10,7 @@ import { ORPCError } from "@orpc/client";
 import { jwtVerify } from "jose";
 import pg from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { WebSocket } from "ws";
 import {
   createSession,
   type Harness,
@@ -25,6 +26,8 @@ const KEY = "test-youtube-key";
 const VIDEO = "dQw4w9WgXcQ";
 const LONG = "LongVideo01";
 const GONE = "GoneVideo01";
+/** A plan the AI service fails to read. */
+const BROKEN = "BrokenPlan1";
 
 let harness: Harness;
 let youtube: Server;
@@ -231,6 +234,9 @@ async function aiRoute(request: IncomingMessage, response: ServerResponse) {
     return send(response, 200, planOut(plan));
   }
   const planMatch = /^GET \/v1\/director\/plans\/([\w-]{11})$/.exec(route);
+  if (planMatch?.[1] === BROKEN) {
+    return send(response, 500, {});
+  }
   if (planMatch) {
     const plan = find(planMatch[1] ?? "");
     return plan ? send(response, 200, planOut(plan)) : fail(404, "DIRECTOR_PLAN_NOT_FOUND");
@@ -302,6 +308,9 @@ beforeAll(async () => {
     YOUTUBE_API_URL: await listen(youtube),
     AI_URL: await listen(ai),
     AI_SERVICE_SECRET: SECRET,
+    // The live call is on; no test here gets as far as calling Google.
+    GOOGLE_CLOUD_PROJECT: "director-test",
+    GOOGLE_ACCESS_TOKEN: "test-token",
   });
 });
 
@@ -622,5 +631,58 @@ describe("Director", () => {
     expect(expiresAt).toBeInstanceOf(Date);
     const other = await signedIn();
     await expectError(other.session.rpc.files.downloadUrl({ fileId: file.id }), "FILE_NOT_FOUND");
+  });
+});
+
+// The call itself (the relay to Gemini) is unit-tested against a stand-in for the Live
+// API (src/modules/live/live.test.ts); this is who may start one, through the real server.
+describe("Director's live call", () => {
+  /** Opens /api/live as the session's browser would, and reads what it says before closing. */
+  async function call(cookies: Map<string, string>, videoId: string) {
+    const socket = new WebSocket(
+      `${harness.baseUrl.replace(/^http/, "ws")}/api/live?videoId=${videoId}&shot=0`,
+      {
+        headers: {
+          origin: process.env.WEB_URL ?? "http://localhost:3000",
+          cookie: [...cookies].map(([name, value]) => `${name}=${value}`).join("; "),
+        },
+      },
+    );
+    const received: unknown[] = [];
+    socket.on("message", (data) => received.push(JSON.parse(String(data))));
+    const code = await new Promise<number>((resolve) => socket.on("close", resolve));
+    return { code, received };
+  }
+
+  it("refuses a browser that isn't signed in", async () => {
+    expect(await call(new Map(), VIDEO)).toEqual({
+      code: 1008,
+      received: [{ type: "error", code: "UNAUTHENTICATED" }],
+    });
+  });
+
+  it("asks for the member's plan in their workspace, and waits until it's ready", async () => {
+    const { session, me } = await signedIn();
+    expect(await call(session.cookies(), "LiveVideo01")).toEqual({
+      code: 1008,
+      received: [{ type: "error", code: "DIRECTOR_PLAN_NOT_FOUND" }],
+    });
+    expect(aiCalls.at(-1)).toMatchObject({
+      route: "GET /v1/director/plans/LiveVideo01",
+      user: me.id,
+    });
+    await session.rpc.director.requestPlan({ videoId: VIDEO });
+    expect(await call(session.cookies(), VIDEO)).toEqual({
+      code: 1008,
+      received: [{ type: "error", code: "DIRECTOR_PLAN_NOT_FOUND" }],
+    });
+  });
+
+  it("says the AI service failed when the plan can't be read", async () => {
+    const { session } = await signedIn();
+    expect(await call(session.cookies(), BROKEN)).toEqual({
+      code: 1011,
+      received: [{ type: "error", code: "UPSTREAM_UNAVAILABLE" }],
+    });
   });
 });
