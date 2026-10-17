@@ -133,7 +133,7 @@ const COUNTERPARTS: Record<string, Record<string, string>> = {
   "ci.yml:types": { "bun run check-types": "types", "bun run type-coverage": "type coverage" },
   "ci.yml:unit": {
     "bun run test": "coverage",
-    "bun test --coverage ./scripts/ ./.claude/hooks/ && bun scripts/coverage.ts --bun": "coverage",
+    "bun run gen && bun test --coverage ./scripts/ ./.claude/hooks/ && bun scripts/coverage.ts --bun": "coverage",
   },
   "ci.yml:components": {
     "Install the browser": "setup: Playwright's Chromium, already on a developer's machine",
