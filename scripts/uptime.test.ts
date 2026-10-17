@@ -80,8 +80,11 @@ describe("hosts", () => {
     });
   });
 
-  it("matches the environments in this repository, still on the placeholders", () => {
-    expect(hosts("production")).toEqual({ site: "app.example.com", mail: "example.com" });
+  it("matches the environments in this repository", () => {
+    expect(hosts("production")).toEqual({
+      site: "director.mmadan.in",
+      mail: "director.mmadan.in",
+    });
   });
 });
 
