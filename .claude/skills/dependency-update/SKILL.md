@@ -68,8 +68,6 @@ on.
 | `mysql2` | 3.23.1 | A credential leak and a decompression bomb in the version the Prisma CLI pins; the migrate image ships it. | Prisma requires 3.23.1 or later. | 2027-03-31 |
 | `deepmerge-ts` | 8.0.0 | An advisory in the version `@prisma/config` pins; the migrate image ships it. | `@prisma/config` requires 8.0.0 or later. | 2027-03-31 |
 | `js-yaml` | 4.3.2 | An advisory in the version `@hey-api/json-schema-ref-parser` pins (code generation). | `@hey-api/openapi-ts` depends on js-yaml 4.3.2 or later. | 2027-03-31 |
-| `uuid` | 11.1.1 | An advisory in the version `xcode` asks for (Expo's native project tooling, its only user). | `xcode`, through `@expo/config-plugins`, allows uuid 11.1.1 or later. | 2027-03-31 |
 | `next` | the catalog's version | A critical advisory in 16.3.3, which `@react-email/ui` (the email preview server) pins exactly; the override gives it the web app's Next, which has the fix. | `@react-email/ui` depends on a fixed Next. | 2027-01-05 |
-| `decode-uri-component` | patched 0.2.2 | Its fix, 0.5.0, is ESM-only and query-string 7 (Expo Router) requires it, so the patch backports 0.5.0's linear-time decoder instead. `osv-scanner.toml` ignores the advisory until the entry expires. | Expo Router moves off query-string 7: drop the patch and the ignore together. | 2027-03-31 |
 
 After merging, the deploy skill covers the rollout to staging.

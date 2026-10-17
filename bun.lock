@@ -508,7 +508,6 @@
     "js-yaml": "4.3.2",
     "mysql2": "3.23.1",
     "next": "catalog:",
-    "uuid": "11.1.1",
   },
   "catalog": {
     "@better-auth/passkey": "^1.7.6",

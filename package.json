@@ -160,10 +160,6 @@
     "deepmerge-ts": "8.0.0",
     "js-yaml": "4.3.2",
     "mysql2": "3.23.1",
-    "next": "catalog:",
-    "uuid": "11.1.1"
-  },
-  "patchedDependencies": {
-    "decode-uri-component@0.2.2": "patches/decode-uri-component@0.2.2.patch"
+    "next": "catalog:"
   }
 }
