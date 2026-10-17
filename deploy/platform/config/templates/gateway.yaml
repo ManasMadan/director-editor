@@ -1,8 +1,16 @@
 {{- $domain := required "domain is required" .Values.domain }}
-{{- $hosts := list $domain (printf "*.%s" $domain) }}
-{{- if .Values.previews }}
-{{- $hosts = append $hosts (printf "*.preview.%s" $domain) }}
+{{- /* Argo CD passes "" for a cluster without the label, which isn't a bool. */ -}}
+{{- $previews := eq (toString .Values.previews) "true" }}
+{{- /* The site's hosts, behind Cloudflare, then the ones reached directly. */ -}}
+{{- $site := list $domain (printf "*.%s" $domain) }}
+{{- $direct := list }}
+{{- if $previews }}
+{{- $direct = append $direct (printf "*.preview.%s" $domain) }}
 {{- end }}
+{{- with .Values.gateway.directZone }}
+{{- $direct = append $direct (printf "*.%s" .) }}
+{{- end }}
+{{- $hosts := concat $site $direct }}
 ---
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: EnvoyProxy
@@ -91,7 +99,6 @@ spec:
             scheme: https
             statusCode: 301
 ---
-{{- $site := sub (len $hosts) (ternary 1 0 .Values.previews) | int }}
 {{- if .Values.gateway.originPulls }}
 ---
 # Cloudflare's origin-pull CA (files/, from developers.cloudflare.com; valid to 2029-11).
@@ -118,7 +125,7 @@ metadata:
   namespace: gateway-system
 spec:
   targetRefs:
-    {{- range $i := until $site }}
+    {{- range $i := until (len $site) }}
     - group: gateway.networking.k8s.io
       kind: Gateway
       name: public
@@ -134,22 +141,25 @@ spec:
         - kind: ConfigMap
           name: cloudflare-origin-pull-ca
   {{- end }}
-{{- if .Values.previews }}
+{{- if $direct }}
 ---
-# Previews are reached directly (their DNS isn't proxied), so whatever X-Forwarded-For a
-# client sends is dropped before Envoy adds the connection's address. ServiceLB hides the
-# real one behind a cluster address, so a preview's visitors share one address for rate limits.
+# Previews and the direct zone are reached directly (their DNS isn't proxied), so
+# whatever X-Forwarded-For a client sends is dropped before Envoy adds the connection's
+# address. ServiceLB hides the real one behind a cluster address, so their visitors
+# share one address for rate limits.
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: ClientTrafficPolicy
 metadata:
-  name: previews
+  name: direct
   namespace: gateway-system
 spec:
   targetRefs:
+    {{- range $i, $host := $direct }}
     - group: gateway.networking.k8s.io
       kind: Gateway
       name: public
-      sectionName: https-{{ $site }}
+      sectionName: https-{{ add (len $site) $i }}
+    {{- end }}
   headers:
     earlyRequestHeaders:
       remove: [X-Forwarded-For]

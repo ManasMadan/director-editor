@@ -69,11 +69,36 @@ tests:
     template: gateway.yaml
     set:
       previews: true
-    documentSelector: { path: metadata.name, value: previews }
+    documentSelector: { path: metadata.name, value: direct }
     asserts:
       - equal: { path: "spec.targetRefs[0].sectionName", value: https-2 }
       - equal: { path: spec.headers.earlyRequestHeaders.remove, value: [X-Forwarded-For] }
       - notExists: { path: spec.tls }
+
+  - it: takes a cluster without the previews label, which Argo CD passes as ""
+    template: gateway.yaml
+    documentSelector: { path: kind, value: Gateway }
+    set:
+      previews: ""
+    asserts:
+      - lengthEqual: { path: spec.listeners, count: 3 }
+
+  - it: serves a direct zone itself, without Cloudflare, after previews
+    template: gateway.yaml
+    set:
+      previews: true
+      gateway.directZone: app.example.com
+    asserts:
+      - equal: { path: "spec.listeners[4].hostname", value: "*.app.example.com" }
+        documentSelector: { path: kind, value: Gateway }
+      - equal: { path: "spec.listeners[4].tls.certificateRefs", value: [{ name: tls-wildcard-app-example-com }] }
+        documentSelector: { path: kind, value: Gateway }
+      - equal:
+          path: spec.targetRefs
+          value:
+            - { group: gateway.networking.k8s.io, kind: Gateway, name: public, sectionName: https-2 }
+            - { group: gateway.networking.k8s.io, kind: Gateway, name: public, sectionName: https-3 }
+        documentSelector: { path: metadata.name, value: direct }
 
   - it: requires no client certificate when there's no Cloudflare in front
     template: gateway.yaml

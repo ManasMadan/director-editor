@@ -138,6 +138,12 @@ variable "flannel_backend" {
   default     = "vxlan"
 }
 
+variable "direct_zone" {
+  description = "A zone under the domain whose hosts skip Cloudflare's proxy and get the gateway's own certificate (e.g. the site's host, for files.<site_host>); Cloudflare's free edge certificate covers one level below the zone only."
+  type        = string
+  default     = null
+}
+
 variable "origin_ips" {
   description = "Where Cloudflare sends the site's traffic; defaults to every node's address."
   type        = list(string)

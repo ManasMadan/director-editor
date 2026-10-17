@@ -117,7 +117,7 @@ tests:
           pattern: '(?m)^\{"@type":"upsert","matchOn":\["name"\],"object":"MtaRoute","value":\{"relay":\{"@type":"Relay","address":"smtp.relay.example","allowInvalidCerts":false,"authSecret":\{"@type":"EnvironmentVariable","variableName":"RELAY_PASSWORD"\},"authUsername":"director-editor","implicitTls":false,"name":"relay","port":587,"protocol":"smtp"\}\}\}$'
       - matchRegex:
           path: 'data["plan.ndjson"]'
-          pattern: '(?m)^\{"@type":"update","object":"MtaOutboundStrategy","value":\{"route":\{"else":"\x27relay\x27","match":\[\{"if":"is_local_domain\(rcpt_domain\)","then":"\x27local\x27"\}\]\}\}\}$'
+          pattern: '(?m)^\{"@type":"update","object":"MtaOutboundStrategy","value":\{"route":\{"else":"\x27relay\x27","match":\{"0":\{"if":"is_local_domain\(rcpt_domain\)","then":"\x27local\x27"\}\}\}\}\}$'
 
   - it: gives the server the relay's password from the Secret
     template: statefulset.yaml

@@ -4,3 +4,4 @@
 # <version>`, whose pull request is the deploy. Until the first promotion it follows
 # master, with no images to run.
 revision: HEAD
+imageTag: sha-c9cf07352af80460059ded17f7eb5924bc86b618

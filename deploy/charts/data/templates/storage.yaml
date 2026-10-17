@@ -260,7 +260,9 @@ spec:
 # The uploads server at its public host: presigned requests only (anything unsigned is
 # refused), so the bucket stays private. A host of its own, not a path of the site's:
 # files people upload never run in the site's origin. external-dns creates its DNS
-# record (the site's are OpenTofu's).
+# record (the site's are OpenTofu's), proxied; a host Cloudflare can't proxy is under
+# OpenTofu's DNS-only wildcard for the direct zone instead, so external-dns leaves it be
+# (it doesn't read the route's own proxied annotation).
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -268,8 +270,10 @@ metadata:
   namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "data.labels" $ | nindent 4 }}
+  {{- if $c.proxied }}
   annotations:
     director-editor.dev/external-dns: "true"
+  {{- end }}
 spec:
   parentRefs:
     {{- toYaml $.Values.gateway.parentRefs | nindent 4 }}

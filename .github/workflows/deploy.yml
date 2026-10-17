@@ -124,11 +124,14 @@ jobs:
               "$REGISTRY/$image:sha-$SHA-amd64" "$REGISTRY/$image:sha-$SHA-arm64"
             digest=$(docker buildx imagetools inspect "$REGISTRY/$image:sha-$SHA" --format '{{json .Manifest}}' | jq -r .digest)
             echo "$image=$digest" >> "$GITHUB_OUTPUT"
+            # The classic signature (a .sig tag, Rekor v1), not cosign 3's Sigstore bundle
+            # as an OCI referrer: Kyverno's image policy (deploy/platform/config) only reads
+            # the classic one, so production would refuse every image signed the new way.
             if [[ -n "$COSIGN_PRIVATE_KEY" ]]; then
               # With a key pair (imagePolicy.publicKey): nothing public is involved.
-              cosign sign --yes --key env://COSIGN_PRIVATE_KEY --tlog-upload=false "$REGISTRY/$image@$digest"
+              cosign sign --yes --new-bundle-format=false --use-signing-config=false --key env://COSIGN_PRIVATE_KEY --tlog-upload=false "$REGISTRY/$image@$digest"
             else
-              cosign sign --yes "$REGISTRY/$image@$digest"
+              cosign sign --yes --new-bundle-format=false --use-signing-config=false "$REGISTRY/$image@$digest"
             fi
           done
 

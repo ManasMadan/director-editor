@@ -16,3 +16,4 @@ clusterParameters:
   tls.dns01.rfc2136.tsigAlgorithm: dns-tsig-algorithm
   gateway.trustedHops: trusted-hops|1
   gateway.originPulls: origin-pulls|true
+  gateway.directZone: direct-zone

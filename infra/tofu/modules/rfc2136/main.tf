@@ -9,7 +9,7 @@
 locals {
   zone = "${trimsuffix(var.zone_name, ".")}."
   # A host relative to the zone: the apex is the zone itself.
-  relative = { for host in compact(concat(var.site_hosts, [var.preview_host == null ? null : "*.${var.preview_host}"], [try(var.mail.host, null)], [try(coalesce(var.mail.domain, var.zone_name), null)])) :
+  relative = { for host in compact(concat(var.site_hosts, [var.preview_host == null ? null : "*.${var.preview_host}"], [var.direct_zone == null ? null : "*.${var.direct_zone}"], [try(var.mail.host, null)], [try(coalesce(var.mail.domain, var.zone_name), null)])) :
     host => host == var.zone_name ? null : trimsuffix(host, ".${var.zone_name}")
   }
   ipv4 = [for ip in var.origin_ips : ip if !strcontains(ip, ":")]
@@ -18,6 +18,7 @@ locals {
   hosts = merge(
     { for host in var.site_hosts : host => { ipv4 = local.ipv4, ipv6 = local.ipv6 } },
     var.preview_host == null ? {} : { "*.${var.preview_host}" = { ipv4 = local.ipv4, ipv6 = local.ipv6 } },
+    var.direct_zone == null ? {} : { "*.${var.direct_zone}" = { ipv4 = local.ipv4, ipv6 = local.ipv6 } },
     var.mail == null ? {} : { (var.mail.host) = { ipv4 = [var.mail.ipv4], ipv6 = compact([var.mail.ipv6]) } },
   )
   mail_domain = var.mail == null ? null : coalesce(var.mail.domain, var.zone_name)

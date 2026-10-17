@@ -125,6 +125,7 @@
             "bucket": { "$ref": "#/$defs/bucket" },
             "host": { "type": "string", "pattern": "^$|^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$" },
             "scheme": { "enum": ["https", "http"] },
+            "proxied": { "type": "boolean" },
             "corsOrigins": {
               "type": "array",
               "items": { "type": "string", "pattern": "^https?://[^/]+$" }
@@ -217,6 +218,7 @@
         "required": { "type": "boolean" },
         "endpoint": { "type": "string", "pattern": "^(https?://.+)?$" },
         "region": { "type": "string" },
+        "provider": { "type": "string", "minLength": 1 },
         "bucket": { "anyOf": [{ "const": "" }, { "$ref": "#/$defs/bucket" }] },
         "prefix": { "type": "string", "pattern": "^([a-z0-9][a-z0-9._-]*)?$" },
         "secretName": { "type": "string", "minLength": 1 },

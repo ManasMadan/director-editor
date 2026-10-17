@@ -78,7 +78,7 @@ spec:
                 - name: RCLONE_CONFIG_OFFSITE_TYPE
                   value: s3
                 - name: RCLONE_CONFIG_OFFSITE_PROVIDER
-                  value: Other
+                  value: {{ $o.provider | quote }}
                 - name: RCLONE_CONFIG_OFFSITE_ENDPOINT
                   value: {{ $o.endpoint }}
                 - name: RCLONE_CONFIG_OFFSITE_REGION

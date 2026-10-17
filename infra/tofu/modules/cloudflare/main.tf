@@ -19,12 +19,16 @@ locals {
   type    = { for ip in var.origin_ips : ip => strcontains(ip, ":") ? "AAAA" : "A" }
 }
 
-# Full (strict) TLS to the origin, HTTPS only, modern TLS.
+# Full (strict) TLS to the origin, HTTPS only, modern TLS, and Cloudflare's origin-pull
+# client certificate on every request to the origin. tls_client_auth is the switch that
+# makes Cloudflare present it; the settings resource below only configures it, and on
+# its own the gateway refuses every request with 520s at the edge.
 resource "cloudflare_zone_setting" "this" {
   for_each = {
     ssl              = "strict"
     always_use_https = "on"
     min_tls_version  = "1.2"
+    tls_client_auth  = "on"
   }
   zone_id    = local.zone_id
   setting_id = each.key
@@ -83,6 +87,19 @@ resource "cloudflare_dns_record" "previews" {
   proxied  = false
   ttl      = 300
   comment  = "${var.name}: pull-request previews"
+}
+
+# Hosts under the direct zone (the site's own name, e.g. files.app.example.com), DNS only
+# for the same reason as previews: the gateway serves them with its own certificate.
+resource "cloudflare_dns_record" "direct" {
+  for_each = var.direct_zone == null ? toset([]) : toset(var.origin_ips)
+  zone_id  = local.zone_id
+  name     = "*.${var.direct_zone}"
+  type     = local.type[each.key]
+  content  = each.key
+  proxied  = false
+  ttl      = 300
+  comment  = "${var.name}: hosts the gateway serves itself"
 }
 
 # ------------------------------------------------------------------ mail

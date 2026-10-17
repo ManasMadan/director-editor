@@ -29,8 +29,8 @@ variables {
 run "hardens_the_zone" {
   command = apply
   assert {
-    condition     = cloudflare_zone_setting.this["ssl"].value == "strict" && cloudflare_zone_setting.this["always_use_https"].value == "on"
-    error_message = "the zone must use strict TLS and HTTPS only"
+    condition     = cloudflare_zone_setting.this["ssl"].value == "strict" && cloudflare_zone_setting.this["always_use_https"].value == "on" && cloudflare_zone_setting.this["tls_client_auth"].value == "on"
+    error_message = "the zone must use strict TLS, HTTPS only, and present the origin-pull certificate"
   }
   assert {
     condition     = cloudflare_authenticated_origin_pulls_settings.this.enabled
@@ -66,6 +66,21 @@ run "gives_ipv6_origins_aaaa_records" {
   assert {
     condition     = cloudflare_dns_record.site["app.example.com 2001:db8::10"].type == "AAAA"
     error_message = "IPv6 origins are AAAA records"
+  }
+}
+
+run "points_the_direct_zone_at_the_cluster_without_the_proxy" {
+  command = apply
+  variables {
+    direct_zone = "app.example.com"
+  }
+  assert {
+    condition     = toset([for record in cloudflare_dns_record.direct : "${record.name} ${record.content}"]) == toset(["*.app.example.com 203.0.113.10", "*.app.example.com 203.0.113.11"])
+    error_message = "a wildcard for the hosts under the site's own name"
+  }
+  assert {
+    condition     = alltrue([for record in cloudflare_dns_record.direct : !record.proxied])
+    error_message = "the free edge certificate doesn't cover a second-level name"
   }
 }
 
