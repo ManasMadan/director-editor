@@ -26,6 +26,8 @@ const KEY = "test-youtube-key";
 const VIDEO = "dQw4w9WgXcQ";
 const LONG = "LongVideo01";
 const GONE = "GoneVideo01";
+/** A take the AI service says isn't the member's take of the shot. */
+const SOMEONE_ELSES_TAKE = randomUUID();
 /** A plan the AI service fails to read. */
 const BROKEN = "BrokenPlan1";
 
@@ -378,6 +380,9 @@ function directorCutRoute(
       return failure(404, "DIRECTOR_PLAN_NOT_FOUND");
     }
     const createdAt = new Date().toISOString();
+    if (JSON.stringify(body.picks).includes(SOMEONE_ELSES_TAKE)) {
+      return failure(404, "DIRECTOR_TAKE_NOT_FOUND");
+    }
     const cut = { id: randomUUID(), org: who.org, user: who.user, plan, body, createdAt };
     cuts.unshift(cut);
     return { status: 201, body: cutOut(cut) };
@@ -867,6 +872,11 @@ describe("Director's shots and cuts", () => {
     });
     await expect(session.rpc.director.cuts({ videoId: "CutsShort01" })).resolves.toEqual([cut]);
     await expect(session.rpc.director.media()).resolves.toEqual([cut]);
+    // A pick that isn't the member's take of that shot, as the AI service says.
+    await expectError(
+      session.rpc.director.saveCut({ ...input, picks: { 0: SOMEONE_ELSES_TAKE } }),
+      "DIRECTOR_TAKE_NOT_FOUND",
+    );
   });
 
   it("refuses a cut of someone else's file, or of a file that isn't a cut", async () => {
@@ -893,6 +903,17 @@ describe("Director's shots and cuts", () => {
       session.rpc.director.saveCut({ ...input, fileId: take.id }),
       "FILE_NOT_FOUND",
     );
+    // Past what the worker can scan (ClamAV's default stream limit), it never uploads.
+    const tooBig = await expectError(
+      session.rpc.files.createUpload({
+        purpose: "director-cut-video",
+        filename: "long.mp4",
+        contentType: "video/mp4",
+        size: 100_000_001,
+      }),
+      "FILE_TOO_LARGE",
+    );
+    expect(tooBig.data).toMatchObject({ params: { maxBytes: 100_000_000 } });
     // Nothing picked, or a title too long for YouTube, isn't a cut either.
     await expectError(session.rpc.director.saveCut({ ...input, picks: {} }), "VALIDATION_FAILED");
     await expectError(

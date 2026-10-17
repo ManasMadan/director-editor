@@ -33,7 +33,7 @@ from pydantic_ai.providers.google_cloud import GoogleCloudProvider
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RunUsage, UsageLimits
 from redis.asyncio import Redis
-from sqlalchemy import func, select, update
+from sqlalchemy import Boolean, func, select, type_coerce, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -273,30 +273,34 @@ def _shot(plan: DirectorPlan, shot_index: int) -> Shot:
 def _pick_ms(pick: CutPick, shots: list[Shot], takes: Mapping[UUID, DirectorTake]) -> int:
     """How long a picked take lasts in a cut: a video take's best part once it's reviewed,
     otherwise its shot's length (for a photo, how long it's shown). DIRECTOR_SHOT_NOT_FOUND
-    for a shot the plan hasn't, NOT_FOUND for a take that isn't the caller's of that shot."""
+    for a shot the plan hasn't, DIRECTOR_TAKE_NOT_FOUND for a take that isn't the caller's
+    take of that shot."""
     if pick.shotIndex >= len(shots):
         raise AppError("DIRECTOR_SHOT_NOT_FOUND")
     take = takes.get(pick.takeId)
     if take is None or take.shot_index != pick.shotIndex:
-        raise AppError("NOT_FOUND")
+        raise AppError("DIRECTOR_TAKE_NOT_FOUND")
     if take.best_start_ms is not None and take.best_end_ms is not None:
         return take.best_end_ms - take.best_start_ms
     return round(shots[pick.shotIndex].durationSeconds * 1000)
 
 
 async def _index_used(session: AsyncSession, user_id: UUID) -> bool:
-    """Whether the user has a short of their own in the session's workspace that hasn't
-    failed (another workspace's is invisible here; ONE_USER_INDEX still refuses a second)."""
-    found = await session.scalar(
-        select(DirectorPlan.id)
-        .where(
-            DirectorPlan.created_by == user_id,
-            DirectorPlan.source == "user",
-            DirectorPlan.status != "failed",
-        )
-        .limit(1)
+    """Whether the user has a short of their own that hasn't failed, in any of their
+    workspaces: ai.index_used looks past row-level security, which would show this session
+    only the current one (the limit, ONE_USER_INDEX, is across all of them)."""
+    used = await session.scalar(select(type_coerce(func.ai.index_used(user_id), Boolean)))
+    return used is True
+
+
+async def _take_turns(session: AsyncSession, user_id: UUID) -> None:
+    """Holds the user's lock until the session's transaction ends, so their index requests
+    (a double click, two tabs) claim one at a time: each sees what the one before it
+    committed, and the same short twice is one plan, not a refusal. A transaction-scoped
+    lock, so it holds behind a transaction-mode pooler too."""
+    _ = await session.execute(
+        select(func.pg_advisory_xact_lock(func.hashtextextended(str(user_id), 0)))
     )
-    return found is not None
 
 
 def _violates(error: IntegrityError, index: str) -> bool:
@@ -448,8 +452,8 @@ class Director:
             async with tenant(org_id) as session:
                 created, retried, plan = await self._claim(session, org_id, user_id, video_id)
         except IntegrityError as error:
-            # Another request of the caller's made their plan after the check in _claim
-            # looked (a double click, a second tab): the partial unique index refuses it.
+            # A plan of the caller's made after the check in _claim looked, by something
+            # that didn't take their turn (_take_turns): the partial unique index refuses it.
             if _violates(error, ONE_USER_INDEX):
                 raise AppError("DIRECTOR_INDEX_LIMIT") from None
             raise
@@ -473,6 +477,7 @@ class Director:
     ) -> tuple[bool, bool, DirectorPlan]:
         """Makes the plan, or claims a failed one for another try, in the caller's name:
         whether it made it, whether it claimed it, and the plan."""
+        await _take_turns(session, user_id)
         existing = await session.scalar(
             select(DirectorPlan).where(
                 DirectorPlan.org_id == org_id, DirectorPlan.video_id == video_id

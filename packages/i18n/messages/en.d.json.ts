@@ -294,6 +294,7 @@ declare const messages: {
     "DIRECTOR_PLAN_NOT_FOUND": "This Short isn't in your library yet.",
     "DIRECTOR_PLAN_NOT_READY": "Director is still working out this short. Try again in a moment.",
     "DIRECTOR_SHOT_NOT_FOUND": "That shot isn't part of this plan.",
+    "DIRECTOR_TAKE_NOT_FOUND": "That take isn't one of yours for this shot. Pick another.",
     "DIRECTOR_TAKE_KIND_MISMATCH": "This shot needs a different kind of take: a video for a video shot, a photo for a photo shot.",
     "DIRECTOR_VIDEO_UNREADABLE": "Director couldn't watch this short. It may be private, age-restricted or removed.",
     "DIRECTOR_ANALYSIS_FAILED": "Director couldn't work out how to film this short. Try again.",

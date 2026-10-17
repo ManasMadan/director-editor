@@ -149,7 +149,8 @@ iOS asks before a page may read the tilt: the level shows a button for that.
 
 - Data: `ai.director_plan` (one per workspace and video, shared by its members: the
   workspace's library of templates, the seeded ones and the one short each member may
-  index, held by the partial unique index `director_plan_one_user_index`),
+  index across all their workspaces, held by the partial unique index
+  `director_plan_one_user_index` and read through `ai.index_used`),
   `ai.director_take` (each member's own; never replaced, the best-scored is picked),
   `ai.director_cut` (a member's rendered video of a plan and how far publishing it got),
   `app.short_reaction` (likes and saves); all under row-level security. Plans are a JSON

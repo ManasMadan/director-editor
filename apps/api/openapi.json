@@ -17854,6 +17854,34 @@
                           "const": true
                         },
                         "code": {
+                          "const": "DIRECTOR_TAKE_NOT_FOUND"
+                        },
+                        "status": {
+                          "const": 404
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "DIRECTOR_TAKE_NOT_FOUND"
+                        },
+                        "data": {
+                          "$ref": "#/components/schemas/ErrorData"
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
                           "const": "FILE_NOT_FOUND"
                         },
                         "status": {
@@ -19545,6 +19573,34 @@
                         "message": {
                           "type": "string",
                           "default": "DIRECTOR_SHOT_NOT_FOUND"
+                        },
+                        "data": {
+                          "$ref": "#/components/schemas/ErrorData"
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "DIRECTOR_TAKE_NOT_FOUND"
+                        },
+                        "status": {
+                          "const": 404
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "DIRECTOR_TAKE_NOT_FOUND"
                         },
                         "data": {
                           "$ref": "#/components/schemas/ErrorData"
@@ -21269,6 +21325,34 @@
                           "const": true
                         },
                         "code": {
+                          "const": "DIRECTOR_TAKE_NOT_FOUND"
+                        },
+                        "status": {
+                          "const": 404
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "DIRECTOR_TAKE_NOT_FOUND"
+                        },
+                        "data": {
+                          "$ref": "#/components/schemas/ErrorData"
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
                           "const": "FILE_NOT_FOUND"
                         },
                         "status": {
@@ -22671,6 +22755,34 @@
                           "const": true
                         },
                         "code": {
+                          "const": "DIRECTOR_TAKE_NOT_FOUND"
+                        },
+                        "status": {
+                          "const": 404
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "DIRECTOR_TAKE_NOT_FOUND"
+                        },
+                        "data": {
+                          "$ref": "#/components/schemas/ErrorData"
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
                           "const": "FILE_NOT_FOUND"
                         },
                         "status": {
@@ -24038,6 +24150,34 @@
                         "message": {
                           "type": "string",
                           "default": "DIRECTOR_SHOT_NOT_FOUND"
+                        },
+                        "data": {
+                          "$ref": "#/components/schemas/ErrorData"
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "DIRECTOR_TAKE_NOT_FOUND"
+                        },
+                        "status": {
+                          "const": 404
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "DIRECTOR_TAKE_NOT_FOUND"
                         },
                         "data": {
                           "$ref": "#/components/schemas/ErrorData"
@@ -25453,6 +25593,34 @@
                         "message": {
                           "type": "string",
                           "default": "DIRECTOR_SHOT_NOT_FOUND"
+                        },
+                        "data": {
+                          "$ref": "#/components/schemas/ErrorData"
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "DIRECTOR_TAKE_NOT_FOUND"
+                        },
+                        "status": {
+                          "const": 404
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "DIRECTOR_TAKE_NOT_FOUND"
                         },
                         "data": {
                           "$ref": "#/components/schemas/ErrorData"
@@ -26893,6 +27061,34 @@
                           "const": true
                         },
                         "code": {
+                          "const": "DIRECTOR_TAKE_NOT_FOUND"
+                        },
+                        "status": {
+                          "const": 404
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "DIRECTOR_TAKE_NOT_FOUND"
+                        },
+                        "data": {
+                          "$ref": "#/components/schemas/ErrorData"
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
                           "const": "FILE_NOT_FOUND"
                         },
                         "status": {
@@ -28256,6 +28452,34 @@
                         "message": {
                           "type": "string",
                           "default": "DIRECTOR_SHOT_NOT_FOUND"
+                        },
+                        "data": {
+                          "$ref": "#/components/schemas/ErrorData"
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "DIRECTOR_TAKE_NOT_FOUND"
+                        },
+                        "status": {
+                          "const": 404
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "DIRECTOR_TAKE_NOT_FOUND"
                         },
                         "data": {
                           "$ref": "#/components/schemas/ErrorData"
@@ -29692,6 +29916,34 @@
                           "const": true
                         },
                         "code": {
+                          "const": "DIRECTOR_TAKE_NOT_FOUND"
+                        },
+                        "status": {
+                          "const": 404
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "DIRECTOR_TAKE_NOT_FOUND"
+                        },
+                        "data": {
+                          "$ref": "#/components/schemas/ErrorData"
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
                           "const": "FILE_NOT_FOUND"
                         },
                         "status": {
@@ -31044,6 +31296,34 @@
                         "message": {
                           "type": "string",
                           "default": "DIRECTOR_SHOT_NOT_FOUND"
+                        },
+                        "data": {
+                          "$ref": "#/components/schemas/ErrorData"
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "DIRECTOR_TAKE_NOT_FOUND"
+                        },
+                        "status": {
+                          "const": 404
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "DIRECTOR_TAKE_NOT_FOUND"
                         },
                         "data": {
                           "$ref": "#/components/schemas/ErrorData"

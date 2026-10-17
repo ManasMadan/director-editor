@@ -719,6 +719,37 @@ def test_two_index_requests_at_once_count_once(client: TestClient) -> None:
     assert len(library(client, other, member).templates) == 1
 
 
+def test_a_member_s_index_requests_take_turns(client: TestClient) -> None:
+    """Each request holds the member's lock for its whole claim, so a second one (a double
+    click, another tab) starts only once the first has committed and sees its plan: the
+    same short is answered with that plan, never refused."""
+    org, user = new_org()
+    portal = client.portal
+    assert portal is not None
+    with migrator() as db, db.transaction():
+        db.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s::text, 0))", (str(user),))
+        db.execute("SELECT set_config('app.org_id', %s, true)", (str(org),))
+        [first] = db.execute(
+            """INSERT INTO ai.director_plan (org_id, created_by, video_id, updated_at)
+               VALUES (%s, %s, %s, now()) RETURNING id""",
+            (org, user, VIDEO),
+        ).fetchall()
+        second = portal.start_task_soon(lambda: director().index(org, user, VIDEO, None))
+        _wait_for_a_lock_wait("advisory")
+    plan = second.result(timeout=10)
+    assert plan.id == first[0]
+
+
+def test_an_index_counts_in_every_workspace(client: TestClient) -> None:
+    """A member's one short of their own is one across all their workspaces."""
+    org, user = new_org()
+    _ = index_plan(client, org, user)
+    other, _ = new_org()
+    assert library(client, other, user).indexUsed is True
+    refused = index(client, other, user, OTHER)
+    assert error_of(refused).code == "DIRECTOR_INDEX_LIMIT"
+
+
 def test_an_index_racing_another_is_refused_by_the_database(client: TestClient) -> None:
     """The check before the insert can't see another request's uncommitted plan; the
     partial unique index can, and its refusal is the same DIRECTOR_INDEX_LIMIT."""
@@ -733,7 +764,7 @@ def test_an_index_racing_another_is_refused_by_the_database(client: TestClient) 
             (org, user, OTHER),
         )
         racing = portal.start_task_soon(lambda: director().index(org, user, VIDEO, None))
-        _wait_for_a_lock_wait()
+        _wait_for_a_lock_wait("transactionid")
     error = racing.exception(timeout=10)
     assert isinstance(error, AppError)
     assert error.code == "DIRECTOR_INDEX_LIMIT"
@@ -746,13 +777,16 @@ def test_an_index_the_database_refuses_otherwise_is_not_the_limit(client: TestCl
         on_app_loop(client, lambda: director().index(org, uuid4(), VIDEO, None))
 
 
-def _wait_for_a_lock_wait() -> None:
-    """Until the service's insert waits on the uncommitted row: a lock not yet granted
-    (pg_locks, which any role may read; pg_stat_activity hides other roles' sessions)."""
+def _wait_for_a_lock_wait(locktype: str) -> None:
+    """Until the service waits on a lock of this type that the test's transaction holds:
+    one not yet granted (pg_locks, which any role may read; pg_stat_activity hides other
+    roles' sessions)."""
     deadline = time.monotonic() + 10
     with migrator() as db:
         while time.monotonic() < deadline:
-            row = db.execute("SELECT count(*) FROM pg_locks WHERE NOT granted").fetchone()
+            row = db.execute(
+                "SELECT count(*) FROM pg_locks WHERE NOT granted AND locktype = %s", (locktype,)
+            ).fetchone()
             if row is not None and row[0] == 1:
                 return
             time.sleep(0.05)
@@ -877,14 +911,14 @@ def test_a_cut_s_picks_are_the_member_s_takes_of_those_shots(client: TestClient)
         )
     for picks, code in [
         ([(5, take.id)], "DIRECTOR_SHOT_NOT_FOUND"),
-        ([(1, take.id)], "NOT_FOUND"),
-        ([(0, uuid4())], "NOT_FOUND"),
+        ([(1, take.id)], "DIRECTOR_TAKE_NOT_FOUND"),
+        ([(0, uuid4())], "DIRECTOR_TAKE_NOT_FOUND"),
         ([(0, take.id), (0, take.id)], "VALIDATION_FAILED"),
     ]:
         assert error_of(save_cut(client, org, user, picks)).code == code, picks
     # Someone else's take is never theirs to pick.
     refused = save_cut(client, org, teammate, [(0, take.id)])
-    assert error_of(refused).code == "NOT_FOUND"
+    assert error_of(refused).code == "DIRECTOR_TAKE_NOT_FOUND"
     assert cuts_of(client, org, user, "/v1/director/cuts") == []
 
 

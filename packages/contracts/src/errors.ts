@@ -71,6 +71,8 @@ export const ERROR_CODES = {
   /** The plan is still being worked out, or its analysis failed. */
   DIRECTOR_PLAN_NOT_READY: 409,
   DIRECTOR_SHOT_NOT_FOUND: 404,
+  /** A cut picks a take that isn't the member's take of that shot of the plan. */
+  DIRECTOR_TAKE_NOT_FOUND: 404,
   /** A photo for a video shot, or the other way round. */
   DIRECTOR_TAKE_KIND_MISMATCH: 422,
   // The next three are only ever a plan's or take's error, never an HTTP answer.

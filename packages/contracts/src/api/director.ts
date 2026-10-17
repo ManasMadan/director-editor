@@ -32,6 +32,7 @@ const errors = errorsOf(
   "DIRECTOR_PLAN_NOT_FOUND",
   "DIRECTOR_PLAN_NOT_READY",
   "DIRECTOR_SHOT_NOT_FOUND",
+  "DIRECTOR_TAKE_NOT_FOUND",
   "DIRECTOR_TAKE_KIND_MISMATCH",
   "FILE_NOT_FOUND",
   "FILE_NOT_READY",
@@ -326,7 +327,7 @@ export const directorContract = {
   /**
    * Saves a cut: a ready `director-cut-video` upload of the caller's (FILE_NOT_FOUND,
    * FILE_NOT_READY) and the take of theirs picked for each shot it uses, each a take of
-   * that shot (DIRECTOR_SHOT_NOT_FOUND, NOT_FOUND).
+   * that shot (DIRECTOR_SHOT_NOT_FOUND, DIRECTOR_TAKE_NOT_FOUND).
    */
   saveCut: route("POST", "/director/{videoId}/cuts", "Save a cut")
     .meta({ rateLimit: EVERYDAY_WRITES })
