@@ -20,7 +20,9 @@ import {
 
 /**
  * Every kind this API records today, plus the kinds later tasks will: a new call site
- * picks from this list instead of inventing its own spelling. Not re-exported from
+ * picks from this list instead of inventing its own spelling. `take_reviewed` is
+ * recorded by apps/ai instead (app/analytics.py, with the same spellings), once a
+ * review has its score; it stays here so the two lists match. Not re-exported from
  * `index.ts`: a caller only ever needs `AnalyticsService.record("kind", fields)`, which
  * TypeScript already checks against `AnalyticsKind` below; export this list from the
  * barrel too only once something needs to enumerate or branch on every kind.

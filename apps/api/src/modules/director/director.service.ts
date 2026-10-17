@@ -20,7 +20,6 @@ import { MINUTE_S } from "@repo/contracts/time";
 import { AppError } from "@repo/nest-common";
 import * as z from "zod";
 import { aiCaller, callAi } from "../ai";
-import { AnalyticsService } from "../analytics";
 import { FilesService } from "../files";
 import { ShortsService } from "../shorts";
 
@@ -46,7 +45,6 @@ export class DirectorService {
   constructor(
     private readonly shorts: ShortsService,
     private readonly files: FilesService,
-    private readonly analytics: AnalyticsService,
   ) {}
 
   async plan(userId: UserId, orgId: OrgId, videoId: VideoId): Promise<DirectorPlan> {
@@ -102,10 +100,6 @@ export class DirectorService {
         sourceUrl: url,
       }),
     );
-    // The AI service reviews it asynchronously and doesn't report completion back here
-    // (apps/ai/app/director.py owns the take and its score); this counts the take
-    // entering review, for the volume side of the Looker report.
-    this.analytics.record("take_reviewed", { userId, videoId: input.videoId });
     return wireTake.parse(row);
   }
 }
