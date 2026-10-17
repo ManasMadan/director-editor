@@ -24,3 +24,34 @@
     @apply bg-background text-foreground;
   }
 }
+
+/*
+ * GeminiLoader and GeminiShimmer: components apply these with the `motion-safe:` variant,
+ * so a `prefers-reduced-motion` reader gets the gradient held still rather than moving.
+ */
+@keyframes gemini-orbit {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes gemini-pulse {
+  0%,
+  100% {
+    transform: scale(0.92) rotate(-4deg);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.08) rotate(4deg);
+    opacity: 1;
+  }
+}
+
+@keyframes gemini-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
