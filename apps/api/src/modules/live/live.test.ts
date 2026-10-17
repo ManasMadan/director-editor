@@ -274,6 +274,26 @@ describe("a live call", () => {
     expect(recordCallStarted).not.toHaveBeenCalled();
   });
 
+  it("never records a call whose setup completes only after it ended", async () => {
+    const recordCallStarted = vi.fn();
+    const fake = new FakeLiveApi();
+    fake.answerSetup = false;
+    const { call, hungUp } = await startApi({ recordCallStarted }, fake);
+    const browser = call();
+    await fake.message(0);
+    // The stand-in stops reading, so the relay's close frame waits in its socket while
+    // the setupComplete it sends next still reaches the relay, after the call ended.
+    fake.socket?.pause();
+    browser.socket.close();
+    await hungUp();
+    fake.send({ setupComplete: {} });
+    fake.socket?.resume();
+    // The relay reads setupComplete before the close it answers with, so once the
+    // stand-in's socket is gone the relay has seen (and ignored) it.
+    await vi.waitFor(() => expect(fake.server.clients.size).toBe(0));
+    expect(recordCallStarted).not.toHaveBeenCalled();
+  });
+
   it("records a call only once even if Gemini answers its setup twice", async () => {
     const recordCallStarted = vi.fn();
     const { fake } = await liveCall({ recordCallStarted });

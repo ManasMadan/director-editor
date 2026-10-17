@@ -212,11 +212,12 @@ export class LiveRelay {
     if (message.setupComplete) {
       clearTimeout(this.setupTimer);
       // Vertex shouldn't send setupComplete twice, but recording the call only once if
-      // it ever does costs nothing and keeps the count honest.
+      // it ever does costs nothing and keeps the count honest. Nor is a call that already
+      // ended (the browser hung up while setup was in flight) one that started.
       const justStarted = !this.ready;
       this.ready = upstream;
       this.toUpstream(this.options.greeting);
-      if (justStarted) {
+      if (justStarted && !this.ended) {
         this.options.onCallStarted();
       }
     }
