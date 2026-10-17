@@ -6,6 +6,7 @@ import {
   coreEnv,
   databaseEnv,
   directDatabaseEnv,
+  filesEnabled,
   port,
   redisEnv,
   storageEnv,
@@ -40,7 +41,7 @@ export const envSchema = {
   // The email delivery log.
   NOTIFICATION_HISTORY_DAYS: positive.default(90),
 
-  // Uploads: checked here when files are on (S3_BUCKET set).
+  // Uploads: checked here when files are on (the chosen STORAGE_PROVIDER has its bucket).
   ...storageEnv,
   FILES_CONCURRENCY: positive.default(2),
   // clamd for virus scanning; "none" skips scanning (development only).
@@ -54,6 +55,8 @@ export const env = createEnv({
   emptyStringAsUndefined: true,
 });
 
-if (env.NODE_ENV === "production" && env.S3_BUCKET && env.FILE_SCANNER === "none") {
+// Asked in every environment, so a half-configured provider stops the worker at boot.
+const files = filesEnabled(env);
+if (env.NODE_ENV === "production" && files && env.FILE_SCANNER === "none") {
   throw new Error("FILE_SCANNER=none is for development only: uploads must be scanned");
 }

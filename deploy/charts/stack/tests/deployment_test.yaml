@@ -173,6 +173,24 @@ tests:
             name: S3_BUCKET
             valueFrom: { secretKeyRef: { name: storage, key: bucket } }
 
+  - it: points a service at Cloud Storage instead, without the RustFS variables
+    set:
+      services.api.storage: none
+      services.api.env.STORAGE_PROVIDER: gcs
+      services.api.env.GCS_BUCKET: director-media-test
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: STORAGE_PROVIDER, value: gcs }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: GCS_BUCKET, value: director-media-test }
+      # The services refuse S3_BUCKET next to STORAGE_PROVIDER=gcs.
+      - notContains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: S3_BUCKET, valueFrom: { secretKeyRef: { name: storage, key: bucket } } }
+
   - it: exports nothing without observability
     documentSelector: { path: metadata.name, value: demo-api }
     asserts:

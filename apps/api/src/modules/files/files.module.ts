@@ -14,7 +14,7 @@ class QueueLifecycle implements OnApplicationShutdown {
 
 @Module({
   providers: [
-    // Null when files are off (no S3_BUCKET): procedures answer FEATURE_DISABLED.
+    // Null when files are off (no bucket for the provider): procedures answer FEATURE_DISABLED.
     { provide: STORAGE, useFactory: () => createStorage(env) },
     {
       provide: FILES_QUEUE,

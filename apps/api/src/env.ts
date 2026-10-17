@@ -25,7 +25,8 @@ export const envSchema = {
   ...coreEnv,
   ...databaseEnv("API"),
   ...redisEnv,
-  // Optional: file uploads (profile pictures), on when S3_BUCKET is set.
+  // Optional: file uploads (profile pictures, Director's takes), on when the chosen
+  // STORAGE_PROVIDER has its bucket (filesEnabled in @repo/nest-common).
   ...storageEnv,
   PORT: port(3001),
 
