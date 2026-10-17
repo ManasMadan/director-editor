@@ -250,3 +250,25 @@ Use `.claude/skills/remove-feature/SKILL.md` as the procedure for each feature. 
 - [ ] Run `apps/ai/evals/index_shorts.py --live` (12/12).
 - [ ] Manual on a phone: landing → demo sign-in → library (6 seeds) → index a Short (stages) → second index → credits modal → template → live call (voice commands record shots) → edit (picks, retake suggestion) → save → My media → publish from a Google account (unlisted) → video appears on YouTube.
 - [ ] Owner records takes on the demo account for judges.
+
+### Task 3.4: Docs a judge reads (owner, 2026-10-18)
+
+A judge has only the repository and https://director.mmadan.in. Everything they need to
+understand, try and assess Director is reachable from the README in a few minutes.
+
+- [ ] `README.md` rewritten for Director: one-paragraph pitch; the live URL and the demo
+  credentials; the full user workflow (index → template → Gemini video call → takes →
+  timeline editor → My media → publish to YouTube Shorts) with screenshots captured by the
+  Playwright run against production (`docs/images/`); a "Built on Google Cloud" table
+  listing every Google service used, what it does in Director and the file that calls it
+  (Vertex AI Gemini 4 Argon and 3.8 Flash, Gemini Live, Gemini TTS, Veo, Lyria, Nano
+  Banana, Cloud Run, Cloud Storage, Artifact Registry, BigQuery, YouTube Data API, Google
+  sign-in, Compute Engine); an architecture diagram (Mermaid) of web, api, ai service and
+  worker, the Cloud Run indexer, the Live relay, Postgres/Valkey, GCS and Vertex; how
+  indexing works (prompt, schema, repair, stages, fallback) and how the live call works
+  (relay, audio formats, tools); how to run it locally; the repository map. Starter-kit
+  material that isn't about Director moves out of the README into `docs/`.
+- [ ] `docs/architecture.md` brought in line with the code; a new `docs/how-it-works.md`
+  (indexing pipeline, live call, take review and best-take pick, editor, publish) if the
+  README would otherwise get too long. Every claim checked against the code
+  (`.claude/rules/docs.md`); run the `docs-sync` agent after.
