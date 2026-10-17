@@ -54,16 +54,19 @@ test("the API docs are reachable on the same origin", async ({ request }) => {
 });
 
 test("the app is called Director everywhere a visitor or member looks", async ({ page }) => {
+  // The template's name must not show anywhere: not in a title, not on the page.
+  const namedDirector = async () => {
+    await expect(page).toHaveTitle(/Director/);
+    expect(await page.title()).not.toContain("Director-editor");
+    await expect(page.locator("body")).not.toContainText("Director-editor");
+  };
   for (const path of ["/", "/sign-in"]) {
     await page.goto(path);
-    await expect(page).toHaveTitle(/Director/);
-    await expect(page.locator("body")).not.toContainText("Director-editor");
+    await namedDirector();
   }
   await signUp(page);
   await settled(page);
-  await expect(page).toHaveTitle(/Director/);
-  await expect(page.locator("body")).not.toContainText("Director-editor");
-  expect(await page.title()).not.toContain("Director-editor");
+  await namedDirector();
 });
 
 test("the landing page stays public, signed in or not", async ({ page }) => {

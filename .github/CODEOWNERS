@@ -1,6 +1,6 @@
 # Every change needs a review from an owner (branch protection: "Require review from
 # Code Owners"). Split this by path as the team grows, e.g.
-#   /apps/mobile/   @org/mobile
+#   /apps/ai/   @org/ai
 #   /infra/ /deploy/   @org/platform
 * @ManasMadan
 
@@ -9,7 +9,6 @@
 # any of these loosens every package at once.
 /packages/vitest-config/   @ManasMadan
 **/vitest.config.ts        @ManasMadan
-/apps/mobile/jest.config.js   @ManasMadan
 /apps/ai/pyproject.toml    @ManasMadan
 /bunfig.toml               @ManasMadan
 /docs/testing.md           @ManasMadan

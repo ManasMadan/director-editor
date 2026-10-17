@@ -25,8 +25,7 @@ declare const messages: {
       "dark": "Dark",
       "system": "System"
     },
-    "captchaFailed": "The security check couldn't load. Check your connection, allow challenges.cloudflare.com if you use a blocker, and reload.",
-    "director": "Director"
+    "captchaFailed": "The security check couldn't load. Check your connection, allow challenges.cloudflare.com if you use a blocker, and reload."
   },
   "meta": {
     "title": "Director",

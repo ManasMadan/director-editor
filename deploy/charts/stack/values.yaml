@@ -245,7 +245,6 @@ services:
     terminationGracePeriodSeconds: 60
     env:
       PORT: "3003"
-      WEB_URL: "{{ include \"stack.siteUrl\" $ }}"
     keda:
       enabled: true
       queues: [notifications-critical, events-notifications]
@@ -291,8 +290,6 @@ services:
     # Its secrets are the AI service's.
     secretFrom: ai
     terminationGracePeriodSeconds: 120
-    env:
-      API_URL: "{{ include \"stack.url\" (list $ \"api\") }}"
     keda:
       enabled: true
       queues: [ai-director]
