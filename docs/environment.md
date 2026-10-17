@@ -300,6 +300,10 @@ The `director` feature in the API is on when `YOUTUBE_API_KEY` is set and the `a
 | `DIRECTOR_TOKENS_PER_REVIEW` | ai | 120000 | Cap per take review: watching one take (at least 10000). |
 | `YOUTUBE_API_KEY` | api, the mock Google | `mock-google-key` in `.env.example` | YouTube Data API v3 key: the Shorts feed, search, video details and comments. Unset: Director off. |
 | `YOUTUBE_API_URL` | api | `https://www.googleapis.com/youtube/v3` (`http://localhost:12112/youtube/v3` in `.env.example`) | Where the API reads YouTube: the mock Google locally. Must be HTTPS in production. |
+| `GOOGLE_CLOUD_PROJECT` | api | unset | The Google Cloud project Director's live video call (`/api/live`, Gemini Live on Vertex AI) runs in and bills to. Unset: the call answers `FEATURE_DISABLED`. |
+| `LIVE_LOCATION` | api | `us-central1` | The Vertex AI region of the live call's endpoint (`wss://<region>-aiplatform.googleapis.com/...`). |
+| `LIVE_MODEL` | api | `gemini-live-2.5-flash-native-audio` | The Live API model, by its Vertex AI name. |
+| `GOOGLE_ACCESS_TOKEN` | api | unset | Local development only: a Google access token (`gcloud auth print-access-token`, valid for an hour) used in place of the GCE metadata server's. Production refuses to start with it set. |
 
 ## Web (apps/web)
 

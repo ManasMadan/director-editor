@@ -54,6 +54,15 @@ describe("the environment", () => {
       },
       "YOUTUBE_API_URL must be HTTPS in production",
     ],
+    [
+      "a pasted Google access token",
+      {
+        WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "",
+        YOUTUBE_API_URL: "https://www.googleapis.com/youtube/v3",
+        GOOGLE_ACCESS_TOKEN: "ya29.token",
+      },
+      "GOOGLE_ACCESS_TOKEN is for local development only",
+    ],
   ])("refuses %s in production", async (_, variables, message) => {
     await expect(load({ NODE_ENV: "production", ...variables })).rejects.toThrow(message);
   });
