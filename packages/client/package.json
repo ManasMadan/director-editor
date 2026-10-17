@@ -17,7 +17,6 @@
   },
   "dependencies": {
     "@better-auth/api-key": "catalog:",
-    "@better-auth/oauth-provider": "catalog:",
     "@better-auth/passkey": "catalog:",
     "@orpc/client": "catalog:",
     "@orpc/contract": "catalog:",

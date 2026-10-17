@@ -16,8 +16,6 @@
  *
  * After adding or removing a plugin, regenerate the auth tables (db-change skill).
  */
-import { cimd } from "@better-auth/cimd";
-import { fetchClientMetadataResource } from "@better-auth/cimd/node";
 import { passkey } from "@better-auth/passkey";
 import { redisStorage } from "@better-auth/redis-storage";
 import {
@@ -31,19 +29,12 @@ import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { admin } from "better-auth/plugins/admin";
 import { haveIBeenPwned } from "better-auth/plugins/haveibeenpwned";
-import { jwt } from "better-auth/plugins/jwt";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import type { Env } from "../env";
 import { features } from "../features";
 import { type AuthContext, type AuthDependencies, authContext } from "./auth-context";
 import { accountDeletion, databaseHooks, requestHooks } from "./auth-hooks";
-import {
-  apiKeyPlugin,
-  captchaPlugins,
-  emailOtpPlugin,
-  mcpPlugin,
-  organizationPlugin,
-} from "./auth-plugins";
+import { apiKeyPlugin, captchaPlugins, emailOtpPlugin, organizationPlugin } from "./auth-plugins";
 import { mobileSignIn } from "./mobile-sign-in";
 
 /** The API key plugin's own endpoints, all turned off (see `disabledPaths`). */
@@ -83,9 +74,6 @@ const RATE_LIMIT = {
     "/email-otp/*": { window: MINUTE_S, max: 5 },
     "/two-factor/*": { window: MINUTE_S, max: 5 },
     "/forget-password/*": { window: MINUTE_S, max: 3 },
-    // Anyone may register an MCP client (it still needs a user's consent to get a token),
-    // so registration is limited per address.
-    "/oauth2/register": { window: MINUTE_S, max: 5 },
   },
 } satisfies BetterAuthOptions["rateLimit"];
 
@@ -158,19 +146,6 @@ function plugins(context: AuthContext) {
     organizationPlugin(context),
     admin({ impersonationSessionDuration: 60 * MINUTE_S }),
     apiKeyPlugin(),
-    // Signing keys for OAuth access tokens, published at /api/auth/jwks so each MCP
-    // server verifies tokens itself. Keys rotate; old ones stay published for the grace
-    // period so tokens signed just before a rotation still verify.
-    jwt({
-      jwks: { rotationInterval: 90 * DAY_S, gracePeriod: 30 * DAY_S },
-      // Sessions stay cookies; only the OAuth flow issues JWTs.
-      disableSettingJwtHeader: true,
-    }),
-    mcpPlugin(context),
-    // Client ID Metadata Documents (the MCP 2026-07-28 way): a client's id is a URL to
-    // its metadata, fetched through a transport that resolves DNS once, refuses private
-    // addresses and never follows redirects (no SSRF).
-    cimd({ fetchClientMetadataResource, metadataProfile: "mcp-2026-07-28" }),
     ...captchaPlugins(env),
   );
 }
@@ -188,11 +163,9 @@ export function createAuth({ database = undefined, ...dependencies }: AuthDepend
     // Browsers may only call auth endpoints from the product's own origins (CSRF
     // protection); the mobile app's scheme is added by the Expo plugin below.
     trustedOrigins: [env.WEB_URL, ...env.APP_ORIGINS, `${MOBILE_SCHEME}://`],
-    // The JWT plugin's /token would hand any session a signed JWT; access tokens come only
-    // from the OAuth flow below. API keys are managed through the API's own procedures
-    // (apps/api/src/modules/api-keys: typed, audited, with scopes), so the plugin's
-    // endpoints aren't served.
-    disabledPaths: ["/token", ...API_KEY_PLUGIN_PATHS],
+    // API keys are managed through the API's own procedures (apps/api/src/modules/api-keys:
+    // typed, audited, with scopes), so the plugin's endpoints aren't served.
+    disabledPaths: API_KEY_PLUGIN_PATHS,
 
     database: database ?? prismaAdapter(db, { provider: "postgresql" }),
     // Session lookups hit Redis, not Postgres, on every request.

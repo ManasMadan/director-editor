@@ -1,6 +1,6 @@
 /**
  * Moves every encrypted value to the newest key, so older keys can be retired:
- * better-auth's values (OAuth tokens, 2FA secrets and backup codes, JWT signing keys) to
+ * better-auth's values (OAuth tokens, 2FA secrets and backup codes) to
  * the newest BETTER_AUTH_SECRETS version, and webhook endpoint secrets (the current and
  * the previous one) to the active ENCRYPTION_KEYS key and SecretBox's current format. Run by `bun run --filter @repo/api secrets:reencrypt` (src/reencrypt.ts).
  *
@@ -12,7 +12,6 @@ import { type OrgId, orgIdSchema } from "@repo/contracts/ids";
 import { type Database, tenantTx } from "@repo/db";
 import { type SecretBox, webhookSecretContext } from "@repo/nest-common";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
-import * as z from "zod";
 import type { authEncryptionKey } from "../auth/secrets";
 
 type AuthKey = ReturnType<typeof authEncryptionKey>;
@@ -20,7 +19,6 @@ type AuthKey = ReturnType<typeof authEncryptionKey>;
 export interface ReencryptResult {
   accounts: number;
   twoFactors: number;
-  signingKeys: number;
   webhookEndpoints: number;
 }
 
@@ -109,25 +107,6 @@ class AuthValues {
     }
     return updated;
   }
-
-  /** JWT signing keys, which store the encrypted private key as a JSON string. */
-  async signingKeys() {
-    let updated = 0;
-    for await (const key of pages((cursor) =>
-      this.db.jwks.findMany({ select: { id: true, privateKey: true }, ...cursor }),
-    )) {
-      const encrypted = z.string().parse(JSON.parse(key.privateKey));
-      if (this.onCurrent(encrypted)) {
-        continue;
-      }
-      const { count } = await this.db.jwks.updateMany({
-        where: { id: key.id, privateKey: key.privateKey },
-        data: { privateKey: JSON.stringify(await this.refresh(encrypted)) },
-      });
-      updated += count;
-    }
-    return updated;
-  }
 }
 
 /** One workspace's webhook endpoint secrets, the current and the previous one, on `box`'s key. */
@@ -169,7 +148,6 @@ export async function reencryptSecrets(
   const result: ReencryptResult = {
     accounts: 0,
     twoFactors: 0,
-    signingKeys: 0,
     webhookEndpoints: 0,
   };
 
@@ -178,7 +156,6 @@ export async function reencryptSecrets(
     const values = new AuthValues(db, authKey);
     result.accounts = await values.accounts();
     result.twoFactors = await values.twoFactors();
-    result.signingKeys = await values.signingKeys();
   }
 
   for await (const org of pages((cursor) =>

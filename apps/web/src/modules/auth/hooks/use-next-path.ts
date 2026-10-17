@@ -24,9 +24,8 @@ export function safeNextPath(next: string | null): Route {
 }
 
 /**
- * A link to another auth step that keeps the query: `?next=`, and the signed OAuth
- * request when an app sent the user here (see use-finish-sign-in), so the step that
- * finally signs the user in still continues it. Optionally sets the email.
+ * A link to another auth step that keeps the query (`?next=`), so the step that finally
+ * signs the user in still continues to it. Optionally sets the email.
  */
 export function useAuthStepHref() {
   const current = useSearchParams().toString();

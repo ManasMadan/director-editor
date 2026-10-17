@@ -13,8 +13,6 @@ export const APP_PATHS = [
   "/shorts",
   "/saved",
   "/director",
-  // Approving an app's OAuth request.
-  "/oauth",
 ];
 
 /**
@@ -29,14 +27,6 @@ export const GUEST_PATHS = [
   "/forgot-password",
   "/reset-password",
 ];
-
-/**
- * A page opened by an app's OAuth request carries it signed (client_id … sig). The
- * authorization server may send a signed-in user to sign in again (the app asked for
- * `prompt=login`), so auth pages stay reachable with one.
- */
-export const isOAuthRequest = (params: URLSearchParams) =>
-  params.has("client_id") && params.has("sig");
 
 export const matchesPath = (pathname: string, prefixes: string[]) =>
   prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));

@@ -109,12 +109,6 @@ const SMOKE_CHECKS: [string, string, (r: Response) => boolean][] = [
   ["web page", "/sign-in", (r) => r.status === 200],
   ["api", "/api/v1/system", (r) => r.status === 200],
   ["api auth", "/api/auth/ok", (r) => r.status === 200],
-  ["OAuth metadata", "/.well-known/oauth-authorization-server/api/auth", (r) => r.status === 200],
-  [
-    "AI MCP server",
-    "/ai/mcp",
-    (r) => r.status === 401 && String(r.headers["www-authenticate"]).includes("resource_metadata"),
-  ],
   ["webhooks", "/webhooks/stripe", (r) => r.status === 404 || r.status === 405 || r.status === 400],
 ];
 

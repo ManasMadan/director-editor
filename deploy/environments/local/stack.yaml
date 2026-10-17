@@ -1,6 +1,5 @@
 # kind (`bun run k8s:up`): images built and loaded locally, one replica each, no
-# autoscalers, plain HTTP on http://localhost (the api's MCP server allows plain HTTP only
-# for localhost itself, not *.localhost).
+# autoscalers, plain HTTP on http://localhost.
 image:
   registry: director-editor
   tag: dev

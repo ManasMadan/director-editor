@@ -30,11 +30,6 @@ describe("the proxy", () => {
     expect(getRedirectUrl(proxy(secure))).toBe(`${SITE}/dashboard`);
   });
 
-  it("keeps auth pages reachable for an app's OAuth request, signed in or not", () => {
-    const response = proxy(request("/sign-in?client_id=app&sig=abc", true));
-    expect(getRedirectUrl(response)).toBeNull();
-  });
-
   it("renders everything else with a nonce'd Content-Security-Policy", () => {
     const first = proxy(request("/"));
     const second = proxy(request("/dashboard", true));

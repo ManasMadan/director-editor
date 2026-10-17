@@ -24,7 +24,6 @@ import {
   NotificationsPage,
   UnsubscribePage,
 } from "@/modules/notifications";
-import { OAuthConsentPage } from "@/modules/oauth";
 import { ProfileSettingsPage, SecuritySettingsPage, SettingsLayout } from "@/modules/settings";
 import { HomePage, SavedPage, ShortsPlayerPage } from "@/modules/shorts";
 import {
@@ -44,7 +43,6 @@ import * as shoot from "./(app)/director/[videoId]/shoot/page";
 import * as home from "./(app)/home/page";
 import * as invitation from "./(app)/invitations/[id]/page";
 import * as notifications from "./(app)/notifications/page";
-import * as consent from "./(app)/oauth/consent/page";
 import * as saved from "./(app)/saved/page";
 import * as apiKeys from "./(app)/settings/api-keys/page";
 import * as audit from "./(app)/settings/audit/page";
@@ -177,7 +175,6 @@ describe("route files", () => {
 
   it("renders pages that read the query string inside a Suspense boundary", async () => {
     for (const [route, page, title] of [
-      [consent, OAuthConsentPage, en.oauth.title],
       [unsubscribe, UnsubscribePage, en.unsubscribe.title],
       [captcha, CaptchaPage, en.captcha.title],
     ] as const) {

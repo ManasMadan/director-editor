@@ -527,54 +527,6 @@ describe("maintenance", () => {
     expect(tokens).toEqual([`live-${userId}`]);
   });
 
-  it("purges expired OAuth tokens and spent client assertions", async () => {
-    const userId = randomUUID();
-    const clientId = `client-${userId}`;
-    await asRole("app_api", async (client) => {
-      await client.query(
-        `INSERT INTO auth."user" (id, name, email, updated_at) VALUES ($1, 'U', $2, now())`,
-        [userId, `${userId}@test.dev`],
-      );
-      await client.query(`INSERT INTO auth.oauth_client (client_id) VALUES ($1)`, [clientId]);
-      for (const table of ["oauth_refresh_token", "oauth_access_token"]) {
-        await client.query(
-          `INSERT INTO auth.${table} (token, client_id, user_id, expires_at) VALUES
-           ($1, $3, $4, now() - interval '1 minute'), ($2, $3, $4, now() + interval '1 day')`,
-          [`expired-${table}-${userId}`, `live-${table}-${userId}`, clientId, userId],
-        );
-      }
-      await client.query(
-        `INSERT INTO auth.oauth_client_assertion (id, expires_at) VALUES
-         ($1, now() - interval '1 minute'), ($2, now() + interval '1 hour')`,
-        [`spent-${userId}`, `fresh-${userId}`],
-      );
-    });
-    await maintenance.run("session-retention");
-    const left = await asRole("app_api", async (client) => {
-      const tokens = async (table: string) =>
-        (
-          await client.query<{ token: string }>(
-            `SELECT token FROM auth.${table} WHERE user_id = $1`,
-            [userId],
-          )
-        ).rows.map((row) => row.token);
-      const assertions = await client.query<{ id: string }>(
-        "SELECT id FROM auth.oauth_client_assertion WHERE id = ANY($1)",
-        [[`spent-${userId}`, `fresh-${userId}`]],
-      );
-      return {
-        refresh: await tokens("oauth_refresh_token"),
-        access: await tokens("oauth_access_token"),
-        assertions: assertions.rows.map((row) => row.id),
-      };
-    });
-    expect(left).toEqual({
-      refresh: [`live-oauth_refresh_token-${userId}`],
-      access: [`live-oauth_access_token-${userId}`],
-      assertions: [`fresh-${userId}`],
-    });
-  });
-
   it("runs a task when its schedule comes round", async () => {
     const queue = new Queue("maintenance", {
       connection: createRedis(process.env.REDIS_URL as string),

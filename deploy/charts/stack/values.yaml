@@ -203,12 +203,6 @@ services:
       # oRPC over HTTP, including the live-update event streams: no request timeout.
       - path: /rpc
         timeout: 0s
-      - path: /.well-known/oauth-authorization-server/api/auth
-        match: Exact
-      - path: /.well-known/openid-configuration/api/auth
-        match: Exact
-      - path: /.well-known/oauth-protected-resource/api/mcp
-        match: Exact
     env:
       PORT: "3001"
       WEB_URL: "{{ include \"stack.siteUrl\" $ }}"
@@ -216,8 +210,6 @@ services:
       AI_URL: "{{ include \"stack.url\" (list $ \"ai\") }}"
       # Empty (unset, so system.alerting answers "off") without observability.
       ALERTMANAGER_URL: "{{ if .Values.observability.enabled }}{{ .Values.observability.alertmanagerUrl }}{{ end }}"
-    # The AI service fetches the api's signing keys (MCP tokens) directly.
-    allowFrom: [ai]
     autoscaling:
       enabled: true
 
@@ -288,14 +280,7 @@ services:
     probes:
       liveness: /health/live
       readiness: /health/ready
-    routes:
-      - path: /ai/mcp
-      - path: /.well-known/oauth-protected-resource/ai/mcp
-        match: Exact
     allowFrom: [api]
-    env:
-      BETTER_AUTH_URL: "{{ include \"stack.siteUrl\" $ }}"
-      API_URL: "{{ include \"stack.url\" (list $ \"api\") }}"
 
   ai-worker:
     enabled: true

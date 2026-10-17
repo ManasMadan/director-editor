@@ -102,7 +102,6 @@
     "ORGANIZATION_NEEDS_OWNER": "Eres propietario de un espacio compartido. Haz propietario a otra persona antes de eliminar tu cuenta.",
     "generic": "Algo salió mal. Inténtalo de nuevo.",
     "ENTITLEMENT_REQUIRED": "Se alcanzó el límite de miembros de tu plan. Mejóralo en la configuración de facturación para invitar a más personas.",
-    "OAUTH_REQUEST_EXPIRED": "La solicitud de la aplicación caducó. Vuelve a la aplicación y conéctala de nuevo.",
     "SIGN_IN_INCOMPLETE": "El inicio de sesión no terminó. Inténtalo de nuevo."
   },
   "nav": {
@@ -240,16 +239,6 @@
         "verified": "Número de teléfono guardado",
         "resend": "Enviar un código nuevo",
         "cancel": "Cancelar"
-      },
-      "apps": {
-        "title": "Aplicaciones conectadas",
-        "description": "Aplicaciones a las que permitiste usar tu cuenta, como asistentes de IA, y el espacio de trabajo de cada una.",
-        "empty": "No hay aplicaciones conectadas.",
-        "unnamed": "Aplicación sin nombre",
-        "details": "{workspace} · conectada el {connected}",
-        "lastUsed": "activa {when}",
-        "disconnect": "Desconectar",
-        "disconnected": "Se desconectó {name}"
       }
     },
     "personalTitle": "Tu cuenta"
@@ -353,10 +342,6 @@
         "subject": "Se eliminó tu número de teléfono",
         "body": "El número de teléfono de tu cuenta se eliminó o se cambió. Los SMS ya no llegan al número anterior."
       },
-      "app-connected": {
-        "subject": "Se conectó una aplicación a tu cuenta",
-        "body": "Una aplicación puede usar ahora los datos de tu cuenta en uno de tus espacios de trabajo, hasta que la desconectes en tus ajustes de seguridad."
-      },
       "api-key-created": {
         "subject": "Se creó una clave de API en tu espacio de trabajo",
         "body": "Un administrador creó la clave de API «{label}». Puede actuar en el espacio de trabajo sin iniciar sesión hasta que caduque o se revoque."
@@ -456,7 +441,6 @@
     "DIRECTOR_VIDEO_UNREADABLE": "Director no pudo ver este short. Puede ser privado, tener restricción de edad o haberse eliminado.",
     "DIRECTOR_ANALYSIS_FAILED": "Director no pudo averiguar cómo grabar este short. Inténtalo de nuevo.",
     "DIRECTOR_REVIEW_FAILED": "Director no pudo revisar esta toma. Grábala de nuevo.",
-    "APP_NOT_FOUND": "Esa aplicación no está conectada a tu cuenta.",
     "API_KEY_NOT_FOUND": "Esa clave de API no existe en este espacio de trabajo.",
     "API_KEY_LIMIT_REACHED": "Este espacio de trabajo ya tiene todas las claves de API que puede tener. Revoca alguna que ya no uses.",
     "API_KEY_SCOPE_MISSING": "Esta clave de API no tiene el permiso {scope}.",
@@ -849,8 +833,7 @@
       "two-factor-disabled": "Director-editor: se desactivó la verificación en dos pasos. ¿No fuiste tú? Restablece tu contraseña ahora.",
       "passkey-added": "Director-editor: se añadió una llave de acceso a tu cuenta. ¿No fuiste tú? Restablece tu contraseña ahora.",
       "phone-added": "Director-editor: este número se añadió a tu cuenta para los SMS de seguridad.",
-      "phone-removed": "Director-editor: este número se eliminó de tu cuenta. ¿No fuiste tú? Restablece tu contraseña ahora.",
-      "app-connected": "Director-editor: se conectó una aplicación a tu cuenta. ¿No fuiste tú? Desconéctala en tus ajustes de seguridad."
+      "phone-removed": "Director-editor: este número se eliminó de tu cuenta. ¿No fuiste tú? Restablece tu contraseña ahora."
     }
   },
   "billing": {
@@ -925,29 +908,6 @@
         "failed": "Falló"
       },
       "passages": "{count, plural, one {# pasaje} other {# pasajes}}"
-    }
-  },
-  "oauth": {
-    "title": "Conectar una aplicación",
-    "heading": "Conectar {appName}",
-    "description": "{appName} quiere usar tu cuenta. Elige el espacio de trabajo en el que podrá trabajar.",
-    "missing": "Esta página se abre cuando una aplicación pide conectarse a tu cuenta. Empieza desde la aplicación.",
-    "unnamed": "Una aplicación",
-    "personal": "Personal",
-    "workspace": "Espacio de trabajo",
-    "canDo": "{appName} podrá:",
-    "returnTo": "Volverás a {host}.",
-    "trust": "Conecta solo aplicaciones de confianza. Puedes desconectarla cuando quieras en tus ajustes de seguridad.",
-    "allow": "Permitir",
-    "deny": "Denegar",
-    "scopes": {
-      "openid": "Saber quién eres",
-      "profile": "Ver tu nombre y foto de perfil",
-      "email": "Ver tu correo electrónico",
-      "offline_access": "Seguir conectada hasta que la desconectes",
-      "todos:read": "Ver las tareas del espacio de trabajo",
-      "todos:write": "Añadir, completar y eliminar las tareas del espacio de trabajo",
-      "documents:read": "Buscar en los documentos del espacio de trabajo"
     }
   },
   "mobile": {

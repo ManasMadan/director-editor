@@ -2,19 +2,12 @@
  * The browser/mobile side of better-auth (server: apps/api/src/auth/auth.ts). Client
  * plugins mirror the server's plugins so their methods exist and are typed:
  * `authClient.emailOtp.*`, `authClient.twoFactor.*`, `authClient.passkey.*`,
- * `authClient.organization.*`, `authClient.admin.*`, `authClient.apiKey.*`,
- * `authClient.oauth2.*` (the consent page for apps connecting over OAuth).
- *
- * The OAuth provider plugin attaches the page's signed OAuth request (when the page was
- * opened by one, e.g. /sign-in?client_id=…&sig=…) to every request from that page, so a
- * sign-in there continues the app's authorization: the answer is `{ redirect, url }`
- * and the client navigates to it.
+ * `authClient.organization.*`, `authClient.admin.*`, `authClient.apiKey.*`.
  *
  * Web uses `createAppAuthClient()`. Mobile builds its client from `authClientPlugins`
  * plus the Expo plugin (secure session storage), so both expose the same methods.
  */
 import { apiKeyClient } from "@better-auth/api-key/client";
-import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { passkeyClient } from "@better-auth/passkey/client";
 import { userAdditionalFields } from "@repo/contracts/auth-settings";
 import type { Session, User } from "better-auth";
@@ -37,7 +30,6 @@ export const authClientPlugins = (options: { onTwoFactorRequired?: () => void } 
   organizationClient(),
   adminClient(),
   apiKeyClient(),
-  oauthProviderClient(),
   inferAdditionalFields({ user: userAdditionalFields }),
 ];
 
@@ -63,7 +55,7 @@ type AuthClient = ReturnType<typeof createAppAuthClient>;
  */
 export type AuthQueryClient = Pick<
   AuthClient,
-  "useSession" | "organization" | "listSessions" | "passkey" | "oauth2"
+  "useSession" | "organization" | "listSessions" | "passkey"
 >;
 
 // better-auth's client types the plugins' answers as any (listing workspaces, members,

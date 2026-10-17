@@ -16,8 +16,8 @@
  *
  * Every builder but `base` also applies the rate limit the procedure's contract declares
  * (`meta.rateLimit`, per user or per workspace), once it knows who's calling. Limits
- * outside the contract sit with what they protect: better-auth's for sign-in, MCP's per
- * token, and the few a service keeps because other ways in share them (todo changes).
+ * outside the contract sit with what they protect: better-auth's for sign-in, and the
+ * few a service keeps because other ways in share them.
  *
  * This is the only request pipeline for the API: Nest provides modules and dependency
  * injection, while auth, tenancy and error mapping live here, where they are typed and

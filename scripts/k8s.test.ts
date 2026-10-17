@@ -38,12 +38,6 @@ const healthy = (host: string, path: string) => {
   if (host === "files.localhost") {
     return new Response(null, { status: path === "/health" ? 200 : 404 });
   }
-  if (path === "/ai/mcp") {
-    return new Response(null, {
-      status: 401,
-      headers: { "www-authenticate": 'Bearer resource_metadata="http://localhost/.well-known/x"' },
-    });
-  }
   if (path === "/webhooks/stripe") {
     return new Response(null, { status: 405 });
   }
@@ -237,7 +231,7 @@ describe("the local cluster", () => {
     expect(output).toContain("Docker has 8.0 GB of memory");
     expect(output).toContain("secrets (4 created)");
     expect(output).toContain("files: files.localhost/health → 200");
-    expect(output).toContain("AI MCP server: /ai/mcp → 401");
+    expect(output).toContain("api auth: /api/auth/ok → 200");
     expect(output).toContain("re-encryption: Re-encrypted 12 rows");
     expect(output).toContain("http://localhost");
 
@@ -424,7 +418,7 @@ describe("the local cluster", () => {
       gateway: gateway(() => new Response(null, { status: 502 })),
     });
     await expect(k8s(["smoke"], wrong.given)).rejects.toThrow("exit 1");
-    expect(printed()).toContain("AI MCP server: /ai/mcp → 502");
+    expect(printed()).toContain("api: /api/v1/system → 502");
   });
 
   it("fails when re-encryption can't start or fails, with its logs", async () => {

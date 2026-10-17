@@ -11,7 +11,6 @@ export const authKeys = {
   activeWorkspace: (id: string | null | undefined) =>
     [...authKeys.workspaces(), "active", id] as const,
   invitation: (id: string) => ["auth", "invitation", id] as const,
-  oauthClient: (clientId: string | null) => ["auth", "oauth-client", clientId] as const,
   sessions: () => ["auth", "sessions"] as const,
   passkeys: () => ["auth", "passkeys"] as const,
 };

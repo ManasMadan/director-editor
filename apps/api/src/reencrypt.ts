@@ -17,8 +17,8 @@ try {
     box: new SecretBox(keysFromEnv(env.ENCRYPTION_KEYS)),
   });
   console.log(
-    `Re-encrypted ${result.accounts} accounts, ${result.twoFactors} two-factor settings, ` +
-      `${result.signingKeys} signing keys and ${result.webhookEndpoints} webhook endpoints.`,
+    `Re-encrypted ${result.accounts} accounts, ${result.twoFactors} two-factor settings ` +
+      `and ${result.webhookEndpoints} webhook endpoints.`,
   );
   if (!env.BETTER_AUTH_SECRETS) {
     console.log(

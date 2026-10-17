@@ -44,12 +44,6 @@ class Settings(BaseSettings):
     # embeddings only; see app/embeddings.py). Calibrate with `bun run --cwd apps/ai evals`.
     min_relevance: float = Field(default=0.0, ge=0.0, lt=1.0, alias="AI_MIN_RELEVANCE")
 
-    # The MCP server (app/mcp_server.py): the site's public origin, where it and apps/api's
-    # OAuth issuer live (the same BETTER_AUTH_URL as the api), and the api's internal URL,
-    # for its signing keys. Either unset: no MCP server.
-    site_url: AnyHttpUrl | None = Field(default=None, alias="BETTER_AUTH_URL")
-    api_url: AnyHttpUrl | None = Field(default=None, alias="API_URL")
-
     # Budgets: tokens a workspace may use per calendar month, and per assistant answer.
     monthly_tokens_per_org: int = Field(default=2_000_000, ge=0, alias="AI_MONTHLY_TOKENS_PER_ORG")
     tokens_per_run: int = Field(default=20_000, ge=1_000, alias="AI_TOKENS_PER_RUN")

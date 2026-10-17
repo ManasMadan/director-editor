@@ -3,33 +3,24 @@
  * router under /rpc and /api/v1. main.ts starts it; integration tests build it in-process.
  */
 import { HOUR_S } from "@repo/contracts/time";
-import { loosely } from "@repo/i18n";
 import {
   createRateLimiter,
   createServer,
-  DATABASE,
-  type Database,
   describeError,
-  I18N,
-  type I18n,
   REDIS,
   type Redis,
-  row,
 } from "@repo/nest-common";
 import type { FastifyInstance } from "fastify";
 import { Logger } from "nestjs-pino";
-import * as z from "zod";
 import { AppModule } from "./app.module";
 import { AUTH, type Auth, MEMBERSHIPS, type Memberships } from "./auth/auth.module";
 import { mountAuth } from "./auth/auth.routes";
 import { env } from "./env";
-import { mountMcp } from "./mcp";
 import { ApiKeysService } from "./modules/api-keys";
 import { DirectorService } from "./modules/director";
 import { FilesService, mountFileContent } from "./modules/files";
 import { createGoogleAuth, liveUpstream, mountLive } from "./modules/live";
 import { mountOneClickUnsubscribe, NotificationsService } from "./modules/notifications";
-import { TodoService } from "./modules/todo";
 import { type AuthenticateApiKey, createProcedures, orgCallerFor } from "./rpc/procedures";
 import { createRouter } from "./rpc/router";
 import { mountRpc } from "./rpc/rpc.routes";
@@ -49,8 +40,6 @@ export function createApiServer() {
       mountAuth(fastify, auth, env.BETTER_AUTH_URL);
       mountOneClickUnsubscribe(fastify, app.get(NotificationsService));
       mountFileContent(fastify, auth, app.get(FilesService));
-      const database = app.get<Database>(DATABASE);
-      const i18n = app.get<I18n>(I18N);
       const apiKeys = app.get(ApiKeysService);
       const authenticateApiKey: AuthenticateApiKey = (key, scope) =>
         apiKeys.authenticate(key, scope);
@@ -60,29 +49,6 @@ export function createApiServer() {
         director: app.get(DirectorService),
         redis: app.get<Redis>(REDIS),
         logger,
-      });
-      mountMcp(fastify, {
-        siteUrl: env.BETTER_AUTH_URL,
-        keys: () => auth.api.getJwks(),
-        // On the primary: a disconnect must be seen by the very next request.
-        grantActive: async (clientId, userId, orgId) => {
-          const { active } = await row(
-            z.object({ active: z.boolean() }),
-            database.write.$queryRaw`
-              SELECT auth.mcp_grant_active(${clientId}, ${userId}::uuid, ${orgId}::uuid) AS active`,
-          );
-          return active;
-        },
-        redis: app.get<Redis>(REDIS),
-        server: {
-          todos: app.get(TodoService),
-          release: env.RELEASE,
-          logError: (error) => logger.error({ err: describeError(error) }, "MCP tool failed"),
-        },
-        describeError: async (error, locale) => {
-          const t = loosely(await i18n.getTranslator(locale));
-          return t(`errors.${error.code}`, error.params);
-        },
       });
       await mountRpc(
         fastify,

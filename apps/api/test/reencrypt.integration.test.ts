@@ -20,7 +20,7 @@ const BACKUP_CODES = JSON.stringify(["aaaaa-11111", "bbbbb-22222"]);
 
 let testDb: TestDatabase;
 let database: Database;
-const ids = { account: "", twoFactor: "", jwks: "", endpoint: "" };
+const ids = { account: "", twoFactor: "", endpoint: "" };
 let orgId: OrgId;
 
 beforeAll(async () => {
@@ -45,11 +45,6 @@ beforeAll(async () => {
   ids.twoFactor = (
     await db.twoFactor.create({
       data: { userId: user.id, secret: await legacy("totp-secret"), backupCodes: BACKUP_CODES },
-    })
-  ).id;
-  ids.jwks = (
-    await db.jwks.create({
-      data: { publicKey: "{}", privateKey: JSON.stringify(await legacy('{"d":"private"}')) },
     })
   ).id;
   const oldBox = new SecretBox(keysFromEnv(oldKey));
@@ -86,13 +81,11 @@ describe("re-encrypting secrets", () => {
     expect(await reencryptSecrets(database, rotated())).toEqual({
       accounts: 1,
       twoFactors: 1,
-      signingKeys: 1,
       webhookEndpoints: 1,
     });
     expect(await reencryptSecrets(database, rotated())).toEqual({
       accounts: 0,
       twoFactors: 0,
-      signingKeys: 0,
       webhookEndpoints: 0,
     });
   });
@@ -113,9 +106,6 @@ describe("re-encrypting secrets", () => {
     expect(twoFactor.backupCodes.startsWith("$ba$1$")).toBe(true);
     expect(await open(twoFactor.backupCodes)).toBe(BACKUP_CODES);
 
-    const jwks = await db.jwks.findUniqueOrThrow({ where: { id: ids.jwks } });
-    expect(await open(JSON.parse(jwks.privateKey) as string)).toBe('{"d":"private"}');
-
     const endpoint = await tenantTx(db, orgId, (tx) =>
       tx.webhookEndpoint.findUniqueOrThrow({ where: { id: ids.endpoint } }),
     );
@@ -130,7 +120,7 @@ describe("re-encrypting secrets", () => {
       authKey: authEncryptionKey(NEW_AUTH, undefined),
       box: new SecretBox(keysFromEnv(newKey)),
     });
-    expect(result).toMatchObject({ accounts: 0, twoFactors: 0, signingKeys: 0 });
+    expect(result).toMatchObject({ accounts: 0, twoFactors: 0 });
   });
 
   it("goes through tables bigger than one page", async () => {

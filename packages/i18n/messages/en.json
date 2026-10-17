@@ -102,7 +102,6 @@
     "ORGANIZATION_NEEDS_OWNER": "You own a shared workspace. Make someone else its owner before deleting your account.",
     "generic": "Something went wrong. Please try again.",
     "ENTITLEMENT_REQUIRED": "Your plan's member limit is reached. Upgrade in billing settings to invite more people.",
-    "OAUTH_REQUEST_EXPIRED": "The app's request expired. Go back to the app and connect again.",
     "SIGN_IN_INCOMPLETE": "The sign-in didn't finish. Please try again."
   },
   "nav": {
@@ -240,16 +239,6 @@
         "verified": "Phone number saved",
         "resend": "Send a new code",
         "cancel": "Cancel"
-      },
-      "apps": {
-        "title": "Connected apps",
-        "description": "Apps you allowed to use your account, such as AI assistants, and the workspace each may work in.",
-        "empty": "No apps are connected.",
-        "unnamed": "Unnamed app",
-        "details": "{workspace} · connected {connected}",
-        "lastUsed": "last active {when}",
-        "disconnect": "Disconnect",
-        "disconnected": "{name} was disconnected"
       }
     },
     "personalTitle": "Your account"
@@ -353,10 +342,6 @@
         "subject": "Your phone number was removed",
         "body": "The phone number on your account was removed or changed. Texts no longer go to the previous number."
       },
-      "app-connected": {
-        "subject": "An app was connected to your account",
-        "body": "An app can now use your account's data in one of your workspaces, until you disconnect it in your security settings."
-      },
       "api-key-created": {
         "subject": "An API key was created in your workspace",
         "body": "An admin created the API key “{label}”. It can act in the workspace without signing in until it expires or is revoked."
@@ -456,7 +441,6 @@
     "DIRECTOR_VIDEO_UNREADABLE": "Director couldn't watch this short. It may be private, age-restricted or removed.",
     "DIRECTOR_ANALYSIS_FAILED": "Director couldn't work out how to film this short. Try again.",
     "DIRECTOR_REVIEW_FAILED": "Director couldn't review this take. Record it again.",
-    "APP_NOT_FOUND": "That app isn't connected to your account.",
     "API_KEY_NOT_FOUND": "That API key doesn't exist in this workspace.",
     "API_KEY_LIMIT_REACHED": "This workspace has as many API keys as it can have. Revoke one you no longer use.",
     "API_KEY_SCOPE_MISSING": "This API key doesn't have the {scope} scope.",
@@ -849,8 +833,7 @@
       "two-factor-disabled": "Director-editor: two-step verification was turned off. Not you? Reset your password now.",
       "passkey-added": "Director-editor: a passkey was added to your account. Not you? Reset your password now.",
       "phone-added": "Director-editor: this number was added to your account for security texts.",
-      "phone-removed": "Director-editor: this number was removed from your account. Not you? Reset your password now.",
-      "app-connected": "Director-editor: an app was connected to your account. Not you? Disconnect it in your security settings."
+      "phone-removed": "Director-editor: this number was removed from your account. Not you? Reset your password now."
     }
   },
   "billing": {
@@ -925,29 +908,6 @@
         "failed": "Failed"
       },
       "passages": "{count, plural, one {# passage} other {# passages}}"
-    }
-  },
-  "oauth": {
-    "title": "Connect an app",
-    "heading": "Connect {appName}",
-    "description": "{appName} wants to use your account. Choose the workspace it may work in.",
-    "missing": "This page opens when an app asks to connect to your account. Start from the app.",
-    "unnamed": "An app",
-    "personal": "Personal",
-    "workspace": "Workspace",
-    "canDo": "{appName} will be able to:",
-    "returnTo": "You'll be sent back to {host}.",
-    "trust": "Only connect apps you trust. You can disconnect it any time in your security settings.",
-    "allow": "Allow",
-    "deny": "Deny",
-    "scopes": {
-      "openid": "Know who you are",
-      "profile": "See your name and profile picture",
-      "email": "See your email address",
-      "offline_access": "Stay connected until you disconnect it",
-      "todos:read": "See the workspace's todos",
-      "todos:write": "Add, complete and delete the workspace's todos",
-      "documents:read": "Search the workspace's documents"
     }
   },
   "mobile": {

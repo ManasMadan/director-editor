@@ -5,7 +5,6 @@ import { renderHook, standIn } from "../../test/stand-in";
 import { useActiveWorkspaceQuery } from "./active-workspace";
 import { createAppAuthClient } from "./client";
 import { useInvitationQuery } from "./invitation";
-import { useOAuthClientQuery } from "./oauth-client";
 import { usePasskeysQuery } from "./passkeys";
 import { authKeys } from "./query";
 import { useSessionsQuery } from "./sessions";
@@ -88,17 +87,6 @@ describe("the auth queries", () => {
     ];
     const { result } = renderHook(() => useInvitationQuery(auth, "inv-1"), api);
     await vi.waitFor(() => expect(result.current.data).toMatchObject({ organizationName: "Acme" }));
-  });
-
-  it("name the app asking for OAuth access, once there is one", async () => {
-    answers["/oauth2/public-client?client_id=app-1"] = [
-      200,
-      { client_id: "app-1", client_name: "Notes" },
-    ];
-    const none = renderHook(() => useOAuthClientQuery(auth, null), api);
-    expect(none.result.current.fetchStatus).toBe("idle");
-    const { result } = renderHook(() => useOAuthClientQuery(auth, "app-1"), api);
-    await vi.waitFor(() => expect(result.current.data).toMatchObject({ client_name: "Notes" }));
   });
 
   it("list the user's sessions and passkeys", async () => {

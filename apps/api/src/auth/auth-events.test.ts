@@ -45,7 +45,6 @@ describe("auth audit events", () => {
     [{ event: "passkey-added" }, "auth.passkey_added.v1", {}],
     [{ event: "phone-added" }, "auth.phone_changed.v1", { change: "added" }],
     [{ event: "phone-removed" }, "auth.phone_changed.v1", { change: "removed" }],
-    [{ event: "app-connected", clientId: "c1" }, "auth.app_connected.v1", { clientId: "c1" }],
   ] as const)("records the alert %o as %s", (change, name, payload) => {
     const userId = userIdSchema.parse(randomUUID());
     expect(auditEventForAlert(change, userId)).toEqual({

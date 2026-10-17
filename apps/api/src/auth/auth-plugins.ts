@@ -1,11 +1,9 @@
 /**
  * The better-auth plugins whose configuration is more than a line (auth.ts lists them
- * all): emailed codes, organizations, API keys, the MCP authorization server and the
- * captcha.
+ * all): emailed codes, organizations, API keys and the captcha.
  */
 import { randomUUID } from "node:crypto";
 import { apiKey } from "@better-auth/api-key";
-import { mcp } from "@better-auth/mcp";
 import {
   API_KEY_EXPIRY_DAYS,
   API_KEY_NAME_MAX_LENGTH,
@@ -18,17 +16,6 @@ import {
   OTP_LENGTH,
   PENDING_INVITATION_LIMIT,
 } from "@repo/contracts/auth";
-import { orgIdSchema } from "@repo/contracts/ids";
-import {
-  AI_MCP_PATH,
-  IDENTITY_SCOPES,
-  MCP_ACCESS_TOKEN_SECONDS,
-  MCP_PATH,
-  MCP_SCOPES,
-  MCP_SERVER_SCOPES,
-  mcpResource,
-  ORG_CLAIM,
-} from "@repo/contracts/mcp";
 import { DAY_S, MINUTE_MS, MINUTE_S } from "@repo/contracts/time";
 import { jobMetaFromContext } from "@repo/nest-common";
 import { APIError } from "better-auth/api";
@@ -249,67 +236,6 @@ export function apiKeyPlugin() {
       enabled: true,
       timeWindow: MINUTE_MS,
       maxRequests: API_KEY_REQUESTS_PER_MINUTE,
-    },
-  });
-}
-
-/** The scopes each MCP server accepts tokens for: only the ones its tools use. */
-const mcpResources = (baseUrl: string) => [
-  {
-    identifier: mcpResource(baseUrl, MCP_PATH),
-    allowedScopes: [...MCP_SERVER_SCOPES[MCP_PATH]],
-  },
-  {
-    identifier: mcpResource(baseUrl, AI_MCP_PATH),
-    allowedScopes: [...MCP_SERVER_SCOPES[AI_MCP_PATH]],
-  },
-];
-
-/**
- * The OAuth 2.1 authorization server for MCP clients (Claude, IDEs, agents). Signed-out
- * users sign in through the normal pages (every step keeps the signed OAuth request in its
- * URL), then approve on /oauth/consent, where they also pick the workspace the client may
- * act in. That workspace is the consent's reference, so each workspace is approved
- * separately, and it travels in the token's `org` claim. Tokens are audience-bound to one
- * MCP server and last 15 minutes; refresh tokens rotate, and deleting the connection
- * (settings) revokes them.
- */
-export function mcpPlugin({ env, memberships }: AuthContext) {
-  return mcp({
-    loginPage: "/sign-in",
-    consentPage: "/oauth/consent",
-    resource: mcpResource(env.BETTER_AUTH_URL, MCP_PATH),
-    scopes: [...IDENTITY_SCOPES, ...MCP_SCOPES],
-    resources: mcpResources(env.BETTER_AUTH_URL),
-    // Clients that register themselves may use both servers.
-    clientRegistrationDefaultResources: [mcpResource(env.BETTER_AUTH_URL, AI_MCP_PATH)],
-    // The resource policy above is the source of truth on every boot.
-    resourceSeedMode: "overwrite",
-    accessTokenExpiresIn: MCP_ACCESS_TOKEN_SECONDS,
-    // MCP clients register themselves: by URL (Client ID Metadata Documents, auth.ts) or,
-    // for clients that don't publish one, with RFC 7591 registration.
-    allowDynamicClientRegistration: true,
-    allowUnauthenticatedClientRegistration: true,
-    postLogin: {
-      page: "/oauth/consent",
-      // The workspace is chosen on the consent page itself (it becomes the active one),
-      // so there is no separate step after sign-in.
-      shouldRedirect: () => false,
-      consentReferenceId: ({ session }) => {
-        const orgId = session?.activeOrganizationId;
-        if (typeof orgId !== "string") {
-          throw new APIError("BAD_REQUEST", { error: "invalid_request" });
-        }
-        return orgId;
-      },
-    },
-    customAccessTokenClaims: async ({ user, referenceId }) => {
-      // The consent named a workspace; it must still be one of the user's.
-      const orgId = orgIdSchema.safeParse(referenceId);
-      if (!user || !orgId.success || !(await memberships.role(orgId.data, userIdOf(user)))) {
-        throw new APIError("FORBIDDEN", { error: "access_denied" });
-      }
-      return { [ORG_CLAIM]: referenceId };
     },
   });
 }

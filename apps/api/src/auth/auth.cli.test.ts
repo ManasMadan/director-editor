@@ -18,11 +18,6 @@ describe("the auth CLI's configuration", () => {
         "twoFactor",
         "passkey",
         "apikey",
-        "jwks",
-        "oauthClient",
-        "oauthConsent",
-        "oauthAccessToken",
-        "oauthRefreshToken",
       ]),
     );
   });

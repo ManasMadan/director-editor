@@ -71,8 +71,6 @@ export const ERROR_CODES = {
   WEBHOOK_DELIVERY_NOT_FOUND: 404,
   WEBHOOK_URL_NOT_ALLOWED: 422,
   WEBHOOK_ENDPOINT_LIMIT: 409,
-  // Connected apps (OAuth / MCP clients)
-  APP_NOT_FOUND: 404,
   // API keys
   API_KEY_NOT_FOUND: 404,
   API_KEY_LIMIT_REACHED: 409,
@@ -161,7 +159,6 @@ export const AUTH_ERROR_CODES = [
   "AUTHENTICATION_FAILED",
   "PASSKEY_CANCELLED",
   "ORGANIZATION_NEEDS_OWNER",
-  "OAUTH_REQUEST_EXPIRED",
   "SIGN_IN_INCOMPLETE",
   // From ERROR_CODES.
   "VALIDATION_FAILED",
@@ -186,9 +183,6 @@ export const AUTH_ERROR_ALIASES: Readonly<Record<string, AuthErrorCode>> = {
   ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY: "PASSKEY_CANCELLED",
   ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED: "PREVIOUSLY_REGISTERED",
   ORGANIZATION_MEMBERSHIP_LIMIT_REACHED: "ENTITLEMENT_REQUIRED",
-  // OAuth errors (the `error` field): the signed request an app sent the user with has
-  // expired (it's valid for 10 minutes) or was altered.
-  invalid_signature: "OAUTH_REQUEST_EXPIRED",
 };
 
 export const isAuthErrorCode = (value: unknown): value is AuthErrorCode =>

@@ -61,18 +61,6 @@ describe("securityAlertFor", () => {
     ).toBeUndefined();
   });
 
-  it("names the app a consent approved, only when it was approved", () => {
-    const consent = (body: unknown) =>
-      securityAlertFor({ path: "/oauth2/consent", body, context: { session: session() } });
-    expect(consent({ accept: true, oauth_query: "client_id=app-1&scope=openid" })).toEqual({
-      event: "app-connected",
-      email: "owner@example.com",
-      clientId: "app-1",
-    });
-    expect(consent({ accept: false, oauth_query: "client_id=app-1" })).toBeUndefined();
-    expect(consent({ accept: true })).toBeUndefined();
-  });
-
   it("ignores everything else", () => {
     expect(
       securityAlertFor({ path: "/sign-in/email", context: { session: session() } }),

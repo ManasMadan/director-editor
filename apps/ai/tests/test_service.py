@@ -271,19 +271,6 @@ def test_the_assistant_is_off_without_a_model(
     }
 
 
-def test_the_mcp_server_is_off_without_the_api_s_address(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.delenv("API_URL")
-    get_settings.cache_clear()
-    from app.main import app
-
-    with TestClient(app) as without:
-        response = without.post("/ai/mcp", json={})
-    assert response.status_code == 404
-    assert error_of(response).code == "NOT_FOUND"
-
-
 def test_an_unknown_route_is_a_contract_error(client: TestClient) -> None:
     response = client.get("/v1/nope")
     assert response.status_code == 404

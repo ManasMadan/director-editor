@@ -20,13 +20,9 @@
   },
   "dependencies": {
     "@better-auth/api-key": "catalog:",
-    "@better-auth/cimd": "catalog:",
     "@better-auth/expo": "catalog:",
-    "@better-auth/mcp": "catalog:",
-    "@better-auth/oauth-provider": "catalog:",
     "@better-auth/passkey": "catalog:",
     "@better-auth/redis-storage": "catalog:",
-    "@modelcontextprotocol/sdk": "catalog:",
     "@nestjs/bullmq": "catalog:",
     "@nestjs/common": "catalog:",
     "@nestjs/core": "catalog:",

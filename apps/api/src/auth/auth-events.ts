@@ -84,7 +84,5 @@ export function auditEventForAlert(change: SecurityChange, userId: UserId): AnyE
       return { name: "auth.phone_changed.v1", payload: { userId, change: "added" } };
     case "phone-removed":
       return { name: "auth.phone_changed.v1", payload: { userId, change: "removed" } };
-    case "app-connected":
-      return { name: "auth.app_connected.v1", payload: { userId, clientId: change.clientId } };
   }
 }

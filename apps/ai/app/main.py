@@ -3,15 +3,14 @@
 Internal: only apps/api calls it, with a typed client generated from this app's OpenAPI
 schema (packages/ai-client) and a short-lived token naming the user and organization
 (app/auth.py). Browsers never reach it, so end-user auth, rate limits and input limits
-stay in the API. The one exception is the MCP server at /ai/mcp (app/mcp_server.py),
-which MCP clients reach through the gateway and which checks OAuth tokens itself.
+stay in the API.
 
 Long work (indexing documents; Director's plans and take reviews) runs in app/worker.py, from
 the `ai-ingest` and `ai-director` queues.
 """
 
 from collections.abc import AsyncGenerator, AsyncIterator
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Annotated
 from uuid import UUID
@@ -21,7 +20,6 @@ from fastapi import Depends, FastAPI, Path, Request, Response
 from fastapi.responses import StreamingResponse
 from redis.asyncio import Redis
 from sqlalchemy import text
-from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app import model
 from app.assistant import Assistant, AssistantEvent, AssistantRequest, create_agent, create_model
@@ -34,7 +32,6 @@ from app.documents import Documents, create_summaries
 from app.embeddings import create_embedder
 from app.errors import AppError, install_error_handlers
 from app.log import configure_logging
-from app.mcp_server import MCP_PATHS, create_mcp_server, mcp_app
 from app.queues import DirectorQueue, IngestQueue
 from app.schemas import (
     VIDEO_ID_PATTERN,
@@ -64,7 +61,6 @@ class Services:
     documents: Documents
     assistant: Assistant | None
     director: Director | None
-    mcp: ASGIApp | None
 
 
 _services: Services | None = None
@@ -92,18 +88,6 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
         redis,
         create_summaries(settings),
     )
-    exit_stack = AsyncExitStack()
-    mcp: ASGIApp | None = None
-    if settings.site_url and settings.api_url:
-        server = create_mcp_server(
-            site_url=str(settings.site_url),
-            api_url=str(settings.api_url),
-            release=settings.release,
-            documents=lambda: documents,
-            redis=lambda: redis,
-        )
-        mcp = mcp_app(server)
-        await exit_stack.enter_async_context(server.session_manager.run())
     assistant = (
         Assistant(
             create_agent(create_model(settings.model, settings.fallback_model)),
@@ -120,11 +104,9 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
         documents=documents,
         assistant=assistant,
         director=create_director(settings, director_queue, redis, http),
-        mcp=mcp,
     )
     yield
     _services = None
-    await exit_stack.aclose()
     await queue.close()
     await director_queue.close()
     await http.aclose()
@@ -142,16 +124,6 @@ app = FastAPI(
 )
 install_error_handlers(app)
 start_telemetry("ai", app)
-
-
-async def _mcp(scope: Scope, receive: Receive, send: Send) -> None:
-    """Hands requests for /ai/mcp and its protected-resource metadata to the MCP server
-    built at startup. Anything else, and everything when the server is off, is an
-    unknown route."""
-    server = services().mcp
-    if server is None or scope.get("path") not in MCP_PATHS:
-        raise AppError("NOT_FOUND")
-    await server(scope, receive, send)
 
 
 def _documents() -> Documents:
@@ -356,7 +328,3 @@ async def list_director_takes(
 ) -> list[DirectorTakeOut]:
     """The caller's takes for the short's plan, newest first."""
     return [_take_out(t) for t in await director.takes(caller.org_id, caller.user_id, video_id)]
-
-
-# Registered last, so every route above takes precedence.
-app.mount("/", _mcp)
