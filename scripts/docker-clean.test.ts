@@ -21,7 +21,7 @@ function everythingThere(line: string) {
   if (line.includes("reference=kindest/node")) {
     return { stdout: "kindest/node:v1\n" };
   }
-  if (line === "docker image inspect grafana/k6:2.3.0") {
+  if (line === "docker image inspect ghcr.io/yannh/kubeconform:v0.7.0") {
     return { status: 1 };
   }
   if (line.includes("ancestor=postgres:18")) {
@@ -44,7 +44,7 @@ describe("docker:clean", () => {
     expect(calls).toContain("docker image rm kindest/node:v1");
     expect(calls).toContain("docker image rm vsc-director-editor-1:latest");
     // Not there, or another container still runs on it: left alone.
-    expect(calls).not.toContain("docker image rm grafana/k6:2.3.0");
+    expect(calls).not.toContain("docker image rm ghcr.io/yannh/kubeconform:v0.7.0");
     expect(calls).not.toContain("docker image rm postgres:18");
     const output = printed();
     expect(output).toContain("local services, their networks and volumes");

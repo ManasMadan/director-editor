@@ -29,7 +29,7 @@ test("an expired code says so; a new one works", async ({ page }) => {
   await page.getByRole("button", { name: "Resend code" }).click();
   await page.getByLabel("Verification code").fill(await inbox.nextCode());
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page).toHaveURL(/\/library/);
 });
 
 test("after the sudo window, the device list asks to sign in again and comes back", async ({
@@ -60,9 +60,10 @@ test("after the sudo window, adding a passkey asks to sign in again", async ({ p
   expect(await authenticator.credentials()).toHaveLength(0);
 });
 
-test("the dashboard keeps working in an old session", async ({ page, context }) => {
-  const user = await signUp(page);
+test("the library keeps working in an old session", async ({ page, context }) => {
+  await signUp(page);
   await ageSession(context, THREE_HOURS);
   await page.reload();
-  await expect(page.getByRole("heading", { name: `Hi ${user.name}` })).toBeVisible();
+  await expect(page).toHaveURL(/\/library/);
+  await expect(page).toHaveTitle("Library · Director");
 });

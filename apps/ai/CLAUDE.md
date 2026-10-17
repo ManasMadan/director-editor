@@ -1,9 +1,9 @@
 # apps/ai
 
-Python 3.14 service: FastAPI (port 8000), Pydantic AI agents, a LangGraph summarizer,
-pgvector retrieval, a BullMQ worker (`app/worker.py`, queue `ai-ingest`) and an MCP
-server for documents. Internal only: callers sign a short-lived JWT with
-`AI_SERVICE_SECRET`; the TypeScript client is `packages/ai-client`.
+Python 3.14 service: Director on Gemini (FastAPI on port 8000, Pydantic AI) and a
+BullMQ worker (`app/worker.py`, queue `ai-director`) that plans shorts and reviews
+takes. Internal only: callers sign a short-lived JWT with `AI_SERVICE_SECRET`; the
+TypeScript client is `packages/ai-client`.
 
 ## Commands (from the repo root)
 
@@ -14,7 +14,6 @@ server for documents. Internal only: callers sign a short-lived JWT with
 - Unit tests: `bun run --filter @repo/ai test`
 - Integration tests (Postgres and Redis): `bun run db:up`, then
   `bun run --filter @repo/ai test:integration`
-- Evals with the local stand-ins: `bun run --cwd apps/ai evals`
 - After changing routes, models or `packages/jobs`: `bun run gen`
 
 ## Where things are
@@ -28,18 +27,17 @@ server for documents. Internal only: callers sign a short-lived JWT with
 - `app/errors.py`: `AppError("CODE", params)`; the status comes from the catalog.
 - What the app builds at startup is `services()` in `app/main.py` (typed; routes and
   tests use it instead of Starlette's untyped `app.state`).
-- `evals/`: pydantic-evals datasets over a fixed handbook.
+- `app/director.py`: plans, scene checks and take reviews; `app/plan_repair.py` fixes
+  inconsistent shot plans; `app/audio.py` captures a short's original audio.
 
 ## Gotchas
 
-- Without a model provider, `AI_MODEL=local:extractive` and `AI_EMBEDDINGS=hashing`
-  give deterministic answers; tests and e2e rely on them. Production refuses both.
+- Director is off (`FEATURE_DISABLED`) until `DIRECTOR_MODEL` is set. Tests stand in
+  for Gemini and other third parties with local servers that speak their HTTP
+  protocol (`tests/fakes.py`), never with mocks.
 - The database schema is owned by Prisma migrations. Change it there, then update
   `app/db/models.py`; `tests/test_models_match_db.py` fails on drift.
 - The service connects as `app_ai` and cannot see rows without `app.org_id` set.
-- The documents' MCP server (`app/mcp_server.py`) is separate from the API's on
-  purpose: each language owns the tools over its own data (see "Why there are two MCP
-  servers" in docs/python-services.md). New document tools go here.
 - BullMQ is pinned in `pyproject.toml` and upgraded together with the Node package;
   `tests/test_bullmq_pair.py` fails when their Lua scripts differ.
 - Token budgets per org and per run are enforced in `app/usage.py`: `reserve` before a

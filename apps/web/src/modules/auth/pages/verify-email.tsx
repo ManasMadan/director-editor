@@ -40,7 +40,7 @@ export function VerifyEmailPage() {
   const address = email;
 
   async function onSubmit({ otp }: z.infer<typeof schema>) {
-    const { data, error } = await authClient.emailOtp.verifyEmail({ email: address, otp });
+    const { error } = await authClient.emailOtp.verifyEmail({ email: address, otp });
     if (error) {
       // Clear the rejected code so the next one can be typed straight in.
       form.setValue("otp", "");
@@ -49,7 +49,7 @@ export function VerifyEmailPage() {
     }
     // Verification signs the user in (autoSignInAfterVerification).
     toast.success(t("auth.verified"));
-    done(data);
+    done();
   }
 
   async function resend() {

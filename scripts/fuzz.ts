@@ -52,7 +52,7 @@ const REAL: Fuzz = {
   run: runSync,
   fetch,
   env: process.env,
-  sessions: join(ROOT, "load/.sessions.json"),
+  sessions: join(ROOT, ".fuzz/sessions.json"),
   root: ROOT,
 };
 

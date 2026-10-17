@@ -1,6 +1,6 @@
 """Local stand-ins for third parties that speak their real HTTP protocol, so the code
 under test talks to them exactly as it would to the real thing (the same idea as
-packages/fake-stripe on the TypeScript side)."""
+packages/fake-google on the TypeScript side)."""
 
 import json
 import threading
@@ -8,8 +8,6 @@ from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-
-from pydantic import BaseModel
 
 type Reply = tuple[int, dict[str, object]]
 
@@ -35,7 +33,7 @@ def serve(handlers: dict[str, Callable[[bytes], Reply]]) -> Generator[Fake]:
             payload = json.dumps(reply).encode()
             self.send_response(status)
             self.send_header("content-type", "application/json")
-            # OpenAI's SDK would otherwise retry a failure, which only slows a test down.
+            # A provider SDK would otherwise retry a failure, which only slows a test down.
             self.send_header("x-should-retry", "false")
             self.send_header("content-length", str(len(payload)))
             self.end_headers()
@@ -52,44 +50,6 @@ def serve(handlers: dict[str, Callable[[bytes], Reply]]) -> Generator[Fake]:
         yield fake
     finally:
         server.shutdown()
-
-
-class EmbeddingsRequest(BaseModel):
-    """What OpenAI's /v1/embeddings is sent."""
-
-    model: str
-    input: list[str]
-    dimensions: int
-
-
-def openai_embeddings(dimensions: int) -> Callable[[bytes], Reply]:
-    """OpenAI's /v1/embeddings: one vector per input, of the dimensions asked for."""
-
-    def reply(body: bytes) -> Reply:
-        request = EmbeddingsRequest.model_validate_json(body)
-        texts = request.input
-        assert request.dimensions == dimensions
-        return 200, {
-            "object": "list",
-            "model": request.model,
-            "data": [
-                {"object": "embedding", "index": i, "embedding": [1.0 / (i + 1)] * dimensions}
-                for i in range(len(texts))
-            ],
-            "usage": {"prompt_tokens": len(texts), "total_tokens": len(texts)},
-        }
-
-    return reply
-
-
-def openai_unavailable(_body: bytes) -> Reply:
-    """A provider outage, as OpenAI reports one."""
-    return 503, {"error": {"message": "overloaded", "type": "server_error", "code": None}}
-
-
-def otlp_collector(_body: bytes) -> Reply:
-    """An OpenTelemetry collector's OTLP/HTTP endpoint, accepting everything."""
-    return 200, {}
 
 
 GEMINI_MODEL = "gemini-test"

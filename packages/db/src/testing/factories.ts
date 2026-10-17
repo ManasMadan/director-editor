@@ -4,7 +4,7 @@
  *
  *   const make = factories(db);
  *   const { user, org } = await make.userWithWorkspace();
- *   await make.todo(org.id, user.id, { completed: true });
+ *   await make.shortReaction(org.id, user.id, { kind: "save" });
  *
  * They skip the application's side effects (emails, audit events, the outbox): use them
  * to arrange state quickly, and drive the API when the side effects are what's tested.
@@ -12,13 +12,7 @@
  * The rows they return carry branded ids (@repo/contracts/ids), like the services' own.
  */
 import { randomUUID } from "node:crypto";
-import {
-  type OrgId,
-  orgIdSchema,
-  todoIdSchema,
-  type UserId,
-  userIdSchema,
-} from "@repo/contracts/ids";
+import { type OrgId, orgIdSchema, type UserId, userIdSchema } from "@repo/contracts/ids";
 import type { Db } from "../client";
 import { tenantTx } from "../tenancy";
 
@@ -66,23 +60,20 @@ export function factories(db: Db) {
     return { user: created, org };
   }
 
-  async function todo(
+  /** A member's like (or save) of a YouTube short, a tenant row. */
+  function shortReaction(
     orgId: OrgId,
-    createdById: UserId,
-    overrides: { title?: string; completed?: boolean } = {},
+    userId: UserId,
+    overrides: { videoId?: string; kind?: "like" | "save" } = {},
   ) {
-    const row = await tenantTx(db, orgId, (tx) =>
-      tx.todo.create({
-        data: {
-          orgId,
-          createdById,
-          title: overrides.title ?? `Todo ${unique()}`,
-          completed: overrides.completed ?? false,
-        },
+    // YouTube's video ids are 11 characters.
+    const videoId = overrides.videoId ?? randomUUID().replaceAll("-", "").slice(0, 11);
+    return tenantTx(db, orgId, (tx) =>
+      tx.shortReaction.create({
+        data: { orgId, userId, videoId, kind: overrides.kind ?? "like" },
       }),
     );
-    return { ...row, id: todoIdSchema.parse(row.id) };
   }
 
-  return { user, organization, member, userWithWorkspace, todo };
+  return { user, organization, member, userWithWorkspace, shortReaction };
 }

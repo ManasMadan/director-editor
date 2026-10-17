@@ -2,8 +2,7 @@
 # `ci-ok` job, which only succeeds when all others do, so adding a job here never
 # needs a settings change.
 #
-# Nightly, the same checks run on master with more weight: the load test ramps to a real
-# load instead of the smoke run, and the evals measure the configured model (evals job).
+# Nightly, the same checks run on master again.
 name: CI
 
 on:
@@ -117,7 +116,6 @@ jobs:
           path: |
             apps/*/node_modules/.cache/tsc
             packages/*/node_modules/.cache/tsc
-            load/node_modules/.cache/tsc
             scripts/node_modules/.cache/tsc
             .claude/hooks/node_modules/.cache/tsc
             turbo/generators/node_modules/.cache/tsc
@@ -306,8 +304,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-24.04
-    # The nightly load test holds its load for five minutes on top.
-    timeout-minutes: ${{ github.event_name == 'schedule' && 40 || 25 }}
+    timeout-minutes: 25
     permissions: { contents: read }
     strategy:
       fail-fast: false
@@ -341,9 +338,8 @@ jobs:
       WEBHOOKS_DATABASE_URL: postgresql://app_webhooks:app_webhooks@localhost:5432/app
       AI_DATABASE_URL: postgresql://app_ai:app_ai@localhost:5432/app
       REDIS_URL: redis://localhost:6379
-      WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: 127.0.0.1
       SMTP_URL: smtp://localhost:1025
-      EMAIL_FROM: Director-editor <no-reply@example.com>
+      EMAIL_FROM: Director <no-reply@example.com>
       MAILPIT_URL: http://localhost:8025
       BETTER_AUTH_URL: http://localhost:3000
       WEB_URL: http://localhost:3000
@@ -356,15 +352,6 @@ jobs:
       S3_SECRET_ACCESS_KEY: rustfs-secret
       S3_FORCE_PATH_STYLE: "true"
       STORAGE_ORIGIN: http://localhost:59000
-      # The assistant without a model provider: quotes the best passage (local:extractive).
-      AI_MODEL: local:extractive
-      AI_EMBEDDINGS: hashing
-      # Billing on, against the local fake Stripe started with the stack (test-only keys).
-      STRIPE_SECRET_KEY: sk_test_ci
-      STRIPE_WEBHOOK_SECRET: whsec_ci
-      STRIPE_PRICE_PRO_MONTHLY: price_pro_monthly
-      STRIPE_PRICE_PRO_YEARLY: price_pro_yearly
-      STRIPE_API_URL: http://127.0.0.1:12111
       # The captcha on, with Cloudflare's published always-pass test keys: the widget and
       # the token check run for real (apps/web/e2e/captcha.spec.ts) without a challenge.
       TURNSTILE_SITE_KEY: 1x00000000000000000000AA
@@ -403,14 +390,7 @@ jobs:
         run: |
           {
             echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)"
-            echo "ENCRYPTION_KEYS=ci:$(openssl rand -base64 32)"
-            echo "UNSUBSCRIBE_SECRET=$(openssl rand -base64 32)"
             echo "AI_SERVICE_SECRET=$(openssl rand -base64 32)"
-            # Browser push (VAPID key pair) and its contact.
-            node -e 'const e = require("node:crypto").createECDH("prime256v1"); e.generateKeys();
-              console.log("VAPID_PUBLIC_KEY=" + e.getPublicKey("base64url"));
-              console.log("VAPID_PRIVATE_KEY=" + Buffer.from(e.getPrivateKey("hex").padStart(64, "0"), "hex").toString("base64url"));'
-            echo "VAPID_SUBJECT=mailto:ci@example.com"
           } >> "$GITHUB_ENV"
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -431,12 +411,9 @@ jobs:
           docker compose --profile files up -d --wait rustfs clamav
           docker compose --profile files run --rm s3-init
       # Builds the services, starts them fresh, runs this shard of Playwright's tests (and, on
-      # the first, the k6 smoke; on the second, the API's fuzzing, with uvx), and stops them
-      # (scripts/e2e.ts), the same way as locally.
+      # the second, the API's fuzzing, with uvx), and stops them (scripts/e2e.ts), the same
+      # way as locally.
       - name: Run the end-to-end suite
-        env:
-          PROFILE: ${{ github.event_name == 'schedule' && 'load' || 'smoke' }}
-          TARGET_RPS: ${{ vars.LOAD_TARGET_RPS || '50' }}
         run: bun run test:e2e --shard=${{ matrix.shard }}/4
       # The web app's first-load JavaScript per route, from the build the suite just ran
       # (scripts/bundle-budget.ts).
@@ -496,10 +473,6 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run basedpyright
       - run: uv run pytest
-      # The assistant and summarizer on a fixed handbook, with the local stand-ins (no
-      # model or key): retrieval, the relevance floor, refusals and summaries must hold.
-      - name: Evals
-        run: uv run python -m evals
       # The same database the TypeScript services use, migrated by Prisma (which owns the DDL).
       - name: Bootstrap database roles and migrate
         working-directory: .
@@ -507,7 +480,7 @@ jobs:
         run: |
           psql -h localhost -U postgres -d app -v ON_ERROR_STOP=1 -f infra/postgres/init/01-roles-and-databases.sql
           bun run db:deploy
-      # Routes, tenancy, indexing, the assistant, the worker, and models vs database, with
+      # Routes, tenancy, Director, the worker, and models vs database, with
       # every line and branch covered (pyproject.toml, tool.coverage).
       - name: All tests with coverage
         run: bun run coverage
@@ -518,34 +491,6 @@ jobs:
           name: coverage-python
           path: apps/ai/coverage/lcov.info
           retention-days: 3
-
-  # The evals against a real model, nightly: set the EVAL_MODEL variable (and optionally
-  # EVAL_EMBEDDINGS, EVAL_JUDGE_MODEL, EVAL_MIN_PASS_RATE, EVAL_MIN_RELEVANCE) and the
-  # provider keys as secrets. Every change already runs them with the local stand-ins.
-  evals:
-    name: Evals (${{ vars.EVAL_MODEL }})
-    if: github.event_name == 'schedule' && vars.EVAL_MODEL != ''
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions: { contents: read }
-    defaults:
-      run: { working-directory: apps/ai }
-    env:
-      AI_MODEL: ${{ vars.EVAL_MODEL }}
-      AI_EMBEDDINGS: ${{ vars.EVAL_EMBEDDINGS || 'hashing' }}
-      AI_MIN_RELEVANCE: ${{ vars.EVAL_MIN_RELEVANCE || '0' }}
-      EVAL_JUDGE_MODEL: ${{ vars.EVAL_JUDGE_MODEL }}
-      EVAL_MIN_PASS_RATE: ${{ vars.EVAL_MIN_PASS_RATE || '0.9' }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-    steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
-        with: { egress-policy: audit }
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { persist-credentials: false }
-      - uses: ./.github/actions/setup
-        with: { python: "true" }
-      - run: uv run python -m evals
 
   codegen:
     name: Generated code is committed

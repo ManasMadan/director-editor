@@ -30,7 +30,7 @@ The web component library: shadcn-style components (`components.json`, style
   A deliberate visual change: `test:visual:update`, and commit the new screenshots.
 - Colours, radii and spacing come from the tokens in `src/styles/theme.css` (CSS
   variables per theme). Never a literal colour in a component; add a token if one is
-  missing, for both themes. Mobile reads the same file (`apps/mobile/global.css`).
+  missing, for both themes.
 - No text of its own: labels and copy are props, translated by the app. Icons from
   `lucide-react`.
 - Components are presentational: no data fetching, no `@repo/client`, nothing

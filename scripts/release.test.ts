@@ -3,14 +3,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Ran } from "./lib";
-import {
-  mobileVersion,
-  type ReleaseFacts,
-  release,
-  releaseFile,
-  releaseImageTag,
-  releaseNotes,
-} from "./release";
+import { type ReleaseFacts, release, releaseFile, releaseImageTag, releaseNotes } from "./release";
 import { captureOutput, fakeRun } from "./stand-ins";
 
 afterEach(() => mock.restore());
@@ -49,13 +42,6 @@ describe("release notes", () => {
     expect(releaseNotes([commit("chore: tidy")])).toBe(
       "Maintenance only: no user-facing changes.\n",
     );
-  });
-});
-
-describe("the mobile version", () => {
-  it("is read from the app config", () => {
-    expect(mobileVersion('export default {\n  name: "App",\n  version: "1.4.0",\n}')).toBe("1.4.0");
-    expect(mobileVersion("export default {}")).toBeUndefined();
   });
 });
 
@@ -108,8 +94,7 @@ describe("a release's images", () => {
 describe("the release command", () => {
   const ROOT = join(import.meta.dir, "..");
   const read = (file: string) => readFileSync(join(ROOT, file), "utf8");
-  const MOBILE = read("apps/mobile/app.config.ts");
-  const VERSION = `v${mobileVersion(MOBILE)}`;
+  const VERSION = "v1.4.0";
   const STAGING = read("deploy/environments/staging/stack.yaml");
   const MERGE = "1111111aaaaaaa";
   const BUMP = "2222222bbbbbbb";
@@ -127,7 +112,6 @@ describe("the release command", () => {
         overrides[line] ??
         {
           [`git rev-list -n 1 ${VERSION}`]: { stdout: `${commit}\n` },
-          [`git show ${VERSION}:apps/mobile/app.config.ts`]: { stdout: MOBILE },
           [`gh run list --commit ${MERGE} --json workflowName,status,conclusion`]: deployed,
           [`gh run list --commit ${BUMP} --json workflowName,status,conclusion`]: runs(),
           [`git rev-parse ${BUMP}^`]: { stdout: `${MERGE}\n` },
@@ -160,7 +144,6 @@ describe("the release command", () => {
       `git merge-base --is-ancestor ${MERGE} origin/master`,
       `gh run list --commit ${MERGE} --json workflowName,status,conclusion`,
       `gh run list --commit ${MERGE} --json workflowName,status,conclusion`,
-      `git show ${VERSION}:apps/mobile/app.config.ts`,
     ]);
     expect(options.every((o) => o.cwd === "/repo")).toBe(true);
     expect(printed()).toContain(`${VERSION} is a release of 1111111, with the images sha-${MERGE}`);
@@ -205,13 +188,11 @@ describe("the release command", () => {
         "completed",
         "failure",
       ]),
-      "git show 1.4:apps/mobile/app.config.ts": { stdout: "export default {}" },
     });
     expect(await release(["check", "1.4"], { run, ...noSleep })).toBe(1);
     expect(printed()).toContain("1.4 isn't a version tag like v1.4.0");
     expect(printed()).toContain("1.4 (1111111) isn't on master");
     expect(printed()).toContain("1.4 (1111111) has no images: deploy.yml hasn't passed for it.");
-    expect(printed()).toContain("apps/mobile/app.config.ts says version (none): set it to .4");
     expect(printed()).not.toContain("is a release of");
   });
 

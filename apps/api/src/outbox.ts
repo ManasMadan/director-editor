@@ -2,9 +2,9 @@
  * This service's transactional outbox (app.outbox_event); see createOutbox in
  * @repo/nest-common for how and why.
  *
- *   await tenantTx(database.write, orgId, async (tx) => {
- *     const todo = await tx.todo.update(...);
- *     await emitEvent(tx, "todo.completed.v1", todo.id, { todoId: todo.id, title: todo.title });
+ *   await transaction(database.write, async (tx) => {
+ *     await tx.user.update(...);
+ *     await emitEvent(tx, "auth.password_changed.v1", userId, { userId });
  *   });
  */
 import { events } from "@repo/contracts/events";

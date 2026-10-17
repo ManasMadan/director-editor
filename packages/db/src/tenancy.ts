@@ -5,10 +5,10 @@
  * transaction-local setting `app.org_id`. These helpers set it for every query:
  *
  *   const db = withTenant(database.read, orgId);
- *   await db.todo.findMany();                          // only this org's rows
+ *   await db.shortReaction.findMany();                 // only this org's rows
  *
  *   await tenantTx(database.write, orgId, async (tx) => {
- *     await tx.todo.update(...);                        // state change ...
+ *     await tx.shortReaction.create(...);               // state change ...
  *     await tx.appOutboxEvent.create(...);              // ... and its event, atomically
  *   });
  *

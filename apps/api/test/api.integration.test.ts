@@ -4,19 +4,17 @@
 import { randomUUID } from "node:crypto";
 import http from "node:http";
 import { ORPCError } from "@orpc/client";
-import { WEBHOOK_SECRET_OVERLAP_HOURS } from "@repo/contracts/api";
-import { ORGANIZATION_LIMIT, PENDING_INVITATION_LIMIT } from "@repo/contracts/auth";
+import { ORGANIZATION_LIMIT } from "@repo/contracts/auth";
 import { orgIdSchema } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
 import { realtimeChannel } from "@repo/contracts/realtime";
 import { queuePrefix } from "@repo/jobs";
-import { AppError, createSignedTokens, S3Storage } from "@repo/nest-common";
+import { AppError, S3Storage } from "@repo/nest-common";
 import { eventually } from "@repo/testing/eventually";
 import { totp } from "@repo/testing/totp";
 import { Queue } from "bullmq";
 import pg from "pg";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import type { PhoneService } from "../src/modules/user/phone.service";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { publishRealtime } from "../src/realtime";
 import {
   createSession,
@@ -40,9 +38,6 @@ beforeAll(async () => {
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: "test-google-secret",
     MINIMUM_CLIENT_VERSION: "2.0.0",
-    // The test receiver below runs on loopback.
-    WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "127.0.0.1",
-    VAPID_PUBLIC_KEY: "BPublicVapidKeyForTests",
     ...LOCAL_STORAGE,
   });
 });
@@ -57,6 +52,23 @@ async function signedInUser(locale = "en") {
   const { otp } = await takeOtp(harness, email);
   await session.auth("/email-otp/verify-email", { email, otp });
   return { session, email, password };
+}
+
+/**
+ * Adds a member to a workspace straight in the database: through the API a workspace
+ * has one member, its owner, so nobody can be invited.
+ */
+async function addMember(organizationId: string, userId: string) {
+  const client = new pg.Client({ connectionString: harness.testDb.urlFor("app_api") });
+  await client.connect();
+  try {
+    await client.query(
+      "INSERT INTO auth.member (organization_id, user_id, role, created_at) VALUES ($1, $2, 'member', now())",
+      [organizationId, userId],
+    );
+  } finally {
+    await client.end();
+  }
 }
 
 async function expectError(promise: Promise<unknown>, code: string) {
@@ -79,12 +91,12 @@ describe("error responses", () => {
   });
 
   it.each([
-    ["a malformed JSON body", "/api/v1/todos", json("{bad"), 400, "BAD_REQUEST"],
+    ["a malformed JSON body", "/api/v1/shorts/lookup", json("{bad"), 400, "BAD_REQUEST"],
     ["an unknown route under /api/v1", "/api/v1/nope", {}, 404, "NOT_FOUND"],
-    ["an unknown route anywhere else", "/v1/todos", {}, 404, "NOT_FOUND"],
+    ["an unknown route anywhere else", "/v1/me", {}, 404, "NOT_FOUND"],
     [
       "the wrong media type",
-      "/api/v1/todos",
+      "/api/v1/shorts/lookup",
       json("x", "text/plain"),
       415,
       "UNSUPPORTED_MEDIA_TYPE",
@@ -96,7 +108,7 @@ describe("error responses", () => {
       401,
       "UNAUTHENTICATED",
     ],
-    ["no session on a procedure", "/api/v1/todos", {}, 401, "UNAUTHENTICATED"],
+    ["no session on a procedure", "/api/v1/me", {}, 401, "UNAUTHENTICATED"],
   ])("answers %s in the contract's shape", async (_case, path, init, status, code) => {
     const response = await send(path, init as RequestInit);
     expect(response.status).toBe(status);
@@ -109,23 +121,22 @@ describe("error responses", () => {
     });
   });
 
-  it("tells a REST caller how to authenticate, and an outdated app to update, with fitting statuses", async () => {
-    const unauthenticated = await send("/api/v1/todos");
-    expect(unauthenticated.status).toBe(401);
-    expect(unauthenticated.headers.get("www-authenticate")).toBe('ApiKey header="x-api-key"');
-    const outdated = await send("/api/v1/todos", { headers: { "x-app-version": "1.0.0" } });
+  it("tells an outdated app to update, with a fitting status", async () => {
+    const outdated = await send("/api/v1/me", { headers: { "x-app-version": "1.0.0" } });
     expect(outdated.status).toBe(400);
     expect(((await outdated.json()) as { code: string }).code).toBe("CLIENT_OUTDATED");
   });
 
   it("refuses, outside production, to answer a code the procedure's contract doesn't declare", async () => {
     const { session } = await signedInUser();
-    const { TodoService } = await import("../src/modules/todo");
-    const todos = harness.app.get(TodoService);
-    // A code the todo contract has no business returning.
-    const list = vi.spyOn(todos, "list").mockRejectedValueOnce(new AppError("PHONE_CODE_INVALID"));
-    await expectError(session.rpc.todo.list({ limit: 1 }), "INTERNAL");
-    list.mockRestore();
+    const { ShortsService } = await import("../src/modules/shorts");
+    const shorts = harness.app.get(ShortsService);
+    // A code the shorts contract has no business returning.
+    const reactions = vi
+      .spyOn(shorts, "reactionsOf")
+      .mockRejectedValueOnce(new AppError("INVALID_SIGNATURE"));
+    await expectError(session.rpc.shorts.reactions({ videoId: "dQw4w9WgXcQ" }), "INTERNAL");
+    reactions.mockRestore();
   });
 
   it("gives better-auth's errors the same envelope, keeping their codes", async () => {
@@ -165,10 +176,10 @@ describe("request bodies", () => {
 
   it("refuses an oversized body before any procedure or auth check runs", async () => {
     const big = 2 * 1024 * 1024;
-    expect(await statusFor("/rpc/todo/create", big)).toBe(413);
-    expect(await statusFor("/api/v1/todos", big)).toBe(413);
+    expect(await statusFor("/rpc/shorts/lookup", big)).toBe(413);
+    expect(await statusFor("/api/v1/shorts/lookup", big)).toBe(413);
     // 100 MB of text, unauthenticated: refused from the headers, never read.
-    expect(await statusFor("/rpc/todo/create", 100 * 1024 * 1024, "text/plain")).toBe(415);
+    expect(await statusFor("/rpc/shorts/lookup", 100 * 1024 * 1024, "text/plain")).toBe(415);
   });
 
   it("accepts only JSON on the API routes", async () => {
@@ -177,52 +188,19 @@ describe("request bodies", () => {
       "application/octet-stream",
       "multipart/form-data; boundary=x",
     ]) {
-      expect((await post("/rpc/todo/create", type, "x".repeat(1024))).status, type).toBe(415);
-      expect((await post("/api/v1/todos", type, "x".repeat(1024))).status, type).toBe(415);
+      expect((await post("/rpc/shorts/lookup", type, "x".repeat(1024))).status, type).toBe(415);
+      expect((await post("/api/v1/shorts/lookup", type, "x".repeat(1024))).status, type).toBe(415);
     }
   });
 
   it("still serves JSON calls", async () => {
     const response = await post(
-      "/rpc/todo/list",
+      "/rpc/shorts/lookup",
       "application/json",
-      JSON.stringify({ json: { limit: 1 } }),
+      JSON.stringify({ json: { url: "https://youtube.com/shorts/dQw4w9WgXcQ" } }),
     );
     // Unauthenticated, but parsed and routed: the procedure answered.
     expect(response.status).toBe(401);
-  });
-});
-
-describe("the mobile sign-in redirect", () => {
-  const proxy = (target: string) =>
-    fetch(
-      `${harness.baseUrl}/api/auth/expo-authorization-proxy?${new URLSearchParams({ authorizationURL: target })}`,
-      { redirect: "manual" },
-    );
-
-  it("sends people only to a sign-in provider", async () => {
-    const google = await proxy("https://accounts.google.com/o/oauth2/v2/auth?state=abc");
-    expect(google.status).toBe(302);
-    expect(google.headers.get("location")).toMatch(/^https:\/\/accounts\.google\.com\//);
-  });
-
-  it("refuses a request without an address", async () => {
-    const response = await fetch(`${harness.baseUrl}/api/auth/expo-authorization-proxy`, {
-      redirect: "manual",
-    });
-    expect(response.status).toBe(400);
-  });
-
-  it("refuses any other address", async () => {
-    for (const target of [
-      "https://evil.example/login?state=abc",
-      "https://accounts.google.com.evil.example/?state=abc",
-      "not a url",
-    ]) {
-      const response = await proxy(target);
-      expect(response.status, target).toBe(400);
-      expect(response.headers.get("location")).toBeNull();
-    }
   });
 });
 
@@ -240,152 +218,19 @@ describe("Google sign-in", () => {
   });
 });
 
-describe("Google sign-in on the mobile app", () => {
-  afterEach(() => vi.restoreAllMocks());
-
-  /** Google's token endpoint, answering any code with an id token for `email`. */
-  function google(email: string) {
-    const real = globalThis.fetch;
-    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
-      const url = input instanceof Request ? input.url : String(input);
-      if (!url.startsWith("https://oauth2.googleapis.com/token")) {
-        return real(input, init);
-      }
-      const part = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
-      const claims = {
-        iss: "https://accounts.google.com",
-        aud: GOOGLE_CLIENT_ID,
-        sub: randomUUID(),
-        email,
-        email_verified: true,
-        name: "Ada",
-      };
-      return Promise.resolve(
-        Response.json({
-          access_token: "google-access-token",
-          id_token: `${part({ alg: "RS256" })}.${part(claims)}.signature`,
-          expires_in: 3600,
-          token_type: "Bearer",
-        }),
-      );
-    });
-  }
-
-  /**
-   * The app starts a sign-in with `callbackURL`; the browser goes through the proxy to
-   * Google, which sends it back with a code (or `error`). Where the callback sends it.
-   */
-  async function signIn(callbackURL: string, back: Record<string, string> = { code: "a" }) {
-    const app = createSession(harness);
-    const started = await app.auth<{ url: string }>("/sign-in/social", {
-      provider: "google",
-      callbackURL,
-      disableRedirect: true,
-    });
-    const authorizationURL = started.body.url;
-    const proxied = await fetch(
-      `${harness.baseUrl}/api/auth/expo-authorization-proxy?${new URLSearchParams({ authorizationURL })}`,
-      { redirect: "manual" },
-    );
-    const state = new URL(authorizationURL).searchParams.get("state") as string;
-    const callback = await fetch(
-      `${harness.baseUrl}/api/auth/callback/google?${new URLSearchParams({ ...back, state })}`,
-      {
-        headers: {
-          cookie: proxied.headers
-            .getSetCookie()
-            .map((c) => c.split(";")[0])
-            .join("; "),
-        },
-        redirect: "manual",
-      },
-    );
-    return new URL(callback.headers.get("location") as string);
-  }
-
-  const start = () =>
-    createSession(harness).auth<{ id: string; secret: string }>("/mobile/sign-in/start");
-  const finish = (body: { id: string; secret: string }) =>
-    fetch(`${harness.baseUrl}/api/auth/mobile/sign-in/finish`, {
-      method: "POST",
-      headers: { "content-type": "application/json", origin: String(process.env.WEB_URL) },
-      body: JSON.stringify(body),
-    });
-
-  it("hands the session only to the app that started the sign-in, once", async () => {
-    const email = newEmail();
-    google(email);
-    const { body: handoff } = await start();
-    const back = await signIn(`director-editor:///?handoff=${handoff.id}`);
-    // The link names the hand-off and carries no session: catching it gets nothing.
-    expect(back.protocol).toBe("director-editor:");
-    expect(back.searchParams.get("handoff")).toBe(handoff.id);
-    expect(back.searchParams.get("cookie")).toBeNull();
-
-    const finished = await finish(handoff);
-    expect(finished.status).toBe(200);
-    const token = /(?:__Secure-)?[\w.-]*session_token=[^;]+/.exec(
-      String(finished.headers.get("set-cookie")),
-    )?.[0];
-    const session = await fetch(`${harness.baseUrl}/api/auth/get-session`, {
-      headers: { cookie: String(token) },
-    }).then((response) => response.json() as Promise<{ user: { email: string } }>);
-    expect(session.user.email).toBe(email);
-    // Once only.
-    expect((await finish(handoff)).status).toBe(401);
-  });
-
-  it("burns the hand-off on a wrong secret, so a caught link can't be tried twice", async () => {
-    google(newEmail());
-    const { body: handoff } = await start();
-    await signIn(`director-editor:///?handoff=${handoff.id}`);
-    const wrong = await finish({ id: handoff.id, secret: "guess" });
-    expect(wrong.status).toBe(401);
-    expect(await wrong.json()).toMatchObject({ code: "SIGN_IN_INCOMPLETE" });
-    expect((await finish(handoff)).status).toBe(401);
-  });
-
-  it("puts no session in a link to the app without a hand-off it started", async () => {
-    google(newEmail());
-    for (const callbackURL of [
-      "director-editor:///",
-      `director-editor:///?handoff=${"x".repeat(43)}`,
-    ]) {
-      const back = await signIn(callbackURL);
-      expect(back.protocol).toBe("director-editor:");
-      expect(back.searchParams.get("cookie"), callbackURL).toBeNull();
-    }
-    // Nor to the web app, which gets its cookie from the redirect itself.
-    expect((await signIn(String(process.env.WEB_URL))).origin).toBe(
-      new URL(String(process.env.WEB_URL)).origin,
-    );
-  });
-
-  it("has nothing to hand over before the sign-in, or after it failed", async () => {
-    const early = await start();
-    expect((await finish(early.body)).status).toBe(401);
-    const { body: handoff } = await start();
-    const back = await signIn(`director-editor:///?handoff=${handoff.id}`, {
-      error: "access_denied",
-    });
-    expect(back.searchParams.get("error")).toBe("access_denied");
-    expect((await finish(handoff)).status).toBe(401);
-  });
-});
-
 describe("profile settings", () => {
   it("saves a known language and time zone, and refuses anything else", async () => {
     const { session } = await signedInUser();
     expect(
-      (await session.auth("/update-user", { locale: "es", timezone: "Asia/Tokyo" })).status,
+      (await session.auth("/update-user", { locale: "en", timezone: "Asia/Tokyo" })).status,
     ).toBe(200);
-    expect(await session.rpc.user.me()).toMatchObject({ locale: "es", timezone: "Asia/Tokyo" });
+    expect(await session.rpc.user.me()).toMatchObject({ locale: "en", timezone: "Asia/Tokyo" });
     for (const change of [{ locale: "xx" }, { timezone: "Mars/Olympus" }]) {
       const refused = await session.auth<{ code?: string }>("/update-user", change);
       expect(refused.status, JSON.stringify(change)).toBe(400);
       expect(refused.body.code).toBe("VALIDATION_FAILED");
     }
-    expect(await session.rpc.user.me()).toMatchObject({ locale: "es", timezone: "Asia/Tokyo" });
+    expect(await session.rpc.user.me()).toMatchObject({ locale: "en", timezone: "Asia/Tokyo" });
   });
 });
 
@@ -399,7 +244,10 @@ describe("an account without a workspace", () => {
     await session.auth("/sign-out");
     expect((await session.auth("/sign-in/email", { email, password })).status).toBe(200);
     expect((await session.rpc.user.me()).activeOrganizationId).toBeNull();
-    await expectError(session.rpc.todo.list({}), "NO_ACTIVE_ORGANIZATION");
+    await expectError(
+      session.rpc.shorts.reactions({ videoId: "dQw4w9WgXcQ" }),
+      "NO_ACTIVE_ORGANIZATION",
+    );
   });
 });
 
@@ -456,7 +304,7 @@ describe("sign-up and verification", () => {
   });
 
   it("issues no session until the email is verified, and queues the code in the browser's language", async () => {
-    const session = createSession(harness, { locale: "es-ES,es;q=0.9" });
+    const session = createSession(harness, { locale: "en-GB,en;q=0.9" });
     const email = newEmail();
     const signUp = await session.auth<{ token: string | null }>("/sign-up/email", {
       email,
@@ -468,12 +316,12 @@ describe("sign-up and verification", () => {
     await expectError(session.rpc.user.me(), "UNAUTHENTICATED");
 
     const code = await takeOtp(harness, email);
-    expect(code).toMatchObject({ locale: "es", purpose: "email-verification" });
+    expect(code).toMatchObject({ locale: "en", purpose: "email-verification" });
     expect(code.otp).toMatch(/^\d{6}$/);
 
     await session.auth("/email-otp/verify-email", { email, otp: code.otp });
     const me = await session.rpc.user.me();
-    expect(me).toMatchObject({ email, locale: "es" });
+    expect(me).toMatchObject({ email, locale: "en" });
     // Their personal workspace, made at sign-up.
     const [personal, ...others] =
       await session.authGet<{ id: string; slug: string }[]>("/organization/list");
@@ -786,7 +634,11 @@ describe("organizations and the audit trail", () => {
     }
   }
 
-  /** A team organization with an owner and a member (who joined by invitation). */
+  /**
+   * A team organization with an owner and a member. Nobody can invite anyone (a workspace
+   * has one member), so the member is written straight to the database, as a workspace
+   * made before that rule would have them.
+   */
   async function team() {
     const owner = await signedInUser();
     const member = await signedInUser();
@@ -794,14 +646,7 @@ describe("organizations and the audit trail", () => {
       name: "Team",
       slug: `team-${randomUUID().slice(0, 8)}`,
     });
-    await owner.session.auth("/organization/invite-member", {
-      email: member.email,
-      role: "member",
-      organizationId: org.body.id,
-    });
-    const invitation = await takeNotification(harness, "org.invitation", member.email);
-    const invitationId = new URL(invitation.data.acceptUrl).pathname.split("/").at(-1);
-    await member.session.auth("/organization/accept-invitation", { invitationId });
+    await addMember(org.body.id, (await member.session.rpc.user.me()).id);
     await member.session.auth("/organization/set-active", { organizationId: org.body.id });
     await owner.session.auth("/organization/set-active", { organizationId: org.body.id });
     const memberId = (await member.session.rpc.user.me()).id;
@@ -826,11 +671,28 @@ describe("organizations and the audit trail", () => {
     expect(after.at(-1)?.payload).toMatchObject({ reason: "sign-out" });
   });
 
+  it("refuses an invitation: a workspace is its owner's alone", async () => {
+    const { session } = await signedInUser();
+    const { activeOrganizationId } = await session.rpc.user.me();
+    const invite = await session.auth<{ code?: string }>("/organization/invite-member", {
+      email: newEmail(),
+      role: "member",
+      organizationId: activeOrganizationId,
+    });
+    expect(invite.status).toBe(403);
+    const anonymous = createSession(harness);
+    expect(
+      (await anonymous.auth("/organization/invite-member", { email: newEmail(), role: "member" }))
+        .status,
+    ).toBe(401);
+  });
+
   it("records membership changes in the organization's own log, with who did them", async () => {
     const { owner, orgId, memberId } = await team();
     const { id: ownerId } = await owner.session.rpc.user.me();
     const { members } = await owner.session.authGet<{ members: { id: string; userId: string }[] }>(
-      `/organization/list-members?organizationId=${orgId}`,
+      // A workspace is meant for one member, which is also better-auth's default page size.
+      `/organization/list-members?organizationId=${orgId}&limit=100`,
     );
     const target = members.find((m) => m.userId === memberId)?.id;
     await owner.session.auth("/organization/update-member-role", {
@@ -844,83 +706,12 @@ describe("organizations and the audit trail", () => {
     expect(events.map((e) => e.name)).toEqual([
       "org.member_added.v1",
       "org.created.v1",
-      "org.invitation_sent.v1",
-      "org.member_added.v1",
       "org.member_role_changed.v1",
     ]);
     expect(events.at(-1)).toMatchObject({
       actor_id: ownerId,
       payload: { role: "admin", previousRole: "member" },
     });
-  });
-
-  it("limits invitations, per address and per workspace, so our domain can't be used to spam", async () => {
-    const { owner, orgId } = await team();
-    const invite = (email: string, resend = false) =>
-      owner.session.auth<{ code?: string }>("/organization/invite-member", {
-        email,
-        role: "member",
-        organizationId: orgId,
-        resend,
-      });
-    // One address: three emails a day, however they're asked for.
-    const target = newEmail();
-    expect((await invite(target)).status).toBe(200);
-    expect((await invite(target, true)).status).toBe(200);
-    expect((await invite(target, true)).status).toBe(200);
-    expect((await invite(target, true)).status).toBe(429);
-    // One workspace: PENDING_INVITATION_LIMIT waiting at once (the team already has one,
-    // its member's accepted one doesn't count, and the one above does).
-    let sent = 1;
-    while (sent < PENDING_INVITATION_LIMIT) {
-      expect((await invite(newEmail())).status).toBe(200);
-      sent++;
-    }
-    const over = await invite(newEmail());
-    expect(over.status).toBe(403);
-    expect(over.body.code).toBe("INVITATION_LIMIT_REACHED");
-  });
-
-  it("limits the invitations one person sends in an hour, across workspaces", async () => {
-    const { session } = await signedInUser();
-    const workspace = async () => {
-      const org = await session.auth<{ id: string }>("/organization/create", {
-        name: "Team",
-        slug: `team-${randomUUID().slice(0, 8)}`,
-      });
-      return org.body.id;
-    };
-    const invite = (organizationId: string) =>
-      session.auth<{ code?: string }>("/organization/invite-member", {
-        email: newEmail(),
-        role: "member",
-        organizationId,
-      });
-    // Two workspaces, so the per-workspace limit on waiting invitations isn't what stops it.
-    const [first, second] = [await workspace(), await workspace()];
-    for (let i = 0; i < PENDING_INVITATION_LIMIT; i++) {
-      expect((await invite(first)).status).toBe(200);
-    }
-    for (let i = PENDING_INVITATION_LIMIT; i < 30; i++) {
-      expect((await invite(second)).status).toBe(200);
-    }
-    const over = await invite(second);
-    expect(over.status).toBe(429);
-    expect(over.body.code).toBe("RATE_LIMITED");
-  });
-
-  it("refuses an invitation without a session, or without an address", async () => {
-    const { session } = await signedInUser();
-    const anonymous = createSession(harness);
-    expect(
-      (await anonymous.auth("/organization/invite-member", { email: newEmail(), role: "member" }))
-        .status,
-    ).toBe(401);
-    const noAddress = await session.auth("/organization/invite-member", {
-      email: 42,
-      role: "member",
-    });
-    expect(noAddress.status).toBe(400);
   });
 
   it("won't let a client mark a workspace as someone's personal one", async () => {
@@ -958,15 +749,18 @@ describe("organizations and the audit trail", () => {
 
   it("a removed member loses access on their very next request", async () => {
     const { owner, member, orgId } = await team();
-    await member.session.rpc.todo.create({ title: "Mine for now" });
+    await member.session.rpc.shorts.react({ videoId: "dQw4w9WgXcQ", kind: "like", on: true });
 
     await owner.session.auth("/organization/remove-member", {
       memberIdOrEmail: member.email,
       organizationId: orgId,
     });
-    await expectError(member.session.rpc.todo.list({ limit: 20 }), "NO_ACTIVE_ORGANIZATION");
     await expectError(
-      member.session.rpc.todo.create({ title: "Sneaky" }),
+      member.session.rpc.shorts.reactions({ videoId: "dQw4w9WgXcQ" }),
+      "NO_ACTIVE_ORGANIZATION",
+    );
+    await expectError(
+      member.session.rpc.shorts.react({ videoId: "dQw4w9WgXcQ", kind: "save", on: true }),
       "NO_ACTIVE_ORGANIZATION",
     );
   });
@@ -977,12 +771,15 @@ describe("organizations and the audit trail", () => {
     const elsewhere = createSession(harness);
     await elsewhere.auth("/sign-in/email", { email: member.email, password: member.password });
     await elsewhere.auth("/organization/set-active", { organizationId: orgId });
-    await elsewhere.rpc.todo.list({ limit: 20 });
+    await elsewhere.rpc.shorts.reactions({ videoId: "dQw4w9WgXcQ" });
 
     expect(
       (await member.session.auth("/organization/leave", { organizationId: orgId })).status,
     ).toBe(200);
-    await expectError(elsewhere.rpc.todo.list({ limit: 20 }), "NO_ACTIVE_ORGANIZATION");
+    await expectError(
+      elsewhere.rpc.shorts.reactions({ videoId: "dQw4w9WgXcQ" }),
+      "NO_ACTIVE_ORGANIZATION",
+    );
     const removed = await outbox("org_id = $1::uuid AND name = 'org.member_removed.v1'", [orgId]);
     expect(removed).toEqual([
       expect.objectContaining({
@@ -1006,59 +803,6 @@ describe("organizations and the audit trail", () => {
     ]);
   });
 
-  it("only owners and admins read the audit log, and only their organization's", async () => {
-    const { owner, member, orgId } = await team();
-    // The worker writes the audit log; here, rows are written directly as it would.
-    const admin = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
-    await admin.connect();
-    await admin.query("SELECT audit.ensure_partitions(1, 1)");
-    await admin.query(
-      `INSERT INTO audit.audit_log (id, occurred_at, name, key, payload, org_id, source)
-       VALUES (uuidv7(), now(), 'todo.created.v1', 'k', '{"title":"Audited"}', $1, 'app'),
-              (uuidv7(), now(), 'todo.created.v1', 'k', '{"title":"Other org"}', $2, 'app')`,
-      [orgId, randomUUID()],
-    );
-    await admin.end();
-
-    const log = await owner.session.rpc.audit.list({ limit: 20 });
-    expect(log.items.map((entry) => entry.payload.title)).toEqual(["Audited"]);
-    await expectError(member.session.rpc.audit.list({ limit: 20 }), "FORBIDDEN");
-  });
-
-  it("names who did each thing in the audit log, newest first, a page at a time", async () => {
-    const { owner, orgId } = await team();
-    const { id: ownerId } = await owner.session.rpc.user.me();
-    const admin = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
-    await admin.connect();
-    await admin.query("SELECT audit.ensure_partitions(1, 1)");
-    // Oldest first: by the owner, by an account deleted since, and by the system (a job).
-    for (const [actor, payload] of [
-      [ownerId, '{"title":"By the owner"}'],
-      [randomUUID(), "null"],
-      [null, '{"title":"By a job"}'],
-    ]) {
-      await admin.query(
-        `INSERT INTO audit.audit_log (id, occurred_at, name, key, payload, org_id, actor_id, source)
-         VALUES (uuidv7(), now(), 'todo.created.v1', 'k', $1::jsonb, $2, $3, 'app')`,
-        [payload, orgId, actor],
-      );
-    }
-    await admin.end();
-
-    const first = await owner.session.rpc.audit.list({ limit: 2 });
-    expect(first.items.map((entry) => [entry.actor, entry.payload])).toEqual([
-      [null, { title: "By a job" }],
-      [null, {}],
-    ]);
-    const rest = await owner.session.rpc.audit.list({
-      limit: 2,
-      cursor: first.nextCursor as string,
-    });
-    expect(rest.items.find((entry) => entry.payload.title === "By the owner")?.actor).toMatchObject(
-      { id: ownerId },
-    );
-  });
-
   it("reads a stored role by an allow-list: an unknown one grants nothing, a compound one its strongest part", async () => {
     const { member, orgId, memberId } = await team();
     const setRole = async (role: string) => {
@@ -1078,297 +822,18 @@ describe("organizations and the audit trail", () => {
       }
     };
 
+    const reactions = () => member.session.rpc.shorts.reactions({ videoId: "dQw4w9WgXcQ" });
     // better-auth joins several roles with commas: the strongest one counts.
     await setRole("member,admin");
-    expect((await member.session.rpc.audit.list({ limit: 20 })).items).toEqual([]);
-    // A role the API doesn't know (a future "viewer", a typo, a hand edit) isn't an admin,
-    // nor a member: it grants nothing at all.
+    expect(await reactions()).toEqual({ liked: false, saved: false });
+    // A role the API doesn't know (a future "viewer", a typo, a hand edit) isn't a member:
+    // it grants nothing at all.
     await setRole("viewer");
-    await expectError(member.session.rpc.audit.list({ limit: 20 }), "NO_ACTIVE_ORGANIZATION");
-    await expectError(member.session.rpc.todo.list({}), "NO_ACTIVE_ORGANIZATION");
+    await expectError(reactions(), "NO_ACTIVE_ORGANIZATION");
     await setRole("member,viewer");
-    await expectError(member.session.rpc.todo.list({}), "NO_ACTIVE_ORGANIZATION");
+    await expectError(reactions(), "NO_ACTIVE_ORGANIZATION");
     await setRole("member");
-    await expectError(member.session.rpc.audit.list({ limit: 20 }), "FORBIDDEN");
-    expect((await member.session.rpc.todo.list({})).items).toEqual([]);
-  });
-});
-
-describe("webhook endpoints", () => {
-  const url = "http://127.0.0.1:9/hook";
-
-  it("limits test sends per workspace, so our servers can't flood an endpoint", async () => {
-    const { session } = await signedInUser();
-    const { endpoint } = await session.rpc.webhooks.createEndpoint({
-      url,
-      events: ["todo.created.v1"],
-    });
-    for (let i = 0; i < 10; i++) {
-      await session.rpc.webhooks.sendTest({ id: endpoint.id });
-    }
-    const limited = await expectError(
-      session.rpc.webhooks.sendTest({ id: endpoint.id }),
-      "RATE_LIMITED",
-    );
-    expect(limited.data.params).toMatchObject({ retryAfterSeconds: expect.any(Number) });
-  });
-
-  it("needs a recent sign-in to add one or point it elsewhere", async () => {
-    const { session } = await signedInUser();
-    const { endpoint } = await session.rpc.webhooks.createEndpoint({
-      url,
-      events: ["todo.created.v1"],
-    });
-    await editSession(harness, session, (stored) => {
-      stored.createdAt = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
-    });
-    await expectError(
-      session.rpc.webhooks.createEndpoint({ url, events: ["todo.created.v1"] }),
-      "FRESH_SESSION_REQUIRED",
-    );
-    await expectError(
-      session.rpc.webhooks.updateEndpoint({ id: endpoint.id, url: "http://127.0.0.1:9/other" }),
-      "FRESH_SESSION_REQUIRED",
-    );
-    // Anything else about it doesn't.
-    await expect(
-      session.rpc.webhooks.updateEndpoint({ id: endpoint.id, enabled: false }),
-    ).resolves.toMatchObject({ url });
-  });
-
-  it("returns the signing secret once and keeps it encrypted at rest", async () => {
-    const { session } = await signedInUser();
-    const created = await session.rpc.webhooks.createEndpoint({ url, events: ["todo.created.v1"] });
-    expect(created.secret).toMatch(/^whsec_/);
-    expect(created.endpoint).toMatchObject({ url, events: ["todo.created.v1"], disabledAt: null });
-    expect(JSON.stringify(await session.rpc.webhooks.listEndpoints())).not.toContain(
-      created.secret,
-    );
-
-    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
-    await client.connect();
-    const { rows } = await client.query("SELECT secret FROM webhooks.endpoint WHERE id = $1", [
-      created.endpoint.id,
-    ]);
-    const events = await client.query("SELECT name FROM app.outbox_event WHERE key = $1", [
-      created.endpoint.id,
-    ]);
-    await client.end();
-    expect(rows[0].secret).not.toContain(created.secret.slice(6));
-    expect(rows[0].secret).toMatch(/^v2\./);
-    expect(events.rows.map((row) => row.name)).toEqual(["webhook.endpoint_created.v1"]);
-
-    const rotated = await session.rpc.webhooks.rotateSecret({ id: created.endpoint.id });
-    expect(rotated.secret).not.toBe(created.secret);
-    // The replaced secret keeps signing for the overlap (apps/webhooks signs with both).
-    const after = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
-    await after.connect();
-    const { rows: stored } = await after
-      .query<{ secret: string; previous_secret: string; previous_secret_expires_at: Date }>(
-        "SELECT secret, previous_secret, previous_secret_expires_at FROM webhooks.endpoint WHERE id = $1",
-        [created.endpoint.id],
-      )
-      .finally(() => after.end());
-    expect(stored[0]?.previous_secret).toBe(rows[0].secret);
-    expect(stored[0]?.secret).not.toBe(rows[0].secret);
-    const overlap = (stored[0]?.previous_secret_expires_at.getTime() ?? 0) - Date.now();
-    expect(overlap).toBeGreaterThan((WEBHOOK_SECRET_OVERLAP_HOURS - 1) * 3_600_000);
-    expect(overlap).toBeLessThanOrEqual(WEBHOOK_SECRET_OVERLAP_HOURS * 3_600_000);
-  });
-
-  it("refuses URLs that point at private or unresolvable hosts", async () => {
-    const { session } = await signedInUser();
-    for (const bad of [
-      "http://10.0.0.1/hook",
-      "http://169.254.169.254/latest",
-      "https://does-not-exist.invalid/",
-    ]) {
-      await expectError(
-        session.rpc.webhooks.createEndpoint({ url: bad }),
-        "WEBHOOK_URL_NOT_ALLOWED",
-      );
-    }
-  });
-
-  it("refuses a host name longer than DNS allows, as invalid rather than a DNS outage", async () => {
-    const { session } = await signedInUser();
-    const tooLong = `https://${`${"a".repeat(63)}.`.repeat(4)}example/hook`;
-    const created = await expectError(
-      session.rpc.webhooks.createEndpoint({ url: tooLong }),
-      "VALIDATION_FAILED",
-    );
-    expect(created.data.issues).toEqual([{ path: ["url"], code: "invalid_format" }]);
-    const { endpoint } = await session.rpc.webhooks.createEndpoint({ url });
-    await expectError(
-      session.rpc.webhooks.updateEndpoint({ id: endpoint.id, url: tooLong }),
-      "VALIDATION_FAILED",
-    );
-  });
-
-  it("turns an endpoint off and on, and records who changed what", async () => {
-    const { session } = await signedInUser();
-    const { endpoint } = await session.rpc.webhooks.createEndpoint({ url });
-    const off = await session.rpc.webhooks.updateEndpoint({ id: endpoint.id, enabled: false });
-    expect(off).toMatchObject({ disabledReason: "manual" });
-    expect(off.disabledAt).toBeInstanceOf(Date);
-    const on = await session.rpc.webhooks.updateEndpoint({
-      id: endpoint.id,
-      enabled: true,
-      description: "Prod",
-    });
-    expect(on).toMatchObject({ disabledAt: null, disabledReason: null, description: "Prod" });
-  });
-
-  it("queues a test event for the delivery service", async () => {
-    const { session } = await signedInUser();
-    const { endpoint } = await session.rpc.webhooks.createEndpoint({ url });
-    await session.rpc.webhooks.sendTest({ id: endpoint.id });
-    const queue = new Queue("webhook-deliveries", {
-      connection: harness.redis,
-      prefix: queuePrefix("webhook-deliveries"),
-    });
-    const jobs = await queue.getJobs(["waiting"]);
-    await queue.close();
-    expect(
-      jobs.some((job) => job.name === "send-test" && job.data.payload.endpointId === endpoint.id),
-    ).toBe(true);
-  });
-
-  it("is for owners and admins of the organization only", async () => {
-    const owner = await signedInUser();
-    const { endpoint } = await owner.session.rpc.webhooks.createEndpoint({ url });
-    const stranger = await signedInUser();
-    expect(await stranger.session.rpc.webhooks.listEndpoints()).toEqual([]);
-    await expectError(
-      stranger.session.rpc.webhooks.deleteEndpoint({ id: endpoint.id }),
-      "WEBHOOK_ENDPOINT_NOT_FOUND",
-    );
-    await expectError(
-      stranger.session.rpc.webhooks.listDeliveries({ id: endpoint.id, limit: 20 }),
-      "WEBHOOK_ENDPOINT_NOT_FOUND",
-    );
-  });
-
-  it("records only what an update really changed", async () => {
-    const { session } = await signedInUser();
-    const { endpoint } = await session.rpc.webhooks.createEndpoint({ url });
-    const changes = async () => {
-      const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
-      await client.connect();
-      const { rows } = await client
-        .query<{ payload: { changed: string[] } }>(
-          "SELECT payload FROM app.outbox_event WHERE key = $1 AND name = 'webhook.endpoint_updated.v1' ORDER BY id",
-          [endpoint.id],
-        )
-        .finally(() => client.end());
-      return rows.map((row) => row.payload.changed);
-    };
-    // The same URL, description and state again: nothing to record.
-    await session.rpc.webhooks.updateEndpoint({ id: endpoint.id, url, enabled: true });
-    expect(await changes()).toEqual([]);
-    const updated = await session.rpc.webhooks.updateEndpoint({
-      id: endpoint.id,
-      url: "http://127.0.0.1:9/moved",
-      events: ["todo.completed.v1"],
-    });
-    expect(updated).toMatchObject({
-      url: "http://127.0.0.1:9/moved",
-      events: ["todo.completed.v1"],
-    });
-    expect(await changes()).toEqual([["url", "events"]]);
-    await expectError(
-      session.rpc.webhooks.updateEndpoint({ id: randomUUID(), enabled: false }),
-      "WEBHOOK_ENDPOINT_NOT_FOUND",
-    );
-  });
-
-  it("deletes an endpoint, once", async () => {
-    const { session } = await signedInUser();
-    const { endpoint } = await session.rpc.webhooks.createEndpoint({ url });
-    await session.rpc.webhooks.deleteEndpoint({ id: endpoint.id });
-    expect(await session.rpc.webhooks.listEndpoints()).toEqual([]);
-    await expectError(
-      session.rpc.webhooks.deleteEndpoint({ id: endpoint.id }),
-      "WEBHOOK_ENDPOINT_NOT_FOUND",
-    );
-  });
-
-  it("can't rotate the secret of, or test, an endpoint that isn't there", async () => {
-    const { session } = await signedInUser();
-    await expectError(
-      session.rpc.webhooks.rotateSecret({ id: randomUUID() }),
-      "WEBHOOK_ENDPOINT_NOT_FOUND",
-    );
-    await expectError(
-      session.rpc.webhooks.sendTest({ id: randomUUID() }),
-      "WEBHOOK_ENDPOINT_NOT_FOUND",
-    );
-  });
-
-  it("lists an endpoint's deliveries newest first, and sends one again", async () => {
-    const { session } = await signedInUser();
-    const { endpoint } = await session.rpc.webhooks.createEndpoint({ url });
-    const { activeOrganizationId: orgId } = await session.rpc.user.me();
-    // apps/webhooks records deliveries; here they're written as it would, oldest first.
-    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
-    await client.connect();
-    const ids: string[] = [];
-    for (const [status, lastError] of [
-      ["succeeded", null],
-      ["failed", "timeout"],
-      // A code from before the current list reads as a failed connection.
-      ["failed", "socket hang up"],
-    ]) {
-      const { rows } = await client.query<{ id: string }>(
-        `INSERT INTO webhooks.delivery (endpoint_id, org_id, event_id, event_name, body, status, attempts, last_error)
-         VALUES ($1, $2, $3, 'todo.created.v1', '{}', $4, 1, $5) RETURNING id`,
-        [endpoint.id, orgId, randomUUID(), status, lastError],
-      );
-      ids.push((rows[0] as { id: string }).id);
-    }
-    await client.end();
-
-    const first = await session.rpc.webhooks.listDeliveries({ id: endpoint.id, limit: 2 });
-    expect(first.items.map((delivery) => [delivery.status, delivery.lastError])).toEqual([
-      ["failed", "connection_failed"],
-      ["failed", "timeout"],
-    ]);
-    const rest = await session.rpc.webhooks.listDeliveries({
-      id: endpoint.id,
-      limit: 2,
-      cursor: first.nextCursor as string,
-    });
-    expect(rest).toMatchObject({ items: [{ id: ids[0], status: "succeeded" }], nextCursor: null });
-
-    await session.rpc.webhooks.redeliver({ id: ids[1] as string });
-    const queue = new Queue("webhook-deliveries", {
-      connection: harness.redis,
-      prefix: queuePrefix("webhook-deliveries"),
-    });
-    const jobs = await queue.getJobs(["waiting"]);
-    await queue.close();
-    expect(
-      jobs.some((job) => job.name === "redeliver" && job.data.payload.deliveryId === ids[1]),
-    ).toBe(true);
-
-    // Another workspace's delivery, or none at all, isn't found.
-    const stranger = await signedInUser();
-    await expectError(
-      stranger.session.rpc.webhooks.redeliver({ id: ids[1] as string }),
-      "WEBHOOK_DELIVERY_NOT_FOUND",
-    );
-  });
-
-  it("limits endpoints per organization", async () => {
-    const { session } = await signedInUser();
-    for (let i = 0; i < 20; i++) {
-      await session.rpc.webhooks.createEndpoint({ url });
-    }
-    const error = await expectError(
-      session.rpc.webhooks.createEndpoint({ url }),
-      "WEBHOOK_ENDPOINT_LIMIT",
-    );
-    expect(error.data.params).toEqual({ max: 20 });
+    expect(await reactions()).toEqual({ liked: false, saved: false });
   });
 });
 
@@ -1442,9 +907,9 @@ describe("realtime", () => {
     const reading = read(again, 1);
     await subscribed(realtimeChannel.user(me.id));
     await publishRealtime(harness.redis, realtimeChannel.user(me.id), {
-      type: "notifications.changed",
+      type: "files.changed",
     });
-    expect(await reading).toEqual([{ type: "notifications.changed" }]);
+    expect(await reading).toEqual([{ type: "files.changed" }]);
   });
 
   it("streams messages for the user and their active workspace only", async () => {
@@ -1456,17 +921,17 @@ describe("realtime", () => {
     const reading = read(stream, 2);
     await subscribed(realtimeChannel.user(me.id), realtimeChannel.org(orgId));
     await publishRealtime(harness.redis, realtimeChannel.org(orgIdSchema.parse(randomUUID())), {
-      type: "todos.changed",
+      type: "director.changed",
     });
     await publishRealtime(harness.redis, realtimeChannel.org(orgId), {
-      type: "todos.changed",
+      type: "director.changed",
     });
     await publishRealtime(harness.redis, realtimeChannel.user(me.id), {
-      type: "notifications.changed",
+      type: "files.changed",
     });
     const received = await reading;
     controller.abort();
-    expect(received).toEqual([{ type: "todos.changed" }, { type: "notifications.changed" }]);
+    expect(received).toEqual([{ type: "director.changed" }, { type: "files.changed" }]);
   });
 
   it("drops a message outside the contract and keeps streaming", async () => {
@@ -1484,9 +949,9 @@ describe("realtime", () => {
       JSON.stringify({ type: "not.in.the.contract" }),
     );
     await publishRealtime(harness.redis, realtimeChannel.user(me.id), {
-      type: "notifications.changed",
+      type: "files.changed",
     });
-    expect((await first).value).toEqual({ type: "notifications.changed" });
+    expect((await first).value).toEqual({ type: "files.changed" });
     await stream.return(undefined);
   });
 
@@ -1495,447 +960,6 @@ describe("realtime", () => {
     const stream = anonymous.rpc.realtime.subscribe(undefined);
     await expectError(
       stream.then((iterator) => iterator[Symbol.asyncIterator]().next()),
-      "UNAUTHENTICATED",
-    );
-  });
-});
-
-describe("notifications", () => {
-  /** Puts in-app notifications in a user's inbox, as apps/notifications does. */
-  async function deliver(userId: string, titles: string[]) {
-    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
-    await client.connect();
-    for (const title of titles) {
-      await client.query(
-        `INSERT INTO notifications.notification (user_id, template, data, link) VALUES ($1, 'todo.reminder', $2, '/dashboard')`,
-        [userId, JSON.stringify({ todoId: randomUUID(), title })],
-      );
-    }
-    await client.end();
-  }
-
-  it("lists the inbox newest first, counts unread, marks read", async () => {
-    const { session } = await signedInUser();
-    const me = await session.rpc.user.me();
-    await deliver(me.id, ["first", "second", "third"]);
-    const page = await session.rpc.notifications.list({ limit: 2 });
-    expect(page.items.map((item) => item.data.title)).toEqual(["third", "second"]);
-    expect(page.nextCursor).toEqual(expect.any(String));
-    expect(await session.rpc.notifications.unreadCount()).toEqual({ count: 3 });
-
-    const rest = await session.rpc.notifications.list({
-      limit: 2,
-      cursor: page.nextCursor as string,
-    });
-    expect(rest).toMatchObject({ items: [{ data: { title: "first" } }], nextCursor: null });
-
-    await session.rpc.notifications.markRead({ ids: [page.items[0]?.id as string] });
-    expect(await session.rpc.notifications.unreadCount()).toEqual({ count: 2 });
-    await session.rpc.notifications.markAllRead();
-    expect(await session.rpc.notifications.unreadCount()).toEqual({ count: 0 });
-  });
-
-  it("lists a notification that carries no data", async () => {
-    const { session } = await signedInUser();
-    const me = await session.rpc.user.me();
-    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
-    await client.connect();
-    await client
-      .query(
-        `INSERT INTO notifications.notification (user_id, template, data, link) VALUES ($1, 'todo.reminder', 'null', '/dashboard')`,
-        [me.id],
-      )
-      .finally(() => client.end());
-    const { items } = await session.rpc.notifications.list({ limit: 20 });
-    expect(items.map((item) => item.data)).toEqual([{}]);
-  });
-
-  it("keeps each inbox private", async () => {
-    const owner = await signedInUser();
-    await deliver((await owner.session.rpc.user.me()).id, ["private"]);
-    const other = await signedInUser();
-    expect((await other.session.rpc.notifications.list({ limit: 20 })).items).toEqual([]);
-  });
-
-  it("saves preferences, digest and quiet hours, but security email can't be turned off", async () => {
-    const { session } = await signedInUser();
-    const defaults = await session.rpc.notifications.preferences();
-    expect(defaults.categories.map((c) => c.name)).toEqual(["workspace", "activity"]);
-    expect(defaults.categories.every((c) => c.channels.every((ch) => ch.enabled))).toBe(true);
-
-    const updated = await session.rpc.notifications.updatePreferences({
-      channels: [{ category: "activity", channel: "email", enabled: false }],
-      dailyDigest: true,
-      quietHours: { start: 22 * 60, end: 7 * 60 },
-    });
-    expect(updated.categories.find((c) => c.name === "activity")?.channels).toContainEqual({
-      channel: "email",
-      enabled: false,
-    });
-    expect(updated).toMatchObject({ dailyDigest: true, quietHours: { start: 1320, end: 420 } });
-
-    // Changing only the digest, then clearing quiet hours, keeps everything else.
-    expect(await session.rpc.notifications.updatePreferences({ dailyDigest: false })).toMatchObject(
-      { dailyDigest: false, quietHours: { start: 1320, end: 420 } },
-    );
-    const cleared = await session.rpc.notifications.updatePreferences({ quietHours: null });
-    expect(cleared).toMatchObject({ dailyDigest: false, quietHours: null });
-    expect(cleared.categories.find((c) => c.name === "activity")?.channels).toContainEqual({
-      channel: "email",
-      enabled: false,
-    });
-
-    await expectError(
-      session.rpc.notifications.updatePreferences({
-        channels: [{ category: "security", channel: "email", enabled: false }],
-      }),
-      "VALIDATION_FAILED",
-    );
-  });
-
-  it("answers a one-click unsubscribe without a token as an invalid link", async () => {
-    const response = await fetch(`${harness.baseUrl}/api/v1/notifications/unsubscribe`, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: "List-Unsubscribe=One-Click",
-    });
-    expect(response.status).toBe(400);
-    expect(((await response.json()) as { code: string }).code).toBe("UNSUBSCRIBE_LINK_INVALID");
-  });
-
-  it("unsubscribes from a signed link, one-click included, and rejects forgeries", async () => {
-    const { session } = await signedInUser();
-    const { id } = await session.rpc.user.me();
-    const tokens = createSignedTokens(process.env.UNSUBSCRIBE_SECRET as string);
-
-    const anonymous = createSession(harness);
-    expect(
-      await anonymous.rpc.notifications.unsubscribe({
-        token: tokens.sign("unsubscribe", [id, "activity"]),
-      }),
-    ).toEqual({ category: "activity" });
-    const oneClick = await fetch(
-      `${harness.baseUrl}/api/v1/notifications/unsubscribe?token=${encodeURIComponent(tokens.sign("unsubscribe", [id, "workspace"]))}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: "List-Unsubscribe=One-Click",
-      },
-    );
-    expect(oneClick.status).toBe(200);
-    const preferences = await session.rpc.notifications.preferences();
-    for (const category of preferences.categories) {
-      expect(category.channels.find((ch) => ch.channel === "email")?.enabled).toBe(false);
-    }
-
-    await expectError(
-      anonymous.rpc.notifications.unsubscribe({ token: "forged.token" }),
-      "UNSUBSCRIBE_LINK_INVALID",
-    );
-    await expectError(
-      anonymous.rpc.notifications.unsubscribe({
-        token: tokens.sign("unsubscribe", [id, "security"]),
-      }),
-      "UNSUBSCRIBE_LINK_INVALID",
-    );
-  });
-});
-
-describe("phone number", () => {
-  const newPhone = () => `+1415${String(Math.floor(Math.random() * 1e7)).padStart(7, "0")}`;
-
-  async function addPhone(session: ReturnType<typeof createSession>, phoneNumber = newPhone()) {
-    await session.rpc.user.sendPhoneCode({ phoneNumber });
-    const { data } = await takeNotification(harness, "auth.phone-code", phoneNumber);
-    const me = await session.rpc.user.verifyPhone({ phoneNumber, code: data.code });
-    return { phoneNumber, me, code: data.code };
-  }
-
-  async function outboxEvents(userId: string) {
-    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
-    await client.connect();
-    const { rows } = await client.query<{ payload: { change: string } }>(
-      "SELECT payload FROM app.outbox_event WHERE name = 'auth.phone_changed.v1' AND key = $1 ORDER BY occurred_at",
-      [userId],
-    );
-    await client.end();
-    return rows.map((row) => row.payload.change);
-  }
-
-  it("adds a number once the texted code matches, audits it and alerts the account", async () => {
-    const { session, email } = await signedInUser("es");
-    const me = await session.rpc.user.me();
-    expect(me.phoneNumber).toBeNull();
-
-    const phoneNumber = newPhone();
-    // Spaces, dashes and brackets are fine; the number is stored as E.164.
-    const formatted = `${phoneNumber.slice(0, 2)} (${phoneNumber.slice(2, 5)}) ${phoneNumber.slice(5, 8)}-${phoneNumber.slice(8)}`;
-    expect(await session.rpc.user.sendPhoneCode({ phoneNumber: formatted })).toEqual({
-      expiresInSeconds: 600,
-    });
-    const text = await takeNotification(harness, "auth.phone-code", phoneNumber);
-    expect(text.to.locale).toBe("es");
-    expect(text.data.code).toMatch(/^\d{6}$/);
-
-    const updated = await session.rpc.user.verifyPhone({ phoneNumber, code: text.data.code });
-    expect(updated.phoneNumber).toBe(phoneNumber);
-    expect((await session.rpc.user.me()).phoneNumber).toBe(phoneNumber);
-    expect(await outboxEvents(me.id)).toEqual(["added"]);
-
-    const alert = await takeNotification(harness, "auth.security-alert", email);
-    expect(alert.data.event).toBe("phone-added");
-    expect(alert.to.phone).toBe(phoneNumber);
-  });
-
-  it("rejects wrong codes, and forgets the code after five wrong guesses", async () => {
-    const { session } = await signedInUser();
-    const phoneNumber = newPhone();
-    await session.rpc.user.sendPhoneCode({ phoneNumber });
-    const { data } = await takeNotification(harness, "auth.phone-code", phoneNumber);
-    const wrong = data.code === "000000" ? "111111" : "000000";
-    for (let i = 0; i < 5; i++) {
-      await expectError(
-        session.rpc.user.verifyPhone({ phoneNumber, code: wrong }),
-        "PHONE_CODE_INVALID",
-      );
-    }
-    // The right code no longer works: guessing can't continue past the limit.
-    await expectError(
-      session.rpc.user.verifyPhone({ phoneNumber, code: data.code }),
-      "PHONE_CODE_INVALID",
-    );
-    expect((await session.rpc.user.me()).phoneNumber).toBeNull();
-  });
-
-  it("counts parallel guesses too: no more than five are ever compared", async () => {
-    const { session } = await signedInUser();
-    const { id: userId } = await session.rpc.user.me();
-    const phoneNumber = newPhone();
-    await session.rpc.user.sendPhoneCode({ phoneNumber });
-    const { data } = await takeNotification(harness, "auth.phone-code", phoneNumber);
-    const wrong = data.code === "000000" ? "111111" : "000000";
-    // In-process, so the guesses really interleave at every Redis round trip. Imported
-    // only now: it loads the API's configuration, which startApi sets up first.
-    const phone = harness.app.get<PhoneService>(
-      (await import("../src/modules/user/phone.service")).PhoneService,
-    );
-    const guesses = await Promise.allSettled(
-      Array.from({ length: 15 }, () => phone.verify(userId, phoneNumber, wrong)),
-    );
-    expect(guesses.every((guess) => guess.status === "rejected")).toBe(true);
-    await expectError(
-      session.rpc.user.verifyPhone({ phoneNumber, code: data.code }),
-      "PHONE_CODE_INVALID",
-    );
-  });
-
-  it("a code only verifies the number it was sent to, and only once", async () => {
-    const { session } = await signedInUser();
-    const phoneNumber = newPhone();
-    await session.rpc.user.sendPhoneCode({ phoneNumber });
-    const { data } = await takeNotification(harness, "auth.phone-code", phoneNumber);
-    await expectError(
-      session.rpc.user.verifyPhone({ phoneNumber: newPhone(), code: data.code }),
-      "PHONE_CODE_INVALID",
-    );
-    await session.rpc.user.verifyPhone({ phoneNumber, code: data.code });
-    await session.rpc.user.removePhone();
-    await expectError(
-      session.rpc.user.verifyPhone({ phoneNumber, code: data.code }),
-      "PHONE_CODE_INVALID",
-    );
-  });
-
-  it("a code sent to one account can't verify another's", async () => {
-    const first = await signedInUser();
-    const second = await signedInUser();
-    const phoneNumber = newPhone();
-    await first.session.rpc.user.sendPhoneCode({ phoneNumber });
-    const { data } = await takeNotification(harness, "auth.phone-code", phoneNumber);
-    await expectError(
-      second.session.rpc.user.verifyPhone({ phoneNumber, code: data.code }),
-      "PHONE_CODE_INVALID",
-    );
-  });
-
-  it("a number can be on one account only, which shows only when verifying it", async () => {
-    const owner = await signedInUser();
-    const { phoneNumber } = await addPhone(owner.session);
-    const other = await signedInUser();
-    // Asking for a code says nothing about whose number it is...
-    await other.session.rpc.user.sendPhoneCode({ phoneNumber });
-    const { data } = await takeNotification(harness, "auth.phone-code", phoneNumber);
-    // ...only proving you receive its texts does.
-    await expectError(
-      other.session.rpc.user.verifyPhone({ phoneNumber, code: data.code }),
-      "PHONE_NUMBER_TAKEN",
-    );
-    // Its own number again: nothing to verify.
-    await expectError(owner.session.rpc.user.sendPhoneCode({ phoneNumber }), "PHONE_NUMBER_TAKEN");
-  });
-
-  it("when two accounts verify the same number at once, the second is refused", async () => {
-    const first = await signedInUser();
-    const second = await signedInUser();
-    const phoneNumber = newPhone();
-    await first.session.rpc.user.sendPhoneCode({ phoneNumber });
-    const firstCode = (await takeNotification(harness, "auth.phone-code", phoneNumber)).data.code;
-    await second.session.rpc.user.sendPhoneCode({ phoneNumber });
-    const secondCode = (await takeNotification(harness, "auth.phone-code", phoneNumber)).data.code;
-
-    await first.session.rpc.user.verifyPhone({ phoneNumber, code: firstCode });
-    await expectError(
-      second.session.rpc.user.verifyPhone({ phoneNumber, code: secondCode }),
-      "PHONE_NUMBER_TAKEN",
-    );
-    expect((await second.session.rpc.user.me()).phoneNumber).toBeNull();
-  });
-
-  it("of two requests with the right code at once, only one adds the number", async () => {
-    const { session } = await signedInUser();
-    const { id: userId } = await session.rpc.user.me();
-    const phoneNumber = newPhone();
-    await session.rpc.user.sendPhoneCode({ phoneNumber });
-    const { data } = await takeNotification(harness, "auth.phone-code", phoneNumber);
-    // In-process, so both pass the attempt count before either claims the code.
-    const phone = harness.app.get<PhoneService>(
-      (await import("../src/modules/user/phone.service")).PhoneService,
-    );
-    const results = await Promise.allSettled([
-      phone.verify(userId, phoneNumber, data.code),
-      phone.verify(userId, phoneNumber, data.code),
-    ]);
-    expect(results.map((result) => result.status).sort()).toEqual(["fulfilled", "rejected"]);
-    expect(results.find((result) => result.status === "rejected")).toMatchObject({
-      reason: { code: "PHONE_CODE_INVALID" },
-    });
-    expect((await session.rpc.user.me()).phoneNumber).toBe(phoneNumber);
-  });
-
-  it("texts and alerts in English when the account's language is no longer offered", async () => {
-    const { session, email, password } = await signedInUser();
-    const { id: userId } = await session.rpc.user.me();
-    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
-    await client.connect();
-    await client
-      .query("UPDATE auth.user SET locale = 'fr' WHERE id = $1", [userId])
-      .finally(() => client.end());
-    // A new session reads the account as it's stored now.
-    await session.auth("/sign-in/email", { email, password });
-    const phoneNumber = newPhone();
-    await session.rpc.user.sendPhoneCode({ phoneNumber });
-    const text = await takeNotification(harness, "auth.phone-code", phoneNumber);
-    expect(text.to.locale).toBe("en");
-    await session.rpc.user.verifyPhone({ phoneNumber, code: text.data.code });
-    expect((await takeNotification(harness, "auth.security-alert", email)).to.locale).toBe("en");
-  });
-
-  it("removing a number when there is none changes nothing and alerts nobody", async () => {
-    const { session, email } = await signedInUser();
-    const me = await session.rpc.user.me();
-    expect((await session.rpc.user.removePhone()).phoneNumber).toBeNull();
-    expect(await outboxEvents(me.id)).toEqual([]);
-    // An alert is recorded before the request answers: there's nothing to wait for.
-    expect(await queuedNotification(harness, "auth.security-alert", email)).toBeUndefined();
-  });
-
-  it("a number that can't be saved fails as INTERNAL, not as taken", async () => {
-    const { session } = await signedInUser();
-    const { id: userId } = await session.rpc.user.me();
-    const phoneNumber = newPhone();
-    await session.rpc.user.sendPhoneCode({ phoneNumber });
-    const { data } = await takeNotification(harness, "auth.phone-code", phoneNumber);
-    // Another transaction holds the account's row, so the change times out.
-    const holder = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
-    await holder.connect();
-    await holder.query("BEGIN");
-    await holder.query("SELECT 1 FROM auth.user WHERE id = $1 FOR UPDATE", [userId]);
-    await expectError(
-      session.rpc.user.verifyPhone({ phoneNumber, code: data.code }),
-      "INTERNAL",
-    ).finally(() => holder.query("ROLLBACK").then(() => holder.end()));
-    expect((await session.rpc.user.me()).phoneNumber).toBeNull();
-  });
-
-  it("limits texts per account and per number", async () => {
-    const { session } = await signedInUser();
-    for (let i = 0; i < 5; i++) {
-      await session.rpc.user.sendPhoneCode({ phoneNumber: newPhone() });
-    }
-    const limited = await expectError(
-      session.rpc.user.sendPhoneCode({ phoneNumber: newPhone() }),
-      "RATE_LIMITED",
-    );
-    expect(limited.data?.params).toMatchObject({ retryAfterSeconds: expect.any(Number) });
-
-    // Three accounts texting one number (someone spamming a victim) hit the number's limit.
-    const victim = newPhone();
-    for (let i = 0; i < 3; i++) {
-      await (await signedInUser()).session.rpc.user.sendPhoneCode({ phoneNumber: victim });
-    }
-    await expectError(
-      (await signedInUser()).session.rpc.user.sendPhoneCode({ phoneNumber: victim }),
-      "RATE_LIMITED",
-    );
-  });
-
-  it("removing the number audits it and tells the number that was removed", async () => {
-    const { session, email } = await signedInUser();
-    const me = await session.rpc.user.me();
-    const { phoneNumber } = await addPhone(session);
-    await takeNotification(harness, "auth.security-alert", email);
-
-    expect((await session.rpc.user.removePhone()).phoneNumber).toBeNull();
-    expect(await outboxEvents(me.id)).toEqual(["added", "removed"]);
-    const alert = await takeNotification(harness, "auth.security-alert", email);
-    expect(alert.data.event).toBe("phone-removed");
-    expect(alert.to.phone).toBe(phoneNumber);
-  });
-
-  it("security alerts are texted to the verified number too", async () => {
-    const { session, email, password } = await signedInUser();
-    const { phoneNumber } = await addPhone(session);
-    await takeNotification(harness, "auth.security-alert", email);
-    await session.auth("/change-password", {
-      currentPassword: password,
-      newPassword: newPassword(),
-    });
-    const alert = await takeNotification(harness, "auth.security-alert", email);
-    expect(alert).toMatchObject({
-      data: { event: "password-changed" },
-      to: { phone: phoneNumber },
-    });
-  });
-
-  it("needs a recent sign-in to change the number", async () => {
-    const { session } = await signedInUser();
-    await editSession(harness, session, (stored) => {
-      stored.createdAt = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
-    });
-    await expectError(
-      session.rpc.user.sendPhoneCode({ phoneNumber: newPhone() }),
-      "FRESH_SESSION_REQUIRED",
-    );
-    await expectError(
-      session.rpc.user.verifyPhone({ phoneNumber: newPhone(), code: "123456" }),
-      "FRESH_SESSION_REQUIRED",
-    );
-    await expectError(session.rpc.user.removePhone(), "FRESH_SESSION_REQUIRED");
-    // Reading it doesn't.
-    await expect(session.rpc.user.me()).resolves.toMatchObject({ phoneNumber: null });
-  });
-
-  it("rejects numbers that aren't E.164, and requires a session", async () => {
-    const { session } = await signedInUser();
-    for (const phoneNumber of ["4155550123", "+0123456789", "+1", "+1415555012345678", "phone"]) {
-      await expectError(session.rpc.user.sendPhoneCode({ phoneNumber }), "VALIDATION_FAILED");
-    }
-    await expectError(
-      session.rpc.user.verifyPhone({ phoneNumber: newPhone(), code: "12345" }),
-      "VALIDATION_FAILED",
-    );
-    await expectError(
-      createSession(harness).rpc.user.sendPhoneCode({ phoneNumber: newPhone() }),
       "UNAUTHENTICATED",
     );
   });
@@ -2192,228 +1216,20 @@ describe("uploads and the profile picture", { tags: ["files"] }, () => {
   });
 });
 
-describe("push devices", () => {
-  const webDevice = (id = randomUUID()) => ({
-    platform: "web" as const,
-    subscription: {
-      endpoint: `https://fcm.googleapis.com/fcm/send/${id}`,
-      keys: { p256dh: `p256dh-${id}`, auth: `auth-${id}` },
-    },
-  });
-
-  async function deviceRows(userId?: string) {
-    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
-    await client.connect();
-    const { rows } = await client.query<{ user_id: string; platform: string; token: string }>(
-      userId
-        ? "SELECT user_id, platform, token FROM notifications.device WHERE user_id = $1"
-        : "SELECT user_id, platform, token FROM notifications.device",
-      userId ? [userId] : [],
-    );
-    await client.end();
-    return rows;
-  }
-
-  it("tells browsers the VAPID public key to subscribe with", async () => {
-    const info = await createSession(harness).rpc.system.info();
-    expect(info.webPushPublicKey).toBe("BPublicVapidKeyForTests");
-  });
-
-  it("registers native and browser devices once, and removes them", async () => {
-    const { session } = await signedInUser();
-    const me = await session.rpc.user.me();
-    const ios = { platform: "ios" as const, token: "a1".repeat(32) };
-    const android = { platform: "android" as const, token: `fcm:${randomUUID()}` };
-    const web = webDevice();
-
-    const first = await session.rpc.notifications.registerDevice({
-      device: ios,
-      appVersion: "2.1.0",
-    });
-    // The app registers on every start: same token, same row.
-    expect(await session.rpc.notifications.registerDevice({ device: ios })).toEqual(first);
-    await session.rpc.notifications.registerDevice({ device: android });
-    await session.rpc.notifications.registerDevice({ device: web });
-    const rows = await deviceRows(me.id);
-    expect(rows.map((row) => row.platform).sort()).toEqual(["android", "ios", "web"]);
-    // Browser subscriptions are stored in one canonical form (key order fixed).
-    expect(rows.find((row) => row.platform === "web")?.token).toBe(
-      JSON.stringify({
-        endpoint: web.subscription.endpoint,
-        keys: { p256dh: web.subscription.keys.p256dh, auth: web.subscription.keys.auth },
-      }),
-    );
-
-    await session.rpc.notifications.unregisterDevice({
-      device: {
-        ...web,
-        subscription: { keys: web.subscription.keys, endpoint: web.subscription.endpoint },
-      },
-    });
-    await session.rpc.notifications.unregisterDevice({ device: ios });
-    expect((await deviceRows(me.id)).map((row) => row.platform)).toEqual(["android"]);
-  });
-
-  it("moves a device to whoever signs in on it, and one user can't remove another's", async () => {
-    const device = { platform: "android" as const, token: `fcm:${randomUUID()}` };
-    const first = await signedInUser();
-    const second = await signedInUser();
-    const firstId = (await first.session.rpc.user.me()).id;
-    const secondId = (await second.session.rpc.user.me()).id;
-
-    await first.session.rpc.notifications.registerDevice({ device });
-    // Removing is scoped to the caller's own devices.
-    await second.session.rpc.notifications.unregisterDevice({ device });
-    expect((await deviceRows(firstId)).map((row) => row.token)).toEqual([device.token]);
-
-    // The same phone, now signed in as someone else.
-    await second.session.rpc.notifications.registerDevice({ device });
-    expect(await deviceRows(firstId)).toEqual([]);
-    expect((await deviceRows(secondId)).map((row) => row.token)).toEqual([device.token]);
-  });
-
-  it("keeps the 20 devices seen most recently", async () => {
-    const { session } = await signedInUser();
-    const me = await session.rpc.user.me();
-    const tokens = Array.from({ length: 22 }, (_, i) => `fcm:${i}-${randomUUID()}`);
-    for (const token of tokens) {
-      await session.rpc.notifications.registerDevice({ device: { platform: "android", token } });
-    }
-    const kept = (await deviceRows(me.id)).map((row) => row.token).sort();
-    expect(kept).toEqual(tokens.slice(2).sort());
-  });
-
-  it("rejects subscriptions that aren't a browser push service, and malformed tokens", async () => {
-    const { session } = await signedInUser();
-    for (const endpoint of [
-      "https://169.254.169.254/latest/meta-data",
-      "http://fcm.googleapis.com/fcm/send/x",
-      "https://fcm.googleapis.com.attacker.dev/x",
-      "https://localhost:3001/api/v1/system",
-    ]) {
-      await expectError(
-        session.rpc.notifications.registerDevice({
-          device: { platform: "web", subscription: { endpoint, keys: { p256dh: "k", auth: "a" } } },
-        }),
-        "VALIDATION_FAILED",
-      );
-    }
-    await expectError(
-      session.rpc.notifications.registerDevice({
-        device: { platform: "ios", token: "../../3/device/evil" },
-      }),
-      "VALIDATION_FAILED",
-    );
-    await expectError(
-      session.rpc.notifications.registerDevice({
-        device: { platform: "android", token: "has spaces and / slashes" },
-      }),
-      "VALIDATION_FAILED",
-    );
-    expect(await deviceRows((await session.rpc.user.me()).id)).toEqual([]);
-  });
-
-  it("stops pushing to a device when its session signs out or is revoked", async () => {
-    const { session: laptop, email, password } = await signedInUser();
-    const me = await laptop.rpc.user.me();
-    const phone = createSession(harness);
-    await phone.auth("/sign-in/email", { email, password });
-    const tablet = createSession(harness);
-    await tablet.auth("/sign-in/email", { email, password });
-    const token = (name: string) => `fcm:${name}-${me.id}`;
-    await laptop.rpc.notifications.registerDevice({ device: webDevice() });
-    await phone.rpc.notifications.registerDevice({
-      device: { platform: "android", token: token("phone") },
-    });
-    await tablet.rpc.notifications.registerDevice({
-      device: { platform: "android", token: token("tablet") },
-    });
-    expect(await deviceRows(me.id)).toHaveLength(3);
-
-    await phone.auth("/sign-out");
-    expect((await deviceRows(me.id)).map((row) => row.token)).not.toContain(token("phone"));
-
-    // Revoked from the laptop: the tablet's device goes with its session.
-    await laptop.auth("/revoke-other-sessions");
-    expect((await deviceRows(me.id)).map((row) => row.platform)).toEqual(["web"]);
-  });
-
-  it("an admin impersonating the user can't register their own device", async () => {
-    const { session } = await signedInUser();
-    await editSession(harness, session, (stored) => {
-      (stored as { impersonatedBy?: string }).impersonatedBy = randomUUID();
-    });
-    await expectError(
-      session.rpc.notifications.registerDevice({ device: webDevice() }),
-      "FORBIDDEN",
-    );
-  });
-
-  it("requires a session", async () => {
-    await expectError(
-      createSession(harness).rpc.notifications.registerDevice({ device: webDevice() }),
-      "UNAUTHENTICATED",
-    );
-  });
-
-  it("the database function only registers for the user the transaction is scoped to", async () => {
-    const client = new pg.Client({ connectionString: harness.testDb.urlFor("app_api") });
-    await client.connect();
-    await expect(
-      client.query(
-        "SELECT notifications.register_device('android', 'fcm:unscoped', null, gen_random_uuid())",
-      ),
-    ).rejects.toThrow(/app.user_id/);
-    // Scoped to one user, with another user's session.
-    const victim = await signedInUser();
-    const attacker = await signedInUser();
-    const [victimSession] = (
-      await client.query<{ id: string }>("SELECT id FROM auth.session WHERE user_id = $1", [
-        (await victim.session.rpc.user.me()).id,
-      ])
-    ).rows;
-    await client.query("BEGIN");
-    await client.query("SELECT set_config('app.user_id', $1, true)", [
-      (await attacker.session.rpc.user.me()).id,
-    ]);
-    await expect(
-      client.query("SELECT notifications.register_device('android', 'fcm:stolen', null, $1)", [
-        victimSession?.id,
-      ]),
-    ).rejects.toThrow(/is not the user's/);
-    await client.query("ROLLBACK");
-    await client.end();
-    const notifications = new pg.Client({
-      connectionString: harness.testDb.urlFor("app_notifications"),
-    });
-    await notifications.connect();
-    await expect(
-      notifications.query(
-        "SELECT notifications.register_device('android', 'fcm:x', null, gen_random_uuid())",
-      ),
-    ).rejects.toThrow(/permission denied/);
-    await notifications.end();
-  });
-});
-
 describe("account deletion", () => {
-  /** Counts an organization's todos and reports whether the org still exists (as the migrator). */
+  /** Counts an organization's reactions and says whether the org still exists (as the migrator). */
   async function orgState(orgId: string) {
     const client = new pg.Client({ connectionString: harness.testDb.urlFor("migrator") });
     await client.connect();
     try {
       await client.query("BEGIN");
       await client.query("SELECT set_config('app.org_id', $1, true)", [orgId]);
-      const todos = await client.query<{ count: string; created: string }>(
-        "SELECT count(*) AS count, count(created_by_id) AS created FROM app.todo",
+      const reactions = await client.query<{ count: string }>(
+        "SELECT count(*) AS count FROM app.short_reaction",
       );
       const org = await client.query("SELECT 1 FROM auth.organization WHERE id = $1", [orgId]);
       await client.query("COMMIT");
-      return {
-        exists: org.rowCount === 1,
-        todos: Number(todos.rows[0]?.count),
-        withCreator: Number(todos.rows[0]?.created),
-      };
+      return { exists: org.rowCount === 1, reactions: Number(reactions.rows[0]?.count) };
     } finally {
       await client.end();
     }
@@ -2421,15 +1237,15 @@ describe("account deletion", () => {
 
   it("removes the personal workspace and its data", async () => {
     const { session, password } = await signedInUser();
-    await session.rpc.todo.create({ title: "Private" });
+    await session.rpc.shorts.react({ videoId: "dQw4w9WgXcQ", kind: "like", on: true });
     const orgId = required(
       (await session.rpc.user.me()).activeOrganizationId,
       "the active workspace",
     );
-    expect(await orgState(orgId)).toMatchObject({ exists: true, todos: 1 });
+    expect(await orgState(orgId)).toEqual({ exists: true, reactions: 1 });
 
     expect((await session.auth("/delete-user", { password })).status).toBe(200);
-    expect(await orgState(orgId)).toEqual({ exists: false, todos: 0, withCreator: 0 });
+    expect(await orgState(orgId)).toEqual({ exists: false, reactions: 0 });
   });
 
   it("won't leave a shared workspace without an owner, and keeps its data", async () => {
@@ -2439,18 +1255,9 @@ describe("account deletion", () => {
       name: "Team",
       slug: `team-${randomUUID().slice(0, 8)}`,
     });
-    await owner.session.auth("/organization/invite-member", {
-      email: member.email,
-      role: "member",
-      organizationId: team.body.id,
-    });
-    const invitation = await takeNotification(harness, "org.invitation", member.email);
-    const invitationId = new URL(invitation.data.acceptUrl).pathname.split("/").at(-1);
-    expect(
-      (await member.session.auth("/organization/accept-invitation", { invitationId })).status,
-    ).toBe(200);
-    await owner.session.auth("/organization/set-active", { organizationId: team.body.id });
-    await owner.session.rpc.todo.create({ title: "Team work" });
+    await addMember(team.body.id, (await member.session.rpc.user.me()).id);
+    await member.session.auth("/organization/set-active", { organizationId: team.body.id });
+    await member.session.rpc.shorts.react({ videoId: "dQw4w9WgXcQ", kind: "like", on: true });
 
     const blocked = await owner.session.auth<{ code: string }>("/delete-user", {
       password: owner.password,
@@ -2460,7 +1267,8 @@ describe("account deletion", () => {
 
     const { id: memberUserId } = await member.session.rpc.user.me();
     const { members } = await owner.session.authGet<{ members: { id: string; userId: string }[] }>(
-      `/organization/list-members?organizationId=${team.body.id}`,
+      // A workspace is meant for one member, which is also better-auth's default page size.
+      `/organization/list-members?organizationId=${team.body.id}&limit=100`,
     );
     const target = members.find((m) => m.userId === memberUserId)?.id;
     expect(
@@ -2476,131 +1284,8 @@ describe("account deletion", () => {
     expect((await owner.session.auth("/delete-user", { password: owner.password })).status).toBe(
       200,
     );
-    // The team and its todo survive; the todo just no longer names its creator.
-    expect(await orgState(team.body.id)).toEqual({ exists: true, todos: 1, withCreator: 0 });
-  });
-});
-
-describe("events outside a request", () => {
-  it("name the workspace the change happened in, from a job, script or seed as from a request", async () => {
-    const { session } = await signedInUser();
-    const { id: userId } = await session.rpc.user.me();
-    const [personal] = await session.authGet<{ id: string }[]>("/organization/list");
-    const orgId = orgIdSchema.parse(personal?.id);
-    const { TodoService } = await import("../src/modules/todo");
-    // Called directly: no request, so no organization in the request context.
-    const todo = await harness.app.get(TodoService).create(orgId, userId, "From a job");
-    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
-    await client.connect();
-    const { rows } = await client
-      .query<{ org_id: string | null }>(
-        "SELECT org_id FROM app.outbox_event WHERE name = 'todo.created.v1' AND key = $1",
-        [todo.id],
-      )
-      .finally(() => client.end());
-    expect(rows).toEqual([{ org_id: orgId }]);
-  });
-});
-
-describe("todos", () => {
-  it("creates, pages, completes and deletes, with typed errors", async () => {
-    const { session } = await signedInUser();
-    const created = [];
-    for (const title of ["one", "two", "three"]) {
-      created.push(await session.rpc.todo.create({ title }));
-    }
-    expect(created[0]?.createdAt).toBeInstanceOf(Date);
-
-    const first = await session.rpc.todo.list({ limit: 2 });
-    expect(first.items.map((todo) => todo.title)).toEqual(["three", "two"]);
-    expect(first.nextCursor).toEqual(expect.any(String));
-    const second = await session.rpc.todo.list({ limit: 2, cursor: first.nextCursor ?? undefined });
-    expect(second.items.map((todo) => todo.title)).toEqual(["one"]);
-    expect(second.nextCursor).toBeNull();
-
-    const todo = created[0];
-    if (!todo) {
-      throw new Error("no todo");
-    }
-    const done = await session.rpc.todo.setCompleted({
-      id: todo.id,
-      completed: true,
-      version: todo.version,
-    });
-    expect(done).toMatchObject({ completed: true, version: todo.version + 1 });
-    // A second writer holding the old version is told, instead of silently overwriting.
-    await expectError(
-      session.rpc.todo.setCompleted({ id: todo.id, completed: false, version: todo.version }),
-      "TODO_VERSION_CONFLICT",
-    );
-
-    await session.rpc.todo.delete({ id: todo.id });
-    await expectError(session.rpc.todo.delete({ id: todo.id }), "TODO_NOT_FOUND");
-  });
-
-  it("returns validation problems as codes, never English messages", async () => {
-    const { session } = await signedInUser();
-    const error = await expectError(session.rpc.todo.create({ title: "   " }), "VALIDATION_FAILED");
-    expect(error.data.issues).toEqual([{ path: ["title"], code: "too_small" }]);
-  });
-
-  it("refuses a version the database can't hold, instead of failing on it", async () => {
-    const { session } = await signedInUser();
-    const todo = await session.rpc.todo.create({ title: "versioned" });
-    const error = await expectError(
-      session.rpc.todo.setCompleted({ id: todo.id, completed: true, version: 2 ** 31 }),
-      "VALIDATION_FAILED",
-    );
-    expect(error.data.issues).toEqual([{ path: ["version"], code: "too_big" }]);
-  });
-
-  it("keeps organizations apart", async () => {
-    const alice = (await signedInUser()).session;
-    const bob = (await signedInUser()).session;
-    const secret = await alice.rpc.todo.create({ title: "alice's plan" });
-
-    expect((await bob.rpc.todo.list({ limit: 20 })).items).toEqual([]);
-    await expectError(bob.rpc.todo.delete({ id: secret.id }), "TODO_NOT_FOUND");
-    await expectError(
-      bob.rpc.todo.setCompleted({ id: secret.id, completed: true, version: 1 }),
-      "TODO_NOT_FOUND",
-    );
-    expect((await alice.rpc.todo.list({ limit: 20 })).items).toHaveLength(1);
-  });
-
-  it("records a domain event in the same transaction as each change", async () => {
-    const { session } = await signedInUser();
-    const todo = await session.rpc.todo.create({ title: "evented" });
-    const { createDb } = await import("@repo/db");
-    const migrator = createDb({
-      url: harness.testDb.urlFor("migrator"),
-      poolMax: 1,
-      service: "test",
-    });
-    const events = await migrator.appOutboxEvent.findMany({ where: { key: todo.id } });
-    await migrator.$disconnect();
-    expect(events.map((event) => event.name)).toEqual(["todo.created.v1"]);
-    // The request's own id (a new UUID: the test's client isn't a trusted proxy).
-    expect(events[0]?.requestId).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-    );
-  });
-
-  it("records completing a todo, not reopening it", async () => {
-    const { session } = await signedInUser();
-    const todo = await session.rpc.todo.create({ title: "back and forth" });
-    const done = await session.rpc.todo.setCompleted({
-      id: todo.id,
-      completed: true,
-      version: todo.version,
-    });
-    await session.rpc.todo.setCompleted({ id: todo.id, completed: false, version: done.version });
-    const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
-    await client.connect();
-    const { rows } = await client
-      .query("SELECT name FROM app.outbox_event WHERE key = $1 ORDER BY id", [todo.id])
-      .finally(() => client.end());
-    expect(rows.map((row) => row.name)).toEqual(["todo.created.v1", "todo.completed.v1"]);
+    // The team and the member's data survive.
+    expect(await orgState(team.body.id)).toEqual({ exists: true, reactions: 1 });
   });
 });
 
@@ -2609,7 +1294,7 @@ describe("the REST API's reference", () => {
     const spec = await fetch(`${harness.baseUrl}/api/v1/openapi.json`);
     expect(spec.status).toBe(200);
     expect(((await spec.json()) as { info: object }).info).toMatchObject({
-      title: "Director-editor API",
+      title: "Director API",
     });
     const docs = await fetch(`${harness.baseUrl}/docs`);
     expect(docs.headers.get("content-type")).toContain("text/html");

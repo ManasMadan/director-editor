@@ -21,42 +21,8 @@ from pydantic import BaseModel, ConfigDict, Field
 REQUEST = ConfigDict(strict=True, extra="forbid")
 
 
-class SentimentRequest(BaseModel):
-    model_config = REQUEST
-
-    text: str = Field(min_length=1, max_length=5_000, description="Text to classify.")
-
-
-class SentimentResponse(BaseModel):
-    label: Literal["positive", "negative", "neutral"]
-    score: float = Field(ge=0, le=1, description="Confidence of the predicted label.")
-    model: str = Field(description="Identifier of the model that produced the prediction.")
-
-
 class HealthResponse(BaseModel):
     status: Literal["ok"]
-
-
-class DocumentCreate(BaseModel):
-    model_config = REQUEST
-
-    title: str = Field(min_length=1, max_length=200)
-    content: str = Field(min_length=1, max_length=200_000, description="Plain text.")
-
-
-# The database checks it too (document_status_check).
-DocumentStatus = Literal["pending", "indexing", "ready", "failed"]
-
-
-class DocumentOut(BaseModel):
-    id: UUID
-    title: str
-    status: DocumentStatus
-    error: str | None
-    chunkCount: int
-    summary: str | None
-    createdBy: UUID | None
-    createdAt: datetime
 
 
 # ------------------------------------------------------------------------------ Director

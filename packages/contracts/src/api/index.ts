@@ -6,53 +6,28 @@
  * changes (removed fields, new required inputs), which also protects older mobile apps.
  */
 import { populateContractRouterPaths } from "@orpc/contract";
-import { aiContract } from "./ai";
-import { apiKeysContract } from "./api-keys";
-import { appsContract } from "./apps";
-import { auditContract } from "./audit";
-import { billingContract } from "./billing";
 import { directorContract } from "./director";
 import { filesContract } from "./files";
-import { notificationsContract } from "./notifications";
 import { realtimeContract } from "./realtime";
 import { shortsContract } from "./shorts";
 import { systemContract } from "./system";
-import { todoContract } from "./todo";
 import { userContract } from "./user";
-import { webhooksContract } from "./webhooks";
 
 export const contract = populateContractRouterPaths({
   system: systemContract,
   user: userContract,
-  apps: appsContract,
-  apiKeys: apiKeysContract,
-  todo: todoContract,
-  ai: aiContract,
-  audit: auditContract,
-  webhooks: webhooksContract,
   realtime: realtimeContract,
-  notifications: notificationsContract,
   files: filesContract,
-  billing: billingContract,
   shorts: shortsContract,
   director: directorContract,
 });
 
 export type Contract = typeof contract;
 
-export * from "./ai";
-export * from "./api-keys";
-export * from "./apps";
-export * from "./audit";
 export * from "./base";
-export * from "./billing";
 export * from "./director";
 export * from "./files";
-export * from "./notifications";
 export * from "./realtime";
-export * from "./scopes";
 export * from "./shorts";
 export * from "./system";
-export * from "./todo";
 export * from "./user";
-export * from "./webhooks";

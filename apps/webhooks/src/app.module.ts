@@ -1,15 +1,6 @@
-import { BullModule } from "@nestjs/bullmq";
 import { Module } from "@nestjs/common";
-import {
-  DatabaseModule,
-  HealthModule,
-  LoggerModule,
-  REDIS,
-  type Redis,
-  RedisModule,
-} from "@repo/nest-common";
+import { DatabaseModule, HealthModule, LoggerModule, RedisModule } from "@repo/nest-common";
 import { env } from "./env";
-import { OutboundModule } from "./outbound/outbound.module";
 
 @Module({
   imports: [
@@ -24,12 +15,7 @@ import { OutboundModule } from "./outbound/outbound.module";
       service: "webhooks",
     }),
     RedisModule.forRoot({ url: env.REDIS_URL }),
-    BullModule.forRootAsync({
-      inject: [REDIS],
-      useFactory: (redis: Redis) => ({ connection: redis }),
-    }),
     HealthModule.forRoot(["db", "redis"]),
-    OutboundModule,
   ],
 })
 export class AppModule {}

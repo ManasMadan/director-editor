@@ -1,13 +1,13 @@
 ---
 name: add-webhook-provider
-description: Accept webhooks from a new third party (a payment, email, SMS or other provider calling us) in apps/webhooks, verified and processed from a queue. Use when a provider needs to notify the product of events.
+description: Accept webhooks from a new third party (a payment, email or other provider calling us) in apps/webhooks, verified and processed from a queue. Use when a provider needs to notify the product of events.
 argument-hint: <provider>
 ---
 
 # Add an inbound webhook provider
 
-Inbound webhooks follow one shape (`apps/webhooks/src/inbound/stripe.routes.ts` and
-`stalwart.routes.ts` are the references): verify on the raw body, store once, emit a
+Inbound webhooks follow one shape (`apps/webhooks/src/inbound/stalwart.routes.ts` is the
+reference): verify on the raw body, store once, emit a
 domain event in the same transaction, answer at once, and do the work from a queue.
 
 1. **Secret.** `<PROVIDER>_WEBHOOK_SECRET` in `apps/webhooks/src/env.ts`, optional (the
@@ -26,10 +26,10 @@ domain event in the same transaction, answer at once, and do the work from a que
    Mount it in `src/server.ts`.
 4. **Event.** Declare `<provider>.event_received.v1` in `packages/contracts/src/events.ts`
    (additive), its audit label `workspace.audit.events.<provider>.event_received.v1` in
-   every catalog, and a
+   `packages/i18n/messages/en.json`, and a
    route to its consumer in `eventSubscribers` (`packages/jobs/src/queues.ts`).
-5. **Consumer.** In the service that owns the effect (as billing consumes Stripe's
-   events in apps/api): idempotent, `parseJob` first (the add-job skill).
+5. **Consumer.** In the service that owns the effect (as apps/notifications consumes the
+   mail server's bounces): idempotent, `parseJob` first (the add-job skill).
 6. **Reachability.** `/webhooks` already routes to the service
    (`deploy/charts/stack/values.yaml`); a provider calling from inside the cluster needs
    its namespace in `allowFromNamespaces`. Register the endpoint URL

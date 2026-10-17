@@ -5,14 +5,14 @@ import Home from "./page";
 
 describe("server pages", () => {
   it("renders the 404 page in the request's language", async () => {
-    request.cookies.set("locale", "es");
+    request.cookies.set("locale", "en");
     const html = await renderHtml(await NotFound());
     expect(html).toContain('href="/"');
   });
 
-  it("sends signed-in visitors of the home page to the dashboard", async () => {
+  it("offers signed-in visitors of the home page their library", async () => {
     request.cookies.set("better-auth.session_token", "x");
-    expect(await renderHtml(await Home())).toContain('href="/dashboard"');
+    expect(await renderHtml(await Home())).toContain('href="/library"');
     request.cookies.clear();
     expect(await renderHtml(await Home())).toContain('href="/sign-up"');
   });

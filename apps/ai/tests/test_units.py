@@ -1,6 +1,5 @@
 """Pure tests: no database, Redis or model provider."""
 
-import math
 import os
 import runpy
 import secrets
@@ -8,16 +7,13 @@ import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import patch
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
 
-from app.assistant import Deps, create_agent, local_extractive
 from app.auth import verify
 from app.director import create_director_model, youtube_video
-from app.documents import Passage, create_summaries
-from app.embeddings import HashingEmbedder
 from app.errors import AppError
 from app.settings import Settings
 from tests.tokens import SECRET, service_token
@@ -61,22 +57,14 @@ def _settings(**env: str) -> Settings:
         return Settings.model_validate({**base, **env})
 
 
-def test_production_refuses_development_stand_ins() -> None:
-    assert _settings(NODE_ENV="production", AI_EMBEDDINGS="openai:text-embedding-3-small")
-    with pytest.raises(ValidationError, match="AI_EMBEDDINGS=hashing"):
-        _settings(NODE_ENV="production")
-    with pytest.raises(ValidationError, match="local:extractive"):
-        _settings(
-            NODE_ENV="production",
-            AI_EMBEDDINGS="openai:text-embedding-3-small",
-            AI_MODEL="local:extractive",
-        )
+def test_a_short_service_secret_is_refused() -> None:
     with pytest.raises(ValidationError):
         _settings(AI_SERVICE_SECRET="x" * 31)  # one character short
 
 
 def test_production_refuses_a_plain_http_gemini_endpoint() -> None:
-    base = {"NODE_ENV": "production", "AI_EMBEDDINGS": "openai:text-embedding-3-small"}
+    base = {"NODE_ENV": "production"}
+    assert _settings(**base).google_base_url is None
     assert _settings(**base, GOOGLE_BASE_URL="https://gateway.example.com").google_base_url
     with pytest.raises(ValidationError, match="GOOGLE_BASE_URL must be HTTPS"):
         _settings(**base, GOOGLE_BASE_URL="http://localhost:12112")
@@ -103,67 +91,6 @@ def test_youtube_videos_go_without_a_container_type() -> None:
     assert video.url == "https://www.youtube.com/watch?v=jNQXAC9IVRw"
     assert video.is_youtube
     assert video.media_type == "video/*"
-
-
-async def test_hashing_embeddings_put_similar_wording_close() -> None:
-    [query, near, far] = await HashingEmbedder().embed(
-        [
-            "refund policy for annual plans",
-            "our refund policy: annual plans are refundable",
-            "the office dog is called Max",
-        ]
-    )
-
-    def cosine(a: list[float], b: list[float]) -> float:
-        return sum(x * y for x, y in zip(a, b, strict=True))
-
-    assert len(query) == 1536
-    assert math.isclose(cosine(query, query), 1.0, abs_tol=1e-9)
-    assert cosine(query, near) > cosine(query, far)
-
-
-class StubDocuments:
-    def __init__(self, passages: list[Passage]) -> None:
-        self.passages = passages
-        self.queries: list[str] = []
-
-    async def search(self, org_id: UUID, query: str, limit: int = 5) -> list[Passage]:
-        self.queries.append(query)
-        return self.passages
-
-
-async def test_the_agent_searches_then_answers_from_the_passage() -> None:
-    doc = uuid4()
-    documents = StubDocuments(
-        [Passage(document_id=doc, title="Handbook", content="Refunds take 5 days.", score=0.9)]
-    )
-    deps = Deps(org_id=ORG, documents=documents)
-    result = await create_agent(local_extractive()).run("How long do refunds take?", deps=deps)
-    assert documents.queries == ["How long do refunds take?"]
-    assert result.output == "From “Handbook”: Refunds take 5 days."
-    assert deps.sources == {doc: "Handbook"}
-
-
-async def test_the_agent_says_so_when_nothing_matches() -> None:
-    deps = Deps(org_id=ORG, documents=StubDocuments([]))
-    result = await create_agent(local_extractive()).run("Anything?", deps=deps)
-    assert result.output == "I couldn't find that in the workspace's documents."
-    assert deps.sources == {}
-
-
-def test_the_sentiment_model() -> None:
-    from app.model import predict
-
-    assert predict("I love this, it is great")[0] == "positive"
-    assert predict("this is terrible")[0] == "negative"
-    assert predict("the sky is blue") == ("neutral", 0.5)
-
-
-def test_summaries_follow_the_configured_model() -> None:
-    assert create_summaries(_settings()) is None
-    summaries = create_summaries(_settings(AI_MODEL="local:extractive", AI_TOKENS_PER_RUN="5000"))
-    assert summaries is not None
-    assert (summaries.model_name, summaries.monthly_tokens) == ("local:extractive", 2_000_000)
 
 
 async def test_nothing_reaches_the_database_before_the_engine_is_opened() -> None:
@@ -196,11 +123,11 @@ def test_the_openapi_export_is_the_committed_document(
 
 
 def test_a_job_this_version_does_not_know_fails() -> None:
-    from app.worker import JOB_NAME
+    from app.worker import DIRECTOR_JOB_NAME
 
-    assert JOB_NAME.validate_python("summarize") == "summarize"
+    assert DIRECTOR_JOB_NAME.validate_python("plan") == "plan"
     with pytest.raises(ValidationError):
-        JOB_NAME.validate_python("translate")
+        DIRECTOR_JOB_NAME.validate_python("translate")
 
 
 def test_the_worker_heartbeat_is_alive_while_fresh_and_dead_when_stale(tmp_path: Path) -> None:
@@ -261,12 +188,15 @@ def test_the_service_boots_from_the_example_with_its_empty_values() -> None:
     from tests import ENV_EXAMPLE
 
     raw = {key: value or "" for key, value in dotenv_values(ENV_EXAMPLE).items()}
-    raw |= {"AI_DATABASE_URL": "postgresql://u:p@localhost/db", "AI_SERVICE_SECRET": SECRET}
+    raw |= {
+        "AI_DATABASE_URL": "postgresql://u:p@localhost/db",
+        "AI_SERVICE_SECRET": SECRET,
+        "GOOGLE_BASE_URL": "",
+    }
     get_settings.cache_clear()
     try:
         with patch.dict(os.environ, raw, clear=True):
             settings = get_settings()
-        assert raw["AI_FALLBACK_MODEL"] == ""
-        assert settings.fallback_model is None
+        assert settings.google_base_url is None
     finally:
         get_settings.cache_clear()

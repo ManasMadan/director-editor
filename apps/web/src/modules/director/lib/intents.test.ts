@@ -1,10 +1,8 @@
 import en from "@repo/i18n/messages/en.json" with { type: "json" };
-import es from "@repo/i18n/messages/es.json" with { type: "json" };
 import { describe, expect, it } from "vitest";
 import { intentOf, isClear, isEcho, normalize, type Vocabulary } from "./intents";
 
 const english: Vocabulary = en.director.live.voice.words;
-const spanish: Vocabulary = es.director.live.voice.words;
 
 describe("talking to Director", () => {
   it("reads what each phrase asks for", () => {
@@ -25,11 +23,9 @@ describe("talking to Director", () => {
     expect(intentOf("cutlery", english)).toBeNull();
   });
 
-  it("understands the member's own language, accents or not", () => {
-    expect(intentOf("¡Acción!", spanish)).toBe("action");
-    expect(intentOf("accion", spanish)).toBe("action");
-    expect(intentOf("otra vez", spanish)).toBe("again");
+  it("hears a phrase whatever its accents, case and spacing", () => {
     expect(normalize("  ¿Dónde   estoy? ")).toBe("donde estoy");
+    expect(intentOf("ACTION!", english)).toBe("action");
   });
 
   it("knows Director's own voice when the microphone hears it", () => {

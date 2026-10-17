@@ -1,58 +1,6 @@
 {
   "components": {
     "schemas": {
-      "AssistantEvent": {
-        "description": "One server-sent event of an answer.",
-        "properties": {
-          "event": {
-            "discriminator": {
-              "mapping": {
-                "done": "#/components/schemas/DoneEvent",
-                "error": "#/components/schemas/ErrorEvent",
-                "sources": "#/components/schemas/SourcesEvent",
-                "text": "#/components/schemas/TextEvent"
-              },
-              "propertyName": "type"
-            },
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/TextEvent"
-              },
-              {
-                "$ref": "#/components/schemas/SourcesEvent"
-              },
-              {
-                "$ref": "#/components/schemas/DoneEvent"
-              },
-              {
-                "$ref": "#/components/schemas/ErrorEvent"
-              }
-            ],
-            "title": "Event"
-          }
-        },
-        "required": [
-          "event"
-        ],
-        "title": "AssistantEvent",
-        "type": "object"
-      },
-      "AssistantRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "question": {
-            "maxLength": 2000,
-            "minLength": 1,
-            "title": "Question",
-            "type": "string"
-          }
-        },
-        "required": [
-          "question"
-        ],
-        "title": "AssistantRequest",
-        "type": "object"
-      },
       "Box": {
         "properties": {
           "height": {
@@ -376,126 +324,6 @@
         "title": "DirectorTakeOut",
         "type": "object"
       },
-      "DocumentCreate": {
-        "additionalProperties": false,
-        "properties": {
-          "content": {
-            "description": "Plain text.",
-            "maxLength": 200000,
-            "minLength": 1,
-            "title": "Content",
-            "type": "string"
-          },
-          "title": {
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Title",
-            "type": "string"
-          }
-        },
-        "required": [
-          "title",
-          "content"
-        ],
-        "title": "DocumentCreate",
-        "type": "object"
-      },
-      "DocumentOut": {
-        "properties": {
-          "chunkCount": {
-            "title": "Chunkcount",
-            "type": "integer"
-          },
-          "createdAt": {
-            "format": "date-time",
-            "title": "Createdat",
-            "type": "string"
-          },
-          "createdBy": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Createdby"
-          },
-          "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "status": {
-            "enum": [
-              "pending",
-              "indexing",
-              "ready",
-              "failed"
-            ],
-            "title": "Status",
-            "type": "string"
-          },
-          "summary": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Summary"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "title",
-          "status",
-          "error",
-          "chunkCount",
-          "summary",
-          "createdBy",
-          "createdAt"
-        ],
-        "title": "DocumentOut",
-        "type": "object"
-      },
-      "DoneEvent": {
-        "properties": {
-          "type": {
-            "const": "done",
-            "default": "done",
-            "title": "Type",
-            "type": "string"
-          },
-          "usage": {
-            "$ref": "#/components/schemas/Usage"
-          }
-        },
-        "required": [
-          "usage"
-        ],
-        "title": "DoneEvent",
-        "type": "object"
-      },
       "ErrorCode": {
         "enum": [
           "BAD_REQUEST",
@@ -520,11 +348,6 @@
           "TOO_MANY_REDIRECTS",
           "UPSTREAM_UNAVAILABLE",
           "NO_ACTIVE_ORGANIZATION",
-          "PHONE_CODE_INVALID",
-          "PHONE_NUMBER_TAKEN",
-          "ENTITLEMENT_REQUIRED",
-          "ALREADY_SUBSCRIBED",
-          "NO_SUBSCRIPTION",
           "FILE_NOT_FOUND",
           "FILE_TYPE_NOT_ALLOWED",
           "FILE_TOO_LARGE",
@@ -533,20 +356,8 @@
           "FILE_UNREADABLE",
           "FILE_NOT_UPLOADED",
           "FILE_NOT_READY",
-          "UNSUBSCRIBE_LINK_INVALID",
           "INVALID_SIGNATURE",
-          "WEBHOOK_ENDPOINT_NOT_FOUND",
-          "WEBHOOK_DELIVERY_NOT_FOUND",
-          "WEBHOOK_URL_NOT_ALLOWED",
-          "WEBHOOK_ENDPOINT_LIMIT",
-          "APP_NOT_FOUND",
-          "API_KEY_NOT_FOUND",
-          "API_KEY_LIMIT_REACHED",
-          "API_KEY_SCOPE_MISSING",
-          "DOCUMENT_NOT_FOUND",
-          "DOCUMENT_INDEXING_FAILED",
           "AI_BUDGET_EXCEEDED",
-          "AI_RUN_LIMIT",
           "SHORT_NOT_FOUND",
           "SHORT_TOO_LONG",
           "DIRECTOR_PLAN_NOT_FOUND",
@@ -555,9 +366,7 @@
           "DIRECTOR_TAKE_KIND_MISMATCH",
           "DIRECTOR_VIDEO_UNREADABLE",
           "DIRECTOR_ANALYSIS_FAILED",
-          "DIRECTOR_REVIEW_FAILED",
-          "TODO_NOT_FOUND",
-          "TODO_VERSION_CONFLICT"
+          "DIRECTOR_REVIEW_FAILED"
         ],
         "title": "ErrorCode",
         "type": "string"
@@ -609,29 +418,6 @@
           "params"
         ],
         "title": "ErrorData",
-        "type": "object"
-      },
-      "ErrorEvent": {
-        "properties": {
-          "code": {
-            "enum": [
-              "AI_RUN_LIMIT",
-              "UPSTREAM_UNAVAILABLE"
-            ],
-            "title": "Code",
-            "type": "string"
-          },
-          "type": {
-            "const": "error",
-            "default": "error",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "code"
-        ],
-        "title": "ErrorEvent",
         "type": "object"
       },
       "ErrorIssue": {
@@ -973,55 +759,6 @@
         "title": "ScriptLine",
         "type": "object"
       },
-      "SentimentRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "text": {
-            "description": "Text to classify.",
-            "maxLength": 5000,
-            "minLength": 1,
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": [
-          "text"
-        ],
-        "title": "SentimentRequest",
-        "type": "object"
-      },
-      "SentimentResponse": {
-        "properties": {
-          "label": {
-            "enum": [
-              "positive",
-              "negative",
-              "neutral"
-            ],
-            "title": "Label",
-            "type": "string"
-          },
-          "model": {
-            "description": "Identifier of the model that produced the prediction.",
-            "title": "Model",
-            "type": "string"
-          },
-          "score": {
-            "description": "Confidence of the predicted label.",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Score",
-            "type": "number"
-          }
-        },
-        "required": [
-          "label",
-          "score",
-          "model"
-        ],
-        "title": "SentimentResponse",
-        "type": "object"
-      },
       "Shot": {
         "properties": {
           "camera": {
@@ -1225,47 +962,6 @@
         "title": "ShotStep",
         "type": "object"
       },
-      "Source": {
-        "properties": {
-          "documentId": {
-            "format": "uuid",
-            "title": "Documentid",
-            "type": "string"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          }
-        },
-        "required": [
-          "documentId",
-          "title"
-        ],
-        "title": "Source",
-        "type": "object"
-      },
-      "SourcesEvent": {
-        "properties": {
-          "sources": {
-            "items": {
-              "$ref": "#/components/schemas/Source"
-            },
-            "title": "Sources",
-            "type": "array"
-          },
-          "type": {
-            "const": "sources",
-            "default": "sources",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "sources"
-        ],
-        "title": "SourcesEvent",
-        "type": "object"
-      },
       "TargetPose": {
         "properties": {
           "description": {
@@ -1289,43 +985,6 @@
           "keypoints"
         ],
         "title": "TargetPose",
-        "type": "object"
-      },
-      "TextEvent": {
-        "properties": {
-          "text": {
-            "title": "Text",
-            "type": "string"
-          },
-          "type": {
-            "const": "text",
-            "default": "text",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "text"
-        ],
-        "title": "TextEvent",
-        "type": "object"
-      },
-      "Usage": {
-        "properties": {
-          "inputTokens": {
-            "title": "Inputtokens",
-            "type": "integer"
-          },
-          "outputTokens": {
-            "title": "Outputtokens",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "inputTokens",
-          "outputTokens"
-        ],
-        "title": "Usage",
         "type": "object"
       }
     }
@@ -1420,79 +1079,6 @@
           }
         },
         "summary": "Ready"
-      }
-    },
-    "/v1/assistant/answers": {
-      "post": {
-        "operationId": "answer",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-request-id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Request-Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AssistantRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AssistantEvent"
-                }
-              },
-              "text/event-stream": {}
-            },
-            "description": "Server-sent events, each `data:` line one AssistantEvent."
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "An error."
-          }
-        },
-        "summary": "Answer"
       }
     },
     "/v1/director/plans": {
@@ -1861,279 +1447,6 @@
           }
         },
         "summary": "Create Director Take"
-      }
-    },
-    "/v1/documents": {
-      "get": {
-        "operationId": "listDocuments",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-request-id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Request-Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/DocumentOut"
-                  },
-                  "title": "Response Listdocuments",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "An error."
-          }
-        },
-        "summary": "List Documents"
-      },
-      "post": {
-        "operationId": "createDocument",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-request-id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Request-Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DocumentCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DocumentOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "An error."
-          }
-        },
-        "summary": "Create Document"
-      }
-    },
-    "/v1/documents/{document_id}": {
-      "delete": {
-        "operationId": "deleteDocument",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "document_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Document Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-request-id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Request-Id"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "An error."
-          }
-        },
-        "summary": "Delete Document"
-      }
-    },
-    "/v1/sentiment": {
-      "post": {
-        "operationId": "sentiment",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-request-id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Request-Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SentimentRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SentimentResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "An error."
-          }
-        },
-        "summary": "Sentiment"
       }
     }
   }

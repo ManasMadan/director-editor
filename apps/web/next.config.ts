@@ -35,29 +35,6 @@ const config: NextConfig = {
       { source: "/rpc/:path*", destination: `${env.API_URL}/rpc/:path*` },
       { source: "/api/:path*", destination: `${env.API_URL}/api/:path*` },
       { source: "/docs", destination: `${env.API_URL}/docs` },
-      // OAuth discovery for MCP clients: the authorization server (the api) and each MCP
-      // server's protected-resource metadata.
-      {
-        source: "/.well-known/oauth-authorization-server/api/auth",
-        destination: `${env.API_URL}/.well-known/oauth-authorization-server/api/auth`,
-      },
-      {
-        source: "/.well-known/openid-configuration/api/auth",
-        destination: `${env.API_URL}/.well-known/openid-configuration/api/auth`,
-      },
-      {
-        source: "/.well-known/oauth-protected-resource/api/mcp",
-        destination: `${env.API_URL}/.well-known/oauth-protected-resource/api/mcp`,
-      },
-      ...(env.AI_URL
-        ? [
-            { source: "/ai/mcp", destination: `${env.AI_URL}/ai/mcp` },
-            {
-              source: "/.well-known/oauth-protected-resource/ai/mcp",
-              destination: `${env.AI_URL}/.well-known/oauth-protected-resource/ai/mcp`,
-            },
-          ]
-        : []),
     ];
   },
   async headers() {

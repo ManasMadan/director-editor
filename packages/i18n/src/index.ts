@@ -2,7 +2,7 @@
  * The single catalog of user-facing text for every surface.
  *
  * - Web (next-intl) and mobile (use-intl) load messages through an async loader.
- * - Servers (emails, push, SMS, in-app notifications) get a translator from
+ * - Servers (emails) get a translator from
  *   `createI18n(source).getTranslator(locale)`, using the same ICU message format, so
  *   plurals, dates and numbers are formatted identically everywhere.
  *
@@ -23,7 +23,6 @@
  */
 import { createTranslator } from "use-intl/core";
 import en from "../messages/en.json" with { type: "json" };
-import es from "../messages/es.json" with { type: "json" };
 
 import type { Locale } from "./locales";
 
@@ -40,8 +39,9 @@ export interface MessageSource {
   load(locale: Locale): Promise<Messages>;
 }
 
-// `satisfies` makes every non-English catalog prove it has exactly English's shape.
-const catalogs = { en, es: es satisfies Catalog } satisfies Record<Locale, Catalog>;
+// `satisfies` makes every non-English catalog prove it has exactly English's shape (there
+// are none today: add one here, as `xx: xx satisfies Catalog`).
+const catalogs = { en } satisfies Record<Locale, Catalog>;
 
 /** Messages shipped in this package. */
 export const bundledMessages: MessageSource = {
@@ -51,16 +51,14 @@ export const bundledMessages: MessageSource = {
   load: async (locale) => catalogs[locale] as Messages,
 };
 
-export { loosely } from "./loosely";
-
 export type Translator = ReturnType<typeof createTranslator<Messages>>;
 
 /**
  * Server-side i18n over a message source, with a per-locale cache.
  *
  *   const i18n = createI18n(bundledMessages);
- *   const t = await i18n.getTranslator("es");
- *   t("email.otp.expires", { minutes: 5 }); // "Este código caduca en 5 minutos."
+ *   const t = await i18n.getTranslator("en");
+ *   t("email.otp.expires", { minutes: 5 }); // "This code expires in 5 minutes."
  */
 export function createI18n(source: MessageSource) {
   const cache = new Map<Locale, Promise<Messages>>();

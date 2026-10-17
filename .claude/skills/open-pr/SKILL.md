@@ -9,7 +9,7 @@ disable-model-invocation: true
 
 ## Before opening one
 
-1. **Branch.** Not `master`: `<type>/<what>` (`feat/todo-sharing`, `fix/draft-reload`).
+1. **Branch.** Not `master`: `<type>/<what>` (`feat/take-sharing`, `fix/draft-reload`).
 2. **Verify.** The verify skill, with every row passing, and its report kept for the
    description.
 3. **Review.** Run the agents that apply, and fix what they report:
@@ -18,12 +18,12 @@ disable-model-invocation: true
      fetches a URL, or a new provider;
    - `migration-reviewer` for anything under `packages/db/prisma`;
    - `python-reviewer` for `apps/ai`;
-   - `frontend-reviewer` and `i18n-checker` for `apps/web`, `apps/mobile`, `packages/ui`
+   - `frontend-reviewer` and `i18n-checker` for `apps/web`, `packages/ui`
      or new copy;
    - `docs-sync` when variables, ports, commands, seams or skills changed.
 4. **Title.** It becomes the squashed commit and the release notes: Conventional
    Commits with a scope from `commitlint.config.ts`, in plain words, e.g.
-   `feat(api): let members share a todo`. `!` before the colon for a breaking API change.
+   `feat(api): let members share a take`. `!` before the colon for a breaking API change.
 5. **Description.** What changed and why, in plain prose; how it was checked (the verify
    report); anything not tested automatically and how it was checked by hand.
 

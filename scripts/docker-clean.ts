@@ -7,7 +7,7 @@
  *   - the kind cluster "director-editor" (`bun run k8s:up`)
  *   - the "director-editor" image builder and its build cache
  *   - the images: ours (director-editor/*), the services' (docker-compose.yml), the
- *     tools' the scripts run (Playwright, k6, kubeconform), and the devcontainer's (the
+ *     tools' the scripts run (Playwright, kubeconform), and the devcontainer's (the
  *     image VS Code builds and what .devcontainer/Dockerfile builds it from)
  *
  * An image another container still uses is left alone, so nothing outside this repo
@@ -22,7 +22,6 @@ const BUILDER = "director-editor";
 /** Images the repo's scripts run directly (keep in sync with them). */
 const TOOL_IMAGES = [
   "mcr.microsoft.com/playwright:v1.63.0-noble",
-  "grafana/k6:2.3.0",
   "ghcr.io/yannh/kubeconform:v0.7.0",
   // The builder's own image (k8s:up builds in a "director-editor" buildx builder).
   "moby/buildkit:buildx-stable-1",

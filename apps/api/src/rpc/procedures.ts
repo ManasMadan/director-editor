@@ -5,19 +5,17 @@
  *   base    error mapping (AppError → typed contract error) + client version gate
  *   authed  + a valid session (UNAUTHENTICATED otherwise); `context.user`, `context.session`
  *   fresh   + signed in within FRESH_SESSION_AGE ("sudo mode"; FRESH_SESSION_REQUIRED)
- *   freshAdmin  orgAdmin, signed in within FRESH_SESSION_AGE
- *   inOrg   a signed-in member of the active organization, or an API key with the
- *           procedure's scope; `context.orgId` (tenant for row-level security),
- *           `context.userId`, `context.role`, `context.apiKeyId`
+ *   inOrg   a signed-in member of the active organization; `context.orgId` (tenant for
+ *           row-level security), `context.userId`, `context.role`
  *
- *   export const todoRouter = ({ inOrg }: Procedures, todos: TodoService) => ({
- *     list: inOrg.todo.list.handler(({ context, input }) => todos.list(context.orgId, input)),
+ *   export const shortsRouter = ({ inOrg }: Procedures, shorts: ShortsService) => ({
+ *     saved: inOrg.shorts.saved.handler(({ context, input }) => shorts.saved(context.orgId, ...)),
  *   });
  *
  * Every builder but `base` also applies the rate limit the procedure's contract declares
  * (`meta.rateLimit`, per user or per workspace), once it knows who's calling. Limits
- * outside the contract sit with what they protect: better-auth's for sign-in, MCP's per
- * token, and the few a service keeps because other ways in share them (todo changes).
+ * outside the contract sit with what they protect: better-auth's for sign-in, and the
+ * few a service keeps because other ways in share them.
  *
  * This is the only request pipeline for the API: Nest provides modules and dependency
  * injection, while auth, tenancy and error mapping live here, where they are typed and
@@ -25,17 +23,10 @@
  */
 
 import { implement, ORPCError, ValidationError } from "@orpc/server";
-import {
-  API_KEY_HEADER,
-  type ApiKeyScope,
-  contract,
-  type ErrorData,
-  type ProcedureMeta,
-  type RateLimit,
-} from "@repo/contracts/api";
+import { contract, type ErrorData, type ProcedureMeta, type RateLimit } from "@repo/contracts/api";
 import { FRESH_SESSION_AGE } from "@repo/contracts/auth";
 import { ERROR_CODES, type ErrorCode, isErrorCode } from "@repo/contracts/errors";
-import type { ApiKeyId, OrgId, UserId } from "@repo/contracts/ids";
+import type { OrgId, UserId } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
 import { canManageWorkspace, type OrgRole } from "@repo/contracts/roles";
 import {
@@ -61,24 +52,13 @@ export interface RpcContext {
   headers: Headers;
 }
 
-/** Who an organization-scoped call acts as. `apiKeyId` is set when an API key made it. */
+/** Who an organization-scoped call acts as. */
 export interface OrgCaller {
   orgId: OrgId;
   userId: UserId;
   role: OrgRole;
-  apiKeyId: ApiKeyId | null;
-  /** When the session signed in; null for an API key, which never counts as fresh. */
-  signedInAt: Date | null;
-}
-
-/**
- * Throws unless the caller signed in within FRESH_SESSION_AGE ("sudo mode"): for what
- * outlives a stolen session (API keys, webhook endpoints), as for account changes.
- */
-export function requireFresh(caller: Pick<OrgCaller, "signedInAt">) {
-  if (!caller.signedInAt || Date.now() - caller.signedInAt.getTime() >= FRESH_SESSION_AGE * 1000) {
-    throw new AppError("FRESH_SESSION_REQUIRED");
-  }
+  /** When the session signed in. */
+  signedInAt: Date;
 }
 
 type ErrorParams = ErrorData["params"];
@@ -175,9 +155,6 @@ export function rateLimitKey(limit: RateLimit, keys: LimitKeys) {
   return key;
 }
 
-/** Checks an API key for a procedure that needs `scope` (modules/api-keys). */
-export type AuthenticateApiKey = (key: string, scope: ApiKeyScope) => Promise<OrgCaller>;
-
 /** Spends a call's rate limit; one limiter per name, so procedures sharing a name share it. */
 function limitSpender(redis: Redis) {
   const limiters = new Map<string, RateLimiter>();
@@ -202,27 +179,12 @@ async function signedIn(auth: Auth, headers: Headers) {
 }
 
 /**
- * Who an organization-scoped call acts as: one organization, one user, their role there.
- *   - a signed-in person: the session's active organization. Membership is re-checked
- *     every time, so someone removed from it loses access immediately (see
- *     auth/memberships.ts).
- *   - an API key (`x-api-key`): its workspace, as its creator, and only for procedures
- *     whose contract names a scope the key has (see modules/api-keys).
+ * Who an organization-scoped call acts as: the signed-in person, in the session's active
+ * organization, with their role there. Membership is re-checked every time, so someone
+ * removed from it loses access immediately (see auth/memberships.ts).
  */
-export function orgCallerFor(
-  auth: Auth,
-  memberships: Memberships,
-  authenticateApiKey: AuthenticateApiKey,
-) {
-  return async (headers: Headers, scope: ApiKeyScope | undefined): Promise<OrgCaller> => {
-    const apiKey = headers.get(API_KEY_HEADER);
-    if (apiKey !== null) {
-      // Everything without a scope is for signed-in people only.
-      if (!scope) {
-        throw new AppError("FORBIDDEN");
-      }
-      return authenticateApiKey(apiKey, scope);
-    }
+export function orgCallerFor(auth: Auth, memberships: Memberships) {
+  return async (headers: Headers): Promise<OrgCaller> => {
     const result = await signedIn(auth, headers);
     if (!result) {
       throw new AppError("UNAUTHENTICATED");
@@ -240,21 +202,15 @@ export function orgCallerFor(
       orgId,
       role,
       userId: result.user.id,
-      apiKeyId: null,
       signedInAt: new Date(result.session.createdAt),
     };
   };
 }
 
-export function createProcedures(
-  auth: Auth,
-  memberships: Memberships,
-  authenticateApiKey: AuthenticateApiKey,
-  redis: Redis,
-) {
+export function createProcedures(auth: Auth, memberships: Memberships, redis: Redis) {
   const os = implement(contract).$context<RpcContext>();
   const spendLimit = limitSpender(redis);
-  const orgCaller = orgCallerFor(auth, memberships, authenticateApiKey);
+  const orgCaller = orgCallerFor(auth, memberships);
 
   const base = os.use(async ({ next }) => {
     const version = currentContext()?.clientVersion;
@@ -301,7 +257,7 @@ export function createProcedures(
         "~orpc": { meta },
       },
     }) => {
-      const caller = await orgCaller(context.headers, meta.apiKeyScope);
+      const caller = await orgCaller(context.headers);
       updateContext({ userId: caller.userId, orgId: caller.orgId });
       await spendLimit(meta, { user: caller.userId, org: caller.orgId });
       return next({ context: caller });
@@ -316,13 +272,7 @@ export function createProcedures(
     return next();
   });
 
-  /** Owners and admins who signed in recently (see requireFresh). */
-  const freshAdmin = orgAdmin.use(async ({ context, next }) => {
-    requireFresh(context);
-    return next();
-  });
-
-  return { os, base, authed, fresh, inOrg, orgAdmin, freshAdmin };
+  return { os, base, authed, fresh, inOrg, orgAdmin };
 }
 
 export type Procedures = ReturnType<typeof createProcedures>;

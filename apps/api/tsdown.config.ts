@@ -1,7 +1,7 @@
 import { nodeService } from "@repo/tsdown-config";
 
-// The service, plus the commands that run its modules: the demo seed, the load-test users
-// and the secrets re-encryption.
+// The service, plus the commands that run its modules: the demo seed, the signed-in users
+// the fuzzing runs as, and the secrets re-encryption.
 export default nodeService({
   entry: [
     "src/main.ts",

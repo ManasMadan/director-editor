@@ -11,9 +11,9 @@ client in `packages/ai-client`. `docs/python-services.md` describes the service.
 1. **Models.** Request and response models in `apps/ai/app/schemas.py`, every field
    constrained (`Field(min_length=…, max_length=…)`, `Literal[...]`). They become
    `apps/ai/openapi.json` and the TypeScript types.
-2. **Logic.** A module in `apps/ai/app/` (like `summaries.py` or `documents.py`). Data
+2. **Logic.** A module in `apps/ai/app/` (like `director.py` or `plan_repair.py`). Data
    access only through `tenant(org_id)` from `app/db/session.py`; models through Pydantic
-   AI, so budgets and `AI_MODEL` apply.
+   AI, with the tokens reserved and settled through `app/usage.py`.
 3. **Route.** In `apps/ai/app/main.py`, with `operation_id="<name>"` (the generated
    client's function name) and `CallerDep` (the API's signed token). Errors are
    `AppError("<CODE>", status, params)` with a code from `packages/contracts/src/errors.ts`.
@@ -22,10 +22,11 @@ client in `packages/ai-client`. `docs/python-services.md` describes the service.
    variable in `.env.example` and `docs/environment.md`.
 5. `bun run gen`: regenerates `apps/ai/openapi.json` and `packages/ai-client/src/generated/`.
 6. **Call it.** Add a method to `createAiClient` in `packages/ai-client/src/index.ts`
-   (wraps the generated function with `unwrap`), then use it from
-   `apps/api/src/modules/ai/ai.service.ts` behind a contract procedure (add-feature
-   skill). Keep the API's input limits equal to the Pydantic ones; add the pair to
-   `apps/api/src/modules/ai/limits.test.ts`.
+   (wraps the generated function with `unwrap`), then call it through `callAi`
+   (`apps/api/src/modules/ai`) from the API module that owns the feature, behind a
+   contract procedure (add-feature skill), as `apps/api/src/modules/director` does. Keep
+   the API's input limits equal to the Pydantic ones, as
+   `apps/api/src/modules/director/limits.test.ts` checks for Director's.
 7. **Tests.** Pure tests in `apps/ai/tests/test_units.py` (run by `bun run test`);
    anything needing Postgres or Redis in `apps/ai/tests/test_service.py`
    (`pytestmark = pytest.mark.integration`, run by `bun run test:integration`).

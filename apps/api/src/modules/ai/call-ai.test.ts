@@ -17,9 +17,9 @@ describe("a call to the AI service that fails", () => {
 
   it("passes on a code clients understand, with its params", async () => {
     const error = await refusal(() =>
-      Promise.reject(new AiServiceError(404, "FEATURE_DISABLED", { feature: "assistant" })),
+      Promise.reject(new AiServiceError(404, "FEATURE_DISABLED", { feature: "director" })),
     );
-    expect(error).toMatchObject({ code: "FEATURE_DISABLED", params: { feature: "assistant" } });
+    expect(error).toMatchObject({ code: "FEATURE_DISABLED", params: { feature: "director" } });
   });
 
   it("hides anything else behind UPSTREAM_UNAVAILABLE, keeping the cause", async () => {

@@ -8,8 +8,8 @@ GitHub settings the workflows need in [repository-settings.md](repository-settin
 Nothing is a managed service: the application, its Postgres (CloudNativePG, with
 continuous backups), Valkey, object storage (RustFS), the mail server (Stalwart) and,
 where a cluster opts in, Jaeger and Prometheus all run in the cluster. Cloudflare stays
-in front, and third-party APIs (AI models, Twilio, push, Stripe, Google, Turnstile)
-stay external.
+in front, and third-party APIs (Gemini and YouTube, Google sign-in, Turnstile) stay
+external.
 
 ## Images
 
@@ -91,11 +91,9 @@ Tag a commit that deployed: the merge once deploy.yml has passed for it, or the 
 bump deploy.yml commits right after (usually master's head; it has no images of its own,
 so a release of it ships its parent's, which is the same code). The tag starts
 `.github/workflows/release.yml`, which checks it: a version, on master, with images
-(waiting while CI and deploy.yml still run on the commit), and the same as `version` in
-`apps/mobile/app.config.ts`, which store builds carry (bump that in a pull request
-first). It then publishes the GitHub release with notes grouped from the Conventional
-Commit titles since the previous tag (`scripts/release.ts`), and mobile.yml starts the
-store builds once it has passed. Choose the number from the notes
+(waiting while CI and deploy.yml still run on the commit). It then publishes the GitHub
+release with notes grouped from the Conventional Commit titles since the previous tag
+(`scripts/release.ts`). Choose the number from the notes
 (`bun scripts/release.ts notes HEAD` shows what's unreleased): a breaking change (`!`) is
 a new major version, a `feat` a minor one.
 
@@ -106,17 +104,6 @@ from your own GitHub login so CI runs on it: it writes
 images (the same rule as the check), the ones already running on staging. It refuses
 when there are none. Merging the promotion is the deploy; a chart change merged to
 master reaches production only this way (deploy/README.md, "GitOps").
-
-The mobile app follows the same events on EAS (`mobile.yml`, see
-[web-and-mobile.md](web-and-mobile.md#eas-builds-and-over-the-air-updates)): updates once
-CI has passed on master, store builds once a release has. The store builds' run waits
-for EAS to build and submit both apps, so a failed build or submission fails it. Before
-any of that, CI's lint job runs `expo-doctor` (the mobile app's `lint`), so duplicate or
-misconfigured native modules fail the pull request rather than the store build. It
-skips the check for newer Expo patches: nothing younger than three days can be
-installed (bunfig.toml), so it would fail every pull request after each Expo release.
-Renovate's Expo group moves them once they're old enough, and the mobile app's `doctor`
-script runs the full check.
 
 ## Rollback
 
@@ -185,7 +172,7 @@ replacement on another host:
 
 | On GitHub | What it does here | Elsewhere |
 |---|---|---|
-| `workflow_run` | deploy.yml after CI passes, mobile.yml after a release | GitLab: one pipeline with stages; Forgejo: call the deploy steps at the end of CI's workflow on `push` to master |
+| `workflow_run` | deploy.yml after CI passes | GitLab: one pipeline with stages; Forgejo: call the deploy steps at the end of CI's workflow on `push` to master |
 | `merge_group` | CI on the merge queue | GitLab merge trains; Forgejo has none (merge after CI on the branch) |
 | environments with reviewers | infra.yml's plan and apply, staging's bump | GitLab protected environments; Forgejo: a manual job on a protected branch |
 | OIDC keyless signing (`id-token: write`) | cosign signatures production admits | a key pair (`COSIGN_PRIVATE_KEY`, `imagePolicy.publicKey`), which any CI can use |

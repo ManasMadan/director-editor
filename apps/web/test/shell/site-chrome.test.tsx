@@ -10,12 +10,12 @@ const chrome = (
 
 describe("the site chrome", () => {
   it("puts the header above the page", async () => {
-    const page = await renderPage(chrome, { url: "/dashboard" });
+    const page = await renderPage(chrome, { url: "/settings" });
     await expect.element(page.getByText("site header")).toBeVisible();
     await expect.element(page.getByRole("main")).toHaveTextContent("page content");
   });
 
-  it.each(["/home", "/shorts/kJQP7kiw5Fk", "/director/kJQP7kiw5Fk"])(
+  it.each(["/library", "/shorts/kJQP7kiw5Fk", "/director/kJQP7kiw5Fk"])(
     "leaves %s the whole screen",
     async (url) => {
       const page = await renderPage(chrome, { url });

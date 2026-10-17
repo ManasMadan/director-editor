@@ -18,7 +18,6 @@ the Python service's routes and models, and commit what changes.
 | `apps/ai` | its FastAPI app, and the JSON Schemas above | `openapi.json`; `app/contracts/*.py` (Pydantic models) and `app/contracts/queue_settings.json` | yes |
 | `packages/ai-client` | `apps/ai/openapi.json` | `src/generated` (typed fetch client, zod schemas, SDK) | yes |
 | `apps/api` | the oRPC contract in `packages/contracts/src/api` | `openapi.json` (the public REST API, `/api/v1`) | yes |
-| `apps/mobile` | `global.css` | `uniwind-types.d.ts` | no |
 
 The order comes from package dependencies (`"dependsOn": ["^gen"]`): `@repo/ai` depends
 on `@repo/jobs`, and `@repo/ai-client` on `@repo/ai`, so the chain below always runs in
@@ -71,11 +70,6 @@ a new major version.
 Generated into `packages/db/src/generated/prisma` (Rust-free, ESM) and not committed:
 it's large and deterministic from the schema. The Docker builds run
 `bun run --cwd packages/db gen` themselves (`deploy/docker/node-service.Dockerfile`).
-
-### Uniwind types
-
-`uniwind generate-artifacts` writes `apps/mobile/uniwind-types.d.ts` from `global.css`.
-Uniwind's Metro plugin rewrites it on every start, so it's ignored by git.
 
 ## Generated files are never edited by hand
 

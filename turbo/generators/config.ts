@@ -186,24 +186,21 @@ function apiFeaturePrompts(plop: PlopTypes.NodePlopAPI, root: string): PlopTypes
   ];
 }
 
-/** The audit log describes every event in every language: English, and a Spanish draft. */
+/** The audit log describes every event; English is the only catalog. */
 function describeEvent(plop: PlopTypes.NodePlopAPI, root: string): PlopTypes.CustomActionFunction {
   return (answers) => {
     const { item } = itemized.parse(answers);
     const words = helper(plop, "lowerCase")(helper(plop, "sentenceCase")(item));
     const article = /^[aeiou]/.test(words) ? "an" : "a";
-    const labels = { en: `Deleted ${article} ${words}`, es: `Eliminó «${words}»` };
-    for (const [locale, label] of Object.entries(labels)) {
-      const path = join(root, `packages/i18n/messages/${locale}.json`);
-      const messages: unknown = JSON.parse(readFileSync(path, "utf8"));
-      if (!isCatalog(messages)) {
-        throw new Error(`${path} has no workspace.audit.events`);
-      }
-      messages.workspace.audit.events[helper(plop, "snakeCase")(item)] = {
-        deleted: { v1: label },
-      };
-      writeFileSync(path, `${JSON.stringify(messages, null, 2)}\n`);
+    const path = join(root, "packages/i18n/messages/en.json");
+    const messages: unknown = JSON.parse(readFileSync(path, "utf8"));
+    if (!isCatalog(messages)) {
+      throw new Error(`${path} has no workspace.audit.events`);
     }
+    messages.workspace.audit.events[helper(plop, "snakeCase")(item)] = {
+      deleted: { v1: `Deleted ${article} ${words}` },
+    };
+    writeFileSync(path, `${JSON.stringify(messages, null, 2)}\n`);
     return "described its event in the audit log";
   };
 }
@@ -224,7 +221,6 @@ function apiFeature(plop: PlopTypes.NodePlopAPI, root: string, format: Format) {
           "packages/contracts/src/api/index.ts",
           "packages/contracts/src/events.ts",
           "packages/i18n/messages/en.json",
-          "packages/i18n/messages/es.json",
           `apps/api/src/modules/${kebab}`,
           "apps/api/src/app.module.ts",
           "apps/api/src/rpc/router.ts",

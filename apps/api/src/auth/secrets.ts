@@ -1,7 +1,6 @@
 /**
  * Rotating better-auth's secret. BETTER_AUTH_SECRET alone signs session cookies and
- * encrypts what better-auth stores (OAuth tokens, 2FA secrets and backup codes, the JWT
- * signing keys). To rotate it, add versioned secrets, newest first:
+ * encrypts what better-auth stores (OAuth tokens, 2FA secrets and backup codes). To rotate it, add versioned secrets, newest first:
  *
  *   BETTER_AUTH_SECRETS="2:<new secret>,1:<previous secret>"
  *

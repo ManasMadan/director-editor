@@ -17,11 +17,11 @@ async function fillIn(
 describe("sign up", () => {
   it("creates the account, emails a code and continues to verify it", async () => {
     const user = newUser();
-    const page = await renderPage(<SignUpPage />, { url: "/sign-up?next=/assistant" });
+    const page = await renderPage(<SignUpPage />, { url: "/sign-up?next=/saved" });
     await fillIn(page, user);
     await expect
       .poll(currentUrl)
-      .toBe(`/verify-email?next=%2Fassistant&email=${encodeURIComponent(user.email)}`);
+      .toBe(`/verify-email?next=%2Fsaved&email=${encodeURIComponent(user.email)}`);
     expect(await takeOtp(user.email)).toMatch(/^\d{6}$/);
   });
 

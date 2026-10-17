@@ -12,7 +12,6 @@ const info = {
   release: "1.4.0",
   features: {
     ai: true,
-    billing: false,
     captcha: false,
     director: false,
     files: true,
@@ -20,7 +19,6 @@ const info = {
   },
   minimumClientVersion: "1.0.0",
   captchaSiteKey: null,
-  webPushPublicKey: null,
 };
 
 const me = {
@@ -31,7 +29,6 @@ const me = {
   locale: "en",
   timezone: "UTC",
   activeOrganizationId: id(2),
-  phoneNumber: null,
 };
 
 /** An API whose `me` fails with `code` every time. */
@@ -41,7 +38,7 @@ const failing = (code: string) =>
       me: os.user.me.handler(() => {
         throw new ORPCError(code);
       }),
-      removePhone: os.user.removePhone.handler(() => {
+      setAvatar: os.user.setAvatar.handler(() => {
         throw new ORPCError(code);
       }),
     },
@@ -130,7 +127,7 @@ describe("ApiProvider", () => {
     );
     await vi.waitFor(() => expect(onNoOrganization).toHaveBeenCalledOnce());
     const { client } = result.current.api;
-    await expect(client.user.removePhone()).rejects.toThrow();
+    await expect(client.user.setAvatar({ fileId: null })).rejects.toThrow();
     // A call made outside react-query isn't the provider's to handle.
     expect(onNoOrganization).toHaveBeenCalledOnce();
   });

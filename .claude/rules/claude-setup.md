@@ -55,9 +55,9 @@ paths:
     and its `.venv`; the type check that counts is still basedpyright's strict one.
   - `expo`, `stripe` and `redis-development`: skills. The Expo and Stripe plugins also
     bring remote MCP servers (mcp.expo.dev, mcp.stripe.com) that stay unconnected until
-    someone signs in from `/mcp`; nothing here needs them. Local billing is the fake
-    Stripe (`bun run stripe:fake`), so ignore the Stripe plugin's start-of-session hint
-    to install its CLI and `stripe login`. The Redis skills fit Valkey for what this
+    someone signs in from `/mcp`; nothing here needs them, and the app has no billing
+    or mobile app any more, so ignore the Stripe plugin's start-of-session hint to
+    install its CLI and `stripe login`. The Redis skills fit Valkey for what this
     repo does (BullMQ, cache, rate limits); the search, vector and semantic-cache ones
     are for Redis-only modules it doesn't run.
   - `terraform`: HashiCorp's MCP server, run with `docker run`, for provider and module

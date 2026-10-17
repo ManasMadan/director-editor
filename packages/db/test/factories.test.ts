@@ -31,20 +31,22 @@ describe("factories", () => {
     const { user, org } = await make.userWithWorkspace();
     const other = await make.userWithWorkspace();
     await make.member(org.id, other.user.id, "admin");
-    await make.todo(org.id, user.id, { title: "Ours", completed: true });
-    await make.todo(other.org.id, other.user.id, { title: "Theirs" });
-    const visible = await withTenant(db, org.id).todo.findMany({ select: { title: true } });
-    expect(visible).toEqual([{ title: "Ours" }]);
+    await make.shortReaction(org.id, user.id, { videoId: "oursoursour", kind: "save" });
+    await make.shortReaction(other.org.id, other.user.id, { videoId: "theirstheir" });
+    const visible = await withTenant(db, org.id).shortReaction.findMany({
+      select: { videoId: true, kind: true },
+    });
+    expect(visible).toEqual([{ videoId: "oursoursour", kind: "save" }]);
   });
 
-  it("make a shared workspace and a todo with defaults when nothing is overridden", async () => {
+  it("make a shared workspace and a reaction with defaults when nothing is overridden", async () => {
     const make = factories(db);
     const owner = await make.user();
     const org = await make.organization(owner.id);
     expect(org).toMatchObject({ name: expect.stringMatching(/^Org /), metadata: null });
     expect(org.slug).toMatch(/^org-/);
-    const todo = await make.todo(org.id, owner.id);
-    expect(todo).toMatchObject({ title: expect.stringMatching(/^Todo /), completed: false });
+    const reaction = await make.shortReaction(org.id, owner.id);
+    expect(reaction).toMatchObject({ kind: "like", videoId: expect.stringMatching(/^\w{11}$/) });
   });
 
   it("never collide between calls", async () => {

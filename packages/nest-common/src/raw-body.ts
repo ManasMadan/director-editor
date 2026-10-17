@@ -1,12 +1,12 @@
 /**
  * Routes that take their body as the raw bytes sent: to check a signature over exactly
- * those bytes (provider webhooks), or because the handler reads it itself (better-auth,
- * the MCP transport). Call it inside a `fastify.register` scope, so only that scope's
- * routes lose the app's parsers.
+ * those bytes (provider webhooks), or because the handler reads it itself (better-auth).
+ * Call it inside a `fastify.register` scope, so only that scope's routes lose the app's
+ * parsers.
  *
  *   fastify.register((scope, _options, done) => {
  *     rawBodies(scope, "application/json");
- *     scope.post("/webhooks/stripe", handler); // request.body is a Buffer
+ *     scope.post("/webhooks/stalwart", handler); // request.body is a Buffer
  *     done();
  *   });
  */

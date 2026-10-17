@@ -12,9 +12,11 @@ export default function robots(): MetadataRoute.Robots {
       userAgent: "*",
       allow: "/",
       disallow: [
-        "/dashboard",
+        "/library",
+        "/shorts",
+        "/saved",
+        "/director",
         "/settings",
-        "/invitations",
         "/sign-",
         "/verify-email",
         "/forgot-password",

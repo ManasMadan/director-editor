@@ -17,8 +17,6 @@ describe("the security page", () => {
       "Signed-in devices",
       "Two-step verification",
       "Passkeys",
-      "Phone number",
-      "Connected apps",
       "Password",
       "Delete account",
     ]) {

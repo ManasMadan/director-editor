@@ -36,4 +36,5 @@ imports its client from here; Python mirrors the tables in `apps/ai/app/db/model
   only.
 - Integration tests clone a migrated template database; it is rebuilt when a
   migration's checksum changes.
-- `drift` ignores only the pgvector HNSW index Prisma cannot express (`scripts/drift.ts`).
+- `drift` fails on any difference; something Prisma can't express needs a skip in
+  `scripts/drift.ts`, with the reason.

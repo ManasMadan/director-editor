@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { applyTestEnvironment, findEnvExample, testEnvironment } from "./environment";
-import { fillPlaceholders, newSecret, PLACEHOLDER, vapidKeyPair } from "./secrets";
+import { fillPlaceholders, newSecret, PLACEHOLDER } from "./secrets";
 
 const example = (text: string) => {
   const dir = mkdtempSync(join(tmpdir(), "test-env-"));
@@ -37,11 +37,11 @@ describe("the test environment", () => {
   });
 
   it("never replaces what's already set (CI's services), and says what it set", () => {
-    const dir = example("REDIS_URL=redis://localhost:56379\nUNSUBSCRIBE_SECRET=change-me\n");
+    const dir = example("REDIS_URL=redis://localhost:56379\nAI_SERVICE_SECRET=change-me\n");
     const env: NodeJS.ProcessEnv = { REDIS_URL: "redis://localhost:6379" };
-    expect(applyTestEnvironment(env, join(dir, ".env.example"))).toEqual(["UNSUBSCRIBE_SECRET"]);
+    expect(applyTestEnvironment(env, join(dir, ".env.example"))).toEqual(["AI_SERVICE_SECRET"]);
     expect(env.REDIS_URL).toBe("redis://localhost:6379");
-    expect(env.UNSUBSCRIBE_SECRET).not.toMatch(PLACEHOLDER);
+    expect(env.AI_SERVICE_SECRET).not.toMatch(PLACEHOLDER);
   });
 
   it("finds .env.example from any directory below it, and fails clearly without one", () => {
@@ -59,22 +59,15 @@ describe("the test environment", () => {
 });
 
 describe("generated secrets", () => {
-  it("have each variable's format", () => {
-    expect(newSecret("ENCRYPTION_KEYS")).toMatch(/^\d{4}-\d{2}:[A-Za-z0-9+/]{43}=$/);
-    expect(newSecret("BETTER_AUTH_SECRET")).toMatch(/^[\w-]{43}$/);
-    expect(newSecret("A")).not.toBe(newSecret("A"));
+  it("are 32 random bytes, different every time", () => {
+    expect(newSecret()).toMatch(/^[\w-]{43}$/);
+    expect(newSecret()).not.toBe(newSecret());
   });
 
-  it("make a matching VAPID pair, generated together when either is a placeholder", () => {
-    const { publicKey, privateKey } = vapidKeyPair();
-    expect(Buffer.from(publicKey, "base64url")).toHaveLength(65);
-    expect(Buffer.from(privateKey, "base64url")).toHaveLength(32);
-    const filled = fillPlaceholders({ VAPID_PUBLIC_KEY: "kept", VAPID_PRIVATE_KEY: "change-me" });
-    expect(filled.VAPID_PUBLIC_KEY).not.toBe("kept");
-    expect(Buffer.from(filled.VAPID_PRIVATE_KEY ?? "", "base64url")).toHaveLength(32);
-    expect(fillPlaceholders({ VAPID_PUBLIC_KEY: "a", VAPID_PRIVATE_KEY: "b" })).toEqual({
-      VAPID_PUBLIC_KEY: "a",
-      VAPID_PRIVATE_KEY: "b",
+  it("replace placeholders only", () => {
+    expect(fillPlaceholders({ KEPT: "a", NEW: "change-me" })).toEqual({
+      KEPT: "a",
+      NEW: expect.stringMatching(/^[\w-]{43}$/),
     });
   });
 });

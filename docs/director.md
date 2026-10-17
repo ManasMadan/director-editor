@@ -29,7 +29,7 @@ bun dev:full                        # the AI service, RustFS, ClamAV and the moc
 ```
 
 Then sign in (`bun run db:seed` makes `demo@example.com`) and open
-http://localhost:3000/home. What the mock answers:
+http://localhost:3000/library. What the mock answers:
 
 - the feed: six real public YouTube videos (their pictures and the embedded player are
   YouTube's own); the first, "GRWM for the office in summer time!", is the short the demo
@@ -52,14 +52,11 @@ job (watching a short unattended) indexes it with `INDEX_MODEL`, a separate, mor
 thorough model from `DIRECTOR_MODEL`'s live scene checks and reviews; `INDEX_FALLBACK_MODEL`
 is tried once after `INDEX_MODEL`'s own retries on a transient failure are spent.
 
-If the Expo app's bundler won't start (`bun dev:full` stops with it), run the rest with
-`bunx turbo run dev --filter='!@repo/mobile'`.
-
 ## The screens (apps/web)
 
 | Route | What it is |
 |---|---|
-| `/home` | YouTube's home: topic chips, a grid of real shorts (YouTube search, cached), a box to paste any Shorts link |
+| `/library` | YouTube's home: topic chips, a grid of real shorts (YouTube search, cached), a box to paste any Shorts link |
 | `/shorts/[videoId]` | the vertical player: swipe for the next; like, comments, share, save and the Director button |
 | `/saved` | the member's liked and saved shorts |
 | `/director/[videoId]` | the plan: "You need 6 shots: 4 videos and 2 photos", the order, speak-or-original-audio, Record |

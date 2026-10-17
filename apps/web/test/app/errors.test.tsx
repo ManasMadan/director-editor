@@ -33,11 +33,11 @@ describe("error pages", () => {
     expect(document.querySelector("p.font-mono")).toBeNull();
   });
 
-  it("speaks the browser's language", async () => {
+  it("falls back to English for a browser language the app doesn't have", async () => {
     vi.spyOn(navigator, "languages", "get").mockReturnValue(["es-ES"]);
     const page = await renderPage(<GlobalError error={new Error("boom")} reset={vi.fn()} />);
-    await expect.poll(() => document.documentElement.lang).toBe("es");
-    await expect.element(page.getByRole("heading", { name: "Algo salió mal" })).toBeVisible();
+    await expect.poll(() => document.documentElement.lang).toBe("en");
+    await expect.element(page.getByRole("heading", { name: "Something went wrong" })).toBeVisible();
   });
 
   it("recovers from a broken root layout without any providers", async () => {

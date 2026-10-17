@@ -1,7 +1,7 @@
 /**
  * {{sentenceCase name}} business rules. Write each change and its domain event in one
- * tenantTx (see todo.service.ts), so the audit log, webhooks and notifications never
- * miss or invent one.
+ * tenantTx (as auth/auth-hooks.ts does with emitEvent), so the audit log and every
+ * other consumer never miss or invent one.
  */
 import { Injectable } from "@nestjs/common";
 import type { OrgId } from "@repo/contracts/ids";

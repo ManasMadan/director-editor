@@ -24,17 +24,8 @@ describe("webhooks environment", () => {
     expect(await listensOn({ PORT: "", WEBHOOKS_PORT: "" })).toBe(3004);
   });
 
-  it("lets development and tests call exact private addresses", async () => {
-    const env = await load({ WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "127.0.0.1, ::1" });
-    expect(env.WEBHOOK_ALLOWED_PRIVATE_ADDRESSES).toEqual(["127.0.0.1", "::1"]);
-  });
-
-  it("refuses to start in production with any private address allowed", async () => {
-    await expect(
-      load({ NODE_ENV: "production", WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "127.0.0.1" }),
-    ).rejects.toThrow("WEBHOOK_ALLOWED_PRIVATE_ADDRESSES must be empty in production");
-    vi.resetModules();
-    const env = await load({ NODE_ENV: "production", WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "" });
-    expect(env.WEBHOOK_ALLOWED_PRIVATE_ADDRESSES).toEqual([]);
+  it("reads the mail server's signing keys, a new and an old one while rotating", async () => {
+    const env = await load({ STALWART_WEBHOOK_SECRET: `${"a".repeat(32)}, ${"b".repeat(32)}` });
+    expect(env.STALWART_WEBHOOK_SECRET).toEqual(["a".repeat(32), "b".repeat(32)]);
   });
 });

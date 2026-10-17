@@ -1,11 +1,9 @@
 # Releases are version tags pushed by hand (`git tag v1.4.0 && git push origin v1.4.0`):
 # this checks the tag (a version, on master, with images: a commit deploy.yml passed for
-# or the staging bump right after it, waiting while they still run; and matching the
-# mobile app's version) and
-# publishes the GitHub release with notes from the Conventional Commit titles since the
-# previous tag. Production then moves through its promotion pull request, opened with
-# `bun run promote v1.4.0` (scripts/release.ts); merging it is the deploy. The mobile
-# store builds start from the same tag (mobile.yml).
+# or the staging bump right after it, waiting while they still run) and publishes the
+# GitHub release with notes from the Conventional Commit titles since the previous tag.
+# Production then moves through its promotion pull request, opened with
+# `bun run promote v1.4.0` (scripts/release.ts); merging it is the deploy.
 name: Release
 
 on:

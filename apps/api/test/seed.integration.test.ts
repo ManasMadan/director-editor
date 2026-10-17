@@ -1,6 +1,7 @@
 /**
  * The API's commands: the demo seed (bun run db:seed) leaves what using the app would, and
- * only once; the load-test users; re-encrypting secrets; and the server's own entry point.
+ * only once; the signed-in users the fuzzing runs as; re-encrypting secrets; and the
+ * server's own entry point.
  */
 
 import { existsSync } from "node:fs";
@@ -25,12 +26,10 @@ beforeAll(async () => {
   // Imported only now: these load the API's configuration, which startApi points at
   // this file's own database first.
   ({ AUTH } = await import("../src/auth/auth.module"));
-  const { TodoService } = await import("../src/modules/todo");
   seed = () =>
     seedDemo({
       auth: harness.app.get<Auth>(AUTH),
       database: harness.app.get<Database>(DATABASE),
-      todos: harness.app.get(TodoService),
     });
 });
 afterAll(() => harness?.close());
@@ -58,7 +57,6 @@ async function command(entry: string, env: Record<string, string | undefined> = 
 /** Production, as far as the configuration's own checks let a test go. */
 const PRODUCTION = {
   NODE_ENV: "production",
-  WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "",
   // .env.example points at the local mock Google, which production refuses.
   YOUTUBE_API_URL: "https://www.googleapis.com/youtube/v3",
 };
@@ -93,34 +91,20 @@ describe("demo seed", () => {
     expect(run.errors).toEqual(["The demo seed is for development only."]);
   });
 
-  it("creates verified users who can sign in and see their workspaces' todos", async () => {
+  it("creates a verified user who can sign in to their personal workspace", async () => {
     // Seeded by the command above.
     expect(await seed()).toBeNull();
-    const created = await harness.app
-      .get<Database>(DATABASE)
-      .write.organization.findUniqueOrThrow({ where: { slug: "acme" } })
-      .then((team) => ({ teamId: team.id }));
-
     const session = createSession(harness);
     const signIn = await session.auth("/sign-in/email", {
       email: DEMO_PEOPLE[0].email,
       password: DEMO_PASSWORD,
     });
     expect(signIn.status).toBe(200);
-    const personal = await session.rpc.todo.list({});
-    expect(personal.items.map((todo) => todo.title).sort()).toEqual([
-      "Connect an app",
-      "Invite a teammate",
-      "Try the assistant",
-    ]);
-
-    await session.auth("/organization/set-active", { organizationId: created?.teamId });
-    const team = await session.rpc.todo.list({});
-    expect(team.items.map((todo) => [todo.title, todo.completed]).sort()).toEqual([
-      ["Plan the launch", false],
-      ["Set up billing", true],
-      ["Write the changelog", false],
-    ]);
+    const me = await session.rpc.user.me();
+    expect(me).toMatchObject({
+      email: DEMO_PEOPLE[0].email,
+      activeOrganizationId: expect.any(String),
+    });
   });
 
   it("changes nothing when run again", async () => {
@@ -128,7 +112,7 @@ describe("demo seed", () => {
     const database = harness.app.get<Database>(DATABASE);
     expect(
       await database.write.user.count({ where: { email: { endsWith: "@example.com" } } }),
-    ).toBe(2);
+    ).toBe(1);
   });
 });
 
@@ -143,7 +127,7 @@ describe("load-test users", () => {
     const first = await signIn(3);
     expect(first).toHaveLength(3);
     for (const cookie of first) {
-      const response = await fetch(`${harness.baseUrl}/api/v1/todos`, { headers: { cookie } });
+      const response = await fetch(`${harness.baseUrl}/api/v1/me`, { headers: { cookie } });
       expect(response.status).toBe(200);
     }
     const again = await signIn(3);
@@ -163,11 +147,11 @@ describe("load-test users", () => {
   });
 });
 
-describe("the load-test users command", () => {
-  const output = join(import.meta.dirname, "../../../load/.sessions.json");
+describe("the fuzzing's users command", () => {
+  const output = join(import.meta.dirname, "../../../.fuzz/sessions.json");
   const kept = `${output}.kept`;
 
-  it("writes a session cookie per user for k6", async () => {
+  it("writes a session cookie per user for the fuzzing", async () => {
     // A developer's own file is put back afterwards.
     const had = existsSync(output);
     if (had) {
@@ -193,7 +177,9 @@ describe("the load-test users command", () => {
     const exit = refusingExit();
     const run = await command("../src/load-users", PRODUCTION);
     expect(exit).toHaveBeenCalledWith(1);
-    expect(run.errors).toEqual(["Load-test users are for development and test environments only."]);
+    expect(run.errors).toEqual([
+      "The fuzzing's users are for development and test environments only.",
+    ]);
   });
 });
 
@@ -201,9 +187,7 @@ describe("the re-encryption command", () => {
   it("says what it moved, and that better-auth's values stay with a single secret", async () => {
     const single = await command("../src/reencrypt", { BETTER_AUTH_SECRETS: "" });
     expect(single.lines).toEqual([
-      expect.stringMatching(
-        /^Re-encrypted \d+ accounts, \d+ two-factor settings, \d+ signing keys and \d+ webhook endpoints\.$/,
-      ),
+      expect.stringMatching(/^Re-encrypted \d+ accounts and \d+ two-factor settings\.$/),
       "BETTER_AUTH_SECRETS isn't set, so better-auth's values have one key and were left as they are.",
     ]);
     const versioned = await command("../src/reencrypt", {

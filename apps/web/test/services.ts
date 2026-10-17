@@ -3,7 +3,6 @@
  * global setup (which starts them) and the commands (which reach them from Node).
  * Values that must agree across those modules live in process.env, set once.
  */
-import { generateKeyPairSync } from "node:crypto";
 import { createServer } from "node:net";
 import { applyTestEnvironment } from "@repo/testing/environment";
 
@@ -27,12 +26,6 @@ function freePort() {
 for (const name of ["API_FULL", "API_BARE", "SITE_FULL", "SITE_BARE"]) {
   process.env[`WEB_TESTS_${name}_PORT`] ??= String(await freePort());
 }
-// Browser push needs a real P-256 public key for PushManager.subscribe.
-// (The uncompressed point is the last 65 bytes of the SPKI encoding.)
-process.env.WEB_TESTS_VAPID_PUBLIC_KEY ??= generateKeyPairSync("ec", { namedCurve: "P-256" })
-  .publicKey.export({ type: "spki", format: "der" })
-  .subarray(-65)
-  .toString("base64url");
 
 const at = (host: string, port: string | undefined) => ({
   port: Number(port),
@@ -69,24 +62,14 @@ export const REDIS_URL = (() => {
   return url.toString();
 })();
 
-export const VAPID_PUBLIC_KEY = process.env.WEB_TESTS_VAPID_PUBLIC_KEY;
-
 /** Cloudflare's published always-pass Turnstile test keys. */
 export const CAPTCHA = {
   siteKey: "1x00000000000000000000AA",
   secretKey: "1x0000000000000000000000000000000AA",
 };
 
-export const STRIPE = {
-  secretKey: "sk_test_webtests",
-  webhookSecret: "whsec_webtests",
-  monthly: "price_pro_monthly_web",
-  yearly: "price_pro_yearly_web",
-};
-
 export interface Services {
   databaseUrl: string;
-  stripeUrl: string;
   aiUrl: string;
   close(): Promise<void>;
 }

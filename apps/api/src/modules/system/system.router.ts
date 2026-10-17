@@ -15,7 +15,6 @@ export const systemRouter = ({ base }: Procedures) => ({
     captchaSiteKey: features.captcha
       ? required(env.TURNSTILE_SITE_KEY, "TURNSTILE_SITE_KEY")
       : null,
-    webPushPublicKey: env.VAPID_PUBLIC_KEY ?? null,
   })),
   alerting: base.system.alerting.handler(async () => ({ status: await alertingStatus() })),
 });

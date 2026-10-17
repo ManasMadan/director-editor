@@ -18,7 +18,7 @@ const MAILPIT =
   process.env.STALWART_MAILPIT_URL ?? process.env.MAILPIT_URL ?? "http://localhost:58025";
 
 const email = (to: string) => ({
-  from: "Director-editor <no-reply@director-editor.test>",
+  from: "Director <no-reply@director-editor.test>",
   to,
   subject: "Stalwart submission",
   html: "<p>Sent through Stalwart</p>",

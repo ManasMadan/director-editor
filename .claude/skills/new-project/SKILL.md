@@ -11,8 +11,8 @@ disable-model-invocation: true
 
 1. **Ask for the identity** if the arguments don't give it: the project name (lowercase,
    dashes allowed: it names Kubernetes resources and the compose project), the GitHub
-   owner, the product name people see, and the mobile bundle id. The bundle id is fixed
-   once the app is in a store, so confirm it.
+   owner, the product name people see, and a bundle id (the rename script still
+   rewrites one; `com.<name>.app` is fine).
 2. **Rename, on a clean tree:** `bun run rename <name> --owner <owner> --product
    "<Product>" --bundle-id <id>`. It rewrites every tracked text file and fails if any
    old identifier is left, naming each line: change those by hand, then run it again

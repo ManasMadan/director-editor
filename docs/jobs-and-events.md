@@ -6,7 +6,7 @@ Services never call each other. Work leaves a request in one of two ways:
   is lost (an email, an upload check).
 - **A domain event**, written to the database outbox in the same transaction as the
   change it describes, then relayed to one queue per consumer: for facts that must
-  never be lost or invented (audit log, customer webhooks, billing).
+  never be lost or invented (the audit log, security alerts).
 
 Everything is in two files: `packages/jobs/src/queues.ts` (every queue, its jobs' zod
 schemas and retry options, and which consumers receive which events) and
@@ -64,54 +64,39 @@ lets it in (`deploy/charts/data/templates/valkey.yaml`).
 
 | Queue | Jobs | Produced by | Consumed by |
 |---|---|---|---|
-| `notifications-critical` | `send`, `deferred` | api (sign-in codes, invitations, security alerts, phone codes, payment failures), notifications (deferred push) | notifications |
-| `notifications-bulk` | `send`, `deferred`, `digests`, `digest` | notifications (hourly digest scheduler) | notifications |
+| `notifications-critical` | `send` | api (sign-in codes) | notifications |
 | `events-audit` | `event` | the outbox relay | worker (audit log) |
-| `events-webhooks` | `event` | the outbox relay | webhooks (fan-out to endpoints) |
-| `events-notifications` | `event` | the outbox relay | notifications (notify someone, or suppress an address that hard-bounced) |
-| `events-realtime` | `event` | the outbox relay | worker (live UI nudges) |
-| `events-billing` | `event` | the outbox relay | api (billing) |
-| `webhook-deliveries` | `deliver`, `redeliver`, `send-test` | webhooks (fan-out, retries), api (replay and test from settings) | webhooks |
+| `events-notifications` | `event` | the outbox relay | notifications (security alerts, and suppressing an address that hard-bounced) |
 | `files` | `process` | api (upload completed) | worker |
-| `ai-ingest` | `ingest`, `summarize` | ai (FastAPI and its worker) | ai worker (Python) |
 | `ai-director` | `plan`, `review-take` | ai (FastAPI and its worker) | ai worker (Python) |
 | `maintenance` | `outbox-retention`, `audit-partitions`, `session-retention`, `files-cleanup` | worker (job schedulers) | worker |
 
-Scheduled work uses BullMQ job schedulers upserted at boot (`maintenance.processor.ts`,
-`digest.service.ts`), so each occurrence runs once whatever the replica count.
+Scheduled work uses BullMQ job schedulers upserted at boot (`maintenance.processor.ts`),
+so each occurrence runs once whatever the replica count.
 
 ## Retries and failed jobs
 
 Most queues retry 5 times with exponential backoff from 2 s, with jitter (each delay
-somewhere in its upper half) so jobs that failed together don't all return at once. `events-realtime` retries 3
-times, 1 s apart (a nudge is worthless later). `webhook-deliveries` retries 8 times on
-the Standard Webhooks schedule (`WEBHOOK_RETRY_DELAYS_MS`: 5 s, 5 min, 30 min, 2 h,
-5 h, 10 h, 10 h), about a day in all; a delivery answered with a redirect counts as
-failed and isn't followed, since that would send the signed body somewhere the customer
-didn't register. An attempt that got no HTTP answer records why as a code tenants see
-(`WEBHOOK_DELIVERY_ERRORS`: timeout, connection failed, destination not allowed,
-response too large), never our own error message. A failure on our side, like a
-secret that no longer decrypts, fails the job instead (logged and retried) and never
-counts against the endpoint or disables it. `maintenance` retries 3 times from a
-minute.
+somewhere in its upper half) so jobs that failed together don't all return at once.
+`ai-director` retries 3 times from 5 s (model calls cost money, and a provider outage
+passes), and `maintenance` 3 times from a minute.
 
 A job that fails validation or runs out of attempts stays in BullMQ's failed set for
 its queue's `removeOnFail` age: an hour on `notifications-critical` (its payloads can
-hold one-time codes), a day on `events-realtime` (a stale nudge is worthless), 30 days
-on the other event queues and `maintenance`, and 7 days on the rest. There is no
+hold one-time codes), 30 days on the event queues and `maintenance`, and 7 days on the
+rest. There is no
 separate dead-letter queue; the failed set is it. `bun run jobs` shows every queue's
 counts, `bun run jobs failed <queue>` lists failed jobs and why, and `retry` or
 `discard` put them back or drop them (`scripts/jobs.ts`, on `packages/jobs/src/admin.ts`;
 header comment for pointing it at a deployed environment). A retried job starts over
 with its full retry schedule.
-Customer webhook deliveries have their own replay in the settings page.
 
 ## The transactional outbox
 
 ```ts
-await tenantTx(database.write, orgId, async (tx) => {
-  const todo = await tx.todo.update(...);
-  await emitEvent(tx, "todo.completed.v1", todo.id, { todoId: todo.id, title: todo.title });
+await transaction(database.write, async (tx) => {
+  await tx.user.update(...);
+  await emitEvent(tx, "auth.password_changed.v1", userId, { userId });
 });
 ```
 
@@ -151,11 +136,8 @@ replayed to a new consumer.
 At least once, unordered. Consumers are idempotent:
 
 - audit: the row id is the event id (`skipDuplicates`);
-- webhooks: one delivery per (endpoint, event), and its job id is the delivery id;
-- notifications: each (job, channel, recipient) is claimed in the delivery log before
-  sending, keyed on the job id (the event id for event-driven notifications);
-- billing: every Stripe event re-reads the subscription from Stripe and overwrites the
-  row; seat updates follow the current member count.
+- notifications: each (job, recipient) is claimed in the delivery log before sending,
+  keyed on the job id (the event id for event-driven notifications).
 
 Each outbox schema also has `processed_event (event_id, consumer)` for a consumer that
 can't be idempotent by construction; the current consumers don't need it.
@@ -163,8 +145,7 @@ can't be idempotent by construction; the current consumers don't need it.
 An outbox row that isn't a valid event (a bad name, say) would fail its batch, and every
 batch after it, forever: the relay logs it ("outbox row isn't a valid event; set
 aside") and marks it published, so it stays in the table for someone to look at until
-retention removes it. A webhook test send creates its delivery once per job, however
-often the job runs.
+retention removes it.
 
 An event's name is accepted by the relay even if that build doesn't know it (a newer
 service can emit it mid-deploy); each consumer ignores names it doesn't handle.
@@ -175,46 +156,41 @@ for 24 hours.
 
 ## Events
 
-Names are versioned (`todo.completed.v1`). Adding an optional field is compatible;
+Names are versioned (`auth.signed_up.v1`). Adding an optional field is compatible;
 anything else is a new version, published alongside the old one until every consumer
 has moved. CI holds this: `bun run gen` writes every event's schema to
 `packages/jobs/generated/events.json`, and on a pull request `scripts/events-compat.ts`
 compares it with the base branch's, failing on a removed event or a field removed,
-retyped, made required or made optional. The events customers can subscribe to are also
-in the `webhooks` section of `apps/api/openapi.json`, with the body they receive. The audit log records every event except `notification.requested.v1`
+retyped, made required or made optional. The audit log records every event except `notification.requested.v1`
 (`unauditedEvents`): its payload is a whole notification, addresses included, and the
 change it's about has its own event.
 
 | Events | Emitted by | Also consumed by |
 |---|---|---|
-| `todo.created.v1`, `todo.completed.v1`, `todo.deleted.v1` | api (todos) | webhooks, realtime |
-| `auth.signed_up.v1`, `auth.session_started.v1`, `auth.session_ended.v1`, `auth.password_changed.v1`, `auth.password_reset.v1`, `auth.email_changed.v1`, `auth.two_factor_changed.v1`, `auth.passkey_added.v1`, `auth.phone_changed.v1`, `auth.app_connected.v1`, `auth.app_disconnected.v1`, `auth.account_deleted.v1` | api (auth, phone, connected apps) | |
-| `org.created.v1`, `org.deleted.v1`, `org.member_role_changed.v1`, `org.invitation_sent.v1` | api (auth) | |
-| `org.member_added.v1`, `org.member_removed.v1` | api (auth) | webhooks, billing |
-| `org.api_key_created.v1`, `org.api_key_revoked.v1` | api (API keys) | |
-| `webhook.endpoint_created.v1`, `webhook.endpoint_updated.v1`, `webhook.endpoint_deleted.v1`, `webhook.secret_rotated.v1` | api (webhook settings) | |
-| `webhook.endpoint_disabled.v1` | webhooks (endpoint failing for `WEBHOOK_AUTO_DISABLE_HOURS`) | notifications |
-| `stripe.event_received.v1` | webhooks (`/webhooks/stripe`) | billing |
+| `auth.signed_up.v1`, `auth.session_started.v1`, `auth.session_ended.v1`, `auth.password_changed.v1`, `auth.password_reset.v1`, `auth.email_changed.v1`, `auth.two_factor_changed.v1`, `auth.passkey_added.v1`, `auth.account_deleted.v1` | api (auth) | |
+| `org.created.v1`, `org.deleted.v1`, `org.member_added.v1`, `org.member_removed.v1`, `org.member_role_changed.v1`, `org.invitation_sent.v1` | api (auth) | |
+| `notification.requested.v1` | api (security alerts) | notifications |
 | `email.feedback_received.v1` | webhooks (`/webhooks/stalwart`: a hard bounce from our mail server) | notifications (suppresses the address) |
 
-Customers can subscribe their endpoints to the events in `webhookEvents`; the rest stay
-internal.
+The catalog still names the events of features Director removed (todos, API keys,
+connected apps, phone numbers, outbound webhooks, Stripe): nothing emits them, and they
+stay so the events-compat check and the audit log's labels for past rows keep working.
 
 ## The Python worker
 
-`apps/ai` produces and consumes `ai-ingest` with the Python `bullmq` package. Its job
+`apps/ai` produces and consumes `ai-director` with the Python `bullmq` package. Its job
 payloads are the Pydantic models generated from the zod schemas, one per job
-(`app/contracts/ai_ingest_ingest_job.py`, `ai_ingest_summarize_job.py`), and its prefix and retry options come from
-`app/contracts/queue_settings.json`, generated from `queues` (see
-[codegen.md](codegen.md)). Job ids are the document id (`ingest`) and
-`<document id>-summary` (`summarize`). It publishes live nudges on the same Redis
+(`app/contracts/ai_director_plan_job.py`, `ai_director_review_take_job.py`), and its
+prefix and retry options come from `app/contracts/queue_settings.json`, generated from
+`queues` (see [codegen.md](codegen.md)). It publishes live nudges on the same Redis
 pub/sub channels as the TypeScript services, validated against the generated
 `RealtimeMessage`.
 
 ## Realtime
 
-The worker maps `events-realtime` events to messages (`realtime.processor.ts`) and
-publishes them on Redis pub/sub (`realtime:<channel>`); each API process subscribes for
+The worker (a checked upload: `files.changed`) and the AI service (a plan or a take that
+changed: `director.changed`) publish messages on Redis pub/sub (`realtime:<channel>`);
+each API process subscribes for
 its open streams and forwards them over the `realtime` procedure (server-sent events on
 `/rpc`). Messages only say "refetch", so a missed one costs freshness, not correctness.
 
@@ -237,8 +213,7 @@ its open streams and forwards them over the `realtime` procedure (server-sent ev
 1. Define its payload in `events` in `packages/contracts/src/events.ts`.
 2. Emit it with `emitEvent(tx, name, key, payload)` in the same transaction as the change.
 3. Route it to the consumers that need it in `eventSubscribers`
-   (`packages/jobs/src/queues.ts`), and add it to `webhookEvents` if customers may
-   subscribe. The audit log needs nothing.
+   (`packages/jobs/src/queues.ts`). The audit log needs nothing.
 4. A new consumer gets its own `events-<name>` queue in `queues` and a line in
    `eventSubscribers`; it sees events from then on (older ones can be replayed from the
    outbox's retention window).

@@ -20,7 +20,7 @@ export type Implement = typeof os;
 
 export interface StandIn {
   fetch: typeof fetch;
-  /** The procedures called so far, in order: `"todo/list"`. */
+  /** The procedures called so far, in order: `"files/get"`. */
   calls: string[];
 }
 

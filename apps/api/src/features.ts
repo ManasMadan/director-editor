@@ -16,15 +16,6 @@ function pair(name: string, a: string | undefined, b: string | undefined) {
   return Boolean(a && b);
 }
 
-function billing() {
-  const set = [env.STRIPE_SECRET_KEY, env.STRIPE_PRICE_PRO_MONTHLY, env.STRIPE_PRICE_PRO_YEARLY];
-  const count = set.filter(Boolean).length;
-  if (count !== 0 && count !== set.length) {
-    throw new Error("Billing needs STRIPE_SECRET_KEY and both STRIPE_PRICE_PRO_* set, or none");
-  }
-  return count === set.length;
-}
-
 const ai = pair("AI service (AI_URL/AI_SERVICE_SECRET)", env.AI_URL, env.AI_SERVICE_SECRET);
 const files = Boolean(env.S3_BUCKET);
 
@@ -44,5 +35,4 @@ export const features: Record<Feature, boolean> = {
     env.TURNSTILE_SECRET_KEY,
   ),
   files,
-  billing: billing(),
 };

@@ -1,6 +1,7 @@
 import { buttonVariants } from "@repo/ui/components/button";
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
+import { HOME_PATH } from "@/lib/routes";
 
 /** The public landing page. Server-rendered: no client JavaScript beyond the shell. */
 export async function HomePage({ signedIn }: { signedIn: boolean }) {
@@ -11,7 +12,7 @@ export async function HomePage({ signedIn }: { signedIn: boolean }) {
         {t("title")}
       </h1>
       <p className="max-w-xl text-lg text-muted-foreground">{t("subtitle")}</p>
-      <Link href={signedIn ? "/dashboard" : "/sign-up"} className={buttonVariants({ size: "lg" })}>
+      <Link href={signedIn ? HOME_PATH : "/sign-up"} className={buttonVariants({ size: "lg" })}>
         {signedIn ? t("ctaSignedIn") : t("cta")}
       </Link>
     </section>

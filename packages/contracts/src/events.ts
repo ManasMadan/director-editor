@@ -1,15 +1,18 @@
 /**
  * Domain events: facts that happened, published through the transactional outbox and
- * consumed by the audit log, customer webhooks and notifications.
+ * consumed by the audit log and notifications.
  *
  * Names are versioned (`todo.completed.v1`). Adding an optional field is compatible;
  * anything else is a new version, published alongside the old one until every
  * consumer has moved (CI checks this: scripts/events-compat.ts). Consumers must be idempotent (events are delivered at least once)
  * and must not depend on order.
  *
- * Adding an event: define its payload here, emit it with `emitEvent(tx, ...)` in the
- * same transaction as the change, and add it to `webhookEvents` if customers may
- * subscribe to it. The audit log records every event automatically.
+ * Adding an event: define its payload here and emit it with `emitEvent(tx, ...)` in the
+ * same transaction as the change. The audit log records every event automatically.
+ *
+ * Events of features that are gone (todos, API keys, customer webhooks, billing, phone
+ * numbers, connected apps) stay named here: the audit log still holds entries of them,
+ * and a published event is never removed (scripts/events-compat.ts).
  */
 import * as z from "zod";
 import {
@@ -141,19 +144,6 @@ export const eventNames = keysOf(events);
 export const unauditedEvents: ReadonlySet<string> = new Set<EventName>([
   "notification.requested.v1",
 ]);
-
-/**
- * Events customers can receive on their webhook endpoints: product facts about their
- * organization. Account-security events stay internal (audit log only).
- */
-export const webhookEvents = [
-  "todo.created.v1",
-  "todo.completed.v1",
-  "todo.deleted.v1",
-  "org.member_added.v1",
-  "org.member_removed.v1",
-] as const satisfies readonly EventName[];
-export type WebhookEventName = (typeof webhookEvents)[number];
 
 /**
  * An event as it travels from the outbox to consumers: the committed row, with its

@@ -13,8 +13,8 @@ disable-model-invocation: true
 - **Today:** Redis pub/sub on the shared `REDIS_URL`, channels `realtime:user:<id>` and
   `realtime:org:<id>`. Best effort: messages only say "refetch".
 - **Used in:** `apps/api/src/realtime.ts` (hub and publish), `apps/worker/src/realtime/`
-  (publishes domain events from `events-realtime`), and `apps/ai/app/realtime.py`
-  (Python publisher, same prefix and message contract).
+  (publishes `files.changed` when an upload is checked), and `apps/ai/app/realtime.py`
+  (Python publisher of `director.changed`, same prefix and message contract).
 
 ## Swap
 
@@ -29,9 +29,9 @@ disable-model-invocation: true
 
 ## Tests
 
-`packages/nest-common/test/realtime.integration.test.ts`,
-`apps/worker/src/realtime/realtime.processor.test.ts`, the realtime case in
-`apps/api/test/api.integration.test.ts`, and `apps/web/e2e/realtime.spec.ts`.
+`packages/nest-common/test/realtime.integration.test.ts`, the realtime case in
+`apps/api/test/api.integration.test.ts`, `apps/ai/tests/test_realtime.py`, and the live
+updates test in `apps/web/test/shell/preferences.test.tsx`.
 
 ## Finish
 

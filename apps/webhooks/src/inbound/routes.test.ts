@@ -7,7 +7,6 @@ import type { Database } from "@repo/nest-common";
 import Fastify from "fastify";
 import { describe, expect, it } from "vitest";
 import { mountStalwart } from "./stalwart.routes";
-import { mountStripe } from "./stripe.routes";
 
 // Never reached by these requests.
 const database = {} as Database;
@@ -31,24 +30,9 @@ async function post(
 
 describe("inbound routes", () => {
   it("don't exist without their provider's secret", async () => {
-    expect(await post((app) => mountStripe(app, database, undefined), "/webhooks/stripe")).toEqual({
-      status: 404,
-      code: "NOT_FOUND",
-    });
     expect(
       await post((app) => mountStalwart(app, database, undefined), "/webhooks/stalwart"),
     ).toEqual({ status: 404, code: "NOT_FOUND" });
-  });
-
-  it("refuse a Stripe request without a signature, or with a body that isn't JSON", async () => {
-    const stripe = (app: ReturnType<typeof Fastify>) => mountStripe(app, database, "whsec_test");
-    expect(await post(stripe, "/webhooks/stripe")).toEqual({ status: 400, code: "BAD_REQUEST" });
-    expect(
-      await post(stripe, "/webhooks/stripe", {
-        headers: { "stripe-signature": "t=1,v1=abc", "content-type": "text/plain" },
-        body: "hello",
-      }),
-    ).toEqual({ status: 400, code: "BAD_REQUEST" });
   });
 
   it("refuse a Stalwart request whose body isn't JSON", async () => {

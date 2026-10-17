@@ -4,20 +4,13 @@
  *   1. migrations → schema: a schema change without a migration (or the reverse);
  *   2. database → schema: a database that isn't at the migrations' state.
  *
- * A few things Prisma can't express live only in migrations (it would "fix" them by
- * dropping them). Those are listed in IGNORED with the reason; any other difference fails.
+ * Any difference fails. Something Prisma can't express (it would "fix" it by dropping
+ * it) needs an entry here that skips exactly that statement, with the reason.
  *
  * It needs MIGRATOR_DATABASE_URL: without a datasource, `prisma migrate diff
  * --from-config-datasource` prints nothing and exits 0, which would read as "no drift".
  */
 import { spawnSync } from "node:child_process";
-
-const IGNORED: { statement: string; why: string }[] = [
-  {
-    statement: 'DROP INDEX "ai"."chunk_embedding_idx";',
-    why: "HNSW index on a pgvector column: Prisma has no vector type or HNSW index.",
-  },
-];
 
 /** What the check needs of `spawnSync`: a command's status and output, as text. */
 type Spawn = (
@@ -48,9 +41,7 @@ export function drift(spawn: Spawn = spawnSync): number {
     ["migrations vs schema", ["--from-migrations", "prisma/migrations"]],
     ["database vs schema", ["--from-config-datasource"]],
   ] as const) {
-    const unexpected = diff(from).filter(
-      (line) => !IGNORED.some((ignored) => ignored.statement === line),
-    );
+    const unexpected = diff(from);
     if (unexpected.length > 0) {
       failed = true;
       process.stderr.write(`Drift (${label}):\n${unexpected.map((l) => `  ${l}`).join("\n")}\n`);

@@ -20,7 +20,7 @@ def raises(status: int) -> None:
 
 @app.get("/app-error")
 def app_error() -> None:
-    raise AppError("DOCUMENT_NOT_FOUND", {"id": "d-1", "count": 2})
+    raise AppError("DIRECTOR_PLAN_NOT_FOUND", {"id": "d-1", "count": 2})
 
 
 @app.get("/bug")
@@ -33,7 +33,7 @@ client = TestClient(app, raise_server_exceptions=False)
 
 def test_every_code_has_the_catalog_s_status() -> None:
     assert literal_values(ErrorCode) == set(STATUS)
-    assert AppError("DOCUMENT_NOT_FOUND").status == 404
+    assert AppError("DIRECTOR_PLAN_NOT_FOUND").status == 404
     assert AppError("AI_BUDGET_EXCEEDED").status == 429
 
 
@@ -42,9 +42,9 @@ def test_an_app_error_has_the_contract_s_shape() -> None:
     assert response.status_code == 404
     assert response.json() == {
         "defined": True,
-        "code": "DOCUMENT_NOT_FOUND",
+        "code": "DIRECTOR_PLAN_NOT_FOUND",
         "status": 404,
-        "message": "DOCUMENT_NOT_FOUND",
+        "message": "DIRECTOR_PLAN_NOT_FOUND",
         "data": {"params": {"id": "d-1", "count": 2}, "requestId": "r-1"},
     }
     ErrorResponse.model_validate(response.json())

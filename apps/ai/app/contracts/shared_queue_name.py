@@ -5,6 +5,4 @@ from typing import Annotated, Literal
 
 from pydantic import Field
 
-type SharedQueueName = Annotated[
-    Literal["ai-ingest", "ai-director"], Field(..., title="SharedQueueName")
-]
+type SharedQueueName = Annotated[Literal["ai-director"], Field(..., title="SharedQueueName")]

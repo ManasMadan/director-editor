@@ -1,6 +1,6 @@
 ---
 name: dependency-update
-description: Review, fix or land dependency updates (Renovate pull requests, the Bun catalog, the Expo SDK, images, actions, Helm charts, OpenTofu providers). Use when a Renovate PR fails CI, the user wants to upgrade a package or tool, or asks how dependencies are kept current.
+description: Review, fix or land dependency updates (Renovate pull requests, the Bun catalog, images, actions, Helm charts, OpenTofu providers). Use when a Renovate PR fails CI, the user wants to upgrade a package or tool, or asks how dependencies are kept current.
 ---
 
 # Dependency updates
@@ -28,13 +28,6 @@ digest, Helm charts, OpenTofu providers, and versions marked with a `# renovate:
   catalog entry and runs `bun install` to refresh `bun.lock`. By hand: edit the catalog
   entry, then `bun install`. Never give one workspace its own version of a catalog
   package.
-- **Expo SDK.** `expo`, `expo-*`, `@expo/*`, `react-native*`, `react`, `react-dom` and
-  their types are one group: the SDK decides the React Native and React versions. On
-  that branch run `bunx expo install --fix` inside `apps/mobile` (the one tool that must
-  run from its project folder), then `bun run --cwd apps/mobile doctor`
-  (expo-doctor). React is in the catalog, so web moves with it: if `expo install`
-  writes a version over a `"catalog:"` entry in `apps/mobile/package.json`, put that
-  version in the root catalog and restore `"catalog:"`.
 - **Playwright.** `@playwright/test`, `playwright` and the root `playwright-core` are
   one group, and Renovate reinstalls Playwright's skills in `.claude/skills` from the
   new version on that branch. By hand: run the commands `scripts/playwright.test.ts`

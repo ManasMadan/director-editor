@@ -17,8 +17,8 @@
  * its `discardAfter` (five minutes by default), so anything much older is a replay.
  *
  * Each event is stored once (webhooks.inbound_event is unique on `eventKey`), so a batch
- * Stalwart retries is harmless. Like Stripe's route: raw body, events and outbox rows in
- * one transaction, nothing processed here.
+ * Stalwart retries is harmless. Raw body, events and outbox rows in one transaction,
+ * nothing processed here: the notification service acts on the outbox event.
  */
 import { transaction } from "@repo/db";
 import type { Database } from "@repo/nest-common";

@@ -1,5 +1,5 @@
 import { ORPCError, ValidationError } from "@orpc/server";
-import type { ApiKeyId, OrgId, UserId } from "@repo/contracts/ids";
+import type { OrgId, UserId } from "@repo/contracts/ids";
 import { Prisma } from "@repo/db";
 import { AppError } from "@repo/nest-common";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -9,7 +9,6 @@ describe("who an organization-scoped call acts as", () => {
   it("hands routers branded ids, so a service can't get them swapped", () => {
     expectTypeOf<OrgCaller["orgId"]>().toEqualTypeOf<OrgId>();
     expectTypeOf<OrgCaller["userId"]>().toEqualTypeOf<UserId>();
-    expectTypeOf<OrgCaller["apiKeyId"]>().toEqualTypeOf<ApiKeyId | null>();
   });
 });
 
@@ -24,9 +23,9 @@ describe("errors from procedures", () => {
 
   it("logs a client error only at debug, and only when it has a cause", () => {
     const log = vi.fn();
-    toContractError(new AppError("TODO_NOT_FOUND"), log);
+    toContractError(new AppError("SHORT_NOT_FOUND"), log);
     expect(log).not.toHaveBeenCalled();
-    toContractError(new AppError("TODO_NOT_FOUND", { cause: new Error("row gone") }), log);
+    toContractError(new AppError("SHORT_NOT_FOUND", { cause: new Error("row gone") }), log);
     expect(log).toHaveBeenCalledWith(expect.any(AppError), "debug");
   });
 
@@ -70,8 +69,8 @@ describe("errors from procedures", () => {
 
   it("keeps an oRPC error with a catalog code, and its params", () => {
     const log = vi.fn();
-    const bare = toContractError(new ORPCError("TODO_NOT_FOUND", { status: 404 }), log);
-    expect(bare).toMatchObject({ code: "TODO_NOT_FOUND", status: 404, data: { params: {} } });
+    const bare = toContractError(new ORPCError("SHORT_NOT_FOUND", { status: 404 }), log);
+    expect(bare).toMatchObject({ code: "SHORT_NOT_FOUND", status: 404, data: { params: {} } });
     const withParams = toContractError(
       new ORPCError("RATE_LIMITED", { data: { params: { retryAfterSeconds: 3 } } }),
       log,

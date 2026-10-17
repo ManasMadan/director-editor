@@ -733,14 +733,7 @@ describe("CI's caches", () => {
     expect(base).toContain('"incremental": true');
     expect(base).toContain(`"tsBuildInfoFile": "\${configDir}/node_modules/.cache/tsc/`);
     const paths = String(cached(ci.jobs.types?.steps)[0]).split("\n").filter(Boolean);
-    for (const dir of [
-      "apps/*",
-      "packages/*",
-      "load",
-      "scripts",
-      ".claude/hooks",
-      "turbo/generators",
-    ]) {
+    for (const dir of ["apps/*", "packages/*", "scripts", ".claude/hooks", "turbo/generators"]) {
       expect(paths).toContain(`${dir}/node_modules/.cache/tsc`);
     }
   });
@@ -783,35 +776,6 @@ describe("ci.yml's images job", () => {
     const smoke = steps.findIndex((step) => step.name === "Smoke-test the image");
     expect(steps[smoke]?.run).toBe(`bun scripts/image-smoke.ts \${{ matrix.image }}`);
     expect(smoke).toBeGreaterThan(scan);
-  });
-});
-
-describe("the mobile app's release", () => {
-  const { jobs } = workflow("mobile.yml");
-  const eas = jobs.eas as Job;
-
-  // Not whether a newer Expo patch is out: the repository installs nothing younger than
-  // three days (bunfig.toml), so that check failed every pull request after each Expo
-  // release until it was old enough to take. Renovate's Expo group keeps them current.
-  it("checks the native dependencies' health in lint, which CI's lint job runs", async () => {
-    const mobile = JSON.parse(readFileSync(join(ROOT, "apps/mobile/package.json"), "utf8")) as {
-      scripts: Record<string, string>;
-    };
-    expect(mobile.scripts.lint).toBe("EXPO_DOCTOR_SKIP_DEPENDENCY_VERSION_CHECK=1 expo-doctor");
-    expect(mobile.scripts.doctor).toBe("expo-doctor");
-    const { STEPS } = await import("./lint");
-    expect(STEPS).toContainEqual(["bunx", "turbo", "run", "lint"]);
-    expect(workflow("ci.yml").jobs.lint?.steps?.map((s) => s.run)).toContain("bun run lint");
-  });
-
-  it("waits for the store builds and their submissions, so a failed one fails the run", () => {
-    const store = eas.steps?.find((s) => s.name === "Store builds, submitted for review");
-    expect(store?.run).toContain("eas build ");
-    expect(store?.run).toContain(" --wait");
-    expect(store?.run).not.toContain("--no-wait");
-    expect(String(eas["timeout-minutes"])).toBe(
-      `\${{ github.event.workflow_run.name == 'Release' && 150 || 30 }}`,
-    );
   });
 });
 
@@ -917,37 +881,6 @@ describe("uptime.yml", () => {
   });
 });
 
-describe("stripe.yml", () => {
-  const { on, jobs } = workflow("stripe.yml");
-  const steps = jobs.contract?.steps ?? [];
-
-  it("runs the fake's contract against Stripe weekly, with the key on that step alone", () => {
-    expect(Object.keys(on).sort()).toEqual(["schedule", "workflow_dispatch"]);
-    const test = steps.find((step) => step.run === "bunx vitest run src/contract.test.ts");
-    expect(test?.env).toEqual({
-      STRIPE_CONTRACT_SECRET_KEY: `\${{ secrets.STRIPE_CONTRACT_SECRET_KEY }}`,
-    });
-    expect(readFileSync(join(ROOT, "packages/fake-stripe/src/contract.test.ts"), "utf8")).toContain(
-      "process.env.STRIPE_CONTRACT_SECRET_KEY",
-    );
-  });
-
-  it("passes without the key, doing nothing but saying so", () => {
-    const after = steps.slice(2);
-    expect(after.length).toBeGreaterThan(0);
-    for (const step of after) {
-      expect(step.if).toBe("steps.key.outputs.present == 'true'");
-    }
-    expect(steps[1]?.run).toContain("::notice::STRIPE_CONTRACT_SECRET_KEY isn't set");
-  });
-
-  it("is documented with its secret", () => {
-    expect(readFileSync(join(ROOT, "docs/repository-settings.md"), "utf8")).toContain(
-      "`STRIPE_CONTRACT_SECRET_KEY`",
-    );
-  });
-});
-
 describe("tools CI downloads", () => {
   it("are checked against a pinned checksum, never installed unverified", () => {
     const dir = join(ROOT, ".github/workflows");
@@ -987,8 +920,8 @@ describe("the checks a merge waits for", () => {
     "kind.yml": "Kubernetes passed",
     "infra.yml": "Infrastructure passed",
   };
-  /** Jobs a gate leaves out on purpose: the nightly evals call real model providers. */
-  const NOT_GATED: Record<string, string[]> = { "ci.yml": ["evals"] };
+  /** Jobs a gate leaves out on purpose. */
+  const NOT_GATED: Record<string, string[]> = {};
   /** Runs on pull requests but never blocks one: optional, or started by a label. */
   const ADVISORY = ["claude-review.yml", "preview.yml"];
   const onPullRequests = readdirSync(join(ROOT, ".github/workflows")).filter(

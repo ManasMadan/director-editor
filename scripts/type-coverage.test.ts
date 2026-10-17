@@ -10,7 +10,7 @@ describe("type coverage", () => {
     const found = workspaces(join(import.meta.dir, ".."));
     expect(found).toContain("apps/api");
     expect(found).toContain("packages/nest-common");
-    expect(found).toEqual(expect.arrayContaining(["scripts", "load", "turbo/generators"]));
+    expect(found).toEqual(expect.arrayContaining(["scripts", "turbo/generators"]));
     expect(found).not.toContain("apps/ai");
     expect(found).not.toContain("packages/typescript-config");
   });

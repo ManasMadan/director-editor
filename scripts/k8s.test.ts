@@ -38,14 +38,8 @@ const healthy = (host: string, path: string) => {
   if (host === "files.localhost") {
     return new Response(null, { status: path === "/health" ? 200 : 404 });
   }
-  if (path === "/ai/mcp") {
-    return new Response(null, {
-      status: 401,
-      headers: { "www-authenticate": 'Bearer resource_metadata="http://localhost/.well-known/x"' },
-    });
-  }
-  if (path === "/webhooks/stripe") {
-    return new Response(null, { status: 405 });
+  if (path === "/webhooks/stalwart") {
+    return new Response(null, { status: 401 });
   }
   return new Response("ok");
 };
@@ -225,9 +219,7 @@ describe("the local cluster", () => {
       webhooks: secrets["director-editor-webhooks"],
       ai: secrets["director-editor-ai"],
     };
-    expect(api?.ENCRYPTION_KEYS).toMatch(/^k1:[\w+/]{43}=$/);
-    expect(webhooks?.ENCRYPTION_KEYS).toBe(api?.ENCRYPTION_KEYS as string);
-    expect(notifications?.UNSUBSCRIBE_SECRET).toBe(api?.UNSUBSCRIBE_SECRET as string);
+    expect(webhooks?.STALWART_WEBHOOK_SECRET).toMatch(/^[\w-]{43}$/);
     expect(ai?.AI_SERVICE_SECRET).toBe(api?.AI_SERVICE_SECRET as string);
     expect(notifications?.SMTP_URL).toMatch(
       /^smtps:\/\/no-reply%40director-editor\.localhost:[\w-]{22}@mailpit:1025$/,
@@ -237,7 +229,7 @@ describe("the local cluster", () => {
     expect(output).toContain("Docker has 8.0 GB of memory");
     expect(output).toContain("secrets (4 created)");
     expect(output).toContain("files: files.localhost/health → 200");
-    expect(output).toContain("AI MCP server: /ai/mcp → 401");
+    expect(output).toContain("api auth: /api/auth/ok → 200");
     expect(output).toContain("re-encryption: Re-encrypted 12 rows");
     expect(output).toContain("http://localhost");
 
@@ -386,7 +378,7 @@ describe("the local cluster", () => {
     );
     expect(await k8s(["smoke"], given)).toBe(0);
     expect(printed()).toContain("web: /healthz → 200");
-    expect(printed()).toContain("webhooks: /webhooks/stripe → 405");
+    expect(printed()).toContain("webhooks: /webhooks/stalwart → 401");
     expect(printed()).toContain("re-encryption: done");
   });
 
@@ -424,7 +416,7 @@ describe("the local cluster", () => {
       gateway: gateway(() => new Response(null, { status: 502 })),
     });
     await expect(k8s(["smoke"], wrong.given)).rejects.toThrow("exit 1");
-    expect(printed()).toContain("AI MCP server: /ai/mcp → 502");
+    expect(printed()).toContain("api: /api/v1/system → 502");
   });
 
   it("fails when re-encryption can't start or fails, with its logs", async () => {
@@ -440,13 +432,13 @@ describe("the local cluster", () => {
         return { stdout: ",1" };
       }
       if (/ logs job\//.test(line)) {
-        return { stdout: "ENCRYPTION_KEYS is malformed\n" };
+        return { stdout: "BETTER_AUTH_SECRETS is malformed\n" };
       }
       return undefined;
     });
     await expect(k8s(["smoke"], failed.given)).rejects.toThrow("exit 1");
     expect(printed()).toMatch(/re-encryption: job reencrypt-\d+ failed/);
-    expect(printed()).toContain("ENCRYPTION_KEYS is malformed");
+    expect(printed()).toContain("BETTER_AUTH_SECRETS is malformed");
   });
 
   it("deletes the cluster", async () => {

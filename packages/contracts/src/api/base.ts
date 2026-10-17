@@ -3,7 +3,7 @@
  * with (COMMON_ERRORS: authentication, validation, limits, the server refusing the
  * request); each contract module adds the codes its own procedures throw with
  * `.errors(errorsOf(...))`. So a client gets the union of codes a call can fail with
- * (`isDefinedError(error) && error.code === "TODO_NOT_FOUND"`), the OpenAPI document
+ * (`isDefinedError(error) && error.code === "SHORT_NOT_FOUND"`), the OpenAPI document
  * lists only those per operation, and every surface returns the same structure. The API
  * refuses, outside production, to answer a code a procedure didn't declare.
  * Procedures also carry metadata (ProcedureMeta): which API key scope lets a key call
@@ -12,7 +12,6 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 import { ERROR_CODES, type ErrorCode, errorCode } from "../errors";
-import type { ApiKeyScope } from "./scopes";
 
 /** One field's problem in a VALIDATION_FAILED error: where, and a code the client translates. */
 export const errorIssue = z.object({
@@ -75,10 +74,7 @@ export const COMMON_ERRORS = [
   "TIMEOUT",
 ] as const satisfies readonly ErrorCode[];
 
-/**
- * What a call in a workspace adds: none active. A module with procedures API keys may
- * call adds API_KEY_SCOPE_MISSING too, for a key without the scope.
- */
+/** What a call in a workspace adds: none active. */
 export const WORKSPACE_ERRORS = ["NO_ACTIVE_ORGANIZATION"] as const satisfies readonly ErrorCode[];
 
 /**
@@ -101,8 +97,6 @@ export interface RateLimit {
 
 /** Metadata every procedure can carry (read by the API's request pipeline). */
 export interface ProcedureMeta {
-  /** Lets API keys with this scope call the procedure. */
-  apiKeyScope?: ApiKeyScope;
   /**
    * The procedure's rate limit, or why it has none. Every procedure that changes
    * something (any method but GET) needs one or the other; a test checks it.

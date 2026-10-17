@@ -7,33 +7,12 @@
 // hide rows from the cascade. Rows a user created point at them with SET NULL: a
 // member leaving doesn't delete the team's data.
 
-/// Example tenant-owned model. Replace with your own; keep the org_id + RLS pattern.
-model Todo {
-  id          String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  orgId       String   @map("org_id") @db.Uuid
-  createdById String?  @map("created_by_id") @db.Uuid
-  title       String   @db.VarChar(200)
-  completed   Boolean  @default(false)
-  /// Optimistic concurrency: updates must match the version they read.
-  version     Int      @default(1)
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
-
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  createdBy    User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
-
-  @@index([orgId, id(sort: Desc)])
-  @@index([createdById])
-  @@map("todo")
-  @@schema("app")
-}
-
 /// Domain events written in the same transaction as the change that caused them, then
 /// relayed to queues by apps/worker (transactional outbox). Rows are kept for the
 /// retention window so consumers can be replayed.
 model AppOutboxEvent {
   id          String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  /// Versioned event name from packages/contracts events, e.g. "todo.completed.v1".
+  /// Versioned event name from packages/contracts events, e.g. "auth.signed_up.v1".
   name        String
   /// Ordering/partition key for future brokers (usually the aggregate id).
   key         String

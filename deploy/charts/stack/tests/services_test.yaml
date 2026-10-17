@@ -66,9 +66,9 @@ tests:
             demo sha-abc123 is deployed at https://app.example.com.
 
             Services:
-              ai (/ai/mcp, /.well-known/oauth-protected-resource/ai/mcp)
+              ai
               ai-worker
-              api (/api, /docs, /rpc, /.well-known/oauth-authorization-server/api/auth, /.well-known/openid-configuration/api/auth, /.well-known/oauth-protected-resource/api/mcp)
+              api (/api, /docs, /rpc)
               notifications
               web (/)
               webhooks (/webhooks)

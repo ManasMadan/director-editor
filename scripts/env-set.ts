@@ -1,8 +1,8 @@
 /**
  * Sets one variable in .env without printing the file.
  *
- *   bun run env:set STRIPE_SECRET_KEY=sk_test_...
- *   echo "sk_test_..." | bun run env:set STRIPE_SECRET_KEY   # value from stdin, not argv
+ *   bun run env:set GOOGLE_API_KEY=AIza...
+ *   echo "AIza..." | bun run env:set GOOGLE_API_KEY   # value from stdin, not argv
  *
  * Claude is not allowed to read .env (it holds secrets), so this is how a prompt like
  * "use my Stripe test key" gets applied.

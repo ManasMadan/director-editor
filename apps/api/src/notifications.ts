@@ -1,5 +1,5 @@
 /**
- * The API's producer for time-critical notifications (sign-in codes, invitations).
+ * The API's producer for time-critical notifications (sign-in codes).
  * It reuses the service's Redis connection and is closed on shutdown so no job is lost
  * mid-write.
  */
@@ -24,7 +24,7 @@ export function requestNotification(
 }
 
 export const CRITICAL_NOTIFICATIONS = Symbol("CRITICAL_NOTIFICATIONS");
-export const InjectCriticalNotifications = () => Inject(CRITICAL_NOTIFICATIONS);
+const InjectCriticalNotifications = () => Inject(CRITICAL_NOTIFICATIONS);
 export type CriticalNotifications = Producer<"notifications-critical">;
 
 class ProducerLifecycle implements OnApplicationShutdown {

@@ -117,36 +117,3 @@ export async function rateLimit(path: string, body: unknown) {
   }
   throw new Error(`${path} was never rate limited`);
 }
-
-/**
- * A shared workspace owned by `owner` (signed in on the page), with `member` invited to
- * it as `role` and joined. Leaves `member` signed in with the workspace active.
- */
-export async function sharedWorkspace(
-  owner: User,
-  member: User,
-  role: "member" | "admin" = "member",
-) {
-  await auth("/sign-in/email", { email: owner.email, password: owner.password });
-  const workspace = await auth<{ id: string; name: string }>("/organization/create", {
-    name: `Team ${crypto.randomUUID().slice(0, 6)}`,
-    slug: `team-${crypto.randomUUID().slice(0, 8)}`,
-  });
-  await auth("/organization/set-active", { organizationId: workspace.id });
-  await auth("/organization/invite-member", {
-    email: member.email,
-    role,
-    organizationId: workspace.id,
-  });
-  const { acceptUrl } = await commands.takeNotification<{ acceptUrl: string }>(
-    "org.invitation",
-    member.email,
-  );
-  await signOut();
-  await auth("/sign-in/email", { email: member.email, password: member.password });
-  await auth("/organization/accept-invitation", {
-    invitationId: acceptUrl.split("/").at(-1),
-  });
-  await auth("/organization/set-active", { organizationId: workspace.id });
-  return workspace;
-}

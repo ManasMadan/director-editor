@@ -14,8 +14,8 @@ test("add a passkey, then sign in with it (no password)", async ({ page, context
   await signOut(page, user);
   await page.goto("/sign-in");
   await page.getByRole("button", { name: "Sign in with a passkey" }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
-  await expect(page.getByRole("heading", { name: `Hi ${user.name}` })).toBeVisible();
+  await expect(page).toHaveURL(/\/library/);
+  await expect(page).toHaveTitle("Library · Director");
 });
 
 test("dismissing the passkey prompt on sign-in says so", async ({ page, context }) => {

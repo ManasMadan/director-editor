@@ -47,14 +47,14 @@ export function SignInPage() {
     }
     // With two-step verification on, the auth client continues on /two-factor instead.
     if (!(data && "twoFactorRedirect" in data && data.twoFactorRedirect)) {
-      done(data);
+      done();
     }
   }
 
   async function signInWithPasskey() {
     const result = await authClient.signIn.passkey();
     if (!result?.error) {
-      done(result?.data);
+      done();
     } else {
       toast.error(errorMessage(result.error));
     }

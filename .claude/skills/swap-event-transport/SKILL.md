@@ -21,11 +21,8 @@ disable-model-invocation: true
    a crash). Bind it in `outbox.module.ts`. The relay, `emitEvent` and every producer
    stay as they are.
 2. Consumers are what move. Each is a BullMQ `@Processor` on an `events-*` queue today:
-   `events-audit` (`apps/worker/src/audit/audit.processor.ts`), `events-realtime`
-   (`apps/worker/src/realtime/realtime.processor.ts`), `events-webhooks`
-   (`apps/webhooks/src/outbound/fanout.processor.ts`), `events-notifications`
-   (`apps/notifications/src/events/events.processor.ts`), `events-billing`
-   (`apps/api/src/modules/billing/billing-events.processor.ts`). Each becomes a consumer
+   `events-audit` (`apps/worker/src/audit/audit.processor.ts`) and `events-notifications`
+   (`apps/notifications/src/events/events.processor.ts`). Each becomes a consumer
    group applying its `eventSubscribers` filter itself, still deduping on the event id.
    Moving one consumer at a time works if the bus publishes to both for a while.
 3. The broker's address in `apps/worker/src/env.ts` and each consumer's `src/env.ts`,

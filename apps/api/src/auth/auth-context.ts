@@ -3,9 +3,8 @@
  * dependencies, and the few helpers the hooks and plugins all use to audit changes and
  * pick an email's language.
  */
-import type { Entitlements } from "@repo/contracts/billing";
 import type { EventName, EventPayload } from "@repo/contracts/events";
-import { type OrgId, type UserId, userIdSchema } from "@repo/contracts/ids";
+import { type UserId, userIdSchema } from "@repo/contracts/ids";
 import { type Db, transaction } from "@repo/db";
 import { isLocale, type Locale, negotiateLocale } from "@repo/i18n";
 import type { Producer } from "@repo/jobs";
@@ -24,11 +23,6 @@ export interface AuthDependencies {
   redis: Redis;
   notifications: Pick<Producer<"notifications-critical">, "add">;
   memberships: Memberships;
-  /** Plan limits and cancelling a deleted organization's subscription (modules/billing). */
-  billing: {
-    entitlements(orgId: OrgId): Promise<Entitlements>;
-    cancelFor(orgId: OrgId): Promise<void>;
-  };
   /** Where better-auth stores its rows; Postgres through Prisma unless given (auth.cli.ts). */
   database?: BetterAuthOptions["database"];
 }
@@ -47,8 +41,8 @@ export interface AuthContext extends Omit<AuthDependencies, "database"> {
   actor(fallback: UserId): UserId;
   /**
    * A membership ended: removed by an admin, left, or gone with the account. The cached
-   * role is forgotten so access ends on the next request, and the event audits it and
-   * resyncs the plan's seats. better-auth runs afterRemoveMember only for removals, so
+   * role is forgotten so access ends on the next request, and the event audits it.
+   * better-auth runs afterRemoveMember only for removals, so
    * leaving (the after hook) and account deletion (afterDelete) call this too.
    */
   memberRemoved(member: RemovedMember, actorId: UserId): Promise<void>;

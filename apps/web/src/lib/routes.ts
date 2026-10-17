@@ -3,25 +3,22 @@
  * APP_PATHS need a session; GUEST_PATHS are pointless with one.
  */
 export const APP_PATHS = [
-  "/dashboard",
   "/settings",
-  "/invitations",
-  "/notifications",
-  "/assistant",
-  // Director: the Shorts feed and filming one.
-  "/home",
+  // Director: the library of Shorts to film, and filming one.
+  "/library",
   "/shorts",
   "/saved",
   "/director",
-  // Approving an app's OAuth request.
-  "/oauth",
 ];
 
 /**
  * Full-screen pages that bring their own chrome (the YouTube-style feed and Director's
  * camera), so the site header and the page column stay out of their way.
  */
-export const IMMERSIVE_PATHS = ["/home", "/shorts", "/saved", "/director"];
+export const IMMERSIVE_PATHS = ["/library", "/shorts", "/saved", "/director"];
+
+/** Where a signed-in person lands: after signing in, and from the site's own links. */
+export const HOME_PATH = "/library";
 export const GUEST_PATHS = [
   "/sign-in",
   "/sign-up",
@@ -29,14 +26,6 @@ export const GUEST_PATHS = [
   "/forgot-password",
   "/reset-password",
 ];
-
-/**
- * A page opened by an app's OAuth request carries it signed (client_id … sig). The
- * authorization server may send a signed-in user to sign in again (the app asked for
- * `prompt=login`), so auth pages stay reachable with one.
- */
-export const isOAuthRequest = (params: URLSearchParams) =>
-  params.has("client_id") && params.has("sig");
 
 export const matchesPath = (pathname: string, prefixes: string[]) =>
   prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));

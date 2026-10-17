@@ -16,22 +16,22 @@ The web app renders and nothing else: data comes from `@repo/client` hooks, text
 2. **Module.** `apps/web/src/modules/<feature>/pages/<page>.tsx` (a client component
    when it uses hooks: `"use client"`), its parts in `components/`, and the page exported
    from `apps/web/src/modules/<feature>/index.ts`. Copy the shape of
-   `apps/web/src/modules/dashboard/`.
+   `apps/web/src/modules/shorts/`.
 3. **Route.** `apps/web/src/app/(app)/<route>/page.tsx` for signed-in pages (or
-   `(auth)` for sign-in flows), two lines like `apps/web/src/app/(app)/dashboard/page.tsx`:
+   `(auth)` for sign-in flows), two lines like `apps/web/src/app/(app)/saved/page.tsx`:
    `export const generateMetadata = pageTitle("<namespace>.<key>")` and
    `export default <Page>`. Dynamic segments use `PageProps<"/route/[id]">` and
    `await params`.
 4. **Access.** A new top-level signed-in path goes in `APP_PATHS` in
    `apps/web/src/lib/routes.ts`, or the proxy won't send signed-out users to sign in.
    Links in the header or settings navigation: `apps/web/src/modules/shell/` or
-   `apps/web/src/app/(app)/settings/layout.tsx`.
+   `apps/web/src/modules/settings/pages/settings-layout.tsx`.
 5. **Text.** Every string, including `aria-label`, `alt`, placeholders and the page title,
-   in every `packages/i18n/messages/*.json` (the add-translation skill). Errors render as
+   in `packages/i18n/messages/en.json` (the add-translation skill). Errors render as
    `t(errorMessageKey(error), errorParams(error))`.
-6. **Forms.** Validate with the contract's input schema, as
-   `apps/web/src/modules/dashboard/components/todo-list.tsx` does; shared fields are in
-   `apps/web/src/components/form-fields.tsx`.
+6. **Forms.** Validate with a zod schema from the contract or `@repo/client`'s shared
+   rules, as `apps/web/src/modules/settings/components/profile-card.tsx` does; shared
+   fields are in `apps/web/src/components/form-fields.tsx`.
 7. **Weight.** Server components for static content; lazy-load heavy client code.
 8. **Tests.** Pure hooks and helpers as `src/**/*.test.ts`. The user flow as a
    Playwright spec in `apps/web/e2e/<feature>.spec.ts`, with the helpers in

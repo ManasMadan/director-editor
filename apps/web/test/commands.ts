@@ -13,7 +13,6 @@ import pg from "pg";
 import type { CDPSession, Page, Request, Route } from "playwright";
 import type { BrowserCommand } from "vitest/node";
 // The API's own token format (a relative import: nest-common's entry pulls in Nest).
-import { createSignedTokens } from "../../../packages/nest-common/src/signed-token";
 import { createStorage } from "../../../packages/nest-common/src/storage";
 import { API, REDIS_URL, SITE, services } from "./services";
 import { FAKE_TURNSTILE } from "./turnstile";
@@ -27,7 +26,7 @@ const turnstileModes = new WeakMap<Page, "fake" | "blocked" | "empty" | "held">(
 /**
  * Every test starts signed out, from a client IP of its own (the API rate-limits auth
  * per IP and trusts X-Forwarded-For from loopback), with full-page navigations caught:
- * the test page would otherwise leave for the sign-in page or Stripe's checkout. They
+ * the test page would otherwise leave for the sign-in page. They
  * are answered 204 No Content, which browsers treat as "stay where you are".
  */
 const startTest: BrowserCommand<[]> = async ({ page, context }) => {
@@ -155,18 +154,16 @@ async function sqlRows<T>(query: string, params: unknown[] = []) {
 const takenRequests = new Set<string>();
 
 /**
- * The data of the notification the API queued for `address` (an email or a phone
- * number): a one-time code, an invitation, a security alert. Waits up to five seconds.
+ * The data of the email the API queued for `address`: a one-time code or a security
+ * alert. Waits up to five seconds.
  */
 const takeNotification: BrowserCommand<[template: string, address: string]> = async (
   _context,
   template,
   address,
 ) => {
-  const matches = (payload: NotificationPayload) => {
-    const to = payload.to as { email?: string; phone?: string };
-    return payload.template === template && (to.email === address || to.phone === address);
-  };
+  const matches = (payload: NotificationPayload) =>
+    payload.template === template && payload.to.email === address;
   // The prefix @repo/jobs gives every queue (queuePrefix).
   const critical = new Queue("notifications-critical", {
     connection: { url: REDIS_URL },
@@ -248,17 +245,6 @@ const turnstile: BrowserCommand<[mode: "fake" | "blocked" | "empty" | "held"]> =
   turnstileModes.set(page, mode);
 };
 
-/** Grants (or clears) a browser permission such as notifications for the test page. */
-const grantPermissions: BrowserCommand<[permissions: string[]]> = async (
-  { context },
-  permissions,
-) => {
-  await context.clearPermissions();
-  if (permissions.length) {
-    await context.grantPermissions(permissions);
-  }
-};
-
 /** The code an authenticator app shows for `secret` now. */
 const totp: BrowserCommand<[secret: string]> = (_context, secret) => totpCode(secret);
 
@@ -296,17 +282,6 @@ const editSession: BrowserCommand<
 /** The page's session signed in three hours ago: "sudo mode" actions need a new sign-in. */
 const ageSession: BrowserCommand<[]> = (context) =>
   editSession(context, { createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString() });
-
-/** The signed link an email's "Unsubscribe" carries (UNSUBSCRIBE_SECRET, as the API has it). */
-const unsubscribeToken: BrowserCommand<[userId: string, category: string]> = (
-  _context,
-  userId,
-  category,
-) =>
-  createSignedTokens(process.env.UNSUBSCRIBE_SECRET as string).sign("unsubscribe", [
-    userId,
-    category,
-  ]);
 
 /**
  * Signs the user in on another device (a request from Node with that device's user
@@ -402,19 +377,6 @@ const publishRealtime: BrowserCommand<[channel: string, message: { type: string 
   }
 };
 
-/** Calls one of the fake Stripe's test hooks (`/__fake/...`) and returns its answer. */
-const fakeStripe: BrowserCommand<[path: string, method?: string]> = async (
-  _context,
-  path,
-  method = "GET",
-) => {
-  const response = await fetch(`${(await services()).stripeUrl}${path}`, { method });
-  if (!response.ok) {
-    throw new Error(`the fake Stripe answered ${path} with ${response.status}`);
-  }
-  return response.json();
-};
-
 /**
  * What apps/worker does with an upload once it has checked it (it isn't running here):
  * accepted, the bytes leave quarantine and the file is ready; refused, it says why.
@@ -468,13 +430,11 @@ export const commands = {
   answeredRequests,
   checkUpload,
   fakeDirector,
-  fakeStripe,
   publishRealtime,
   editSession,
   storageCors,
   refuseNextPut,
   signInElsewhere,
-  unsubscribeToken,
   ageSession,
   requestHeaders,
   failRequests,
@@ -486,13 +446,11 @@ export const commands = {
   sql,
   virtualAuthenticator,
   turnstile,
-  grantPermissions,
 };
 
 declare module "vitest/browser" {
   interface BrowserCommands {
     answeredRequests(part: string): Promise<number>;
-    fakeStripe<T = unknown>(path: string, method?: string): Promise<T>;
     checkUpload(fileId: string, rejectReason?: string): Promise<void>;
     fakeDirector(
       videoId: string,
@@ -507,7 +465,6 @@ declare module "vitest/browser" {
       userAgent: string,
       options?: { withoutIp?: boolean },
     ): Promise<void>;
-    unsubscribeToken(userId: string, category: string): Promise<string>;
     ageSession(): Promise<void>;
     editSession(
       fields: Record<string, unknown>,
@@ -523,6 +480,5 @@ declare module "vitest/browser" {
     sql<T = Record<string, unknown>>(query: string, params?: unknown[]): Promise<T[]>;
     virtualAuthenticator(options?: { verified?: boolean }): Promise<void>;
     turnstile(mode: "fake" | "blocked" | "empty" | "held"): Promise<void>;
-    grantPermissions(permissions: string[]): Promise<void>;
   }
 }

@@ -50,28 +50,8 @@ export function newUserFields<
   };
 }
 
-/** Where the mobile sign-in redirect (/expo-authorization-proxy) may send people. */
-const PROVIDER_ORIGINS = new Set(["https://accounts.google.com"]);
-
-/** A hook's request body and query: better-auth types them `any`; read them as unknown. */
-const requestOf = (ctx: { body?: unknown; query?: unknown }) => ({
-  body: ctx.body,
-  query: ctx.query,
-});
-
-/**
- * The mobile app's sign-in goes through this redirect; left alone it sends anyone
- * anywhere over https from our own domain (phishing, planted OAuth state).
- */
-function checkAuthorizationProxy(query: unknown) {
-  const target = String(fieldOf(query, "authorizationURL") ?? "");
-  if (!URL.canParse(target) || !PROVIDER_ORIGINS.has(new URL(target).origin)) {
-    throw new APIError("BAD_REQUEST", {
-      message: "Not a sign-in provider's address.",
-      code: "INVALID_REDIRECT",
-    });
-  }
-}
+/** A hook's request body: better-auth types it `any`; read it as unknown. */
+const requestOf = (ctx: { body?: unknown }) => ({ body: ctx.body });
 
 /**
  * The audit entry and the alert in one transaction: both or neither, and the alert leaves
@@ -80,7 +60,7 @@ function checkAuthorizationProxy(query: unknown) {
 async function sendSecurityAlert(
   { db, env, localeFor }: AuthContext,
   alert: SecurityAlert,
-  account: { id: string; phoneNumber: string | null },
+  account: { id: string },
   headers: Headers | undefined,
 ) {
   const userId = userIdOf(account);
@@ -95,11 +75,7 @@ async function sendSecurityAlert(
       userId,
       {
         template: "auth.security-alert",
-        to: {
-          email: alert.email,
-          locale,
-          ...(account.phoneNumber && { phone: account.phoneNumber }),
-        },
+        to: { email: alert.email, locale },
         data: {
           event: alert.event,
           ...("newEmail" in alert && alert.newEmail && { newEmail: alert.newEmail }),
@@ -120,9 +96,6 @@ export function requestHooks(context: AuthContext) {
   const { db, emailLimits, accountLimits, memberRemoved } = context;
   return {
     before: createAuthMiddleware(async (ctx) => {
-      if (ctx.path === "/expo-authorization-proxy") {
-        checkAuthorizationProxy(requestOf(ctx).query);
-      }
       // Invitation emails go out in the background, too late to refuse; so the limit is
       // taken here, for new invitations and resends alike.
       if (ctx.path === "/organization/invite-member") {
@@ -159,7 +132,7 @@ export function requestHooks(context: AuthContext) {
         // The change succeeded, so its account exists.
         const account = await db.user.findUniqueOrThrow({
           where: ctx.context.session ? { id: ctx.context.session.user.id } : { email: alert.email },
-          select: { id: true, phoneNumber: true },
+          select: { id: true },
         });
         await sendSecurityAlert(context, alert, account, ctx.headers);
       } catch (error) {
@@ -323,7 +296,7 @@ type DeleteUser = NonNullable<NonNullable<BetterAuthOptions["user"]>["deleteUser
  * without an owner, so that blocks deletion until ownership is handed over.
  */
 export function accountDeletion(context: AuthContext): DeleteUser {
-  const { db, billing, leavingWithAccount, memberRemoved } = context;
+  const { db, leavingWithAccount, memberRemoved } = context;
   return {
     enabled: true,
     beforeDelete: async (user) => {
@@ -334,10 +307,6 @@ export function accountDeletion(context: AuthContext): DeleteUser {
         select: { id: true, userId: true, role: true, organizationId: true },
       });
       leavingWithAccount.set(userId, removedMemberSchema.array().parse(shared));
-      // Nothing may keep charging for a workspace that's going away.
-      for (const organizationId of soleMember) {
-        await billing.cancelFor(organizationId);
-      }
       await transaction(db, async (tx) => {
         await tx.organization.deleteMany({ where: { id: { in: soleMember } } });
         for (const organizationId of soleMember) {

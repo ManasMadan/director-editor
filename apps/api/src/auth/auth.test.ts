@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { passkeyOrigins } from "./auth";
 import { newUserFields } from "./auth-hooks";
 
 const headers = (values: Record<string, string>) => new Headers(values);
@@ -17,16 +16,18 @@ describe("a new account's row", () => {
     expect(newUserFields({ name: `  ${"a".repeat(200)}  ` }, null).name).toHaveLength(100);
   });
 
-  it("takes the locale asked for, else the browser's", () => {
-    expect(newUserFields({ name: "A", locale: "es" }, null).locale).toBe("es");
-    const browser = { path: "/sign-up/email", headers: headers({ "accept-language": "es-MX" }) };
-    expect(newUserFields({ name: "A", locale: "" }, browser).locale).toBe("es");
+  it("takes the locale asked for, else the browser's, else English", () => {
+    expect(newUserFields({ name: "A", locale: "en" }, null).locale).toBe("en");
+    const browser = { path: "/sign-up/email", headers: headers({ "accept-language": "en-GB" }) };
+    expect(newUserFields({ name: "A", locale: "" }, browser).locale).toBe("en");
+    // A language the app doesn't have, asked for or from the browser.
+    expect(newUserFields({ name: "A", locale: "es" }, null).locale).toBe("en");
     expect(
       newUserFields(
         { name: "A" },
-        { headers: headers({ "x-locale": "es", "accept-language": "en" }) },
+        { headers: headers({ "x-locale": "es", "accept-language": "es-MX" }) },
       ).locale,
-    ).toBe("es");
+    ).toBe("en");
     expect(newUserFields({ name: "A" }, undefined).locale).toBe("en");
   });
 
@@ -35,31 +36,5 @@ describe("a new account's row", () => {
       "Asia/Kolkata",
     );
     expect(newUserFields({ name: "A", timezone: "Mars/Olympus" }, null).timezone).toBe("UTC");
-  });
-});
-
-describe("passkeys", () => {
-  const site = {
-    WEB_URL: "https://app.example.com",
-    APP_ORIGINS: [],
-    ANDROID_CERT_FINGERPRINTS: [],
-  };
-
-  it("come from the site, and from the Android app signed with each certificate", () => {
-    // The certificate's SHA-256 as Credential Manager reports it: base64url, unpadded
-    // (these 0xFF bytes would be "//…8=" in plain base64).
-    const certificate = Array.from({ length: 32 }, () => "FF").join(":");
-    expect(passkeyOrigins({ ...site, ANDROID_CERT_FINGERPRINTS: [certificate] })).toEqual([
-      "https://app.example.com",
-      `android:apk-key-hash:${"_".repeat(42)}8`,
-    ]);
-    expect(passkeyOrigins(site)).toEqual(["https://app.example.com"]);
-  });
-
-  it("come from the product's other origins too (the mobile app's web build)", () => {
-    expect(passkeyOrigins({ ...site, APP_ORIGINS: ["http://localhost:3005"] })).toEqual([
-      "https://app.example.com",
-      "http://localhost:3005",
-    ]);
   });
 });

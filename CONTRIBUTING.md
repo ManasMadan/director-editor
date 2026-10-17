@@ -46,7 +46,7 @@ fixes for what usually goes wrong.
 4. Open a pull request. It's squash-merged, so its title becomes the one commit on
    master and follows
    [Conventional Commits](https://www.conventionalcommits.org) with a workspace scope:
-   `feat(api): add todo sharing`, `fix(web): keep the draft on reload`. The scopes are in
+   `feat(api): add take sharing`, `fix(web): keep the draft on reload`. The scopes are in
    `commitlint.config.ts`. `feat` and `fix` end up in the changelog and the next version.
 
 The branch must be up to date with master ("Update branch" on the pull request does it)

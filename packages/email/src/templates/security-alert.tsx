@@ -7,18 +7,11 @@ type SecurityEventName =
   | "password-reset"
   | "two-factor-enabled"
   | "two-factor-disabled"
-  | "passkey-added"
-  | "phone-added"
-  | "phone-removed"
-  | "app-connected"
-  | "api-key-created"
-  | "webhook-endpoint-created";
+  | "passkey-added";
 
 export interface SecurityAlertEmailProps extends LocalizedProps {
   event: SecurityEventName;
   newEmail?: string | undefined;
-  /** What was created: an API key's name or a webhook endpoint's URL. */
-  label?: string | undefined;
   securityUrl: string;
 }
 
@@ -31,7 +24,6 @@ export default function SecurityAlertEmail({
   t,
   event,
   newEmail,
-  label,
   securityUrl,
 }: SecurityAlertEmailProps) {
   return (
@@ -40,7 +32,7 @@ export default function SecurityAlertEmail({
         {t(`email.securityAlert.${event}.subject`)}
       </Heading>
       <Text style={{ color: "#444", fontSize: 15 }}>
-        {t(`email.securityAlert.${event}.body`, { newEmail: newEmail ?? "", label: label ?? "" })}
+        {t(`email.securityAlert.${event}.body`, { newEmail: newEmail ?? "" })}
       </Text>
       <Text style={{ color: "#444", fontSize: 15 }}>{t("email.securityAlert.notYou")}</Text>
       <Button

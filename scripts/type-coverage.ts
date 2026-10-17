@@ -1,6 +1,6 @@
 /**
  * No `any` and no casts in the source: type-coverage in its strict mode, for every
- * TypeScript workspace and the repo's own scripts, load test and code generators, at 100%. An `any` turns off checking for everything that flows
+ * TypeScript workspace and the repo's own scripts and code generators, at 100%. An `any` turns off checking for everything that flows
  * from it (a JSON body, a job's data, a library's generic left at its default), and a
  * type assertion or a non-null `!` is a claim the compiler can't check, so each becomes
  * a parse, a type guard, a check that throws (`required` in @repo/contracts/objects) or
@@ -29,8 +29,7 @@ const IGNORED = [
 
 /**
  * Every workspace with its own tsconfig (the Python service and config packages have
- * none), and the other TypeScript the repo runs: its scripts, the load test and the code
- * generators.
+ * none), and the other TypeScript the repo runs: its scripts and the code generators.
  */
 export function workspaces(root = ROOT): string[] {
   return [
@@ -38,7 +37,6 @@ export function workspaces(root = ROOT): string[] {
       readdirSync(join(root, dir)).map((name) => `${dir}/${name}`),
     ),
     "scripts",
-    "load",
     "turbo/generators",
   ].filter((path) => existsSync(join(root, path, "tsconfig.json")));
 }

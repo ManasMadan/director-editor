@@ -11,12 +11,6 @@ const ROOT = join(import.meta.dir, "..");
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 
 describe("a tool pinned in two places", () => {
-  it("is the same Node in .nvmrc (CI) and eas.json (EAS's builds), to the patch", () => {
-    const eas = JSON.parse(read("apps/mobile/eas.json")) as { build: { base: { node: string } } };
-    expect(read(".nvmrc").trim()).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(read(".nvmrc").trim()).toBe(eas.build.base.node);
-  });
-
   it("is the same uv in CI's setup action and the devcontainer", () => {
     const setup = /astral-sh\/setup-uv@[\s\S]*?\n\s+version: (\S+)/.exec(
       read(".github/actions/setup/action.yml"),
@@ -97,7 +91,7 @@ describe("every pinned version", () => {
 
   it("is found where they're written", () => {
     const names = pins.map((pin) => `${pin.path}: ${pin.line}`);
-    for (const pin of ["diff-cover@", "squawk-cli@", "postgres-mcp@", "mcp==", "eas-version:"]) {
+    for (const pin of ["diff-cover@", "squawk-cli@", "postgres-mcp@", "mcp=="]) {
       expect(names.some((name) => name.includes(pin))).toBe(true);
     }
   });
@@ -161,9 +155,7 @@ describe("the Playwright image", () => {
 
   it("is the version every package declares Playwright at", () => {
     type Deps = Record<string, string> | undefined;
-    const files = ["", "apps/web/", "apps/mobile/", "packages/ui/"].map(
-      (dir) => `${dir}package.json`,
-    );
+    const files = ["", "apps/web/", "packages/ui/"].map((dir) => `${dir}package.json`);
     const manifests = files.map(
       (file) =>
         JSON.parse(read(file)) as {

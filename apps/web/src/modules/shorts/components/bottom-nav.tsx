@@ -5,9 +5,10 @@ import { House, Library, Play } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { HOME_PATH } from "@/lib/routes";
 
 const TABS = [
-  { href: "/home", label: "home", icon: House },
+  { href: HOME_PATH, label: "home", icon: House },
   { href: "/shorts", label: "shorts", icon: Play },
   { href: "/saved", label: "saved", icon: Library },
 ] as const;

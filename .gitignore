@@ -44,8 +44,8 @@ __pycache__
 .claude/worktrees/
 CLAUDE.local.md
 
-# Session cookies of the load-test users (apps/api/src/load-users.ts).
-load/.sessions.json
+# Session cookies of the fuzzing's users (apps/api/src/load-users.ts).
+.fuzz/sessions.json
 # Schemathesis's record of the failures it found (scripts/fuzz.ts), for `st replay`.
 .schemathesis/
 
