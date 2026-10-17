@@ -76,6 +76,10 @@ spec:
                   echo "SMTP_PASSWORD must be letters, digits and ._~- only (it goes into SMTP_URL)" >&2
                   exit 1 ;;
               esac
+              # A node reboot restarts this pod in place, its scratch volume and the last
+              # provisioning's markers intact: clear them so it provisions from the start
+              # again, as a new pod would (applying the plan twice changes nothing).
+              rm -f /run/provision/applied /run/provision/stopped
               sed "s/@SMTP_PASSWORD@/$SMTP_PASSWORD/g" /etc/stalwart/plan.ndjson > /run/provision/plan.ndjson
               cp /usr/local/bin/stalwart /run/provision/stalwart
           env:
