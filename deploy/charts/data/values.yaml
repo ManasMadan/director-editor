@@ -119,9 +119,10 @@ storage:
     # and presigned URLs), e.g. files.example.com: it must be one of the gateway's hosts.
     host: ""
     scheme: https
-    # Whether Cloudflare proxies the host (external-dns's record). Off for a host deeper
-    # than one level under the zone, which the free edge certificate doesn't cover: the
-    # gateway then serves it directly (the platform config's gateway.directZone).
+    # Whether Cloudflare proxies the host, through external-dns's record. Off for a host
+    # deeper than one level under the zone, which the free edge certificate doesn't
+    # cover: OpenTofu's DNS-only wildcard for the direct zone names it, and the gateway
+    # serves it with its own certificate (the platform config's gateway.directZone).
     proxied: true
     # Origins allowed to PUT and GET with presigned URLs (the site's).
     corsOrigins: []

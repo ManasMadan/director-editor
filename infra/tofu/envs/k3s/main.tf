@@ -29,6 +29,7 @@ locals {
     site_hosts   = [var.site_host]
     origin_ips   = length(var.origin_ips) > 0 ? var.origin_ips : [for node in var.nodes : node.address]
     preview_host = var.previews ? "preview.${var.domain}" : null
+    direct_zone  = var.direct_zone
     mail = var.mail == null ? null : {
       host               = local.mail_host
       ipv4               = var.nodes[var.mail.node].address
@@ -87,6 +88,7 @@ module "cloudflare" {
   site_hosts   = local.records.site_hosts
   origin_ips   = local.records.origin_ips
   preview_host = local.records.preview_host
+  direct_zone  = local.records.direct_zone
   mail         = local.records.mail
 }
 
@@ -104,6 +106,7 @@ module "rfc2136" {
   site_hosts   = local.records.site_hosts
   origin_ips   = local.records.origin_ips
   preview_host = local.records.preview_host
+  direct_zone  = local.records.direct_zone
   mail         = local.records.mail
 }
 

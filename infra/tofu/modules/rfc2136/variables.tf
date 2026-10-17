@@ -17,6 +17,12 @@ variable "origin_ips" {
   }
 }
 
+variable "direct_zone" {
+  description = "The zone whose hosts the gateway serves itself, DNS only (*.<direct_zone>), e.g. the site's own name for files.<site>: Cloudflare's free edge certificate covers one level below the zone only; null for none."
+  type        = string
+  default     = null
+}
+
 variable "preview_host" {
   description = "The host pull-request previews run under (pr-<n>.<preview_host>); null elsewhere."
   type        = string

@@ -290,13 +290,15 @@ describe("deploy.yml", () => {
 
   it("signs with the key pair when there is one, so admission needn't trust Sigstore", () => {
     expect(merge?.run).toContain(
-      "cosign sign --yes --key env://COSIGN_PRIVATE_KEY --tlog-upload=false",
+      "cosign sign --yes --new-bundle-format=false --use-signing-config=false --key env://COSIGN_PRIVATE_KEY --tlog-upload=false",
     );
     expect(JSON.stringify(merge)).toContain("secrets.COSIGN_PRIVATE_KEY");
   });
 
   it("signs keylessly otherwise", () => {
-    expect(merge?.run).toContain('cosign sign --yes "$REGISTRY/$image@$digest"');
+    expect(merge?.run).toContain(
+      'cosign sign --yes --new-bundle-format=false --use-signing-config=false "$REGISTRY/$image@$digest"',
+    );
   });
 
   describe("every image docker-bake.hcl builds", () => {

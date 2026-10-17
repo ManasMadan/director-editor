@@ -452,17 +452,13 @@ tests:
       - equal: { path: spec.parentRefs, value: [{ name: public, namespace: gateway-system }] }
       - equal: { path: metadata.annotations, value: { director-editor.dev/external-dns: "true" } }
 
-  - it: publishes the files host unproxied when Cloudflare can't serve it
+  - it: leaves a files host Cloudflare can't proxy to OpenTofu's DNS-only record
     template: storage.yaml
     documentSelector: { path: kind, value: HTTPRoute }
     set:
       storage.uploads.proxied: false
     asserts:
-      - equal:
-          path: metadata.annotations
-          value:
-            director-editor.dev/external-dns: "true"
-            external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
+      - notExists: { path: metadata.annotations }
 
   - it: creates the uploads bucket with CORS for the site after each sync
     template: storage.yaml
