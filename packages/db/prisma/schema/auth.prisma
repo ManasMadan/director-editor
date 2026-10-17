@@ -34,6 +34,7 @@ model User {
   files            File[]
   directorPlans    DirectorPlan[]
   directorTakes    DirectorTake[]
+  directorCuts     DirectorCut[]
   shortReactions   ShortReaction[]
   invitations      Invitation[]
 
@@ -145,6 +146,7 @@ model Organization {
   aiUsage        AiUsage[]
   directorPlans  DirectorPlan[]
   directorTakes  DirectorTake[]
+  directorCuts   DirectorCut[]
   shortReactions ShortReaction[]
   invitations    Invitation[]
 

@@ -21,35 +21,48 @@ model AiUsage {
 }
 
 /// Director: how to film one YouTube short, as Gemini worked it out from watching it.
-/// One per workspace and video, so everyone in the workspace reuses the analysis.
+/// One per workspace and video, so everyone in the workspace reuses the analysis: the
+/// workspace's library of templates.
 model DirectorPlan {
   id           String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
   orgId        String         @map("org_id") @db.Uuid
+  /// Who indexed it. A member indexes one short of their own (source user, not failed):
+  /// the partial unique index below holds that, two requests racing included.
   createdBy    String?        @map("created_by") @db.Uuid
   /// The YouTube video id (11 characters).
   videoId      String         @map("video_id")
+  /// seed (copied into every workspace, never anyone's index) | user
+  source       String         @default("user")
   /// pending (queued) | analyzing | ready | failed
   status       String         @default("pending")
+  /// How far indexing got, for the library: queued | watching | writing | ready | failed
+  stage        String         @default("queued")
   /// Why the analysis failed (an error code).
   error        String?
   /// The shot plan (app/schemas.py ShotPlan), once ready.
   plan         Json?
   /// The model that wrote it.
   model        String?
+  /// The short's original audio: ready (stored at audio_key) | failed | none (not tried)
+  audioStatus  String         @default("none") @map("audio_status")
+  /// Its object key in storage, once ready.
+  audioKey     String?        @map("audio_key")
   createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
   organization Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
   creator      User?          @relation(fields: [createdBy], references: [id], onDelete: SetNull)
   takes        DirectorTake[]
+  cuts         DirectorCut[]
 
   @@unique([orgId, videoId])
+  @@unique([createdBy], map: "director_plan_one_user_index", where: raw("source = 'user' AND status <> 'failed'"))
   @@index([orgId, id(sort: Desc)])
   @@map("director_plan")
   @@schema("ai")
 }
 
-/// One recorded clip or photo for a shot of a plan, and Gemini's review of it. The
-/// newest take of a shot is the one that goes into the final video.
+/// One recorded clip or photo for a shot of a plan, and Gemini's review of it. Takes are
+/// never replaced: a retake is another row, and the best-scored one is picked.
 model DirectorTake {
   id           String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
   orgId        String       @map("org_id") @db.Uuid
@@ -82,5 +95,39 @@ model DirectorTake {
   @@index([userId])
   @@index([fileId])
   @@map("director_take")
+  @@schema("ai")
+}
+
+/// A member's finished video of a plan: the take picked for each shot, rendered into one
+/// upload, and how far publishing it to YouTube got.
+model DirectorCut {
+  id             String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  orgId          String       @map("org_id") @db.Uuid
+  planId         String       @map("plan_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  title          String
+  /// The take picked for each shot used: [{shotIndex, takeId}].
+  picks          Json
+  /// The rendered video (files.file, purpose director-cut-video).
+  fileId         String       @map("file_id") @db.Uuid
+  durationMs     Int          @map("duration_ms")
+  /// none | uploading | published | failed
+  publishStatus  String       @default("none") @map("publish_status")
+  /// The published video's id on YouTube.
+  youtubeVideoId String?      @map("youtube_video_id")
+  /// private | unlisted | public, as published.
+  visibility     String?
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  plan           DirectorPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  file           File         @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, id(sort: Desc)])
+  @@index([planId, userId])
+  @@index([userId])
+  @@index([fileId])
+  @@map("director_cut")
   @@schema("ai")
 }
