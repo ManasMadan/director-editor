@@ -15,6 +15,8 @@ TypeScript client is `packages/ai-client`.
 - Integration tests (Postgres and Redis): `bun run db:up`, then
   `bun run --filter @repo/ai test:integration`
 - After changing routes, models or `packages/jobs`: `bun run gen`
+- After changing the plan schema (`ShotPlan`): `bun run --filter @repo/ai seeds:build`
+  re-indexes the 6 seed Shorts on Vertex AI into `app/seeds/templates.json` (commit it)
 
 ## Where things are
 

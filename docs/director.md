@@ -157,6 +157,9 @@ iOS asks before a page may read the tilt: the level shows a button for that.
   row-level security. Plans are a JSON column validated by `ShotPlan` on the way in and out.
 - AI service: `apps/ai/app/director.py` (the three Gemini calls, their token budgets and
   failures), queue `ai-director` (`plan`, `review-take`) in `packages/jobs`.
+- Seed templates: `apps/ai/app/seeds/templates.json`, the 6 seed Shorts (`seeds.json`)
+  indexed for real on Vertex AI and committed. Rebuild it with
+  `bun run --filter @repo/ai seeds:build` whenever the plan schema changes.
 - API: `apps/api/src/modules/shorts` (YouTube; `youtube.ts` is the only code that knows its
   wire format), `apps/api/src/modules/director` (checks, then the AI service).
 - Contracts: `packages/contracts/src/api/{shorts,director}.ts`; the plan's shape is checked

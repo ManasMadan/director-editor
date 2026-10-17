@@ -113,7 +113,7 @@ markers = ["integration: needs Postgres and Redis"]
 addopts = "-m 'not integration'"
 
 [tool.coverage.run]
-source = ["app"]
+source = ["app", "scripts"]
 branch = true
 # The worker runs as a subprocess in the integration tests; measure it there too.
 patch = ["subprocess"]

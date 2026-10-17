@@ -3,15 +3,17 @@
 plan job indexes a member's own short (`app.director.index_short`). Run from the repo
 root whenever the plan schema changes:
 
-    bun --env-file=.env run uv run --project apps/ai python apps/ai/scripts/build_seeds.py
+    bun run --filter @repo/ai seeds:build
 
-Needs the real INDEX_MODEL settings in .env (GOOGLE_API_KEY a Vertex express-mode key,
-GOOGLE_VERTEX=true, GOOGLE_CLOUD_PROJECT, VERTEX_LOCATION): there is no local stand-in
-for indexing a short, on purpose (CLAUDE.md's "no fakes outside tests" -- the running app
-never makes one up, and neither does this script). gemini-4-argon sometimes answers a
-video request with a 500 and succeeds on a retry; `index_short` already retries and falls
-back, so a seed that still falls back is worth running again a few times before keeping
-the fallback's plan.
+That runs `python -m scripts.build_seeds` from apps/ai with the repo's .env loaded
+(apps/ai/package.json); starting from apps/ai is what makes `app` importable, since it
+isn't an installed package. Needs the real INDEX_MODEL settings in .env (GOOGLE_API_KEY
+a Vertex express-mode key, GOOGLE_VERTEX=true, GOOGLE_CLOUD_PROJECT, VERTEX_LOCATION):
+there is no local stand-in for indexing a short, on purpose (CLAUDE.md's "no fakes
+outside tests" -- the running app never makes one up, and neither does this script).
+gemini-4-argon sometimes answers a video request with a 500 and succeeds on a retry;
+`index_short` already retries and falls back, so a seed that still falls back is worth
+running again a few times before keeping the fallback's plan.
 
 The 6 seeds' original audio is already captured and uploaded (by a different task, once,
 by hand) to gs://director-media-1053522546520/seed-audio/<videoId>.m4a; this script only
@@ -20,18 +22,8 @@ records that key (`audio_key`), it never fetches or uploads audio itself.
 
 import asyncio
 import json
-import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-
-# Run as "python apps/ai/scripts/build_seeds.py" (whatever the current directory is),
-# Python puts this file's own directory on sys.path, not apps/ai -- and apps/ai/app isn't
-# an installed package (apps/ai/pyproject.toml's `package = false`), so nothing else
-# would put it there either. This has to be an `if`, not an assignment: ruff's E402
-# allows a conditional ahead of the module's imports but not a plain statement, and
-# `_APP_ROOT` (used below, once the imports it doesn't gate are done) is exactly that.
-if str(Path(__file__).resolve().parents[1]) not in sys.path:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 from pydantic_ai.usage import RunUsage, UsageLimits
@@ -139,12 +131,12 @@ def settings_indexer(settings: Settings) -> Indexer:
     return index
 
 
-async def main() -> None:
+async def main(seeds_path: Path = SEEDS_PATH, templates_path: Path = TEMPLATES_PATH) -> None:
     settings = get_settings()
     configure_logging(settings.log_level, json=False)
-    templates = await build_templates(load_seeds(), settings_indexer(settings))
-    write_templates(templates)
-    log.info("wrote seed templates", count=len(templates), path=str(TEMPLATES_PATH))
+    templates = await build_templates(load_seeds(seeds_path), settings_indexer(settings))
+    write_templates(templates, templates_path)
+    log.info("wrote seed templates", count=len(templates), path=str(templates_path))
 
 
 if __name__ == "__main__":
