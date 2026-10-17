@@ -38,6 +38,7 @@ from app.db.models import DirectorPlan, DirectorTake
 from app.db.session import tenant
 from app.errors import AppError
 from app.log import log
+from app.plan_repair import repair_plan
 from app.queues import DirectorQueue
 from app.realtime import publish_to_org
 from app.schemas import (
@@ -357,6 +358,11 @@ class Director:
             return
         finally:
             await settle(reservation, usage.input_tokens, usage.output_tokens)
+        # Gemini's plan validates field by field but can still be inconsistent with
+        # itself (overlapping shots, a script line past its shot's end); the video's own
+        # length isn't known here (Gemini watches it by URL, never downloaded), so the
+        # repair only clamps source ranges to MAX_SHORT_SECONDS.
+        repaired = repair_plan(result.output, None)
         async with tenant(org_id) as session:
             await session.execute(
                 update(DirectorPlan)
@@ -364,7 +370,7 @@ class Director:
                 .values(
                     status="ready",
                     error=None,
-                    plan=result.output.model_dump(mode="json"),
+                    plan=repaired.model_dump(mode="json"),
                     model=self._model_name,
                     updated_at=func.now(),
                 )

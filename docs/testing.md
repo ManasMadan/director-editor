@@ -345,6 +345,7 @@ file below 100%, or one no test loads.
 | `.github/workflows/deploy.yml` | `# zizmor: ignore[dangerous-triggers]` | `workflow_run` is how a deploy follows CI on master; the job that checks out the run's commit runs only for this repository's own push (`scripts/workflows.test.ts` checks) |
 | `.github/workflows/mobile.yml` | `# zizmor: ignore[dangerous-triggers]` | the same, for the app updates that follow CI and the store builds that follow a release |
 | `.devcontainer/Dockerfile` | `# hadolint ignore=DL3066` | `USER node` by name, not its id: the dev container features the image takes (docker-in-docker, for one) find the user to set up by its name |
+| `deploy/docker/ai.Dockerfile` | `# hadolint ignore=DL3008` | ffmpeg comes from trixie's apt mirror, which doesn't keep old versions: a pin would go stale and fail the build instead of catching a real regression |
 | `.github/zizmor.yml` | `self-repository` off | GitHub's `uses: $/...` syntax for this repository's own actions, which actionlint (in the same lint job) doesn't read yet |
 | `biome.jsonc` | `noExcessiveLinesPerFunction` off in tests, end-to-end specs and stories | a `describe` block is as long as its list of cases |
 | `biome.jsonc` | `noSkippedTests` off in `apps/web/e2e/captcha.spec.ts` and `apps/web/e2e/google.spec.ts` | Playwright's conditional skip, for the two browser tests that need real credentials (both under Skipped tests) |
@@ -352,6 +353,7 @@ file below 100%, or one no test loads.
 | `biome.jsonc` | `useImportType` and `noStaticOnlyClass` off in the Nest services and `packages/nest-common` | Nest's dependency injection needs the imported class at run time, which `import type` erases; a module is a class with only a decorator and static members |
 | `biome.jsonc` | `noConsole` off in `scripts/`, the hooks, config files and the API's command-line scripts | they talk to whoever runs them through the console |
 | `apps/ai/app/embeddings.py` | `# noqa: SIM905` | a stop-word list reads as prose on one line |
+| `apps/ai/app/audio.py` | `# pyright: ignore[reportMissingTypeStubs]` on the import, `# pyright: ignore[reportUnknownMemberType]` on the upload | google-cloud-storage ships no stubs |
 | `apps/ai/app/documents.py` | `# pyright: ignore[reportMissingTypeStubs]` | langgraph ships no stubs |
 | `apps/ai/app/summaries.py` | `# pyright: ignore[reportMissingTypeStubs, reportUnknownMemberType]` | langgraph ships no stubs, and its graph, config and checkpointer types are unknown |
 | `apps/ai/app/queues.py` | `# pyright: ignore[reportMissingTypeStubs, reportUnknownMemberType, reportArgumentType]` | bullmq ships no stubs and leaves job data untyped |
