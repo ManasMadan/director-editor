@@ -969,8 +969,10 @@ describe("ci.yml's unit job", () => {
 
   it("holds the scripts and hooks to 100% on its own, since a change to them alone skips the coverage job", () => {
     const steps = workflow("ci.yml").jobs.unit?.steps ?? [];
+    // Generated code first: when only infrastructure changed the packages' tests are
+    // skipped, and with them the generation the scripts' tests import.
     expect(steps.map((step) => step.run ?? "")).toContain(
-      "bun test --coverage ./scripts/ ./.claude/hooks/ && bun scripts/coverage.ts --bun",
+      "bun run gen && bun test --coverage ./scripts/ ./.claude/hooks/ && bun scripts/coverage.ts --bun",
     );
   });
 });
