@@ -52,3 +52,15 @@ vulnerabilities:
     statement: >-
       stdlib v1.26.4 (fixed in 1.26.9, 1.27.2): no upstream rebuild with the fixed package as of 2026-10-13
     expired_at: 2026-11-12
+  - id: CVE-2026-103111
+    statement: >-
+      pcre2 10.40-6.el9 (fixed in 10.40-7.el9_8); pcre2-syntax likewise, v0.15.1 still ships it: no upstream rebuild with the fixed package as of 2026-10-17
+    expired_at: 2026-11-16
+  - id: CVE-2026-86145
+    statement: >-
+      pcre2 10.40-6.el9 (fixed in 10.40-7.el9_8); pcre2-syntax likewise, v0.15.1 still ships it: no upstream rebuild with the fixed package as of 2026-10-17
+    expired_at: 2026-11-16
+  - id: CVE-2026-89161
+    statement: >-
+      pcre2 10.40-6.el9 (fixed in 10.40-7.el9_8); pcre2-syntax likewise, v0.15.1 still ships it: no upstream rebuild with the fixed package as of 2026-10-17
+    expired_at: 2026-11-16

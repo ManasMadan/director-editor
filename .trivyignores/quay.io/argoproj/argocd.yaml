@@ -200,3 +200,7 @@ vulnerabilities:
     statement: >-
       github.com/argoproj/argo-cd/v3 v3.5.3+dirty (fixed in 3.3.15, 3.4.10, 3.5.4, 3.6.0-rc2): no upstream rebuild with the fixed package as of 2026-10-13
     expired_at: 2026-11-12
+  - id: CVE-2026-92392
+    statement: >-
+      libcurl3t64-gnutls 8.18.0-1ubuntu2.7 (fixed in 8.18.0-1ubuntu2.8), in v3.5.4 too: no upstream rebuild with the fixed package as of 2026-10-17
+    expired_at: 2026-11-16
