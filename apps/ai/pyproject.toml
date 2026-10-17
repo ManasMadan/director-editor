@@ -88,7 +88,7 @@ DEP002 = ["psycopg"]
 # keeps the generated OpenAPI schema (and therefore the TypeScript types) precise.
 typeCheckingMode = "strict"
 pythonVersion = "3.14"
-include = ["app", "tests"]
+include = ["app", "tests", "scripts"]
 reportUnusedCallResult = false
 # A job or code added on the TypeScript side regenerates a Literal; every `match` over it
 # must then handle the new value.
@@ -100,6 +100,7 @@ reportUnnecessaryTypeIgnoreComment = true
 executionEnvironments = [
   { root = "tests", extraPaths = ["."] },
   { root = "app", extraPaths = ["."] },
+  { root = "scripts", extraPaths = ["."] },
 ]
 
 [tool.pytest.ini_options]
@@ -113,7 +114,7 @@ markers = ["integration: needs Postgres and Redis"]
 addopts = "-m 'not integration'"
 
 [tool.coverage.run]
-source = ["app"]
+source = ["app", "scripts"]
 branch = true
 # The worker runs as a subprocess in the integration tests; measure it there too.
 patch = ["subprocess"]

@@ -45,7 +45,7 @@ paths:
 - Every route except health needs the caller JWT (`CallerDep` in `app/auth.py`).
 - Tests are `tests/test_*.py`. Anything needing Postgres, Redis or a local HTTP server is
   marked `pytest.mark.integration` (excluded by default; `bun run test:integration` runs
-  them). Coverage is 100% of lines and branches of `app/`, unit and
+  them). Coverage is 100% of lines and branches of `app/` and `scripts/`, unit and
   integration together, with nothing omitted: a line no test reaches gets a test or goes. Providers are exercised
   through the local fakes in `tests/fakes.py` (a provider's HTTP API, an OTLP
   collector), which speak the real protocol. Model behaviour is tested through them,
