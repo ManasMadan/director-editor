@@ -60,14 +60,25 @@ class DocumentOut(BaseModel):
 
 
 # ------------------------------------------------------------------------------ Director
-# A shot plan is what Gemini writes after watching a short: the model's output type, so
-# every constraint below is also an instruction to it (they reach it in the JSON schema).
-# Positions are fractions of a 9:16 portrait frame, from its top-left corner.
+# A shot plan is what Gemini writes after watching a short: ShotPlan is both the stored
+# plan's type and the API's, so every constraint here is the real contract. It is not,
+# though, the planner's own output type: Vertex AI answers 400 INVALID_ARGUMENT to a
+# schema with a `minItems`/`maxItems` anywhere in it, on every model and output mode
+# (bisected down to exactly that keyword), so the planner's output type is
+# `ShotPlanDraft`, below ShotPlan, which repeats `shots`, `steps`, `script` and
+# `pose.keypoints` without a length bound; `repair_plan` turns a draft into a real
+# `ShotPlan`, trimming anything that runs over `MAX_SHOTS`, `MAX_SHOT_STEPS`,
+# `MAX_SCRIPT_LINES` or `MAX_POSE_KEYPOINTS` and validating the result against ShotPlan's
+# own Field constraints, so a trim that still runs over fails loudly instead of being
+# stored. Positions are fractions of a 9:16 portrait frame, from its top-left corner.
 
 VIDEO_ID_PATTERN = r"^[A-Za-z0-9_-]{11}$"
 MAX_SHOTS = 12
 MAX_SHORT_SECONDS = 180
 MAX_SHOT_SECONDS = 60
+MAX_SHOT_STEPS = 10
+MAX_SCRIPT_LINES = 20
+MAX_POSE_KEYPOINTS = 13
 # A camera frame for a scene check, base64: a 640-pixel JPEG is 40-120 kB.
 MAX_FRAME_BASE64 = 400_000
 
@@ -137,7 +148,7 @@ class PhoneAngle(BaseModel):
 class TargetPose(BaseModel):
     description: str = Field(min_length=1, max_length=160)
     keypoints: list[Keypoint] = Field(
-        max_length=13,
+        max_length=MAX_POSE_KEYPOINTS,
         description="The person's joints at the shot's key moment; empty when no one is in it.",
     )
 
@@ -159,7 +170,12 @@ class ScriptLine(BaseModel):
 class Shot(BaseModel):
     kind: Literal["video", "photo"]
     title: str = Field(min_length=1, max_length=80)
-    purpose: str = Field(min_length=1, max_length=240, description="What it shows, and why.")
+    purpose: str = Field(
+        min_length=1,
+        max_length=240,
+        description="The scene's role in the story (hook, setup, reveal or payoff) and the "
+        "feeling it's going for.",
+    )
     sourceStartSeconds: float = Field(ge=0, le=MAX_SHORT_SECONDS)
     sourceEndSeconds: float = Field(ge=0.1, le=MAX_SHORT_SECONDS)
     durationSeconds: float = Field(
@@ -177,8 +193,10 @@ class Shot(BaseModel):
     framing: Framing
     phoneAngle: PhoneAngle
     pose: TargetPose
-    steps: list[ShotStep] = Field(min_length=1, max_length=10)
-    script: list[ScriptLine] = Field(max_length=20, description="Empty when nothing is said.")
+    steps: list[ShotStep] = Field(min_length=1, max_length=MAX_SHOT_STEPS)
+    script: list[ScriptLine] = Field(
+        max_length=MAX_SCRIPT_LINES, description="Empty when nothing is said."
+    )
 
 
 class ShotPlan(BaseModel):
@@ -188,6 +206,70 @@ class ShotPlan(BaseModel):
     audio: Literal["speech", "music", "speech-and-music", "none"]
     durationSeconds: float = Field(ge=0.5, le=MAX_SHORT_SECONDS)
     shots: list[Shot] = Field(min_length=1, max_length=MAX_SHOTS)
+
+
+class TargetPoseDraft(TargetPose):
+    """`TargetPose` for the planner's own output: `keypoints` carries no length bound (see
+    the module comment); `repair_plan` trims it to `MAX_POSE_KEYPOINTS`."""
+
+    keypoints: list[Keypoint] = Field(
+        description="The person's joints at the shot's key moment; empty when no one is in it.",
+    )
+
+
+class ShotDraft(BaseModel):
+    """`Shot`, as the planner answers with it: `steps`, `script` and `pose.keypoints`
+    carry no length bound (see the module comment); `repair_plan` trims them, and
+    synthesizes a step from the shot's `scene` when Gemini leaves `steps` empty.
+
+    Not a subclass of `Shot`: a field whose *type* (not just its `Field` constraints)
+    differs between a base model and a subclass is a mutable-attribute override
+    basedpyright refuses in strict mode (unsound covariance), so `pose` and `shots`
+    (`ShotPlanDraft`, below) are re-declared here instead of narrowed in an override.
+    """
+
+    kind: Literal["video", "photo"]
+    title: str = Field(min_length=1, max_length=80)
+    purpose: str = Field(
+        min_length=1,
+        max_length=240,
+        description="The scene's role in the story (hook, setup, reveal or payoff) and the "
+        "feeling it's going for.",
+    )
+    sourceStartSeconds: float = Field(ge=0, le=MAX_SHORT_SECONDS)
+    sourceEndSeconds: float = Field(ge=0.1, le=MAX_SHORT_SECONDS)
+    durationSeconds: float = Field(
+        ge=0.5,
+        le=MAX_SHOT_SECONDS,
+        description="How long it lasts in the edit (a photo: how long it is shown).",
+    )
+    camera: Literal["front", "back"]
+    scene: str = Field(
+        min_length=1, max_length=200, description='Where to be: "Stand near a tree".'
+    )
+    sceneLandmark: str | None = Field(
+        max_length=40, description="The one thing the scene needs, to look for in the camera."
+    )
+    framing: Framing
+    phoneAngle: PhoneAngle
+    pose: TargetPoseDraft
+    steps: list[ShotStep]
+    script: list[ScriptLine] = Field(description="Empty when nothing is said.")
+
+
+class ShotPlanDraft(BaseModel):
+    """`ShotPlan`, as the planner answers with it: `shots` carries no length bound (see
+    the module comment, and `ShotDraft`'s on why this isn't a `ShotPlan` subclass).
+    `repair_plan` turns one into a real `ShotPlan`, trimming to `MAX_SHOTS` and validating
+    the result; a draft with no shots at all can't be repaired into one, and
+    `repair_plan` raises for that case."""
+
+    title: str = Field(min_length=1, max_length=120)
+    format: str = Field(min_length=1, max_length=60, description='The trend, e.g. "GRWM".')
+    summary: str = Field(min_length=1, max_length=400)
+    audio: Literal["speech", "music", "speech-and-music", "none"]
+    durationSeconds: float = Field(ge=0.5, le=MAX_SHORT_SECONDS)
+    shots: list[ShotDraft]
 
 
 # The database checks them too (director_plan_status_check, director_take_status_check).

@@ -78,6 +78,14 @@ class Settings(BaseSettings):
     director_tokens_per_review: int = Field(
         default=120_000, ge=10_000, alias="DIRECTOR_TOKENS_PER_REVIEW"
     )
+    # Indexing (a plan job, never a live request) uses its own model: one picked for
+    # watching an arbitrary short unattended, not the one DIRECTOR_MODEL names for the
+    # scene checks and reviews a member waits on. INDEX_FALLBACK_MODEL stands in once a
+    # plan's retries on INDEX_MODEL are all spent (see app/director.py's retry loop).
+    index_model: str = Field(default="gemini-4-argon", min_length=1, alias="INDEX_MODEL")
+    index_fallback_model: str = Field(
+        default="gemini-3.1-pro-preview", min_length=1, alias="INDEX_FALLBACK_MODEL"
+    )
 
     @model_validator(mode="after")
     def _production_uses_real_providers(self) -> Self:

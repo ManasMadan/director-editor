@@ -546,7 +546,7 @@ export type Shot = {
     /**
      * Purpose
      *
-     * What it shows, and why.
+     * The scene's role in the story (hook, setup, reveal or payoff) and the feeling it's going for.
      */
     purpose: string;
     /**
