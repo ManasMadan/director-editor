@@ -6,10 +6,11 @@
  * `error` message just before its socket closes.
  */
 import { ERROR_CODES, type ErrorCode } from "@repo/contracts/errors";
-import { PROVIDER_TIMEOUT_MS } from "@repo/contracts/time";
+import { PROVIDER_TIMEOUT_MS, SECOND_MS } from "@repo/contracts/time";
 import { describeError } from "@repo/nest-common";
 import { type RawData, WebSocket } from "ws";
 import type { GoogleAuth } from "./google-auth";
+import { SlidingBudget } from "./live.budget";
 import {
   type ClientMessage,
   clientMessageSchema,
@@ -42,6 +43,19 @@ export interface RelayOptions {
   log: LiveLog;
 }
 
+/** 16 kHz, 16-bit mono: what a microphone sends in real time. */
+const AUDIO_BYTES_PER_SECOND = 16_000 * 2;
+const AUDIO_WINDOW_MS = 5 * SECOND_MS;
+/** Twice real time over the window: room for a burst after the network stalls, no more. */
+const AUDIO_WINDOW_BYTES = 2 * AUDIO_BYTES_PER_SECOND * (AUDIO_WINDOW_MS / SECOND_MS);
+const TEXT_TURNS = 3;
+const TEXT_WINDOW_MS = 10 * SECOND_MS;
+/**
+ * What may wait unsent to Gemini: about half a minute of audio. Past it Gemini isn't
+ * keeping up, the conversation has fallen too far behind to recover, and the call ends.
+ */
+const UPSTREAM_MAX_BUFFERED_BYTES = 1024 * 1024;
+
 /** Tells the browser why its call ended, then closes the socket. */
 export function closeWithError(client: WebSocket, code: ErrorCode) {
   if (client.readyState !== WebSocket.OPEN) {
@@ -71,10 +85,14 @@ function parseJson(text: string): unknown {
 
 export class LiveRelay {
   private upstream: WebSocket | null = null;
-  private ready = false;
+  /** The upstream, once Gemini has its setup and listens. */
+  private ready: WebSocket | null = null;
   private ended = false;
   private lastFrameAt = Number.NEGATIVE_INFINITY;
+  private readonly audio: SlidingBudget;
+  private readonly turns: SlidingBudget;
   private readonly timer: NodeJS.Timeout;
+  private setupTimer: NodeJS.Timeout | undefined;
   private readonly finished = Promise.withResolvers<void>();
 
   constructor(
@@ -82,6 +100,8 @@ export class LiveRelay {
     private readonly options: RelayOptions,
   ) {
     this.timer = setTimeout(() => this.end("TIMEOUT"), options.maxDurationMs);
+    this.audio = new SlidingBudget(AUDIO_WINDOW_BYTES, AUDIO_WINDOW_MS, options.now);
+    this.turns = new SlidingBudget(TEXT_TURNS, TEXT_WINDOW_MS, options.now);
     client.on("message", (data, isBinary) => this.fromClient(data, isBinary));
     client.on("close", () => this.end(null));
   }
@@ -109,8 +129,14 @@ export class LiveRelay {
       handshakeTimeout: PROVIDER_TIMEOUT_MS,
     });
     this.upstream = upstream;
-    upstream.on("open", () => upstream.send(JSON.stringify(this.options.setup)));
-    upstream.on("message", (data) => this.fromUpstream(data));
+    upstream.on("open", () => {
+      upstream.send(JSON.stringify(this.options.setup));
+      this.setupTimer = setTimeout(() => {
+        this.options.log("error", {}, "live setup never completed");
+        this.end("UPSTREAM_UNAVAILABLE");
+      }, PROVIDER_TIMEOUT_MS);
+    });
+    upstream.on("message", (data) => this.fromUpstream(upstream, data));
     upstream.on("error", (error) => {
       if (!this.ended) {
         this.options.log("error", { err: describeError(error) }, "live upstream failed");
@@ -133,13 +159,21 @@ export class LiveRelay {
     }
     // Until Gemini has its setup, anything sent would be refused; a moment's audio is lost.
     if (this.ready) {
-      this.forward(parsed.data);
+      this.forward(this.ready, parsed.data);
     }
   }
 
-  private forward(message: ClientMessage) {
+  private forward(upstream: WebSocket, message: ClientMessage) {
+    if (upstream.bufferedAmount > UPSTREAM_MAX_BUFFERED_BYTES) {
+      const details = { bufferedBytes: upstream.bufferedAmount };
+      this.options.log("warn", details, "live upstream fell behind");
+      return this.end("UPSTREAM_UNAVAILABLE");
+    }
     switch (message.type) {
       case "audio":
+        if (!this.audio.spend(Buffer.byteLength(message.pcm16, "base64"))) {
+          return this.end("RATE_LIMITED");
+        }
         return this.toUpstream({
           realtimeInput: { audio: { mimeType: "audio/pcm;rate=16000", data: message.pcm16 } },
         });
@@ -154,6 +188,9 @@ export class LiveRelay {
         });
       }
       case "text":
+        if (!this.turns.spend(1)) {
+          return this.end("RATE_LIMITED");
+        }
         return this.toUpstream({
           clientContent: {
             turns: [{ role: "user", parts: [{ text: message.text }] }],
@@ -163,7 +200,7 @@ export class LiveRelay {
     }
   }
 
-  private fromUpstream(data: RawData) {
+  private fromUpstream(upstream: WebSocket, data: RawData) {
     const parsed = upstreamMessageSchema.safeParse(parseJson(textOf(data)));
     if (!parsed.success) {
       this.options.log("warn", { issues: parsed.error.issues }, "unreadable live message");
@@ -171,7 +208,8 @@ export class LiveRelay {
     }
     const message = parsed.data;
     if (message.setupComplete) {
-      this.ready = true;
+      clearTimeout(this.setupTimer);
+      this.ready = upstream;
       this.toUpstream(this.options.greeting);
     }
     if (message.serverContent) {
@@ -234,6 +272,7 @@ export class LiveRelay {
     }
     this.ended = true;
     clearTimeout(this.timer);
+    clearTimeout(this.setupTimer);
     if (code) {
       closeWithError(this.client, code);
     }

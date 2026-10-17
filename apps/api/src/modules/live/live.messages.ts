@@ -70,5 +70,15 @@ export const upstreamMessageSchema = z.object({
 });
 export type UpstreamMessage = z.infer<typeof upstreamMessageSchema>;
 
-/** A tool's arguments as the browser gets them: the optional reason, nothing else. */
-export const toolArgsSchema = z.object({ reason: z.string().max(500).optional() });
+const TOOL_REASON_MAX_LENGTH = 500;
+
+/**
+ * A tool's arguments as the browser gets them: the optional reason, nothing else. A long
+ * reason is cut short; the call itself is still the one the director asked for.
+ */
+export const toolArgsSchema = z.object({
+  reason: z
+    .string()
+    .transform((reason) => reason.slice(0, TOOL_REASON_MAX_LENGTH))
+    .optional(),
+});

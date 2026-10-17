@@ -3,10 +3,12 @@
  * bare Fastify server, the relay, and a stand-in for Vertex AI's Live API that speaks its
  * JSON over a real WebSocket. Who calls, the plan and the token are stand-ins too.
  */
-import type { IncomingHttpHeaders } from "node:http";
-import type { AddressInfo } from "node:net";
+import { type IncomingHttpHeaders, IncomingMessage } from "node:http";
+import { type AddressInfo, connect, Socket } from "node:net";
+import { Duplex } from "node:stream";
 import { type DirectorPlan, directorPlanSchema, type Shot } from "@repo/contracts/api";
 import { orgIdSchema, userIdSchema } from "@repo/contracts/ids";
+import { PROVIDER_TIMEOUT_MS } from "@repo/contracts/time";
 import { AppError } from "@repo/nest-common";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -170,6 +172,7 @@ async function startApi(overrides: Partial<LiveOptions> = {}, fake = new FakeLiv
     now: () => clock,
     ...overrides,
   });
+  app.get("/plain", () => Promise.resolve("plain answer"));
   await app.listen({ port: 0, host: "127.0.0.1" });
   servers.push(app);
   const { port } = app.server.address() as AddressInfo;
@@ -194,6 +197,34 @@ async function startApi(overrides: Partial<LiveOptions> = {}, fake = new FakeLiv
     clock += ms;
   };
   return { app, fake, log, call, callWithoutOrigin, port, hungUp, tick };
+}
+
+/**
+ * An upgrade request over a raw socket, answered with what the server writes first; with
+ * `reset`, the client then resets the connection instead of closing it.
+ */
+function rawUpgrade(
+  port: number,
+  path: string,
+  protocol: string,
+  origin = WEB,
+  options: { reset?: boolean } = {},
+) {
+  return new Promise<string>((resolve) => {
+    const socket = connect(port, "127.0.0.1", () =>
+      socket.write(
+        `GET ${path} HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: ${origin}\r\nConnection: Upgrade\r\nUpgrade: ${protocol}\r\n\r\n`,
+      ),
+    );
+    socket.once("data", (data) => {
+      if (options.reset) {
+        socket.resetAndDestroy();
+      } else {
+        socket.end();
+      }
+      resolve(String(data));
+    });
+  });
 }
 
 /** A call that Gemini has its setup for, and has greeted. */
@@ -311,6 +342,81 @@ describe("a live call", () => {
     );
   });
 
+  it("cuts a long reason short rather than refusing the tool", async () => {
+    const { fake, browser } = await liveCall();
+    const reason = "r".repeat(600);
+    fake.send({ toolCall: { functionCalls: [{ id: "1", name: "retake", args: { reason } }] } });
+    expect(await browser.message(0)).toEqual({
+      type: "tool",
+      name: "retake",
+      args: { reason: "r".repeat(500) },
+    });
+    expect(await fake.message(2)).toMatchObject({
+      toolResponse: { functionResponses: [{ id: "1", response: { result: "done" } }] },
+    });
+  });
+
+  it("forwards up to twice real time of microphone audio, and hangs up past it", async () => {
+    const { fake, browser, tick } = await liveCall();
+    // 66,000 bytes of audio each: four fit in five seconds' budget of 320,000, five don't.
+    const chunk = { type: "audio", pcm16: "A".repeat(88_000) };
+    for (let sent = 0; sent < 4; sent++) {
+      browser.send(chunk);
+    }
+    await fake.message(5);
+    tick(5000);
+    for (let sent = 0; sent < 5; sent++) {
+      browser.send(chunk);
+    }
+    expect(await browser.closed).toBe(1008);
+    expect(browser.received).toEqual([{ type: "error", code: "RATE_LIMITED" }]);
+    await vi.waitFor(() => expect(fake.server.clients.size).toBe(0));
+    expect(fake.received).toHaveLength(10);
+  });
+
+  it("takes three typed turns in ten seconds, and hangs up on a fourth", async () => {
+    const { fake, browser } = await liveCall();
+    for (const text of ["one", "two", "three", "four"]) {
+      browser.send({ type: "text", text });
+    }
+    expect(await browser.closed).toBe(1008);
+    expect(browser.received).toEqual([{ type: "error", code: "RATE_LIMITED" }]);
+    await vi.waitFor(() => expect(fake.server.clients.size).toBe(0));
+    expect(fake.received).toHaveLength(5);
+  });
+
+  it("hangs up when Gemini stops reading what it's sent", async () => {
+    let clock = 0;
+    // Every frame a second after the last, so none is dropped for coming too soon.
+    const { fake, browser, log } = await liveCall({ now: () => (clock += 1000) });
+    fake.socket?.pause();
+    const frame = { type: "frame", jpeg: "A".repeat(300_000) };
+    for (let sent = 0; sent < 80 && browser.socket.readyState === WebSocket.OPEN; sent++) {
+      // One at a time, as each leaves: the API reads them as fast as they come.
+      await new Promise<void>((resolve) =>
+        browser.socket.send(JSON.stringify(frame), () => resolve()),
+      );
+    }
+    expect(await browser.closed).toBe(1011);
+    expect(browser.received).toContainEqual({ type: "error", code: "UPSTREAM_UNAVAILABLE" });
+    expect(log).toHaveBeenCalledWith("warn", expect.anything(), "live upstream fell behind");
+    // Its end of the socket never reads the close either; drop it so the stand-in can stop.
+    fake.socket?.terminate();
+  });
+
+  it("hangs up when Gemini never answers its setup", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const fake = new FakeLiveApi();
+    fake.answerSetup = false;
+    const { call, log } = await startApi({}, fake);
+    const browser = call();
+    await fake.message(0);
+    vi.advanceTimersByTime(PROVIDER_TIMEOUT_MS);
+    expect(await browser.closed).toBe(1011);
+    expect(browser.received).toEqual([{ type: "error", code: "UPSTREAM_UNAVAILABLE" }]);
+    expect(log).toHaveBeenCalledWith("error", {}, "live setup never completed");
+  });
+
   it("skips what it can't read from Gemini and carries on", async () => {
     const { fake, browser, log } = await liveCall();
     fake.send("not json");
@@ -394,16 +500,13 @@ describe("a live call", () => {
   });
 
   it("hangs up on Gemini when the browser leaves before Gemini answers", async () => {
-    let answer = () => undefined as void;
-    const holdHandshake = new Promise<void>((resolve) => {
-      answer = resolve;
-    });
-    const api = await startApi({}, new FakeLiveApi({ holdHandshake }));
+    const handshake = Promise.withResolvers<void>();
+    const api = await startApi({}, new FakeLiveApi({ holdHandshake: handshake.promise }));
     const browser = api.call();
     await vi.waitFor(() => expect(api.fake.attempts).toBe(1));
     browser.socket.close();
     await api.hungUp();
-    answer();
+    handshake.resolve();
     // The next call starts: the first one let go of its slot without an error to log.
     const next = api.call();
     await vi.waitFor(() => expect(api.fake.attempts).toBe(2));
@@ -575,6 +678,55 @@ describe("starting a call", () => {
     const elsewhere = new Browser(new WebSocket(`ws://127.0.0.1:${port}/api/other`));
     elsewhere.socket.on("error", () => undefined);
     expect(await refused(elsewhere)).toBe(404);
+  });
+
+  it("leaves other paths' upgrade requests to the server's own routes", async () => {
+    const { port } = await startApi();
+    const answer = await rawUpgrade(port, "/plain", "h2c");
+    expect(answer).toMatch(/^HTTP\/1\.1 200 OK/);
+    expect(answer).toContain("plain answer");
+  });
+
+  it("keeps serving after a client resets its connection on a refused upgrade", async () => {
+    const { port, call, fake } = await startApi();
+    for (const [path, origin] of [
+      [LIVE_PATH, "https://evil.example"],
+      ["/plain", WEB],
+    ] as const) {
+      await rawUpgrade(port, path, "websocket", origin, { reset: true });
+    }
+    const browser = call();
+    await fake.message(1);
+    browser.socket.close();
+  });
+
+  it("refuses another path on a Node that sends every upgrade to the listener", async () => {
+    const { app, log } = await startApi();
+    const request = new IncomingMessage(new Socket());
+    request.url = "/api/other";
+    const written: string[] = [];
+    const socket = new Duplex({
+      read: () => undefined,
+      write: (chunk, _encoding, done) => {
+        written.push(String(chunk));
+        done();
+      },
+    });
+    const closed = new Promise((resolve) => socket.on("close", resolve));
+    app.server.emit("upgrade", request, socket, Buffer.alloc(0));
+    // The client resets meanwhile: logged, not thrown at the process.
+    socket.emit("error", new Error("read ECONNRESET"));
+    await closed;
+    expect(written.join("")).toMatch(/^HTTP\/1\.1 404 Not Found/);
+    expect(log).toHaveBeenCalledWith("warn", expect.anything(), "live upgrade socket failed");
+  });
+
+  it("charges the hourly limit only for a call that can start", async () => {
+    const spendCallLimit = vi.fn<LiveOptions["spendCallLimit"]>(() => Promise.resolve());
+    const notReady = { ...readyPlan, status: "analyzing" as const, plan: null };
+    const { call } = await startApi({ spendCallLimit, plan: () => Promise.resolve(notReady) });
+    await call().closed;
+    expect(spendCallLimit).not.toHaveBeenCalled();
   });
 
   it("is open to a client that sends no origin (not a browser)", async () => {
