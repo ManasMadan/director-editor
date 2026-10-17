@@ -173,6 +173,7 @@ Use `.claude/skills/remove-feature/SKILL.md` as the procedure for each feature. 
 - [ ] App shell: wordmark "Director", nav Library · My media, user menu; no workspace UI.
 
 #### Task 2.3.2: Landing page
+- [ ] `/` (https://director.mmadan.in) is public: no auth gate, no redirect for signed-in users (they see the landing with an "Open Director" button to `/library` instead of "Try the demo"). Check `apps/web/src/proxy.ts` and the marketing route so nothing redirects `/` (owner, 2026-10-18).
 - [ ] `apps/web/src/modules/marketing/pages/home.tsx`: hero ("Watch any Short. Shoot your own." + "Try the demo" → `/sign-in?demo=1`), the x-ray moment (a seed's real plan JSON animating a Short into shot cards with framing box, pose, script, camera arrow, then into a phone frame), three steps (Index · Shoot with Gemini · Publish), a live original-vs-take proof, "Built on Google Cloud" strip (Gemini 4 Argon, Gemini Live, Vertex AI, Cloud Run, Cloud Storage, Veo, Lyria, BigQuery, YouTube), the 6 templates, "For platforms" pitch, footer.
 - [ ] e2e: landing renders, CTA reaches sign-in.
 
