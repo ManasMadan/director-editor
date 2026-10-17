@@ -1,22 +1,25 @@
 "use client";
 
+import { useApiErrorMessage } from "@repo/client";
 import { GeminiLoader } from "@repo/ui/components/gemini-loader";
 import { cn } from "@repo/ui/lib/utils";
 import { Mic, MicOff, Phone, PhoneOff } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, type Ref, useEffect, useRef } from "react";
 import type { CallFailure, CallState } from "../hooks/use-live-call";
 import type { Captions } from "../lib/live-call";
 import { GLASS } from "./live-hud";
 
 const prefersStill = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/** The failures a call has its own words for; anything else stopped it unexpectedly. */
+/**
+ * The failures a call has its own words for; any other code reads as the API's own
+ * message for it (`errors.<CODE>`).
+ */
 const TOLD_FAILURES = [
   "microphone",
   "dropped",
   "RATE_LIMITED",
-  "TIMEOUT",
   "CONFLICT",
   "FEATURE_DISABLED",
   "UPSTREAM_UNAVAILABLE",
@@ -28,7 +31,11 @@ const TOLD_FAILURES = [
 /** Why a call failed, in the member's words. */
 export function useCallFailure() {
   const t = useTranslations("director.call.failed");
-  return (failure: CallFailure) => t(TOLD_FAILURES.find((told) => told === failure) ?? "other");
+  const apiError = useApiErrorMessage();
+  return (failure: CallFailure) => {
+    const told = TOLD_FAILURES.find((known) => known === failure);
+    return told ? t(told) : apiError({ code: failure });
+  };
 }
 
 /**
@@ -66,27 +73,33 @@ export function CallOrb({ level, className }: { level: () => number; className?:
   );
 }
 
-/** The header's word on the call: ringing, or on the call with Director's orb. */
+/**
+ * The header's word on the call: ringing, or on the call with Director's orb. Each is
+ * said once: the ringing by the loader's own status, reaching Director by the pill's
+ * live region (the ringing's visible words stay out of it).
+ */
 export function CallPill({ state, level }: { state: CallState; level: () => number }) {
   const t = useTranslations("director.call");
-  if (state !== "live") {
-    return (
-      <p className={cn("flex items-center gap-2 rounded-full py-1 pr-3.5 pl-1.5", GLASS)}>
-        <GeminiLoader size="sm" label={t("connecting")} />
-        <span className="text-sm font-semibold">{t("connecting")}</span>
-      </p>
-    );
-  }
   return (
-    <p
+    <div
+      aria-live="polite"
       className={cn(
         "flex items-center gap-2 rounded-full py-1 pr-3.5 pl-1.5 text-sm font-semibold",
         GLASS,
       )}
     >
-      <CallOrb level={level} className="size-6" />
-      {t("live")}
-    </p>
+      {state === "live" ? (
+        <>
+          <CallOrb level={level} className="size-6" />
+          <span>{t("live")}</span>
+        </>
+      ) : (
+        <>
+          <GeminiLoader size="sm" label={t("connecting")} />
+          <span aria-hidden="true">{t("connecting")}</span>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -128,10 +141,11 @@ export function CallCaptions({ captions, level }: { captions: Captions; level: (
 }
 
 /** The button that rings Director, in the dock beside the shutter. */
-export function CallButton({ onCall }: { onCall: () => void }) {
+export function CallButton({ onCall, ref }: { onCall: () => void; ref?: Ref<HTMLButtonElement> }) {
   const t = useTranslations("director.call");
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onCall}
       aria-label={t("start")}
@@ -155,12 +169,14 @@ export function CallDock({
   canMute,
   onMute,
   onEnd,
+  endRef,
 }: {
   shutter: ReactNode;
   muted: boolean;
   canMute: boolean;
   onMute: () => void;
   onEnd: () => void;
+  endRef?: Ref<HTMLButtonElement>;
 }) {
   const t = useTranslations("director.call");
   const mute = muted ? t("unmute") : t("mute");
@@ -187,6 +203,7 @@ export function CallDock({
       </button>
       {shutter}
       <button
+        ref={endRef}
         type="button"
         aria-label={t("end")}
         title={t("end")}

@@ -5,7 +5,7 @@ import { Spinner } from "@repo/ui/components/spinner";
 import { cn } from "@repo/ui/lib/utils";
 import { Check, RotateCcw } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
-import { useMemo } from "react";
+import { type ReactNode, useMemo } from "react";
 import { useObjectUrl } from "../hooks/use-object-url";
 import { webVtt } from "../lib/captions";
 import type { Cut } from "../lib/cut";
@@ -110,6 +110,8 @@ export function DirectorsCut({
   error,
   onAgain,
   onKeep,
+  captions,
+  raised = false,
 }: {
   take: Blob;
   cut: Cut;
@@ -118,6 +120,10 @@ export function DirectorsCut({
   error: string | null;
   onAgain: () => void;
   onKeep: () => void;
+  /** What's being said on a call, shown above the review. */
+  captions?: ReactNode;
+  /** Clear of a dock floating over the viewport's foot (on a call). */
+  raised?: boolean;
 }) {
   const t = useTranslations("director.live.cut");
   const locale = useLocale();
@@ -136,7 +142,10 @@ export function DirectorsCut({
         </p>
         <ScoreStar score={cut.score} label={t("score", { score: cut.score })} />
       </div>
-      <div className="absolute inset-x-3 bottom-3 flex flex-col gap-3">
+      <div
+        className={cn("absolute inset-x-3 flex flex-col gap-3", raised ? "bottom-28" : "bottom-3")}
+      >
+        {captions}
         <div
           aria-live="polite"
           className={cn(

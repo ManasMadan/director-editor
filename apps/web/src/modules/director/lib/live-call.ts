@@ -1,40 +1,12 @@
 /**
  * The video call with Director, as the browser sees it: where it connects (the API's
- * /api/live, on the page's own origin like /rpc), what the API sends down it, and the
- * captions built from both sides' transcripts. The messages mirror the API's relay
- * (apps/api/src/modules/live/live.messages.ts); what can't be read is ignored, the way
- * the relay ignores what it can't read from Gemini.
+ * live route, on the page's own origin like /rpc), what the API sends down it (the
+ * shared schema in @repo/contracts/live), and the captions built from both sides'
+ * transcripts. What can't be read is ignored, the way the relay ignores what it can't
+ * read from Gemini.
  */
-import { errorCode } from "@repo/contracts/errors";
-import * as z from "zod";
+import { LIVE_PATH, type LiveServerMessage, liveServerMessage } from "@repo/contracts/live";
 
-/** What Director can do to the camera app during a call. */
-const LIVE_TOOLS = [
-  "start_recording",
-  "stop_recording",
-  "next_shot",
-  "previous_shot",
-  "retake",
-] as const;
-
-const serverMessageSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("audio"), pcm16: z.base64() }),
-  z.object({
-    type: z.literal("transcript"),
-    who: z.enum(["you", "director"]),
-    text: z.string(),
-  }),
-  z.object({
-    type: z.literal("tool"),
-    name: z.enum(LIVE_TOOLS),
-    args: z.object({ reason: z.string().optional() }),
-  }),
-  z.object({ type: z.literal("interrupted") }),
-  // A code newer than this page is still a failure: our own, as far as it can tell.
-  z.object({ type: z.literal("error"), code: errorCode.catch("INTERNAL") }),
-]);
-export type ServerMessage = z.infer<typeof serverMessageSchema>;
-export type LiveTool = (typeof LIVE_TOOLS)[number];
 export type Speaker = "you" | "director";
 
 function parseJson(text: string): unknown {
@@ -47,15 +19,15 @@ function parseJson(text: string): unknown {
 }
 
 /** A frame from the call's socket, or null when it isn't a message this page knows. */
-export function parseServerMessage(data: unknown): ServerMessage | null {
+export function parseServerMessage(data: unknown): LiveServerMessage | null {
   if (typeof data !== "string") {
     return null;
   }
-  const parsed = serverMessageSchema.safeParse(parseJson(data));
+  const parsed = liveServerMessage.safeParse(parseJson(data));
   return parsed.success ? parsed.data : null;
 }
 
-/** The call's WebSocket URL for one shot of a short, on the page's origin. */
+/** The call's WebSocket URL for a short, starting on one of its shots, on the page's origin. */
 export function callUrl(
   page: Pick<Location, "protocol" | "host">,
   videoId: string,
@@ -63,7 +35,7 @@ export function callUrl(
 ): string {
   const scheme = page.protocol === "https:" ? "wss" : "ws";
   const query = new URLSearchParams({ videoId, shot: String(shotIndex) });
-  return `${scheme}://${page.host}/api/live?${query}`;
+  return `${scheme}://${page.host}${LIVE_PATH}?${query}`;
 }
 
 interface Caption {

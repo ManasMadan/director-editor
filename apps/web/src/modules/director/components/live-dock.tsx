@@ -4,7 +4,7 @@ import { cn } from "@repo/ui/lib/utils";
 import { Mic, MicOff, Pause, Play, ScreenShare, ScreenShareOff, X } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import type { ListenState } from "../hooks/use-listening";
 import { CallButton } from "./live-call";
 import { GLASS } from "./live-hud";
@@ -112,6 +112,7 @@ export function Shutter({
 export function LiveDock({
   idle,
   onCall,
+  callRef,
   shutter,
   sharing,
   onShare,
@@ -123,6 +124,7 @@ export function LiveDock({
 }: {
   idle: boolean;
   onCall: () => void;
+  callRef?: Ref<HTMLButtonElement>;
   shutter: ReactNode;
   sharing: boolean;
   onShare: (() => void) | null;
@@ -157,7 +159,7 @@ export function LiveDock({
       )}
     >
       <div className={cn("flex gap-2.5", fade)}>
-        <CallButton onCall={onCall} />
+        <CallButton onCall={onCall} ref={callRef} />
         {onShare ? (
           <DockButton
             label={sharing ? t("stopShare") : t("share")}

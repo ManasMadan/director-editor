@@ -22,6 +22,11 @@ class Capture extends AudioWorkletProcessor {
     super();
     this.chunk = new Float32Array(options.processorOptions.chunk);
     this.filled = 0;
+    this.running = true;
+    // Told to stop when the call ends: returning false lets the audio thread drop it.
+    this.port.onmessage = () => {
+      this.running = false;
+    };
   }
   process(inputs) {
     for (const sample of inputs[0]?.[0] ?? []) {
@@ -32,7 +37,7 @@ class Capture extends AudioWorkletProcessor {
         this.filled = 0;
       }
     }
-    return true;
+    return this.running;
   }
 }
 registerProcessor("${CAPTURE_PROCESSOR}", Capture);
@@ -122,6 +127,7 @@ export async function openMicrophone(
     },
     stop() {
       node.port.onmessage = null;
+      node.port.postMessage("stop");
       source.disconnect();
       node.disconnect();
       for (const track of tracks) {
@@ -142,6 +148,7 @@ export function createPlayer(context: AudioContext, onSpeaking: (speaking: boole
   const levels = new Float32Array(analyser.fftSize);
   const playing = new Set<AudioBufferSourceNode>();
   let endsAt = 0;
+  let held = false;
 
   const flush = () => {
     for (const source of playing) {
@@ -156,7 +163,7 @@ export function createPlayer(context: AudioContext, onSpeaking: (speaking: boole
   return {
     /** Queues a chunk to play right after the last one. */
     play(pcm: Int16Array) {
-      if (pcm.length === 0) {
+      if (held || pcm.length === 0) {
         return;
       }
       const buffer = context.createBuffer(1, pcm.length, PLAYBACK_RATE);
@@ -178,6 +185,16 @@ export function createPlayer(context: AudioContext, onSpeaking: (speaking: boole
     },
     /** Drops what's still to play: the member started talking. */
     flush,
+    /**
+     * While held, Director's voice is dropped rather than played: a take is recording the
+     * member's voice, and the speaker would put Director's in it too.
+     */
+    hold(on: boolean) {
+      held = on;
+      if (on) {
+        flush();
+      }
+    },
     /** How loud Director is right now, from 0 to 1. */
     level() {
       analyser.getFloatTimeDomainData(levels);
