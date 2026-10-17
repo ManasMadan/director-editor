@@ -6,8 +6,36 @@ source range to the next: `repair_plan` is what catches that instead of failing 
 whole analysis.
 """
 
+import pytest
+
 from app.plan_repair import repair_plan
-from app.schemas import MAX_SHORT_SECONDS, ShotPlan
+from app.schemas import (
+    MAX_POSE_KEYPOINTS,
+    MAX_SCRIPT_LINES,
+    MAX_SHORT_SECONDS,
+    MAX_SHOT_STEPS,
+    MAX_SHOTS,
+    ShotPlan,
+)
+
+# Keypoint.name's 13 allowed values (app/schemas.py's KeypointName); a test pose with
+# more keypoints than that cycles back through them (the schema never requires unique
+# names).
+KEYPOINT_NAMES = (
+    "nose",
+    "left_shoulder",
+    "right_shoulder",
+    "left_elbow",
+    "right_elbow",
+    "left_wrist",
+    "right_wrist",
+    "left_hip",
+    "right_hip",
+    "left_knee",
+    "right_knee",
+    "left_ankle",
+    "right_ankle",
+)
 
 FRAMING: dict[str, object] = {
     "shotSize": "full-body",
@@ -143,3 +171,63 @@ def test_repair_recomputes_the_plan_s_duration() -> None:
     repaired = repair_plan(plan(a, b, duration=100), video_seconds=20)
 
     assert repaired.durationSeconds == 8
+
+
+def test_repair_trims_shots_to_the_director_max() -> None:
+    # One second each, back to back: more than MAX_SHOTS of them, none a sliver, none
+    # overlapping, so nothing but the trim itself drops any.
+    extra = 3
+    shots = [
+        shot(title=str(i), sourceStartSeconds=i, sourceEndSeconds=i + 1, durationSeconds=1)
+        for i in range(MAX_SHOTS + extra)
+    ]
+    repaired = repair_plan(plan(*shots, duration=len(shots)), video_seconds=len(shots))
+
+    assert [s.title for s in repaired.shots] == [str(i) for i in range(MAX_SHOTS)]
+
+
+def test_repair_trims_steps_and_script_and_keypoints() -> None:
+    steps = [
+        {"atSeconds": i, "instruction": f"Step {i}.", "cameraMove": "static"}
+        for i in range(MAX_SHOT_STEPS + 5)
+    ]
+    script = [
+        {"startSeconds": i * 0.2, "endSeconds": i * 0.2 + 0.15, "text": f"Line {i}."}
+        for i in range(MAX_SCRIPT_LINES + 5)
+    ]
+    keypoints = [
+        {"name": KEYPOINT_NAMES[i % len(KEYPOINT_NAMES)], "x": 0.5, "y": 0.5}
+        for i in range(MAX_POSE_KEYPOINTS + 5)
+    ]
+    a_shot = shot(
+        durationSeconds=60,
+        sourceEndSeconds=60,
+        steps=steps,
+        script=script,
+        pose={"description": "A pose.", "keypoints": keypoints},
+    )
+    repaired = repair_plan(plan(a_shot, duration=60), video_seconds=60)
+
+    [only] = repaired.shots
+    assert len(only.steps) == MAX_SHOT_STEPS
+    assert [step.instruction for step in only.steps] == [
+        f"Step {i}." for i in range(MAX_SHOT_STEPS)
+    ]
+    assert len(only.script) == MAX_SCRIPT_LINES
+    assert len(only.pose.keypoints) == MAX_POSE_KEYPOINTS
+
+
+def test_repair_synthesizes_a_step_when_the_shot_has_none() -> None:
+    a_shot = shot(scene="Stand near a tree", steps=[])
+    repaired = repair_plan(plan(a_shot, duration=4), video_seconds=20)
+
+    [only] = repaired.shots
+    [step] = only.steps
+    assert step.atSeconds == 0
+    assert step.cameraMove == "static"
+    assert "Stand near a tree" in step.instruction
+
+
+def test_repair_raises_for_a_plan_with_no_shots() -> None:
+    with pytest.raises(ValueError, match="at least one shot"):
+        repair_plan(plan(duration=4), video_seconds=20)

@@ -6,9 +6,28 @@ one shot's source range to the one before it. A plan with one such mistake would
 otherwise fail the whole analysis (DIRECTOR_ANALYSIS_FAILED) over a detail nobody
 filming would notice is wrong. `repair_plan` cleans those up deterministically, so a
 small inconsistency costs a repair, not the plan.
+
+A list's own length (how many shots, steps, script lines or pose keypoints) is one such
+detail, and a special case: `MAX_SHOTS`, `MAX_SHOT_STEPS`, `MAX_SCRIPT_LINES` and
+`MAX_POSE_KEYPOINTS` are never declared on the corresponding `Field` in app/schemas.py
+(no `minItems`/`maxItems` reaches Gemini in the request: Vertex AI answers 400
+INVALID_ARGUMENT to a ShotPlan schema that has any, on every model and output mode,
+bisected down to exactly that keyword), so `repair_plan` is the only place they're
+enforced, by trimming an answer that runs over.
 """
 
-from app.schemas import MAX_SHORT_SECONDS, MAX_SHOT_SECONDS, ScriptLine, Shot, ShotPlan, ShotStep
+from app.schemas import (
+    MAX_POSE_KEYPOINTS,
+    MAX_SCRIPT_LINES,
+    MAX_SHORT_SECONDS,
+    MAX_SHOT_SECONDS,
+    MAX_SHOT_STEPS,
+    MAX_SHOTS,
+    ScriptLine,
+    Shot,
+    ShotPlan,
+    ShotStep,
+)
 
 # Below this, a shot's source range is leftover noise (a cut mistimed by a fraction of a
 # second), not a shot anyone could film.
@@ -16,25 +35,36 @@ MIN_SHOT_SOURCE_SECONDS = 0.3
 # ScriptLine.endSeconds must be at least this (its own Field constraint); a clamped line
 # shorter than it said nothing worth keeping.
 MIN_SCRIPT_LINE_SECONDS = 0.1
+# What a synthesized step says when a shot came back with none: short enough that even a
+# shot with a nearly 200-character scene still fits `ShotStep.instruction`'s 160.
+_SYNTHESIZED_STEP_PREFIX = "Get ready: "
 
 
 def repair_plan(plan: ShotPlan, video_seconds: float | None) -> ShotPlan:
-    """`plan`, with every shot's timing made consistent with itself and its neighbours.
+    """`plan`, with every shot's timing made consistent with itself and its neighbours,
+    and every list back within the limit Gemini's schema no longer states.
 
     Shots are sorted by where they start in the source and trimmed so they never
     overlap; their source range is clamped into the video's own length (or, when that
     isn't known yet, `MAX_SHORT_SECONDS`); a shot left shorter than
     `MIN_SHOT_SOURCE_SECONDS` is dropped, unless that would empty the plan, in which case
-    the longest of them survives anyway (`ShotPlan.shots` needs at least one). Each
-    remaining shot's edited duration is clamped to a sane range, and its script lines and
-    steps are pulled back inside it. The plan's own `durationSeconds` is then the sum of
-    its shots', not whatever Gemini originally wrote.
+    the longest of them survives anyway. What's left is trimmed to `MAX_SHOTS`, keeping
+    the earliest ones. Each remaining shot's edited duration is clamped to a sane range,
+    its script lines and steps are pulled back inside it and trimmed to `MAX_SCRIPT_LINES`
+    and `MAX_SHOT_STEPS`, a shot left with no steps gets one synthesized from its scene,
+    and its pose's keypoints are trimmed to `MAX_POSE_KEYPOINTS`. The plan's own
+    `durationSeconds` is then the sum of its shots', not whatever Gemini originally wrote.
+
+    Raises `ValueError` for a plan with no shots at all: there's nothing to repair that
+    into, and `ShotPlan.shots` carries no `minItems` to have refused it on the way in.
     """
+    if not plan.shots:
+        raise ValueError("a shot plan needs at least one shot")
     ceiling = video_seconds if video_seconds is not None else MAX_SHORT_SECONDS
     shots = sorted(plan.shots, key=lambda shot: shot.sourceStartSeconds)
     shots = [_clamp_source(shot, ceiling) for shot in shots]
     shots = _remove_overlaps(shots)
-    shots = _drop_slivers(shots)
+    shots = _drop_slivers(shots)[:MAX_SHOTS]
     shots = [_repair_shot(shot) for shot in shots]
     return plan.model_copy(
         update={
@@ -80,11 +110,15 @@ def _source_span(shot: Shot) -> float:
 
 def _repair_shot(shot: Shot) -> Shot:
     duration = _clamp(shot.durationSeconds, 0.5, MAX_SHOT_SECONDS)
+    steps = [_repair_step(step, duration) for step in shot.steps][:MAX_SHOT_STEPS]
     return shot.model_copy(
         update={
             "durationSeconds": duration,
             "script": _repair_script(shot.script, duration),
-            "steps": [_repair_step(step, duration) for step in shot.steps],
+            "steps": steps or [_synthesized_step(shot)],
+            "pose": shot.pose.model_copy(
+                update={"keypoints": shot.pose.keypoints[:MAX_POSE_KEYPOINTS]}
+            ),
         }
     )
 
@@ -97,11 +131,18 @@ def _repair_script(lines: list[ScriptLine], duration: float) -> list[ScriptLine]
         if end - start < MIN_SCRIPT_LINE_SECONDS:
             continue  # Clamping left nothing worth saying: drop it rather than keep a blink.
         repaired.append(line.model_copy(update={"startSeconds": start, "endSeconds": end}))
-    return repaired
+    return repaired[:MAX_SCRIPT_LINES]
 
 
 def _repair_step(step: ShotStep, duration: float) -> ShotStep:
     return step.model_copy(update={"atSeconds": _clamp(step.atSeconds, 0, duration)})
+
+
+def _synthesized_step(shot: Shot) -> ShotStep:
+    """A shot Gemini left with no steps at all gets one, from its scene, rather than fail
+    the plan over a detail a beginner filmer would never notice was synthesized."""
+    instruction = f"{_SYNTHESIZED_STEP_PREFIX}{shot.scene}."[:160]
+    return ShotStep(atSeconds=0, instruction=instruction, cameraMove="static")
 
 
 def _clamp(value: float, low: float, high: float) -> float:

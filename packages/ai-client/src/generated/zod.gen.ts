@@ -375,7 +375,7 @@ export const zSourcesEvent = z.object({
  */
 export const zTargetPose = z.object({
     description: z.string().min(1).max(160),
-    keypoints: z.array(zKeypoint).max(13)
+    keypoints: z.array(zKeypoint)
 });
 
 /**
@@ -391,10 +391,10 @@ export const zShot = z.object({
     purpose: z.string().min(1).max(240),
     scene: z.string().min(1).max(200),
     sceneLandmark: z.string().max(40).nullable(),
-    script: z.array(zScriptLine).max(20),
+    script: z.array(zScriptLine),
     sourceEndSeconds: z.number().gte(0.1).lte(180),
     sourceStartSeconds: z.number().gte(0).lte(180),
-    steps: z.array(zShotStep).min(1).max(10),
+    steps: z.array(zShotStep),
     title: z.string().min(1).max(80)
 });
 
@@ -410,7 +410,7 @@ export const zShotPlan = z.object({
     ]),
     durationSeconds: z.number().gte(0.5).lte(180),
     format: z.string().min(1).max(60),
-    shots: z.array(zShot).min(1).max(12),
+    shots: z.array(zShot),
     summary: z.string().min(1).max(400),
     title: z.string().min(1).max(120)
 });

@@ -135,7 +135,11 @@ export const shotPlanSchema = z.object({
   summary: z.string(),
   audio: z.enum(["speech", "music", "speech-and-music", "none"]),
   durationSeconds: z.number().min(0.5),
-  shots: z.array(shotSchema).min(1).max(DIRECTOR_MAX_SHOTS),
+  // No `.min()`/`.max()`: a stored plan never has more than DIRECTOR_MAX_SHOTS (the AI
+  // service's repair_plan trims to it, since Vertex AI rejects a ShotPlan schema whose
+  // request carries any array bound at all), but that's an invariant of what's written,
+  // not of the type.
+  shots: z.array(shotSchema),
 });
 export type ShotPlan = z.infer<typeof shotPlanSchema>;
 

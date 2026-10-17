@@ -1057,7 +1057,7 @@
             "$ref": "#/components/schemas/TargetPose"
           },
           "purpose": {
-            "description": "What it shows, and why.",
+            "description": "The scene's role in the story (hook, setup, reveal or payoff) and the feeling it's going for.",
             "maxLength": 240,
             "minLength": 1,
             "title": "Purpose",
@@ -1088,7 +1088,6 @@
             "items": {
               "$ref": "#/components/schemas/ScriptLine"
             },
-            "maxItems": 20,
             "title": "Script",
             "type": "array"
           },
@@ -1108,8 +1107,6 @@
             "items": {
               "$ref": "#/components/schemas/ShotStep"
             },
-            "maxItems": 10,
-            "minItems": 1,
             "title": "Steps",
             "type": "array"
           },
@@ -1168,8 +1165,6 @@
             "items": {
               "$ref": "#/components/schemas/Shot"
             },
-            "maxItems": 12,
-            "minItems": 1,
             "title": "Shots",
             "type": "array"
           },
@@ -1279,7 +1274,6 @@
             "items": {
               "$ref": "#/components/schemas/Keypoint"
             },
-            "maxItems": 13,
             "title": "Keypoints",
             "type": "array"
           }

@@ -298,6 +298,8 @@ The `director` feature in the API is on when `YOUTUBE_API_KEY` is set and the `a
 | `DIRECTOR_TOKENS_PER_PLAN` | ai | 200000 | Cap per plan: watching the whole short and thinking (at least 10000). |
 | `DIRECTOR_TOKENS_PER_SCENE_CHECK` | ai | 12000 | Cap per scene check: one camera frame (at least 2000). |
 | `DIRECTOR_TOKENS_PER_REVIEW` | ai | 120000 | Cap per take review: watching one take (at least 10000). |
+| `INDEX_MODEL` | ai | `gemini-4-argon` (`gemini-mock` in `.env.example`) | The model a plan job indexes a short with, unattended, so it can be a different, more thorough model than `DIRECTOR_MODEL`'s live scene checks and reviews. |
+| `INDEX_FALLBACK_MODEL` | ai | `gemini-3.1-pro-preview` (`gemini-mock` in `.env.example`) | Tried once after `INDEX_MODEL`'s own retries on a plan are spent (a transient failure, not a refusal). |
 | `YOUTUBE_API_KEY` | api, the mock Google | `mock-google-key` in `.env.example` | YouTube Data API v3 key: the Shorts feed, search, video details and comments. Unset: Director off. |
 | `YOUTUBE_API_URL` | api | `https://www.googleapis.com/youtube/v3` (`http://localhost:12112/youtube/v3` in `.env.example`) | Where the API reads YouTube: the mock Google locally. Must be HTTPS in production. |
 

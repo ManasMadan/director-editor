@@ -61,13 +61,20 @@ class DocumentOut(BaseModel):
 
 # ------------------------------------------------------------------------------ Director
 # A shot plan is what Gemini writes after watching a short: the model's output type, so
-# every constraint below is also an instruction to it (they reach it in the JSON schema).
+# every constraint below is also an instruction to it (they reach it in the JSON schema),
+# with one exception: a list's own length (`shots`, `steps`, `script`, `pose.keypoints`)
+# carries no `minItems`/`maxItems` in what's sent to Gemini (app/director.py strips it:
+# Vertex AI answers 400 INVALID_ARGUMENT to a ShotPlan schema that has any), so those four
+# are enforced afterwards instead, by `repair_plan` trimming an answer that runs over.
 # Positions are fractions of a 9:16 portrait frame, from its top-left corner.
 
 VIDEO_ID_PATTERN = r"^[A-Za-z0-9_-]{11}$"
 MAX_SHOTS = 12
 MAX_SHORT_SECONDS = 180
 MAX_SHOT_SECONDS = 60
+MAX_SHOT_STEPS = 10
+MAX_SCRIPT_LINES = 20
+MAX_POSE_KEYPOINTS = 13
 # A camera frame for a scene check, base64: a 640-pixel JPEG is 40-120 kB.
 MAX_FRAME_BASE64 = 400_000
 
@@ -136,8 +143,9 @@ class PhoneAngle(BaseModel):
 
 class TargetPose(BaseModel):
     description: str = Field(min_length=1, max_length=160)
+    # No `max_length` (MAX_POSE_KEYPOINTS instead, enforced by repair_plan): see the
+    # module comment on why a list's length isn't a Field constraint here.
     keypoints: list[Keypoint] = Field(
-        max_length=13,
         description="The person's joints at the shot's key moment; empty when no one is in it.",
     )
 
@@ -159,7 +167,12 @@ class ScriptLine(BaseModel):
 class Shot(BaseModel):
     kind: Literal["video", "photo"]
     title: str = Field(min_length=1, max_length=80)
-    purpose: str = Field(min_length=1, max_length=240, description="What it shows, and why.")
+    purpose: str = Field(
+        min_length=1,
+        max_length=240,
+        description="The scene's role in the story (hook, setup, reveal or payoff) and the "
+        "feeling it's going for.",
+    )
     sourceStartSeconds: float = Field(ge=0, le=MAX_SHORT_SECONDS)
     sourceEndSeconds: float = Field(ge=0.1, le=MAX_SHORT_SECONDS)
     durationSeconds: float = Field(
@@ -177,8 +190,13 @@ class Shot(BaseModel):
     framing: Framing
     phoneAngle: PhoneAngle
     pose: TargetPose
-    steps: list[ShotStep] = Field(min_length=1, max_length=10)
-    script: list[ScriptLine] = Field(max_length=20, description="Empty when nothing is said.")
+    # No `min_length`/`max_length` (MAX_SHOT_STEPS instead, enforced by repair_plan,
+    # which also synthesizes a step when Gemini leaves this empty): see the module
+    # comment on why a list's length isn't a Field constraint here.
+    steps: list[ShotStep]
+    # No `max_length` (MAX_SCRIPT_LINES instead, enforced by repair_plan): see the module
+    # comment on why a list's length isn't a Field constraint here.
+    script: list[ScriptLine] = Field(description="Empty when nothing is said.")
 
 
 class ShotPlan(BaseModel):
@@ -187,7 +205,10 @@ class ShotPlan(BaseModel):
     summary: str = Field(min_length=1, max_length=400)
     audio: Literal["speech", "music", "speech-and-music", "none"]
     durationSeconds: float = Field(ge=0.5, le=MAX_SHORT_SECONDS)
-    shots: list[Shot] = Field(min_length=1, max_length=MAX_SHOTS)
+    # No `min_length`/`max_length` (MAX_SHOTS instead, enforced by repair_plan): see the
+    # module comment on why a list's length isn't a Field constraint here. A plan with no
+    # shots at all can't be repaired into one; `repair_plan` raises for that case.
+    shots: list[Shot]
 
 
 # The database checks them too (director_plan_status_check, director_take_status_check).

@@ -59835,8 +59835,6 @@
                             },
                             "shots": {
                               "type": "array",
-                              "minItems": 1,
-                              "maxItems": 12,
                               "items": {
                                 "type": "object",
                                 "properties": {
@@ -61466,8 +61464,6 @@
                             },
                             "shots": {
                               "type": "array",
-                              "minItems": 1,
-                              "maxItems": 12,
                               "items": {
                                 "type": "object",
                                 "properties": {

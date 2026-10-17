@@ -15,9 +15,10 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import TypeAdapter, ValidationError
 
-from app.director import Director, ReviewInterrupted
+from app.director import PLANNER_RETRIES, Director, ReviewInterrupted
 from app.queues import JobLike
 from app.schemas import DirectorPlanOut, DirectorTakeOut, SceneCheck
+from app.settings import get_settings
 from app.worker import director_processor
 from tests.fakes import (
     GEMINI_MODEL,
@@ -38,6 +39,7 @@ from tests.support import (
     new_org,
     on_app_loop,
     published,
+    redis_client,
     stored_job,
     subscribe,
 )
@@ -104,6 +106,75 @@ PLAN: dict[str, object] = {
         },
     ],
 }
+# No one in the shot at all: an object (the pan) is the whole subject.
+NO_PERSON_PLAN: dict[str, object] = {
+    "title": "5-minute pasta",
+    "format": "recipe",
+    "summary": "A quick pasta, from pan to plate.",
+    "audio": "music",
+    "durationSeconds": 6,
+    "shots": [
+        {
+            "kind": "video",
+            "title": "The pan",
+            "purpose": "setup: the ingredients go in, simple and inviting",
+            "sourceStartSeconds": 0,
+            "sourceEndSeconds": 6,
+            "durationSeconds": 6,
+            "camera": "back",
+            "scene": "At the stove",
+            "sceneLandmark": "stove",
+            "framing": {
+                "shotSize": "close-up",
+                "subject": {"x": 0.2, "y": 0.2, "width": 0.6, "height": 0.6},
+                "note": "The pan fills the frame.",
+            },
+            "phoneAngle": {"pitch": -60, "roll": 0, "tolerance": 10, "height": "overhead"},
+            "pose": {"description": "No one in frame.", "keypoints": []},
+            "steps": [
+                {"atSeconds": 0, "instruction": "Put the pan on the stove.", "cameraMove": "static"}
+            ],
+            "script": [],
+        }
+    ],
+}
+# Nobody speaks; the story is told by on-screen captions, carried as script lines.
+NO_SPEECH_PLAN: dict[str, object] = {
+    "title": "3 tips for faster mornings",
+    "format": "listicle",
+    "summary": "Three on-screen tips, no voice at all.",
+    "audio": "none",
+    "durationSeconds": 6,
+    "shots": [
+        {
+            "kind": "video",
+            "title": "Tip one",
+            "purpose": "hook: the first tip, on screen only",
+            "sourceStartSeconds": 0,
+            "sourceEndSeconds": 6,
+            "durationSeconds": 6,
+            "camera": "front",
+            "scene": "In the kitchen",
+            "sceneLandmark": None,
+            "framing": FRAMING,
+            "phoneAngle": ANGLE,
+            "pose": {
+                "description": "Standing, pointing at the caption.",
+                "keypoints": [{"name": "nose", "x": 0.5, "y": 0.2}],
+            },
+            "steps": [
+                {
+                    "atSeconds": 0,
+                    "instruction": 'Show the caption "Tip 1: Prep the night before".',
+                    "cameraMove": "static",
+                }
+            ],
+            "script": [
+                {"startSeconds": 0, "endSeconds": 3, "text": "Tip 1: Prep the night before"}
+            ],
+        }
+    ],
+}
 SCENE: dict[str, object] = {
     "inPlace": False,
     "instruction": "Move about five meters left, to the tree.",
@@ -134,6 +205,10 @@ def gemini() -> Iterator[tuple[Fake, dict[str, Callable[[bytes], Reply]]]]:
 def extra_env(gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]) -> dict[str, str]:
     return {
         "DIRECTOR_MODEL": GEMINI_MODEL,
+        # Indexing (app/director.py's planner) uses its own models; the fake only answers
+        # one path, so both point at it too, same as DIRECTOR_MODEL.
+        "INDEX_MODEL": GEMINI_MODEL,
+        "INDEX_FALLBACK_MODEL": GEMINI_MODEL,
         "GOOGLE_API_KEY": "test-key",
         "GOOGLE_BASE_URL": gemini[0].url,
     }
@@ -265,11 +340,85 @@ def test_the_analysis_watches_the_short_and_stores_the_plan(
     assert path == GEMINI_PATH
     # Gemini watches the video from its URL; it is never downloaded here.
     assert b'"file_uri": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"' in sent
+    # fps and the resolution hint reach the request (pydantic-ai's VideoUrl.vendor_metadata
+    # and GoogleModelSettings.google_video_resolution).
+    assert b'"videoMetadata": {"fps": 3.0}' in sent
+    assert b'"mediaResolution": "MEDIA_RESOLUTION_MEDIUM"' in sent
+    # No array bound anywhere in the schema: Vertex AI answers 400 INVALID_ARGUMENT to a
+    # ShotPlan schema that has one (see app/plan_repair.py's module comment).
+    assert b"minItems" not in sent
+    assert b"maxItems" not in sent
     assert usage(org, "director-plan") == 1_000
     # A ready plan isn't analyzed again, nor queued again when asked for.
     on_app_loop(client, lambda: director().analyze(org, plan.id, user))
     assert len(gemini[0].received) == 1
     assert request_plan(client, org, user).status == "ready"
+
+
+def test_a_plan_with_no_one_in_it_is_accepted(
+    client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    """An object (a pan, a product, a view) can be the whole subject: empty keypoints and
+    an object-framed shot are a valid plan, not a broken one."""
+    gemini[1][GEMINI_PATH] = gemini_output(NO_PERSON_PLAN)
+    org, user = new_org()
+    plan = ready_plan(client, org, user)
+    assert plan.status == "ready"
+    assert plan.plan is not None
+    [shot] = plan.plan.shots
+    assert shot.pose.keypoints == []
+    assert shot.camera == "back"
+
+
+def test_a_plan_with_no_speech_is_accepted(
+    client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    """Nobody has to speak: on-screen text carrying the story, transcribed into script, is
+    a valid plan too."""
+    gemini[1][GEMINI_PATH] = gemini_output(NO_SPEECH_PLAN)
+    org, user = new_org()
+    plan = ready_plan(client, org, user)
+    assert plan.status == "ready"
+    assert plan.plan is not None
+    assert plan.plan.audio == "none"
+    [shot] = plan.plan.shots
+    assert [line.text for line in shot.script] == ["Tip 1: Prep the night before"]
+
+
+def test_the_planner_retries_then_falls_back_to_the_index_fallback_model(
+    monkeypatch: pytest.MonkeyPatch, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    """INDEX_MODEL's video calls fail intermittently; a transient failure is retried on it
+    a couple of times before the plan falls back to INDEX_FALLBACK_MODEL, rather than
+    failing a plan job over one bad response."""
+    fallback_model = "gemini-fallback-test"
+    fallback_path = f"/v1beta/models/{fallback_model}:generateContent"
+    gemini[1][GEMINI_PATH] = gemini_error(503, "UNAVAILABLE")
+    gemini[1][fallback_path] = gemini_output(PLAN)
+    for key, value in {
+        **ENV,
+        "DIRECTOR_MODEL": GEMINI_MODEL,
+        "INDEX_MODEL": GEMINI_MODEL,
+        "INDEX_FALLBACK_MODEL": fallback_model,
+        "GOOGLE_API_KEY": "test-key",
+        "GOOGLE_BASE_URL": gemini[0].url,
+    }.items():
+        monkeypatch.setenv(key, value)
+    get_settings.cache_clear()
+    redis_client().flushdb()  # pyright: ignore[reportUnknownMemberType]  # untyped options
+    from app.main import app
+
+    with TestClient(app) as test_client:
+        org, user = new_org()
+        plan = ready_plan(test_client, org, user)
+    get_settings.cache_clear()
+
+    assert plan.status == "ready"
+    paths = [path for path, _ in gemini[0].received]
+    # Every attempt on the primary model (the initial try plus PLANNER_RETRIES), then one
+    # on the fallback, which is the one that actually answers.
+    assert paths.count(GEMINI_PATH) == PLANNER_RETRIES + 1
+    assert paths.count(fallback_path) == 1
 
 
 def test_a_plan_nobody_asked_for_is_not_found(client: TestClient) -> None:

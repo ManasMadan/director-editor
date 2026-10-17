@@ -47,7 +47,10 @@ For the real APIs: empty `GOOGLE_BASE_URL`, set `YOUTUBE_API_URL` back to Google
 real keys and a real `DIRECTOR_MODEL` (`gemini-3.5-flash`). Production refuses the mock
 (both URLs must be HTTPS there). Set `GOOGLE_VERTEX=true` to call Gemini through Vertex
 AI instead of the Gemini API: `GOOGLE_API_KEY` then needs to be a Vertex key bound to a
-service account, and usage bills through Cloud Billing rather than the Gemini API.
+service account, and usage bills through Cloud Billing rather than the Gemini API. A plan
+job (watching a short unattended) indexes it with `INDEX_MODEL`, a separate, more
+thorough model from `DIRECTOR_MODEL`'s live scene checks and reviews; `INDEX_FALLBACK_MODEL`
+is tried once after `INDEX_MODEL`'s own retries on a transient failure are spent.
 
 If the Expo app's bundler won't start (`bun dev:full` stops with it), run the rest with
 `bunx turbo run dev --filter='!@repo/mobile'`.

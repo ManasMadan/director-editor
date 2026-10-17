@@ -366,6 +366,7 @@ file below 100%, or one no test loads.
 | `apps/ai/evals/__main__.py` | `# pyright: ignore[reportAssignmentType]` | pydantic-evals' report type is wider than what it returns |
 | `apps/ai/tests/conftest.py` | `# pyright: ignore[reportUnknownMemberType]` | redis-py's options are untyped |
 | `apps/ai/tests/support.py` | `# pyright: ignore[reportUnknownMemberType]` | redis-py's options and handlers are untyped |
+| `apps/ai/tests/test_director.py` | `# pyright: ignore[reportUnknownMemberType]` | redis-py's options are untyped |
 | `apps/ai/tests/test_evals.py` | `# pyright: ignore[reportArgumentType]` | these checks never read spans, so none are passed |
 
 ## Type-coverage exceptions
