@@ -1,7 +1,6 @@
 import { UnrecoverableError } from "bullmq";
 import { describe, expect, it } from "vitest";
 import { createProducer, idOf, isJobName, jobName, parseJob } from "./producer";
-import { queues, WEBHOOK_RETRY_DELAYS_MS } from "./queues";
 
 const payload = {
   template: "auth.otp",
@@ -64,11 +63,5 @@ describe("createProducer", () => {
   it("refuses job ids BullMQ can't store", async () => {
     await expect(producer.add("send", payload, { jobId: "a:b" })).rejects.toThrow(/without ":"/);
     await expect(producer.add("send", payload, { jobId: "" })).rejects.toThrow(/non-empty/);
-  });
-});
-
-describe("queue contracts", () => {
-  it("retries webhook deliveries once per step of the delivery schedule", () => {
-    expect(queues["webhook-deliveries"].options.attempts).toBe(WEBHOOK_RETRY_DELAYS_MS.length + 1);
   });
 });

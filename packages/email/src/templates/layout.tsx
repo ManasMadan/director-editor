@@ -1,25 +1,13 @@
-import {
-  Body,
-  Container,
-  Head,
-  Hr,
-  Html,
-  Link,
-  Preview,
-  Section,
-  Text,
-} from "@react-email/components";
+import { Body, Container, Head, Hr, Html, Preview, Section, Text } from "@react-email/components";
 import type { Locale, Translator } from "@repo/i18n";
 import type { ReactNode } from "react";
 
-const brand = { name: "Director-editor", color: "#171717" };
+const brand = { name: "Director", color: "#171717" };
 
 /** Every template receives the recipient's locale and a translator for it. */
 export interface LocalizedProps {
   locale: Locale;
   t: Translator;
-  /** Set for emails the recipient can opt out of (never for codes or security alerts). */
-  unsubscribeUrl?: string | undefined;
 }
 
 /** Shared chrome for every email. Keep it table-safe: React Email compiles to email-client HTML. */
@@ -27,7 +15,6 @@ export function Layout({
   locale,
   t,
   preview,
-  unsubscribeUrl,
   children,
 }: LocalizedProps & { preview: string; children: ReactNode }) {
   return (
@@ -57,13 +44,6 @@ export function Layout({
           <Text style={{ color: "#8a8a8a", fontSize: 12 }}>
             {t("email.footer", { appName: brand.name })}
           </Text>
-          {unsubscribeUrl ? (
-            <Text style={{ color: "#8a8a8a", fontSize: 12 }}>
-              <Link href={unsubscribeUrl} style={{ color: "#8a8a8a" }}>
-                {t("email.unsubscribe")}
-              </Link>
-            </Text>
-          ) : null}
         </Container>
       </Body>
     </Html>

@@ -7,34 +7,6 @@
       "properties": {
         "type": {
           "type": "string",
-          "const": "todos.changed"
-        }
-      },
-      "required": [
-        "type"
-      ],
-      "additionalProperties": false,
-      "title": "TodosChanged"
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "const": "notifications.changed"
-        }
-      },
-      "required": [
-        "type"
-      ],
-      "additionalProperties": false,
-      "title": "NotificationsChanged"
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
           "const": "files.changed"
         }
       },

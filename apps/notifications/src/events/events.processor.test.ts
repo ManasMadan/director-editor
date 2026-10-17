@@ -37,8 +37,12 @@ describe("events the notification service isn't routed", () => {
     expect(calls).toEqual([]);
     // The same processor does act on one it's routed.
     await processor.process(
-      job("webhook.endpoint_created.v1", { endpointId: randomUUID(), url: "https://x.test/h" }),
+      job("email.feedback_received.v1", {
+        provider: "stalwart",
+        kind: "bounce",
+        address: "gone@example.com",
+      }),
     );
-    expect(calls).toEqual(["dispatch"]);
+    expect(calls).toEqual(["suppress"]);
   });
 });
