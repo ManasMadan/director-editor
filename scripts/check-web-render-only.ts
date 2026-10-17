@@ -1,9 +1,8 @@
 /**
  * The web app renders UI only; all backend logic lives in apps/api. Next.js makes it
  * easy to slip server code in anyway (route handlers, server actions), so CI fails on
- * either. The allowed route handlers answer from configuration alone: the Kubernetes
- * health probe, and the mobile app's association files (apps/web/src/lib/app-links.ts),
- * which iOS and Android fetch from fixed paths.
+ * either. The one allowed route handler is the Kubernetes health probe, which answers
+ * from configuration alone.
  */
 
 import { readFileSync } from "node:fs";
@@ -11,11 +10,7 @@ import { join } from "node:path";
 import { Glob } from "bun";
 import { fail, ok, ROOT, runMain } from "./lib";
 
-const ALLOWED_ROUTES = new Set([
-  "app/healthz/route.ts",
-  "app/.well-known/apple-app-site-association/route.ts",
-  "app/.well-known/assetlinks.json/route.ts",
-]);
+const ALLOWED_ROUTES = new Set(["app/healthz/route.ts"]);
 
 /** Reports each piece of server code in the web app's source at `web`; the exit code. */
 export function checkWebRenderOnly(web = join(ROOT, "apps/web/src")): number {

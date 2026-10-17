@@ -17,13 +17,11 @@ function web(files: Record<string, string>) {
 }
 
 describe("the web app's render-only check", () => {
-  it("allows pages, components, the health probe and the app association files", () => {
+  it("allows pages, components and the health probe", () => {
     const printed = captureOutput();
     const dir = web({
       "app/page.tsx": "export default function Page() {}\n",
       "app/healthz/route.ts": "export function GET() {}\n",
-      "app/.well-known/apple-app-site-association/route.ts": "export function GET() {}\n",
-      "app/.well-known/assetlinks.json/route.ts": "export function GET() {}\n",
       "lib/format.ts": "// A comment about 'use server' is fine.\n",
     });
     expect(checkWebRenderOnly(dir)).toBe(0);
@@ -35,6 +33,7 @@ describe("the web app's render-only check", () => {
     const dir = web({
       "app/api/users/route.ts": "export function POST() {}\n",
       "app/.well-known/anything/route.ts": "export function GET() {}\n",
+      "app/.well-known/assetlinks.json/route.ts": "export function GET() {}\n",
       "app/actions.ts": '"use server";\nexport async function save() {}\n',
       "pages/api/hello.js": "export default () => {};\n",
     });
@@ -42,6 +41,8 @@ describe("the web app's render-only check", () => {
     const output = printed();
     expect(output).toContain("apps/web/src/app/api/users/route.ts: route handlers are not allowed");
     expect(output).toContain("apps/web/src/app/.well-known/anything/route.ts: route handlers");
+    // There's no mobile app any more, so its association files aren't an exception either.
+    expect(output).toContain("apps/web/src/app/.well-known/assetlinks.json/route.ts: route");
     expect(output).toContain('apps/web/src/app/actions.ts: server actions ("use server")');
     expect(output).toContain("apps/web/src/pages/api/hello.js: Pages Router API routes");
   });
