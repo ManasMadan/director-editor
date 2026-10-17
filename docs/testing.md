@@ -246,19 +246,14 @@ still written, and skips with the reason when they're missing.
 | What | Why not in CI | Test, and how to run it |
 |---|---|---|
 | Google sign-in | needs a real Google account | `apps/web/e2e/google.spec.ts`, with `E2E_GOOGLE_EMAIL` and `E2E_GOOGLE_PASSWORD` |
-| Client ID Metadata Documents from a public URL | needs an HTTPS document on the internet | `apps/api/test/oauth.integration.test.ts` (the CIMD case), with `E2E_CIMD_CLIENT_ID` |
 | Mail through Stalwart | needs the `mail` profile | `apps/notifications/test/stalwart.integration.test.ts` and `apps/webhooks/test/stalwart.integration.test.ts`, with `STALWART_SMTP_URL` and `STALWART_URL` (above) |
-| Native mobile: a session surviving a restart, the push permission prompt, links opened by the OS | needs a device or simulator with a development build | `apps/mobile/maestro/*.yaml`, by hand (`apps/mobile/maestro/README.md`) |
-| Real Stripe test mode | the suites use `packages/fake-stripe` | weekly, the calls the api makes against Stripe's test mode and the fake alike (`packages/fake-stripe/src/contract.test.ts`, `stripe.yml`, with `STRIPE_CONTRACT_SECRET_KEY`); hosted Checkout and webhooks by hand: [files-and-billing.md](files-and-billing.md), "Real Stripe test mode" |
-| A web push notification being clicked | headless Chromium can't display a notification, so nothing can click one | the service worker's click handling runs in a real browser, through the event a click fires (`apps/web/e2e/service-worker.spec.ts`), and as unit tests (`apps/web/src/service-worker.test.ts`); the operating system showing the notification and delivering the click, by hand: allow notifications on the web app, trigger one, click it |
 | Email in real mail clients | rendering differs per client | by hand: the previews (`bun run --cwd packages/email dev`), then a real send |
-| Real MCP clients | needs Claude or an IDE on the other end | by hand: connect one to `<site>/api/mcp` and `<site>/ai/mcp` |
 | Valkey failing over (`valkey.replication`) | needs nodes to lose; kind has one | the chart's tests render it and the start-up scripts' tests (`scripts/valkey-replication.test.ts`) cover which node follows which; on a three-node cluster, once: delete the primary's pod, and the site keeps working within seconds |
 | DNS on a name server of your own (`dns.provider = "rfc2136"`) | needs a real name server and zone | OpenTofu's tests (mocked) and the issuer's chart tests; for real, the first certificate after switching (`kubectl get certificate -A`) and `dig` of the site |
 | A preview's address posted by Argo CD | needs the preview cluster and the GitHub App | `scripts/previews.test.ts` reads the trigger and template; for real, label a pull request and wait for the comment |
 | The weekly backup drill (`postgres.drill`), and restoring from the offsite copy | needs a cluster with backups; kind has none | `scripts/backup-drill.test.ts` (the script, against a stand-in kubectl) and the chart's tests (which object store the drill restores from); for real, every Sunday in staging (production is one machine, with no disk to spare for the drill), restoring from the offsite copy where there is one, or now with `kubectl create job --from=cronjob/<release>-restore-drill` |
 | CI's own steps: the image smoke test, the caches, the egress allowlists | need GitHub's runners | `scripts/workflows.test.ts`, actionlint and zizmor (`bun run lint`); for real, the first pull request after a change to them |
-| The first real deploy: DNS, TLS, mail deliverability, backups to a new cluster, the SOPS plugin in Argo CD, the first EAS build and store submission, Renovate's and the preview's first runs | needs the real environment | once, per [new-project.md](new-project.md), "The first deploy" |
+| The first real deploy: DNS, TLS, mail deliverability, backups to a new cluster, the SOPS plugin in Argo CD, Renovate's and the preview's first runs | needs the real environment | once, per [new-project.md](new-project.md), "The first deploy" |
 
 ## Coverage
 
@@ -324,7 +319,6 @@ file below 100%, or one no test loads.
 
 | File | Skipped when | Where it runs |
 |---|---|---|
-| `apps/api/test/oauth.integration.test.ts` | `E2E_CIMD_CLIENT_ID` is unset: the client metadata document must be served over public HTTPS | by hand, against a deployed environment |
 | `apps/notifications/test/stalwart.integration.test.ts` | `STALWART_SMTP_URL` is unset: Stalwart isn't in the default profile | CI's integration job, with the `mail` profile |
 | `apps/webhooks/test/stalwart.integration.test.ts` | `STALWART_URL` is unset, as above | CI's integration job, with the `mail` profile |
 | `apps/web/e2e/captcha.spec.ts` | the API has no Turnstile keys (`TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`), so the captcha is off | CI's e2e job, with Cloudflare's always-pass test keys: the real widget and token flow, reaching challenges.cloudflare.com; a real site's keys only by hand |
@@ -336,6 +330,7 @@ file below 100%, or one no test loads.
 |---|---|---|
 | `apps/web/src/lib/cookies.ts` | `biome-ignore lint/suspicious/noDocumentCookie` | the Cookie Store API isn't in every browser yet |
 | `packages/db/prisma/migrations/20261010121359_director/migration.sql` | `-- squawk-ignore` (`adding-foreign-key-constraint`, `constraint-missing-not-valid`, `require-concurrent-index-creation`) | every flagged statement acts on a table the same migration creates: it is empty and no running release reads it, so nothing waits on a scan; the foreign keys hold writes on the tables they point at only until the migration commits, bounded by `lock_timeout` |
+| `packages/db/prisma/migrations/20261018120000_remove_starter_features/migration.sql` | `-- squawk-ignore` (`ban-drop-table`, `ban-drop-column`) | the contract step for the starter features Director removed: the release before it already stopped reading every table and the column it drops |
 | `packages/ui/src/components/field.tsx` | `biome-ignore lint/a11y/useSemanticElements` | `Field` is a `div` with the group role: a fieldset brings its own border, padding and minimum width into every form row (`FieldSet` is the fieldset, for a group of fields) |
 | `packages/ui/src/components/input-otp.tsx` | `biome-ignore lint/a11y/useSemanticElements` | the separator holds an icon, which an `hr` can't |
 | `packages/ui/src/components/label.tsx` | `biome-ignore lint/a11y/noLabelWithoutControl` | `Label` is a wrapper: the caller ties it to its control (`htmlFor`, or the control inside it) through props the rule can't see |

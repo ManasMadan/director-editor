@@ -231,7 +231,7 @@ services:
       CLAMAV_URL: "tcp://{{ include \"stack.host\" (list $ \"clamav\") }}:3310"
     keda:
       enabled: true
-      queues: [events-audit, events-realtime, files, maintenance]
+      queues: [events-audit, files, maintenance]
 
   notifications:
     enabled: true
@@ -248,7 +248,7 @@ services:
       WEB_URL: "{{ include \"stack.siteUrl\" $ }}"
     keda:
       enabled: true
-      queues: [notifications-critical, notifications-bulk, events-notifications]
+      queues: [notifications-critical, events-notifications]
 
   webhooks:
     enabled: true
@@ -260,16 +260,13 @@ services:
       liveness: /health/live
       readiness: /health/ready
     routes:
-      # Inbound provider webhooks (Stripe).
+      # Inbound provider webhooks.
       - path: /webhooks
     # The mail server posts delivery failures straight to it (/webhooks/stalwart).
     allowFromNamespaces: [mail]
     terminationGracePeriodSeconds: 60
     env:
       PORT: "3004"
-    keda:
-      enabled: true
-      queues: [events-webhooks, webhook-deliveries]
 
   ai:
     enabled: true

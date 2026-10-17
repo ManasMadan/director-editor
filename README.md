@@ -113,15 +113,9 @@ has a `swap-*` skill in `.claude/skills`.
 | Object storage | S3 API on RustFS, locally and in the cluster | any S3-compatible provider (S3, R2, …), or one without an S3 API | `packages/nest-common/src/storage.ts` | `swap-storage` |
 | File scanning | ClamAV | a scanning service | `apps/worker/src/files/file-scanner.ts` | `swap-file-scanner` |
 | Email | SMTP to our Stalwart mail server (Mailpit locally) | any SMTP server, or a provider API | `apps/notifications/src/channels/email/email-transport.ts` | `swap-email-provider` |
-| SMS | Twilio | another provider | `apps/notifications/src/channels/sms/sms-transport.ts` | `swap-sms-provider` |
-| Push | FCM, APNs, Web Push | OneSignal and the like | `apps/notifications/src/channels/push/push-transport.ts` | `swap-push-provider` |
 | Notification templates | in code | a database, edited without a deploy | `apps/notifications/src/dispatch/templates.ts` | `swap-notification-templates` |
 | Translations | JSON bundled in `packages/i18n` | a database plus Redis cache | `packages/nest-common/src/i18n.ts` | `swap-translations` |
-| Encryption keys | `ENCRYPTION_KEYS` from the service's SOPS-encrypted Secret | a KMS unwrapping data keys | `packages/nest-common/src/crypto.ts` | `swap-secrets-encryption` |
 | Realtime fan-out | pub/sub on the shared Valkey | a dedicated Redis or NATS | `packages/nest-common/src/realtime.ts` | `swap-realtime` |
-| LLM access | providers called directly, with a fallback model | a gateway (LiteLLM, a router) | `apps/ai/app/assistant.py` | `swap-llm` |
-| Embeddings | provider models, or hashing locally | any embedding model | `apps/ai/app/embeddings.py` | `swap-embeddings` |
-| Vector search | pgvector | Qdrant or another vector store | `PassageSearch` in `apps/ai/app/assistant.py` | `swap-document-search` |
 | DNS and certificates' DNS-01 | Cloudflare, with its proxy in front | a name server of our own (RFC 2136, built in), or another provider | `dns` in `infra/tofu/envs/k3s`, and the cluster's `dns-*` annotations the platform add-ons read | `swap-dns` |
 
 Some growth steps don't need an interface, because they're configuration or a move:

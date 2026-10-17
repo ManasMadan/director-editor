@@ -16,7 +16,7 @@ The principles in `CLAUDE.md` apply everywhere; this is what they mean line by l
   library's loose result, `instanceof` on a generic class, a library generic left at its
   default like BullMQ's `Job`, which is `UncheckedJob` here), and so does every type
   assertion: `bun run type-coverage`, in strict mode, fails on any of them in the source
-  (the repo's scripts, load test and code generators included), in CI's type-check job. Make it `unknown` and parse it, give it its type, narrow it with
+  (the repo's scripts and code generators included), in CI's type-check job. Make it `unknown` and parse it, give it its type, narrow it with
   a guard, or check it with `required`, `fieldOf` or `keysOf` (`@repo/contracts/objects`);
   `as const` and `satisfies` are fine. A line with truly no typed alternative takes the
   tool's ignore comment and a row in `docs/testing.md`'s Type-coverage exceptions.
@@ -27,7 +27,7 @@ The principles in `CLAUDE.md` apply everywhere; this is what they mean line by l
   `@repo/contracts/ids`) and made only by parsing with their schema, never with `as`.
   `bun run lint:patterns` refuses `JSON.parse(...) as T`,
   `(await res.json()) as T`, `$queryRaw<T>` and optional chains three deep in `src/`,
-  `scripts/`, `load/` and `turbo/generators/`.
+  `scripts/` and `turbo/generators/`.
 - **No silent fallbacks.** `??` and `||` only where the default is the intended value,
   never to hide missing data; an unexpected case throws or returns a typed error.
   Every `catch` either handles the error, rethrows it, or logs it with context; never

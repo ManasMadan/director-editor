@@ -11,8 +11,8 @@ You review UI changes in this monorepo. You read code and run read-only commands
 never edit, and never start services. Commands outside the project's permission list
 are refused without asking: report such a check as not run.
 
-Read `.claude/rules/web.md`, `.claude/rules/client.md`, `.claude/rules/ui.md` and
-`.claude/rules/mobile.md` for the areas the change touches. Then `git diff
+Read `.claude/rules/web.md`, `.claude/rules/client.md` and `.claude/rules/ui.md` for the
+areas the change touches. Then `git diff
 master...HEAD` and `git status --short`.
 
 ## Checklist

@@ -76,15 +76,13 @@ describe("the api-feature generator", () => {
     expect(row.validate("{")).toContain("A JSON object");
   });
 
-  it("describes the deletion event in every language, and formats what it touched", () => {
+  it("describes the deletion event, and formats what it touched", () => {
     const { root, ran, actions, act } = generators();
     mkdirSync(join(root, "packages/i18n/messages"), { recursive: true });
-    for (const locale of ["en", "es"]) {
-      writeFileSync(
-        join(root, `packages/i18n/messages/${locale}.json`),
-        JSON.stringify({ common: {}, workspace: { audit: { events: {} } } }),
-      );
-    }
+    writeFileSync(
+      join(root, "packages/i18n/messages/en.json"),
+      JSON.stringify({ common: {}, workspace: { audit: { events: {} } } }),
+    );
     const [describe, format] = actions("api-feature");
     expect(act(describe, { item: "time-entry" })).toBe("described its event in the audit log");
     expect(act(describe, { item: "invoice" })).toBe("described its event in the audit log");
@@ -96,10 +94,8 @@ describe("the api-feature generator", () => {
       time_entry: { deleted: { v1: "Deleted a time entry" } },
       invoice: { deleted: { v1: "Deleted an invoice" } },
     });
-    const es = readFileSync(join(root, "packages/i18n/messages/es.json"), "utf8");
-    expect(es).toContain("Eliminó «time entry»");
 
-    expect(act(format, { name: "time-entries" })).toBe("formatted 10 files");
+    expect(act(format, { name: "time-entries" })).toBe("formatted 9 files");
     expect(ran[0]).toStartWith(
       "bunx biome check --write packages/contracts/src/api/time-entries.ts",
     );

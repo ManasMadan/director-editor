@@ -551,16 +551,6 @@ export const STEPS: Step[] = [
     run: (ctx) => passes(ctx, "bun", ["scripts/generators.ts"]),
   },
   {
-    name: "evals",
-    jobs: ["ci.yml:python"],
-    areas: ["app"],
-    needs: ["generated code"],
-    memory: 1,
-    run: async (ctx) =>
-      (await ctx.exec("uv", ["run", "python", "-m", "evals"], { cwd: join(ctx.root, "apps/ai") }))
-        .status === 0,
-  },
-  {
     name: "migrations match the schema",
     jobs: ["ci.yml:integration"],
     areas: ["app"],
@@ -584,7 +574,6 @@ export const STEPS: Step[] = [
 export const CI_ONLY: Record<string, string> = {
   "ci.yml:images":
     "builds the seven images, scans them with Trivy and starts each: more than a 2 GB Docker VM holds",
-  "ci.yml:evals": "measures a real model with the provider's keys, nightly",
   "ci.yml:pr-title":
     "there's no pull request yet; the commit-msg hook checked every commit's header",
   "infra.yml:drift": "plans every environment nightly against the real cloud accounts",
@@ -606,10 +595,8 @@ export const AFTER_MERGE: Record<string, string> = {
   "deploy.yml:publish": "publishes them to the registry",
   "deploy.yml:attest": "attests each published image's SBOM, with the registry's digests",
   "deploy.yml:staging": "deploys them to staging",
-  "mobile.yml:eas": "builds the mobile app in Expo's cloud after a release",
   "release.yml:release": "tags a release from master",
   "renovate.yml:renovate": "opens dependency updates on a schedule",
-  "stripe.yml:contract": "checks the fake Stripe against Stripe's real test API, weekly",
   "uptime.yml:probe": "probes the running environments from outside",
 };
 

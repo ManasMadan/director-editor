@@ -49,31 +49,26 @@ them, but each is a plain Markdown checklist you can follow by hand.
 | [add-feature](../.claude/skills/add-feature/SKILL.md) | a resource end to end: contract, API module, client hook, web page, tests |
 | [db-change](../.claude/skills/db-change/SKILL.md) | a schema change: migration, row-level security, grants, expand then contract |
 | [add-job](../.claude/skills/add-job/SKILL.md) | a background job, scheduled task or event consumer, in TypeScript or Python |
-| [add-notification](../.claude/skills/add-notification/SKILL.md) | a notification by email, in-app, push or SMS |
+| [add-notification](../.claude/skills/add-notification/SKILL.md) | an email notification |
 | [add-package](../.claude/skills/add-package/SKILL.md) | a new shared package under `packages/` |
 | [add-python-module](../.claude/skills/add-python-module/SKILL.md) | an endpoint or module in the AI service, called from the API |
 | [add-web-page](../.claude/skills/add-web-page/SKILL.md) | a page, route or component in the web app or `packages/ui` |
-| [add-mobile-screen](../.claude/skills/add-mobile-screen/SKILL.md) | a screen or tab in the Expo app |
 | [add-translation](../.claude/skills/add-translation/SKILL.md) | user-facing text, or a new language |
 | [add-env-var](../.claude/skills/add-env-var/SKILL.md) | a setting or secret, locally and in every environment |
 | [add-error-code](../.claude/skills/add-error-code/SKILL.md) | an error code with its status and messages |
-| [add-api-key-scope](../.claude/skills/add-api-key-scope/SKILL.md) | letting API keys call a procedure |
-| [add-entitlement](../.claude/skills/add-entitlement/SKILL.md) | a feature or limit that depends on the plan |
-| [add-mcp-tool](../.claude/skills/add-mcp-tool/SKILL.md) | a tool for MCP clients, in the api or the AI service |
 | [add-webhook-provider](../.claude/skills/add-webhook-provider/SKILL.md) | receiving a new provider's webhooks |
 | [add-seam](../.claude/skills/add-seam/SKILL.md) | putting a replaceable integration behind an interface |
 | [add-app](../.claude/skills/add-app/SKILL.md) | a new deployable service or app, wired everywhere |
 | [add-helm-value](../.claude/skills/add-helm-value/SKILL.md) | a chart setting, or a cluster add-on |
-| [add-load-test](../.claude/skills/add-load-test/SKILL.md) | a k6 scenario and its latency budget |
 | [new-project](../.claude/skills/new-project/SKILL.md) | renaming a fresh copy of the template and working through the new-project checklist |
 | [remove-feature](../.claude/skills/remove-feature/SKILL.md) | removing an optional feature completely, tables last |
 | [write-tests](../.claude/skills/write-tests/SKILL.md) | missing tests, and getting a file to 100% coverage |
 | [fix-ci](../.claude/skills/fix-ci/SKILL.md) | a red CI run: find the failing step, reproduce it, fix the cause |
 | [open-pr](../.claude/skills/open-pr/SKILL.md) | preparing, opening or reviewing a pull request, with the reviewer agents |
-| [dependency-update](../.claude/skills/dependency-update/SKILL.md) | Renovate pull requests, the Bun catalog, the Expo SDK |
+| [dependency-update](../.claude/skills/dependency-update/SKILL.md) | Renovate pull requests and the Bun catalog |
 | [deploy](../.claude/skills/deploy/SKILL.md) | how a merge reaches staging, and checking the rollout |
 | [release](../.claude/skills/release/SKILL.md) | tagging a version and promoting it to production |
 | [rollback](../.claude/skills/rollback/SKILL.md) | undoing a bad deploy in staging or production |
 | [preview](../.claude/skills/preview/SKILL.md) | a pull request's own environment, and why one isn't up |
 | [rotate-secrets](../.claude/skills/rotate-secrets/SKILL.md) | rotating every kind of secret and key, in `.env` and in the SOPS files |
-| `swap-*` (15) | moving a seam to another implementation; the README's "Scaling path" names each |
+| `swap-*` (10) | moving a seam to another implementation; the README's "Scaling path" names each |

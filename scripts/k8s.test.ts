@@ -38,8 +38,8 @@ const healthy = (host: string, path: string) => {
   if (host === "files.localhost") {
     return new Response(null, { status: path === "/health" ? 200 : 404 });
   }
-  if (path === "/webhooks/stripe") {
-    return new Response(null, { status: 405 });
+  if (path === "/webhooks/stalwart") {
+    return new Response(null, { status: 401 });
   }
   return new Response("ok");
 };
@@ -219,9 +219,7 @@ describe("the local cluster", () => {
       webhooks: secrets["director-editor-webhooks"],
       ai: secrets["director-editor-ai"],
     };
-    expect(api?.ENCRYPTION_KEYS).toMatch(/^k1:[\w+/]{43}=$/);
-    expect(webhooks?.ENCRYPTION_KEYS).toBe(api?.ENCRYPTION_KEYS as string);
-    expect(notifications?.UNSUBSCRIBE_SECRET).toBe(api?.UNSUBSCRIBE_SECRET as string);
+    expect(webhooks?.STALWART_WEBHOOK_SECRET).toMatch(/^[\w-]{43}$/);
     expect(ai?.AI_SERVICE_SECRET).toBe(api?.AI_SERVICE_SECRET as string);
     expect(notifications?.SMTP_URL).toMatch(
       /^smtps:\/\/no-reply%40director-editor\.localhost:[\w-]{22}@mailpit:1025$/,
@@ -380,7 +378,7 @@ describe("the local cluster", () => {
     );
     expect(await k8s(["smoke"], given)).toBe(0);
     expect(printed()).toContain("web: /healthz → 200");
-    expect(printed()).toContain("webhooks: /webhooks/stripe → 405");
+    expect(printed()).toContain("webhooks: /webhooks/stalwart → 401");
     expect(printed()).toContain("re-encryption: done");
   });
 
@@ -434,13 +432,13 @@ describe("the local cluster", () => {
         return { stdout: ",1" };
       }
       if (/ logs job\//.test(line)) {
-        return { stdout: "ENCRYPTION_KEYS is malformed\n" };
+        return { stdout: "BETTER_AUTH_SECRETS is malformed\n" };
       }
       return undefined;
     });
     await expect(k8s(["smoke"], failed.given)).rejects.toThrow("exit 1");
     expect(printed()).toMatch(/re-encryption: job reencrypt-\d+ failed/);
-    expect(printed()).toContain("ENCRYPTION_KEYS is malformed");
+    expect(printed()).toContain("BETTER_AUTH_SECRETS is malformed");
   });
 
   it("deletes the cluster", async () => {

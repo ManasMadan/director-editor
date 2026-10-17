@@ -22,7 +22,7 @@ tests:
             type: redis
             metadata: { listName: "{files}:files:wait", listLength: "20" }
             authenticationRef: { name: demo-valkey }
-      - lengthEqual: { path: spec.triggers, count: 4 }
+      - lengthEqual: { path: spec.triggers, count: 3 }
 
   - it: authenticates to Valkey from its Secret
     template: keda.yaml
@@ -45,12 +45,3 @@ tests:
     asserts:
       - equal: { path: spec.maxUnavailable, value: 1 }
       - equal: { path: spec.unhealthyPodEvictionPolicy, value: AlwaysAllow }
-
-  # Inbound provider webhooks (Stripe) are routed to webhooks: in production it never
-  # scales to zero, however short its queues. Production runs one machine, so one pod.
-  - it: keeps a webhooks pod in production
-    template: keda.yaml
-    values: [../../../environments/production/stack.yaml]
-    documentSelector: { path: metadata.name, value: demo-webhooks }
-    asserts:
-      - equal: { path: spec.minReplicaCount, value: 1 }

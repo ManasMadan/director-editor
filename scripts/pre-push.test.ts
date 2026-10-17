@@ -171,7 +171,6 @@ const COUNTERPARTS: Record<string, Record<string, string>> = {
     "uv run ruff format --check .": "lint",
     "uv run basedpyright": "types",
     "uv run pytest": "coverage",
-    Evals: "evals",
     "Bootstrap database roles and migrate":
       "setup: infra/postgres/init and the suites' own migration",
     "All tests with coverage": "coverage",
@@ -298,7 +297,6 @@ describe("the steps", () => {
       "type coverage": ["bun run type-coverage"],
       codeql: ["bun run codeql --languages javascript-typescript,python"],
       generators: ["bun scripts/generators.ts"],
-      evals: ["uv run python -m evals"],
       screenshots: ["bun run --cwd packages/ui test:visual"],
     };
     for (const [name, commands] of Object.entries(expected)) {
@@ -320,7 +318,7 @@ describe("the steps", () => {
   });
 
   it("fail when their command does", async () => {
-    for (const name of ["python dependencies", "services", "evals"]) {
+    for (const name of ["python dependencies", "services"]) {
       const { ctx } = context(() => ({ status: 1 }));
       expect(await step(name).run(ctx)).toBe(false);
     }
@@ -446,7 +444,6 @@ describe("the database steps", () => {
     );
     expect(env.REDIS_URL).toBe("redis://localhost:56379/21");
     expect(env.S3_BUCKET).toBe("uploads");
-    expect(env.STRIPE_SECRET_KEY).toBe("sk_test_ci");
     expect(env.GOOGLE_CLIENT_ID).toBe("");
     expect(env.CLAMAV_URL).toBe("tcp://127.0.0.1:9");
     expect(env.NODE_ENV).toBe("test");

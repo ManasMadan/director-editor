@@ -5,9 +5,9 @@ set:
   image.tag: sha-abc123
   site.host: app.example.com
 tests:
-  - it: routes the web app, api, webhooks and AI service on the site's host
+  - it: routes the web app, api and webhooks on the site's host
     asserts:
-      - hasDocuments: { count: 4 }
+      - hasDocuments: { count: 3 }
       - equal: { path: spec.hostnames, value: [app.example.com] }
       - equal:
           path: spec.parentRefs

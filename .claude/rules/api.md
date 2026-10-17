@@ -7,7 +7,7 @@ paths:
 # apps/api modules
 
 - A feature is `src/modules/<name>/` with `<name>.module.ts`, `.service.ts`,
-  `.repository.ts`, `.router.ts` and an `index.ts` barrel. `modules/todo` is the
+  `.repository.ts`, `.router.ts` and an `index.ts` barrel. `modules/shorts` is the
   reference; copy its shape. Register the module in `app.module.ts` and its router in
   `src/rpc/router.ts` (`os.router` makes a missing or extra procedure a compile error).
 - Other modules import a module only through its `index.ts` (dependency-cruiser
@@ -32,7 +32,7 @@ paths:
   routers `context.orgId`, `context.userId` and `context.user.id` already branded.
   better-auth's ids are branded once in `src/auth/ids.ts` (`userIdOf`, `orgIdOf`,
   `membershipOf`, `sessionWithIds`); a row's id is parsed where the code hands it on
-  (`todoIdSchema.parse(row.id)`), or taken from the branded id it was queried by. Never
+  (`fileIdSchema.parse(row.id)`), or taken from the branded id it was queried by. Never
   cast a string to an id.
 - Inside `tenantTx`/`userTx` only database calls. No HTTP, Redis or queue awaits: the
   transaction holds a pooled connection and times out after 5s.
@@ -45,10 +45,9 @@ paths:
 - Rate limits are declared in the procedure's contract (`meta({ rateLimit })`, see
   `.claude/rules/contracts.md`) and applied by the builders, per user or per workspace.
   Anything that costs money or sends messages needs one. `createRateLimiter` from
-  `@repo/nest-common` in a service is only for what the contract can't key on (the phone
-  number a code is sent to) or what other ways in share (todo changes over MCP).
-- Paid features check `BillingService.require(orgId, entitlement)`. Optional features
-  are on only when their env is set (`src/features.ts`) and otherwise answer
+  `@repo/nest-common` in a service is only for what the contract can't key on (the email
+  address a code is sent to).
+- Optional features are on only when their env is set (`src/features.ts`) and otherwise answer
   `FEATURE_DISABLED`.
 - Tests: unit tests next to the code as `src/**/*.test.ts` (no services). Anything that
   touches the database, Redis, auth or email goes in `test/*.integration.test.ts` using

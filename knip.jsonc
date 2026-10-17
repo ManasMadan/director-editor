@@ -2,7 +2,7 @@
 // (`bun run lint:unused`, in CI's lint job). With Bun's hoisted install an undeclared
 // dependency still resolves locally, then breaks in a pruned Docker image; this is what
 // catches it. Knip finds most entry points through its plugins (Next, Nest via tsdown,
-// Vitest, Playwright, Storybook, Expo, Jest, …); the ones below are started some other way.
+// Vitest, Playwright, Storybook, …); the ones below are started some other way.
 {
   "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
   // Generated clients export more than we call; they're regenerated, not pruned. A
@@ -33,19 +33,6 @@
       // The Python service; its package.json only runs uv. @repo/jobs orders codegen:
       // `gen` reads packages/jobs/generated for the queue contracts.
       "ignoreDependencies": ["@repo/jobs"]
-    },
-    "apps/web": {
-      // The push service worker, served as a static file.
-      "entry": ["public/sw.js"]
-    },
-    "apps/mobile": {
-      // Run by Maestro flows (runScript).
-      "entry": ["maestro/scripts/*.js"]
-    },
-    "load": {
-      // The k6 script, run in the k6 image, which provides the k6/* modules.
-      "entry": ["api.ts"],
-      "ignoreDependencies": ["k6"]
     },
     // A package's exports are its API to the rest of the repo: one nothing imports is
     // dead, so knip reports it too (includeEntryExports) instead of trusting the entry.

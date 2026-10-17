@@ -6,7 +6,7 @@ paths:
   - "**/e2e/**"
   - "apps/ai/tests/**"
   - "packages/vitest-config/**"
-  - "packages/fake-stripe/**"
+  - "packages/fake-google/**"
 ---
 
 # Tests
@@ -15,12 +15,11 @@ Which kind goes where:
 
 | Kind | Location | Runs with | Needs |
 |---|---|---|---|
-| Unit | `src/**/*.test.ts` next to the code (Jest in `apps/mobile`) | `bun run test` (cached; the Stop hook runs it for affected packages, and fails on a changed line of a unit-tested file it doesn't cover, in packages without integration tests: `bun scripts/unit-coverage.ts`) | nothing |
-| Scripts, hooks and the rest of the tooling | `scripts/*.test.ts`, `.claude/hooks/*.test.ts` (Bun's runner); the tooling outside `src/` (build scripts, presets, generators, the load test, `deploy/docker/check-peers.mjs`) is tested from `scripts/` too | `bun test ./scripts/ ./.claude/hooks/` | nothing |
+| Unit | `src/**/*.test.ts` next to the code | `bun run test` (cached; the Stop hook runs it for affected packages, and fails on a changed line of a unit-tested file it doesn't cover, in packages without integration tests: `bun scripts/unit-coverage.ts`) | nothing |
+| Scripts, hooks and the rest of the tooling | `scripts/*.test.ts`, `.claude/hooks/*.test.ts` (Bun's runner); the tooling outside `src/` (build scripts, presets, generators, `deploy/docker/check-peers.mjs`) is tested from `scripts/` too | `bun test ./scripts/ ./.claude/hooks/` | nothing |
 | Integration | `<pkg>/test/**/*.test.ts` (apps name them `*.integration.test.ts`) | `bun run test:integration` (the core services); suites tagged `files` (RustFS, ClamAV) with `bun run test:integration:files` | Docker (the command starts it) |
 | Web pages and components | `apps/web/test/**/*.test.tsx`, in Chromium against the real API | `bun run --filter @repo/web test:integration` | Docker, Chromium |
 | E2E (web) | `apps/web/e2e/*.spec.ts` | `bun run test:e2e --app web` | full stack |
-| E2E (mobile) | `apps/mobile/e2e/*.spec.ts` (react-native-web); native flows in `apps/mobile/maestro/` | `bun run test:e2e --app mobile` | full stack |
 | Python | `apps/ai/tests/test_*.py`, `pytest.mark.integration` for DB/Redis | `bun run test` / `bun run test:integration` | Docker for integration |
 | Components | `packages/ui/src/components/*.stories.tsx` with `play`, plain `*.test.tsx` beside them | `bun run --cwd packages/ui test:stories` | Playwright browser |
 | Fuzzing | every operation of `apps/api/openapi.json` and `apps/ai/openapi.json`, settings in `schemathesis.toml` | `bun run test:fuzz` (or `bun run test:e2e --app fuzz`) | a running API and AI service |
@@ -34,8 +33,7 @@ Which kind goes where:
   from `@repo/db/testing`), each file on its own cloned database, so a missing grant or
   policy fails here. Build data with `factories(db)`, not raw inserts.
 - Third-party providers are replaced by local fakes that speak the real protocol:
-  `packages/fake-stripe`, `apps/notifications/test/fake-twilio.ts` and `fake-push.ts`,
-  Mailpit for email, the `local:extractive` model and `hashing` embeddings for AI. New
+  `packages/fake-google` for Gemini and YouTube, Mailpit for email. New
   providers get a fake like these, not `vi.mock`.
 - `packages/client`'s hooks run against the contract implemented in memory
   (`standIn` and `renderHook` in `packages/client/test/stand-in.tsx`), never a mocked
