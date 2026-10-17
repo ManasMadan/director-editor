@@ -1,13 +1,16 @@
 /**
- * A local stand-in for the two Google APIs Director uses, so the whole flow runs offline
- * and in demos with no real keys: the Gemini API (`/v1beta/models/<model>:generateContent`,
- * ./gemini.ts) and YouTube Data API v3 (`/youtube/v3/...`, ./youtube.ts). Like the real
- * ones it checks the key (Gemini's `x-goog-api-key` header, YouTube's `key` parameter) and
- * answers anything else with a 404. What it answers is mock data; everything that asks it
- * (the AI service's agents, the API's YouTube client) runs as it would against Google.
+ * A local stand-in for the two Google APIs Director uses, so integration, e2e and fuzz
+ * suites run the whole flow with no real keys: the Gemini API
+ * (`/v1beta/models/<model>:generateContent`, ./gemini.ts) and YouTube Data API v3
+ * (`/youtube/v3/...`, ./youtube.ts). Like the real ones it checks the key (Gemini's
+ * `x-goog-api-key` header, YouTube's `key` parameter) and answers anything else with a
+ * 404. What it answers is mock data; everything that asks it (the AI service's agents,
+ * the API's YouTube client) runs as it would against Google. The running app and
+ * `bun dev`/`bun dev:full` never start it: they use the real services, off until a real
+ * key is set.
  *
- * Point the AI service at it with GOOGLE_BASE_URL and the API with YOUTUBE_API_URL (both
- * refused in production, which needs HTTPS).
+ * Tests point the AI service at it with GOOGLE_BASE_URL and the API with YOUTUBE_API_URL
+ * (both refused in production, which needs HTTPS).
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { text } from "node:stream/consumers";

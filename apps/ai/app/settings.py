@@ -45,12 +45,14 @@ class Settings(BaseSettings):
     google_base_url: AnyHttpUrl | None = Field(default=None, alias="GOOGLE_BASE_URL")
     # Gemini through Vertex AI (express mode: GOOGLE_API_KEY is a Vertex key, bound to a
     # service account) instead of the Gemini API. Vertex bills through Cloud Billing, so a
-    # project's Cloud credits pay for it; the Gemini API bills separately.
+    # project's Cloud credits pay for it; the Gemini API bills separately. Defaults to true
+    # in .env.example so a key added later is billed through Vertex without an extra step;
+    # true alone (no key yet) is harmless, since nothing calls Gemini without one.
     google_vertex: bool = Field(default=False, alias="GOOGLE_VERTEX")
-    # Required when GOOGLE_VERTEX is true: an API key drops the project/location from the
-    # request unless every call addresses its model by the full resource name
-    # (app/director.py's create_google_model), which needs the project. The same variable
-    # apps/api reads for Director's live video call.
+    # Required once GOOGLE_VERTEX is true and a key turns it on: an API key drops the
+    # project/location from the request unless every call addresses its model by the full
+    # resource name (app/director.py's create_google_model), which needs the project. The
+    # same variable apps/api reads for Director's live video call.
     google_cloud_project: str | None = Field(
         default=None, min_length=1, alias="GOOGLE_CLOUD_PROJECT"
     )
@@ -97,8 +99,10 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _vertex_has_a_project(self) -> Self:
-        # Without it, create_google_model can't address a model by its resource name.
-        if self.google_vertex and not self.google_cloud_project:
+        # Without it, create_google_model can't address a model by its resource name. Only
+        # once a key actually turns Vertex on: GOOGLE_VERTEX=true with no GOOGLE_API_KEY
+        # yet (.env.example's default) must still boot.
+        if self.google_vertex and self.google_api_key and not self.google_cloud_project:
             raise ValueError("GOOGLE_VERTEX=true needs GOOGLE_CLOUD_PROJECT")
         return self
 

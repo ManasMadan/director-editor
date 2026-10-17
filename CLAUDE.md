@@ -10,7 +10,7 @@ driven by `bun` scripts, and every common task has a skill in `.claude/skills/`.
 | First-time setup (idempotent) | `bun run setup` |
 | Health check (tools, .env drift, services) | `bun run doctor` |
 | Develop (core profile: web, api, notifications, worker, webhooks) | `bun dev` |
-| Develop with every service (AI and its worker, RustFS, ClamAV, Stalwart, Jaeger, the mock Google, email previews) | `bun dev:full` |
+| Develop with every service (AI and its worker, RustFS, ClamAV, Stalwart, Jaeger, email previews) | `bun dev:full` |
 | Lint, formatting, architecture boundaries | `bun run lint` (`bun run format` to fix) |
 | Types | `bun run check-types`; no `any` and no casts in the source: `bun run type-coverage [<workspace>]` |
 | Unit tests (fast, cached) | `bun run test` |
@@ -31,9 +31,10 @@ Local services (Docker, host ports): Postgres 55432, Valkey 56379, Mailpit 58025
 51025); with `full`, RustFS 59000 (console 59001), ClamAV 53310 and Jaeger (OTLP 54318,
 UI 56686); the Stalwart mail server (`bun run db:up:mail`, and in `full`): submission
 51465, management 58080. Web is on 3000, api 3001, worker 3002, notifications 3003,
-webhooks 3004, ai 8000; with `bun dev:full`, the email previews 3030 and the mock Google
-12112. On demand: Storybook 6006. Those are the defaults: each is a `*_PORT` in `.env`
-(`WEB_PORT`, `API_PORT`, ...), and nothing else may fix a local port
+webhooks 3004, ai 8000; with `bun dev:full`, the email previews 3030. On demand:
+Storybook 6006; the mock Google 12112, a test fixture only (`bun run google:fake`
+starts it, tests start it themselves). Those are the defaults: each is a `*_PORT` in
+`.env` (`WEB_PORT`, `API_PORT`, ...), and nothing else may fix a local port
 (`scripts/ports.test.ts`). Uploads stay off until `S3_BUCKET` is set
 (docs/files.md), even with `dev:full`.
 

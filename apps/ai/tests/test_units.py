@@ -95,10 +95,12 @@ def test_director_calls_vertex_ai_when_asked() -> None:
     )
 
 
-def test_vertex_needs_the_cloud_project() -> None:
+def test_vertex_needs_the_cloud_project_once_a_key_is_set() -> None:
+    # .env.example ships GOOGLE_VERTEX=true with no key yet, so that must still boot.
+    assert _settings(GOOGLE_VERTEX="true").google_cloud_project is None
     assert _settings(GOOGLE_VERTEX="true", GOOGLE_CLOUD_PROJECT="p").google_cloud_project == "p"
     with pytest.raises(ValidationError, match="GOOGLE_VERTEX=true needs GOOGLE_CLOUD_PROJECT"):
-        _settings(GOOGLE_VERTEX="true")
+        _settings(GOOGLE_VERTEX="true", GOOGLE_API_KEY="key")
 
 
 def test_the_index_model_addresses_vertex_at_its_configured_location() -> None:

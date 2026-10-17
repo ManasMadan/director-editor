@@ -16,41 +16,46 @@ apps/web (Shorts UI, camera)  ──@repo/client──▶  apps/api  ──ai-cl
 
 ## Turning it on
 
-Locally Director runs against the **mock Google** (`packages/fake-google`): one server on
-`GOOGLE_FAKE_PORT` that speaks the Gemini API and YouTube Data API v3. Every request the
-app makes is real (the AI service's Gemini client, the API's YouTube client, uploads,
-ClamAV, the worker); only the answers are mock data. `.env.example` points at it with
-mock keys, so nothing needs a real key and nothing leaves the machine:
+Director calls the real Gemini and YouTube Data API v3, like the rest of the app; there
+is no local stand-in for either in `bun dev` or `bun dev:full` (the **mock Google**,
+`packages/fake-google`, speaks both protocols, but only integration, e2e and fuzz suites
+start it, never the running app). `.env.example` ships every Google variable empty, so
+Director stays off until you set real keys:
 
 ```sh
-bun run setup                       # once: .env from .env.example
-bun run env:set S3_BUCKET=uploads   # takes are uploads
-bun dev:full                        # the AI service, RustFS, ClamAV and the mock Google too
+bun run setup                              # once: .env from .env.example
+bun run env:set S3_BUCKET=uploads          # takes are uploads
+bun run env:set YOUTUBE_API_KEY=...        # a YouTube Data API v3 key
+bun run env:set GOOGLE_API_KEY=...         # a Gemini API key, or a Vertex key (below)
+bun run env:set DIRECTOR_MODEL=gemini-3.8-flash
+bun dev:full                               # the AI service, RustFS and ClamAV too
 ```
 
 Then sign in (`bun run db:seed` makes `demo@example.com`) and open
-http://localhost:3000/library. What the mock answers:
-
-- the feed: six real public YouTube videos (their pictures and the embedded player are
-  YouTube's own); the first, "GRWM for the office in summer time!", is the short the demo
-  recreates, the other five stand in for shorts; any pasted link opens too;
-- the plans: for the office GRWM, its own twelve cuts (ten videos, two product photos,
-  filmed on a propped-up phone, music and no script); then the PRD's examples, a GRWM in
-  six shots (four videos, two photos) with a script, the pen-drop shoe flaunt in one
-  back-camera video, and a "stand near a tree" talk;
-- scene checks: two directions toward the shot's landmark, then "in place";
-- take reviews: the shot's length from just after the take starts, a score and feedback.
+http://localhost:3000/library.
 
 Director is on when the API has `YOUTUBE_API_KEY` and the `ai` and `files` features, and
-the AI service has `DIRECTOR_MODEL` and `GOOGLE_API_KEY` ([environment.md](environment.md)).
-For the real APIs: empty `GOOGLE_BASE_URL`, set `YOUTUBE_API_URL` back to Google's, set
-real keys and a real `DIRECTOR_MODEL` (`gemini-3.5-flash`). Production refuses the mock
-(both URLs must be HTTPS there). Set `GOOGLE_VERTEX=true` to call Gemini through Vertex
-AI instead of the Gemini API: `GOOGLE_API_KEY` then needs to be a Vertex key bound to a
-service account, and usage bills through Cloud Billing rather than the Gemini API. A plan
-job (watching a short unattended) indexes it with `INDEX_MODEL`, a separate, more
-thorough model from `DIRECTOR_MODEL`'s live scene checks and reviews; `INDEX_FALLBACK_MODEL`
-is tried once after `INDEX_MODEL`'s own retries on a transient failure are spent.
+the AI service has `DIRECTOR_MODEL` and `GOOGLE_API_KEY`
+([environment.md](environment.md)). `.env.example` defaults `GOOGLE_VERTEX` to `true`,
+so a `GOOGLE_API_KEY` you add is addressed through
+Vertex AI rather than the Gemini API, once `GOOGLE_CLOUD_PROJECT` is also set (below,
+under Director's live video call): `GOOGLE_API_KEY` then needs to be a Vertex key bound
+to a service account, and usage bills through Cloud Billing rather than the Gemini API.
+Unset `GOOGLE_VERTEX` to call the Gemini API directly instead. Production refuses a
+plain-HTTP `GOOGLE_BASE_URL` or `YOUTUBE_API_URL` (the mock Google's protocol, not a real
+endpoint). A plan job (watching a short unattended) indexes it with `INDEX_MODEL`, a
+separate, more thorough model from `DIRECTOR_MODEL`'s live scene checks and reviews;
+`INDEX_FALLBACK_MODEL` is tried once after `INDEX_MODEL`'s own retries on a transient
+failure are spent.
+
+Integration, e2e and fuzz suites never need a real key: they start the mock Google
+themselves (`startFakeGoogle` from `packages/fake-google`, e.g.
+`apps/web/test/global-setup.ts`), which answers the feed with six real public YouTube
+videos (their pictures and the embedded player are YouTube's own, the answers are mock
+data): the first, "GRWM for the office in summer time!", is the short the demo recreates
+(`packages/fake-google/src/catalog.ts`, `plans.ts`), the other five stand in for shorts,
+and any pasted link opens too. Its scene checks and take reviews are in
+`packages/fake-google/src/gemini.ts`.
 
 ## The screens (apps/web)
 
