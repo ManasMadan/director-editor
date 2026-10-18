@@ -13,13 +13,14 @@ import {
   TwoFactorPage,
   VerifyEmailPage,
 } from "@/modules/auth";
-import { DirectorPage, LibraryPage, ReviewPage, ShootPage } from "@/modules/director";
+import { DirectorPage, EditPage, LibraryPage, MediaPage, ShootPage } from "@/modules/director";
 import { ProfileSettingsPage, SecuritySettingsPage, SettingsLayout } from "@/modules/settings";
 import { renderHtml } from "../../test/next-server";
+import * as edit from "./(app)/director/[videoId]/edit/page";
 import * as director from "./(app)/director/[videoId]/page";
-import * as review from "./(app)/director/[videoId]/review/page";
 import * as shoot from "./(app)/director/[videoId]/shoot/page";
 import * as library from "./(app)/library/page";
+import * as media from "./(app)/media/page";
 import SettingsRouteLayout from "./(app)/settings/layout";
 import * as profile from "./(app)/settings/page";
 import * as security from "./(app)/settings/security/page";
@@ -41,6 +42,7 @@ interface Route {
 
 const pages: [string, Route, string, unknown][] = [
   ["/library", library, en.common.library, LibraryPage],
+  ["/media", media, en.director.media.title, MediaPage],
   ["/settings", profile, en.settings.profile.title, ProfileSettingsPage],
   ["/settings/security", security, en.settings.security.title, SecuritySettingsPage],
   ["/forgot-password", forgotPassword, en.auth.forgotTitle, ForgotPasswordPage],
@@ -90,24 +92,24 @@ describe("route files", () => {
       <ShootPage videoId="dQw4w9WgXcQ" shot={undefined} audio={undefined} />,
     );
     expect(
-      await rendered(review.default, {
+      await rendered(edit.default, {
         params,
         searchParams: Promise.resolve({ audio: ["original", "voice"] }),
       }),
-    ).toEqual(<ReviewPage videoId="dQw4w9WgXcQ" audio="original" wrap={false} />);
+    ).toEqual(<EditPage videoId="dQw4w9WgXcQ" audio="original" wrap={false} />);
     expect(
-      await rendered(review.default, { params, searchParams: Promise.resolve({ audio: "voice" }) }),
-    ).toEqual(<ReviewPage videoId="dQw4w9WgXcQ" audio="voice" wrap={false} />);
+      await rendered(edit.default, { params, searchParams: Promise.resolve({ audio: "voice" }) }),
+    ).toEqual(<EditPage videoId="dQw4w9WgXcQ" audio="voice" wrap={false} />);
     // Arriving from the last shot: the wrap.
     expect(
-      await rendered(review.default, {
+      await rendered(edit.default, {
         params,
         searchParams: Promise.resolve({ audio: "voice", wrap: "1" }),
       }),
-    ).toEqual(<ReviewPage videoId="dQw4w9WgXcQ" audio="voice" wrap />);
+    ).toEqual(<EditPage videoId="dQw4w9WgXcQ" audio="voice" wrap />);
     expect(await director.generateMetadata()).toEqual({ title: en.director.title });
     expect(await shoot.generateMetadata()).toEqual({ title: en.director.title });
-    expect(await review.generateMetadata()).toEqual({ title: en.director.review.title });
+    expect(await edit.generateMetadata()).toEqual({ title: en.director.editor.title });
   });
 
   it("renders the sign-in steps, which read the query string, inside a Suspense boundary", () => {

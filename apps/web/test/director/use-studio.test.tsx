@@ -183,7 +183,7 @@ describe("useStudio", () => {
     vi.useRealTimers();
 
     hook.current.actions.use();
-    await expect.poll(currentUrl).toBe(`/director/${VIDEO_ID}/review?audio=voice&wrap=1`);
+    await expect.poll(currentUrl).toBe(`/director/${VIDEO_ID}/edit?audio=voice&wrap=1`);
     expect(uploads).toMatchObject([
       { purpose: "director-take-photo", filename: "shot-2.jpg", contentType: "image/jpeg" },
     ]);

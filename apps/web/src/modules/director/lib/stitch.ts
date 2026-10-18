@@ -1,18 +1,30 @@
 /**
- * Puts the takes together into the finished short, in the browser: each video's best part
- * (as Gemini picked it) and each photo, in the plan's order, drawn onto a 9:16 canvas and
- * recorded with the takes' own sound, the captions burned into every frame. Rendering takes
- * as long as the short plays; nothing is uploaded, the result is downloaded.
+ * Puts the picked takes together into the finished video, in the browser: each video's
+ * best part (as Gemini kept it) and each photo, in the plan's order, drawn onto a 9:16
+ * canvas and recorded with the takes' own sound, the captions burned into every frame.
+ * Rendering takes as long as the video plays; the editor then saves it to My media.
  *
  * The takes are read through short-lived storage URLs (fetched, so the canvas stays
  * CORS-clean: a canvas that drew a cross-origin video can't be recorded).
  */
+import { uploadPurposes } from "@repo/contracts/files";
 import { type CaptionInk, drawCaption } from "./caption-draw";
 import { type CaptionLine, type CaptionStyle, captionAt } from "./captions";
-import { recorderFormat, VIDEO_BITS_PER_SECOND } from "./media";
+import { recorderFormat } from "./media";
 
 export const OUTPUT_WIDTH = 720;
 export const OUTPUT_HEIGHT = 1280;
+/**
+ * About 4 Mbit/s of picture and 128 kbit/s of sound, for 720×1280 with captions: a
+ * 3-minute Short comes to about 93 MB, inside a saved video's 100 MB upload (the virus
+ * scanner's stream limit). Raising either means raising that limit with it.
+ */
+const VIDEO_BITS_PER_SECOND = 4_000_000;
+const AUDIO_BITS_PER_SECOND = 128_000;
+/** The longest video that fits a saved video's upload at those rates. */
+export const MAX_SECONDS =
+  (uploadPurposes["director-cut-video"].maxBytes * 8) /
+  (VIDEO_BITS_PER_SECOND + AUDIO_BITS_PER_SECOND);
 const FPS = 30;
 /** How much a photo slowly zooms in over its time on screen. */
 const PHOTO_ZOOM = 0.06;
@@ -152,6 +164,7 @@ export async function stitch(
   const recorder = new MediaRecorder(new MediaStream(tracks), {
     mimeType: format.mimeType,
     videoBitsPerSecond: VIDEO_BITS_PER_SECOND,
+    audioBitsPerSecond: AUDIO_BITS_PER_SECOND,
   });
   const chunks: Blob[] = [];
   recorder.ondataavailable = (event) => chunks.push(event.data);

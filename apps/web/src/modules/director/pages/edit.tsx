@@ -3,116 +3,163 @@
 import "@fontsource/gochi-hand/400.css";
 import "../live.css";
 import { useApiErrorMessage } from "@repo/client";
-import { latestTakes } from "@repo/client/api/director/latest";
 import { useDirectorPlanQuery } from "@repo/client/api/director/plan";
-import { useDirectorTakesQuery } from "@repo/client/api/director/takes";
-import type { ShotPlan } from "@repo/contracts/api";
+import { useSaveCutMutation } from "@repo/client/api/director/save-cut";
+import { useDirectorShotsQuery } from "@repo/client/api/director/shots";
+import type { DirectorCut, DirectorShot, ShotPlan } from "@repo/contracts/api";
+import { uploadPurposes } from "@repo/contracts/files";
+import type { DirectorTakeId } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
 import { buttonVariants } from "@repo/ui/components/button";
-import { GeminiLoader } from "@repo/ui/components/gemini-loader";
-import { ChevronRight, Pause, Play, Redo2, Undo2, X } from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { DirectorGate } from "@/modules/shorts";
-import { ClipPanel } from "../components/clip-panel";
-import { EditPlayer } from "../components/edit-player";
-import { EditTimeline } from "../components/edit-timeline";
+import { GeminiLoader, GeminiShimmer } from "@repo/ui/components/gemini-loader";
+import { cn } from "@repo/ui/lib/utils";
 import {
-  EditTools,
-  SoundPanel,
-  StylePicker,
-  TextEditor,
-  type Tool,
-} from "../components/edit-tools";
+  AudioLines,
+  Captions,
+  Download,
+  Pause,
+  Play,
+  Redo2,
+  Undo2,
+  VolumeX,
+  X,
+} from "lucide-react";
+import Link from "next/link";
+import { useLocale, useTranslations } from "next-intl";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { DirectorGate } from "@/modules/shorts";
+import { EditPlayer } from "../components/edit-player";
+import { SoundPanel, StylePicker, type Tool } from "../components/edit-tools";
+import { ShotBoard } from "../components/shot-board";
 import { type EditChoices, useEditHistory } from "../hooks/use-edit-history";
 import { useMemory } from "../hooks/use-memory";
 import { useObjectUrl } from "../hooks/use-object-url";
 import { usePlayback } from "../hooks/use-playback";
+import { shotPage } from "../hooks/use-studio";
 import { type MediaState, useTakeMedia } from "../hooks/use-take-media";
 import { type AudioMode, parseAudio } from "../lib/audio";
 import { webVtt } from "../lib/captions";
-import {
-  type Clip,
-  clipAt,
-  clipsOf,
-  complete,
-  type EditLine,
-  editLines,
-  editSeconds,
-} from "../lib/edit";
+import { type Clip, clipsOf, complete, editLines, editSeconds } from "../lib/edit";
 import { captionInk } from "../lib/ink";
+import { cutPicks, pickedTakes } from "../lib/picks";
 import { hush, say } from "../lib/speech";
-import { OUTPUT_HEIGHT, type Segment, stitch } from "../lib/stitch";
+import { MAX_SECONDS, type Segment, stitch } from "../lib/stitch";
 import { timecode } from "../lib/track";
 
 /** A clip's take once it's in memory (not while it loads, nor when it couldn't be). */
-function loadedTake(media: Map<number, MediaState>, index: number) {
-  const state = media.get(index);
+function loadedTake(media: Map<DirectorTakeId, MediaState>, clip: Clip) {
+  const state = clip.take ? media.get(clip.take.id) : undefined;
   return typeof state === "object" ? state : undefined;
 }
 
-function segmentsOf(clips: readonly Clip[], media: Map<number, MediaState>): Segment[] {
+function segmentsOf(clips: readonly Clip[], media: Map<DirectorTakeId, MediaState>): Segment[] {
   return clips.map((clip) => {
-    const take = required(loadedTake(media, clip.index), "a loaded take");
+    const take = required(loadedTake(media, clip), "a loaded take");
     return clip.shot.kind === "video"
       ? { kind: "video", source: take.blob, startSeconds: clip.from, endSeconds: clip.to }
       : { kind: "photo", source: take.blob, seconds: clip.seconds };
   });
 }
 
-/** Renders the edit from the takes in memory; `progress` is null when not rendering. */
-function useMakeShort() {
-  const [progress, setProgress] = useState<number | null>(null);
-  const [result, setResult] = useState<Blob | null>(null);
-  const [failed, setFailed] = useState(false);
-  const make = async (segments: Segment[], lines: readonly EditLine[], choices: EditChoices) => {
-    setFailed(false);
-    setProgress(0);
-    // Made in the tap itself: Safari starts audio only there (see lib/stitch.ts).
-    const audioContext = new AudioContext();
-    const resumed = audioContext.resume();
-    try {
-      await resumed;
-      const captions = { lines, style: choices.style, ink: captionInk() };
-      setResult(
-        await stitch(segments, {
-          audio: audioContext,
-          withSound: choices.sound,
-          onProgress: setProgress,
-          captions,
-        }),
-      );
-    } catch {
-      setFailed(true);
-    } finally {
-      setProgress(null);
-      await audioContext.close();
-    }
-  };
-  return { make, progress, result, failed, close: () => setResult(null) };
+type Saving =
+  | { step: "idle" }
+  | { step: "rendering"; done: number }
+  | { step: "uploading" }
+  | { step: "saved"; video: Blob }
+  | { step: "failed"; message: string };
+
+/** What a save is made from: the clips playing, their takes in memory, the choices. */
+interface SaveInput {
+  clips: readonly Clip[];
+  media: Map<DirectorTakeId, MediaState>;
+  choices: EditChoices;
+  picks: DirectorCut["picks"];
 }
 
-/** The finished short over the editor: to watch, download, or go back and change. */
-function FinishedShort({
-  result,
-  lines,
-  silent,
+/** Renders the edit in the browser, at a size a saved video may be. */
+async function render({ clips, media, choices }: SaveInput, onProgress: (done: number) => void) {
+  // Made in the tap itself: Safari starts audio only there (see lib/stitch.ts).
+  const audio = new AudioContext();
+  const resumed = audio.resume();
+  try {
+    await resumed;
+    return await stitch(segmentsOf(clips, media), {
+      audio,
+      withSound: choices.sound,
+      onProgress,
+      captions: { lines: editLines(clips), style: choices.style, ink: captionInk() },
+    });
+  } finally {
+    await audio.close();
+  }
+}
+
+/**
+ * Saving the video: rendered here, refused before it's uploaded when it's bigger than a
+ * saved video may be, then uploaded and recorded as a cut (it shows in My media).
+ */
+function useSaveVideo(videoId: string, title: string) {
+  const t = useTranslations("director.editor");
+  const errorMessage = useApiErrorMessage();
+  const saveCut = useSaveCutMutation();
+  const [saving, setSaving] = useState<Saving>({ step: "idle" });
+  const { maxBytes } = uploadPurposes["director-cut-video"];
+  const tooLong = () =>
+    setSaving({
+      step: "failed",
+      message: t("tooLong", { minutes: Math.floor(MAX_SECONDS / 60) }),
+    });
+
+  const save = async (input: SaveInput) => {
+    // Rendering takes as long as the video plays: not for one that can't be kept.
+    if (editSeconds(input.clips) > MAX_SECONDS) {
+      return tooLong();
+    }
+    setSaving({ step: "rendering", done: 0 });
+    const video = await render(input, (done) => setSaving({ step: "rendering", done })).catch(
+      () => null,
+    );
+    if (!video) {
+      return setSaving({ step: "failed", message: t("renderFailed") });
+    }
+    if (video.size > maxBytes) {
+      return tooLong();
+    }
+    setSaving({ step: "uploading" });
+    const extension = video.type === "video/mp4" ? "mp4" : "webm";
+    try {
+      await saveCut.mutateAsync({
+        videoId,
+        title,
+        picks: input.picks,
+        file: new File([video], `director-${videoId}.${extension}`, { type: video.type }),
+      });
+      setSaving({ step: "saved", video });
+    } catch (error) {
+      setSaving({ step: "failed", message: errorMessage(error) });
+    }
+  };
+  const busy = saving.step === "rendering" || saving.step === "uploading";
+  return { saving, save, busy, close: () => setSaving({ step: "idle" }) };
+}
+
+/** The saved video over the editor: to watch, find in My media, download, or keep editing. */
+function Saved({
+  video,
+  clips,
   onClose,
 }: {
-  result: Blob;
-  lines: readonly EditLine[];
-  silent: boolean;
+  video: Blob;
+  clips: readonly Clip[];
   onClose: () => void;
 }) {
   const t = useTranslations("director");
   const locale = useLocale();
-  const video = useObjectUrl(result);
+  const url = useObjectUrl(video);
   const captions = useObjectUrl(
-    useMemo(() => new Blob([webVtt(lines)], { type: "text/vtt" }), [lines]),
+    useMemo(() => new Blob([webVtt(editLines(clips))], { type: "text/vtt" }), [clips]),
   );
-  const extension = result.type === "video/mp4" ? "mp4" : "webm";
+  const extension = video.type === "video/mp4" ? "mp4" : "webm";
   return (
     <div className="fixed inset-0 z-30 flex flex-col items-center gap-4 overflow-y-auto bg-studio p-4 pt-[max(1rem,env(safe-area-inset-top))]">
       <div className="flex w-full max-w-lg items-center gap-3">
@@ -124,35 +171,39 @@ function FinishedShort({
         >
           <X className="size-6" aria-hidden />
         </button>
-        <h2 className="font-semibold">{t("review.ready")}</h2>
+        <h2 className="font-semibold">{t("editor.saved")}</h2>
       </div>
       {/* The captions are in the picture; the track is there for screen readers' players. */}
       <video
-        src={video ?? undefined}
+        src={url ?? undefined}
         controls
         autoPlay
         playsInline
-        className="aspect-9/16 max-h-[70dvh] rounded-xl bg-studio-foreground/10"
+        className="aspect-9/16 max-h-[65dvh] rounded-xl bg-studio-foreground/10"
       >
         <track
           kind="captions"
           src={captions ?? undefined}
           srcLang={locale}
-          label={t("review.ready")}
+          label={t("editor.saved")}
         />
       </video>
-      {silent ? (
-        <p className="max-w-sm text-center text-xs text-studio-foreground/70">
-          {t("review.silent")}
-        </p>
-      ) : null}
-      <a
-        href={video ?? undefined}
-        download={`director-short.${extension}`}
-        className="rounded-full bg-record px-8 py-3 font-semibold text-record-foreground"
-      >
-        {t("review.download")}
-      </a>
+      <div className="flex flex-wrap items-center justify-center gap-3">
+        <Link
+          href="/media"
+          className="rounded-full bg-record px-6 py-3 font-semibold text-record-foreground"
+        >
+          {t("editor.openMedia")}
+        </Link>
+        <a
+          href={url ?? undefined}
+          download={`director-short.${extension}`}
+          className="flex items-center gap-2 rounded-full bg-studio-foreground/10 px-5 py-3 font-semibold"
+        >
+          <Download className="size-4" aria-hidden />
+          {t("review.download")}
+        </a>
+      </div>
     </div>
   );
 }
@@ -160,17 +211,17 @@ function FinishedShort({
 function TopBar({
   videoId,
   title,
-  canFinish,
-  onNext,
+  canSave,
+  onSave,
 }: {
   videoId: string;
   title: string;
-  canFinish: boolean;
-  onNext: () => void;
+  canSave: boolean;
+  onSave: () => void;
 }) {
   const t = useTranslations("director");
   return (
-    <header className="flex items-center gap-3 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2">
+    <header className="flex items-center gap-3 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 lg:col-span-2 lg:px-6">
       <Link
         href={`/director/${videoId}`}
         aria-label={t("back")}
@@ -179,186 +230,140 @@ function TopBar({
         <X className="size-6" aria-hidden />
       </Link>
       <h1 className="min-w-0 flex-1 truncate text-lg font-semibold">{title}</h1>
-      <span className="rounded-lg bg-studio-foreground/10 px-2.5 py-1.5 text-sm font-semibold">
-        {t("editor.quality", { height: OUTPUT_HEIGHT * (9 / 16) })}
-      </span>
       <button
         type="button"
-        onClick={onNext}
-        disabled={!canFinish}
-        className="flex items-center gap-0.5 rounded-xl bg-studio-foreground py-2 pr-2 pl-4 font-semibold text-studio disabled:opacity-40"
+        onClick={onSave}
+        disabled={!canSave}
+        className="rounded-full bg-record px-5 py-2 font-semibold text-record-foreground transition-opacity disabled:opacity-40"
       >
-        {t("editor.next")}
-        <ChevronRight className="size-5" aria-hidden />
+        {t("editor.save")}
       </button>
     </header>
   );
 }
 
-function Transport({
-  time,
-  total,
-  playing,
-  onPlay,
-  history,
+function IconButton({
+  label,
+  onClick,
+  disabled,
+  pressed,
+  children,
 }: {
-  time: number;
-  total: number;
-  playing: boolean;
-  onPlay: () => void;
-  history: ReturnType<typeof useEditHistory>;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  pressed?: boolean;
+  children: ReactNode;
 }) {
-  const t = useTranslations("director.editor");
   return (
-    <div className="grid grid-cols-3 items-center px-4 py-1">
-      <button
-        type="button"
-        onClick={onPlay}
-        aria-label={playing ? t("pause") : t("play")}
-        className="flex size-10 items-center justify-center"
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={pressed}
+      aria-label={label}
+      className={cn(
+        "flex size-10 items-center justify-center rounded-full transition-colors disabled:opacity-30",
+        pressed && "bg-studio-foreground/15",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Play and the clock, the two settings, and undo and redo (of picks and settings alike). */
+function Transport({ editor }: { editor: EditorState }) {
+  const t = useTranslations("director.editor");
+  const { playback, history, tool, setTool, total } = editor;
+  const toggle = (next: Tool) => setTool(tool === next ? null : next);
+  const SoundIcon = history.choices.sound ? AudioLines : VolumeX;
+  return (
+    <div className="flex items-center gap-1 px-3 py-1">
+      <IconButton
+        label={playback.playing ? t("pause") : t("play")}
+        onClick={playback.playing ? playback.pause : playback.play}
       >
-        {playing ? (
-          <Pause className="size-7 fill-current" aria-hidden />
+        {playback.playing ? (
+          <Pause className="size-6 fill-current" aria-hidden />
         ) : (
-          <Play className="size-7 fill-current" aria-hidden />
+          <Play className="size-6 fill-current" aria-hidden />
         )}
-      </button>
-      <p className="text-center font-mono text-sm leading-tight">
-        {timecode(time)}
-        <br />
-        <span className="text-studio-foreground/60">{timecode(total)}</span>
+      </IconButton>
+      <p className="font-mono text-sm tabular-nums">
+        <span>{timecode(playback.time)}</span>
+        <span className="text-studio-foreground/50"> / {timecode(total)}</span>
       </p>
-      <div className="flex justify-end gap-4">
-        <button
-          type="button"
-          onClick={history.undo}
-          disabled={!history.canUndo}
-          aria-label={t("undo")}
-          className="disabled:opacity-30"
-        >
-          <Undo2 className="size-6" aria-hidden />
-        </button>
-        <button
-          type="button"
-          onClick={history.redo}
-          disabled={!history.canRedo}
-          aria-label={t("redo")}
-          className="disabled:opacity-30"
-        >
-          <Redo2 className="size-6" aria-hidden />
-        </button>
-      </div>
+      <span className="flex-1" />
+      <IconButton
+        label={t("tools.captions")}
+        pressed={tool === "captions"}
+        onClick={() => toggle("captions")}
+      >
+        <Captions className="size-5" aria-hidden />
+      </IconButton>
+      <IconButton
+        label={t("tools.sound")}
+        pressed={tool === "sound"}
+        onClick={() => toggle("sound")}
+      >
+        <SoundIcon className="size-5" aria-hidden />
+      </IconButton>
+      <IconButton label={t("undo")} onClick={history.undo} disabled={!history.canUndo}>
+        <Undo2 className="size-5" aria-hidden />
+      </IconButton>
+      <IconButton label={t("redo")} onClick={history.redo} disabled={!history.canRedo}>
+        <Redo2 className="size-5" aria-hidden />
+      </IconButton>
     </div>
   );
 }
 
-/** Everything the editor holds: the clips, their takes, the clock, the choices, the picks. */
-function useEditor(videoId: string, plan: ShotPlan, audio: AudioMode) {
-  const takes = useDirectorTakesQuery(videoId);
-  const latest = useMemo(() => latestTakes(takes.data ?? []), [takes.data]);
-  const clips = useMemo(() => clipsOf(plan.shots, latest), [plan.shots, latest]);
+/** Everything the editor holds: the shots and their picks, the takes, the clock, the choices. */
+function useEditor(plan: ShotPlan, shots: readonly DirectorShot[], audio: AudioMode) {
+  const history = useEditHistory({ style: "pop", sound: audio === "voice", picks: {} });
+  const { picks } = history.choices;
+  const played = useMemo(() => pickedTakes(shots, picks), [shots, picks]);
+  const clips = useMemo(() => clipsOf(plan.shots, played), [plan.shots, played]);
   const media = useTakeMedia(clips);
   const total = editSeconds(clips);
   const playback = usePlayback(total);
-  const history = useEditHistory({ style: "pop", texts: {}, sound: audio === "voice" });
-  const lines = useMemo(
-    () => editLines(clips, history.choices.texts),
-    [clips, history.choices.texts],
-  );
-  const [selectedClip, setSelectedClip] = useState<number | null>(null);
-  const [selectedLine, setSelectedLine] = useState<string | null>(null);
   const [tool, setTool] = useState<Tool | null>(null);
-  const loaded = clips.every((clip) => loadedTake(media, clip.index));
   return {
-    takes,
     clips,
     media,
     total,
     playback,
     history,
-    lines,
     tool,
     setTool,
-    ready: complete(clips) && loaded,
+    lines: useMemo(() => editLines(clips), [clips]),
+    cutPicks: cutPicks(played),
+    ready: complete(clips) && clips.every((clip) => loadedTake(media, clip)),
     left: clips.filter((clip) => clip.state === "missing").length,
-    // A plan has a shot at least, so there's always a clip under the playhead.
-    focus: required(clips[selectedClip ?? -1] ?? clipAt(clips, playback.time), "a clip"),
-    selectedClip,
-    selectedLine,
-    selectClip: (clip: Clip) => {
-      setSelectedClip(clip.index);
-      setSelectedLine(null);
-      playback.pause();
+    pick: (shotIndex: number, takeId: DirectorTakeId) => {
+      history.change({ picks: { ...picks, [shotIndex]: takeId } });
+      const clip = required(clips[shotIndex], "the shot picked");
       playback.seek(clip.at);
     },
-    selectLine: (line: EditLine) => {
-      setSelectedLine(line.key);
-      setSelectedClip(null);
-      setTool("text");
+    seek: (clip: Clip) => {
       playback.pause();
-      playback.seek(line.startSeconds);
-    },
-    scrub: (seconds: number) => {
-      playback.pause();
-      setSelectedClip(null);
-      playback.seek(seconds);
+      playback.seek(clip.at);
     },
   };
 }
 
 type EditorState = ReturnType<typeof useEditor>;
 
-/** What shows above the tools: the open tool, or the clip under the playhead. */
-function Panel({
-  editor,
-  videoId,
-  audio,
-}: {
-  editor: EditorState;
-  videoId: string;
-  audio: AudioMode;
-}) {
-  const { history, tool, lines, focus } = editor;
-  if (tool === "captions") {
-    return (
-      <StylePicker value={history.choices.style} onChange={(style) => history.change({ style })} />
-    );
-  }
-  if (tool === "text") {
-    const line = lines.find((each) => each.key === editor.selectedLine) ?? null;
-    return (
-      <TextEditor
-        key={line?.key ?? "none"}
-        line={line}
-        onSave={(edited, text) =>
-          history.change({ texts: { ...history.choices.texts, [edited.key]: text } })
-        }
-      />
-    );
-  }
-  if (tool === "sound") {
-    return (
-      <SoundPanel
-        voice={audio === "voice"}
-        on={history.choices.sound}
-        onChange={(sound) => history.change({ sound })}
-      />
-    );
-  }
-  return <ClipPanel videoId={videoId} clip={focus} audio={audio} />;
-}
-
-function soundLabel(audio: AudioMode, on: boolean) {
-  if (audio === "original") {
-    return "editor.sound.original";
-  }
-  return on ? "editor.sound.voice" : "editor.sound.muted";
-}
-
-/** The player, with the render's progress over it while the short is being made. */
-function Stage({ editor, progress }: { editor: EditorState; progress: number | null }) {
-  const t = useTranslations("director.review");
+/** The player, with the save's progress over it while the video is made and uploaded. */
+function Stage({ editor, saving }: { editor: EditorState; saving: Saving }) {
+  const t = useTranslations("director.editor");
   const { playback, history } = editor;
+  const labels: Partial<Record<Saving["step"], string>> = {
+    rendering: t("rendering", { done: saving.step === "rendering" ? saving.done : 0 }),
+    uploading: t("uploading"),
+  };
+  const label = labels[saving.step] ?? null;
   return (
     <div className="relative flex min-h-0 flex-1 justify-center px-4 py-2">
       <EditPlayer
@@ -372,73 +377,44 @@ function Stage({ editor, progress }: { editor: EditorState; progress: number | n
         sound={history.choices.sound}
         onStall={playback.pause}
       />
-      {progress === null ? null : (
-        <div
-          aria-live="polite"
-          className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-studio/80"
-        >
-          <GeminiLoader label={t("rendering", { done: progress })} size="lg" />
-          <p aria-hidden className="font-semibold">
-            {t("rendering", { done: progress })}
-          </p>
+      {label === null ? null : (
+        <div className="absolute inset-0 flex items-center justify-center bg-studio/80">
+          <GeminiLoader
+            label={label}
+            showLabel
+            size="lg"
+            className="*:last:font-semibold *:last:text-studio-foreground"
+          />
         </div>
       )}
     </div>
   );
 }
 
-/** Below the clock: the timeline, the panel for the open tool or clip, and the tools. */
-function Workbench({
-  editor,
-  videoId,
-  audio,
-}: {
-  editor: EditorState;
-  videoId: string;
-  audio: AudioMode;
-}) {
-  const t = useTranslations("director");
-  const router = useRouter();
-  const { history, focus } = editor;
-  return (
-    <>
-      <EditTimeline
-        clips={editor.clips}
-        lines={editor.lines}
-        media={editor.media}
-        total={editor.total}
-        time={editor.playback.time}
-        onScrub={editor.scrub}
-        selectedClip={editor.selectedClip}
-        onSelectClip={editor.selectClip}
-        selectedLine={editor.selectedLine}
-        onSelectLine={editor.selectLine}
-        soundLabel={t(soundLabel(audio, history.choices.sound))}
-        soundOn={audio === "voice" && history.choices.sound}
+/** The open setting, under the transport. */
+function Panel({ editor, audio }: { editor: EditorState; audio: AudioMode }) {
+  const { history, tool } = editor;
+  if (tool === "captions") {
+    return (
+      <StylePicker value={history.choices.style} onChange={(style) => history.change({ style })} />
+    );
+  }
+  if (tool === "sound") {
+    return (
+      <SoundPanel
+        voice={audio === "voice"}
+        on={history.choices.sound}
+        onChange={(sound) => history.change({ sound })}
       />
-      <div className="min-h-20 px-4 py-3">
-        {editor.left > 0 && editor.tool === null ? (
-          <p className="mb-2 text-xs text-studio-foreground/60">
-            {t("review.left", { count: editor.left })}
-          </p>
-        ) : null}
-        <Panel editor={editor} videoId={videoId} audio={audio} />
-      </div>
-      <EditTools
-        tool={editor.tool}
-        onTool={editor.setTool}
-        onRetake={() =>
-          router.push(`/director/${videoId}/shoot?shot=${focus.index}&audio=${audio}`)
-        }
-      />
-    </>
-  );
+    );
+  }
+  return null;
 }
 
 /**
  * Arriving from the last shot: Director calls the wrap (aloud, when the member has its
  * voice on) and plays the cut it made of the takes, once they've all loaded, so the
- * editor opens on the finished short ready for last changes.
+ * editor opens on the finished video ready for last changes.
  */
 function WrapCall({ ready, play }: { ready: boolean; play: () => void }) {
   const t = useTranslations("director.live");
@@ -482,68 +458,91 @@ function WrapCall({ ready, play }: { ready: boolean; play: () => void }) {
 function Editor({
   videoId,
   plan,
+  shots,
   audio,
   wrap,
 }: {
   videoId: string;
   plan: ShotPlan;
+  shots: readonly DirectorShot[];
   audio: AudioMode;
   wrap: boolean;
 }) {
   const t = useTranslations("director");
-  const errorMessage = useApiErrorMessage();
-  const editor = useEditor(videoId, plan, audio);
-  const render = useMakeShort();
-  const { playback, history, clips, media, lines } = editor;
-  if (editor.takes.isError) {
-    return (
-      <p role="alert" className="p-4 text-sm text-studio-error">
-        {errorMessage(editor.takes.error)}
-      </p>
-    );
-  }
-  const next = () => {
+  const editor = useEditor(plan, shots, audio);
+  const saver = useSaveVideo(videoId, plan.title);
+  const { playback, history, clips, media } = editor;
+  const save = () => {
     playback.pause();
-    void render.make(segmentsOf(clips, media), lines, history.choices);
+    void saver.save({ clips, media, choices: history.choices, picks: editor.cutPicks });
   };
   return (
-    <div className="mx-auto flex h-dvh max-w-lg flex-col">
+    <div className="flex h-dvh flex-col lg:grid lg:grid-cols-[minmax(20rem,28rem)_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)]">
       <TopBar
         videoId={videoId}
         title={plan.title}
-        canFinish={editor.ready && render.progress === null}
-        onNext={next}
+        canSave={editor.ready && !saver.busy}
+        onSave={save}
       />
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        <Stage editor={editor} progress={render.progress} />
-        {wrap ? <WrapCall ready={editor.ready} play={playback.play} /> : null}
+      <div className="flex min-h-0 flex-1 flex-col lg:pb-4">
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <Stage editor={editor} saving={saver.saving} />
+          {wrap ? <WrapCall ready={editor.ready} play={playback.play} /> : null}
+        </div>
+        {saver.saving.step === "failed" ? (
+          <p role="alert" className="px-4 text-center text-sm text-studio-error">
+            {saver.saving.message}
+          </p>
+        ) : null}
+        <Transport editor={editor} />
+        {editor.tool ? (
+          <div className="px-4 pb-3">
+            <Panel editor={editor} audio={audio} />
+          </div>
+        ) : null}
       </div>
-      {render.failed ? (
-        <p role="alert" className="px-4 text-center text-sm text-studio-error">
-          {t("review.renderFailed")}
-        </p>
-      ) : null}
-      <Transport
-        time={playback.time}
-        total={editor.total}
-        playing={playback.playing}
-        onPlay={playback.playing ? playback.pause : playback.play}
-        history={history}
-      />
-      <Workbench editor={editor} videoId={videoId} audio={audio} />
-      {render.result ? (
-        <FinishedShort
-          result={render.result}
-          lines={lines}
-          silent={!history.choices.sound}
-          onClose={render.close}
+      <div className="flex h-[42dvh] min-h-64 shrink-0 flex-col gap-2 border-t border-studio-foreground/10 pt-3 lg:h-auto lg:min-h-0 lg:border-t-0 lg:border-l lg:pt-4">
+        {editor.left > 0 ? (
+          <p className="px-4 text-xs text-studio-foreground/60">
+            {t("review.left", { count: editor.left })}
+          </p>
+        ) : null}
+        <ShotBoard
+          clips={clips}
+          shots={shots}
+          media={media}
+          picks={history.choices.picks}
+          time={playback.time}
+          playing={playback.playing}
+          shotHref={(index) => shotPage(videoId, index, audio)}
+          onPick={editor.pick}
+          onSeek={editor.seek}
         />
+      </div>
+      {saver.saving.step === "saved" ? (
+        <Saved video={saver.saving.video} clips={clips} onClose={saver.close} />
       ) : null}
     </div>
   );
 }
 
-function Review({
+/** While the shots load: the player's frame and a few columns, shimmering. */
+function Loading() {
+  const t = useTranslations("director.editor");
+  return (
+    <div className="flex h-dvh flex-col items-center gap-4 p-4">
+      <GeminiShimmer className="aspect-9/16 h-1/2 rounded-xl bg-studio-foreground/10" />
+      <div className="flex w-full gap-3">
+        {[0, 1, 2].map((column) => (
+          <GeminiShimmer key={column} className="h-40 w-40 shrink-0 bg-studio-foreground/10" />
+        ))}
+      </div>
+      <GeminiLoader label={t("loadingTakes")} />
+    </div>
+  );
+}
+
+function Edit({
   videoId,
   audio,
   wrap,
@@ -553,11 +552,10 @@ function Review({
   wrap: boolean;
 }) {
   const t = useTranslations("director");
+  const errorMessage = useApiErrorMessage();
   const plan = useDirectorPlanQuery(videoId);
   const ready = plan.data?.status === "ready" ? plan.data.plan : null;
-  if (ready) {
-    return <Editor videoId={videoId} plan={ready} audio={parseAudio(audio, ready)} wrap={wrap} />;
-  }
+  const shots = useDirectorShotsQuery(videoId, ready !== null);
   if (plan.isError) {
     return (
       <div className="flex h-dvh flex-col items-center justify-center gap-4 p-8 text-center">
@@ -568,18 +566,32 @@ function Review({
       </div>
     );
   }
+  if (shots.isError) {
+    return (
+      <p role="alert" className="p-4 text-sm text-studio-error">
+        {errorMessage(shots.error)}
+      </p>
+    );
+  }
+  if (!ready || !shots.data) {
+    return <Loading />;
+  }
   return (
-    <div className="flex h-dvh items-center justify-center">
-      <GeminiLoader label={t("starting")} size="lg" />
-    </div>
+    <Editor
+      videoId={videoId}
+      plan={ready}
+      shots={shots.data}
+      audio={parseAudio(audio, ready)}
+      wrap={wrap}
+    />
   );
 }
 
-/** The editor: the member's takes on a timeline, Director's review of each, and the short. */
-export function ReviewPage(props: { videoId: string; audio: string | undefined; wrap: boolean }) {
+/** The editor: the member's takes shot by shot, Director's picks, and saving the video. */
+export function EditPage(props: { videoId: string; audio: string | undefined; wrap: boolean }) {
   return (
     <DirectorGate>
-      <Review {...props} />
+      <Edit {...props} />
     </DirectorGate>
   );
 }

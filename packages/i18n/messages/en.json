@@ -608,19 +608,14 @@
       }
     },
     "review": {
-      "title": "Your takes",
       "reviewing": "Director is reviewing this take…",
       "score": "{score, number}/100",
-      "keeps": "Keeps {start, number, ::.#} s to {end, number, ::.#} s",
       "missing": "Not filmed yet",
       "film": "Film it",
       "retake": "Retake",
       "left": "{count, plural, one {# shot} other {# shots}} still to film.",
-      "rendering": "Putting your short together… {done, number, ::percent}",
-      "ready": "Your short is ready",
       "download": "Download",
-      "silent": "It's silent on purpose: add the original sound when you post it on YouTube (Use this sound).",
-      "renderFailed": "Your short couldn't be put together in this browser. Try Chrome or Safari."
+      "silent": "It's silent on purpose: add the original sound when you post it on YouTube (Use this sound)."
     },
     "template": {
       "use": "Start shooting",
@@ -650,33 +645,21 @@
       "reviewing": "Director is reviewing your take"
     },
     "editor": {
-      "quality": "{height, number}p",
-      "next": "Next",
+      "title": "Edit your video",
+      "loadingTakes": "Loading your takes…",
+      "save": "Save video",
       "play": "Play",
       "pause": "Pause",
       "undo": "Undo",
       "redo": "Redo",
-      "second": "{seconds, number}s",
       "clip": "Shot {index, number} · {title}",
       "notFilmed": "Shot {index, number} isn't filmed yet",
       "loadFailed": "This take couldn't be loaded. Try a retake.",
-      "timeline": "Timeline",
       "backToEdit": "Back to editing",
-      "textHint": "Tap a caption on the timeline to change its words.",
-      "textLabel": "Caption text",
-      "done": "Done",
       "soundOn": "Keep your voice in the short",
-      "sound": {
-        "voice": "Your voice",
-        "muted": "Sound off",
-        "original": "Original sound · add it on YouTube"
-      },
       "tools": {
-        "label": "Editing tools",
         "captions": "Captions",
-        "text": "Text",
-        "sound": "Sound",
-        "retake": "Retake"
+        "sound": "Sound"
       },
       "style": {
         "label": "Caption style",
@@ -684,7 +667,23 @@
         "classic": "Classic",
         "off": "Off"
       },
-      "loading": "Loading this take…"
+      "loading": "Loading this take…",
+      "board": "Shots",
+      "playFrom": "Play from shot {index, number}: {title}",
+      "seconds": "{seconds, number, ::.#} s",
+      "takesOf": "Takes of shot {index, number}",
+      "take": "Take {number, number}",
+      "takeOf": "Take {number, number} of {count, number}",
+      "previousTake": "Previous take",
+      "nextTake": "Next take",
+      "directorsPick": "Director's pick",
+      "needsRetake": "Needs a retake",
+      "rendering": "Putting your video together… {done, number, ::percent}",
+      "uploading": "Saving to My media…",
+      "renderFailed": "Your video couldn't be put together in this browser. Try Chrome or Safari.",
+      "tooLong": "This video is too long to save: videos can be up to {minutes, number} minutes. Pick shorter takes, or film shorter shots.",
+      "saved": "Saved to My media",
+      "openMedia": "Open My media"
     },
     "live": {
       "live": "Live",
@@ -862,7 +861,25 @@
     },
     "off": "Director isn't set up yet.",
     "leave": "Go to settings",
-    "starting": "Getting Director ready…"
+    "starting": "Getting Director ready…",
+    "media": {
+      "title": "My media",
+      "back": "Back to the library",
+      "loading": "Loading your videos…",
+      "empty": "Nothing saved yet",
+      "emptyHint": "Pick a Short, film your takes and save the video: it lands here, ready to publish.",
+      "pick": "Pick a Short",
+      "count": "{count, plural, one {# video} other {# videos}}",
+      "play": "Play {title}",
+      "opening": "Opening the video…",
+      "playFailed": "This video couldn't be opened. Try again.",
+      "publish": {
+        "none": "Not published",
+        "uploading": "Publishing…",
+        "published": "{visibility, select, public {Public on YouTube} unlisted {Unlisted on YouTube} private {Private on YouTube} other {On YouTube}}",
+        "failed": "Couldn't publish"
+      }
+    }
   },
   "library": {
     "heading": "Pick a Short. Shoot your own.",

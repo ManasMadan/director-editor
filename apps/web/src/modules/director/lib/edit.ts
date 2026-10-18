@@ -1,9 +1,9 @@
 /**
- * The edit, from the plan and the member's takes: one clip per shot, laid end to end on
- * the timeline. A filmed clip plays the part of its take Gemini picked (or the whole take
- * when it had none); a shot not filmed yet, or still being reviewed, holds its place for
- * the shot's length. The captions are the shots' scripts moved to where their clips play,
- * with any text the member changed.
+ * The edit, from the plan and the take picked for each shot (lib/picks.ts): one clip per
+ * shot, laid end to end. A filmed clip plays the part of its take Gemini kept (or the
+ * whole take when it kept none); a shot not filmed yet, or whose take is still being
+ * reviewed, holds its place for the shot's length. The captions are the shots' scripts
+ * moved to where their clips play.
  */
 import type { DirectorTake, Shot } from "@repo/contracts/api";
 import type { CaptionLine } from "./captions";
@@ -30,10 +30,10 @@ function stateOf(take: DirectorTake | undefined): ClipState {
   return take.status === "pending" || take.status === "reviewing" ? "reviewing" : "cut";
 }
 
-export function clipsOf(shots: readonly Shot[], latest: Map<number, DirectorTake>): Clip[] {
+export function clipsOf(shots: readonly Shot[], picked: Map<number, DirectorTake>): Clip[] {
   let at = 0;
   return shots.map((shot, index) => {
-    const take = latest.get(index);
+    const take = picked.get(index);
     const state = stateOf(take);
     const best = state === "cut" ? take : undefined;
     const { from, to } =
@@ -47,7 +47,7 @@ export function clipsOf(shots: readonly Shot[], latest: Map<number, DirectorTake
   });
 }
 
-/** Whether every shot is filmed and reviewed, so the short can be made. */
+/** Whether every shot is filmed and reviewed, so the video can be made. */
 export const complete = (clips: readonly Clip[]) => clips.every((clip) => clip.state === "cut");
 
 export const editSeconds = (clips: readonly Clip[]) =>
@@ -58,28 +58,16 @@ export function clipAt(clips: readonly Clip[], seconds: number): Clip | undefine
   return clips.find((clip) => seconds < clip.at + clip.seconds) ?? clips.at(-1);
 }
 
-export interface EditLine extends CaptionLine {
-  /** Which shot's script line this is, to keep the member's text for it. */
-  key: string;
-  clip: number;
-}
-
-/** The caption lines on the edit's clock, cut to their clip; `texts` replaces lines by key. */
-export function editLines(
-  clips: readonly Clip[],
-  texts: Readonly<Record<string, string>> = {},
-): EditLine[] {
+/** The caption lines on the edit's clock, cut to their clip. */
+export function editLines(clips: readonly Clip[]): CaptionLine[] {
   return clips.flatMap((clip) => {
     const from = clip.shot.kind === "video" && clip.state === "cut" ? clip.from : 0;
     const end = clip.at + clip.seconds;
-    return clip.shot.script.flatMap((line, at) => {
-      const key = `${clip.index}:${at}`;
+    return clip.shot.script.flatMap((line) => {
       const startSeconds = Math.min(end, clip.at + Math.max(0, line.startSeconds - from));
       const endSeconds = Math.min(end, clip.at + Math.max(0, line.endSeconds - from));
       // A line the kept part leaves out isn't shown.
-      return endSeconds > startSeconds
-        ? [{ key, clip: clip.index, text: texts[key] ?? line.text, startSeconds, endSeconds }]
-        : [];
+      return endSeconds > startSeconds ? [{ text: line.text, startSeconds, endSeconds }] : [];
     });
   });
 }

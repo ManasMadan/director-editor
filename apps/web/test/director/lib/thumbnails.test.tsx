@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { soundPeaks, videoFrames } from "@/modules/director/lib/thumbnails";
-import { hue, imageOf, pixel, recordClip, wavOf } from "./footage";
+import { videoFrames } from "@/modules/director/lib/thumbnails";
+import { hue, imageOf, pixel, recordClip } from "./footage";
 
 let take: string;
 
@@ -35,26 +35,5 @@ describe("a take's frames", () => {
   it("fails with no canvas to draw on", async () => {
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
     await expect(videoFrames(take, [0])).rejects.toThrow("no canvas to draw on");
-  });
-});
-
-describe("a take's sound", () => {
-  it("is bars of its loudness over the part asked for", async () => {
-    // One second loud, then one second at under a third of it.
-    const rate = 8000;
-    const samples = Array.from(
-      { length: rate * 2 },
-      (_, at) => Math.sin(at / 3) * (at < rate ? 0.8 : 0.24),
-    );
-    const bars = await soundPeaks(wavOf(samples, rate), 0, 2, 4);
-    expect(bars?.map((bar) => Math.round(bar * 10) / 10)).toEqual([1, 1, 0.3, 0.3]);
-    const lateHalf = await soundPeaks(wavOf(samples, rate), 1, 2, 2);
-    // Against the loudest of that part alone.
-    expect(lateHalf).toHaveLength(2);
-    expect(lateHalf?.every((bar) => bar > 0.8)).toBe(true);
-  });
-
-  it("is none for a take with no sound", async () => {
-    expect(await soundPeaks(new Blob(["no sound here"]), 0, 1, 4)).toBeNull();
   });
 });

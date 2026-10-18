@@ -590,7 +590,7 @@ describe("sending a take", { tags: ["files"] }, () => {
     expect(preview.element().getAttribute("src")).toMatch(/^blob:/);
     await userEvent.click(page.getByRole("button", { name: /Keep it/ }));
     await commands.checkUpload(await lastUpload(user));
-    await expect.poll(currentUrl).toBe(`/director/${videoId}/review?audio=original&wrap=1`);
+    await expect.poll(currentUrl).toBe(`/director/${videoId}/edit?audio=original&wrap=1`);
   });
 
   it("says why the take couldn't be sent, and lets the member try again", async () => {

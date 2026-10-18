@@ -9,13 +9,15 @@ export const APP_PATHS = [
   "/library",
   "/shorts",
   "/director",
+  // My media: the videos the member saved from the editor.
+  "/media",
 ];
 
 /**
  * Pages on Director's dark stage: the header and the page sit on it too, so the library's
  * thumbnails and the template's video read as they do on YouTube.
  */
-export const STUDIO_PATHS = ["/library"];
+export const STUDIO_PATHS = ["/library", "/media"];
 
 /**
  * Full-screen pages that bring their own chrome (a short's page and Director's camera),

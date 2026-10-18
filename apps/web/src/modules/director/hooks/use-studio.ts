@@ -41,7 +41,7 @@ export const shotPage = (videoId: string, index: number, audio: AudioMode) =>
 export function nextPage({ videoId, index, count, audio }: Omit<StudioShot, "shot">) {
   return index + 1 < count
     ? shotPage(videoId, index + 1, audio)
-    : (`/director/${videoId}/review?audio=${audio}&wrap=1` as const);
+    : (`/director/${videoId}/edit?audio=${audio}&wrap=1` as const);
 }
 
 /**

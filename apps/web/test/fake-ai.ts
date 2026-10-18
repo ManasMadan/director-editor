@@ -1,12 +1,13 @@
 /**
  * A stand-in for the Python AI service (apps/ai), answering the API the way the real one
  * does. The API checks the contract (packages/ai-client validates every response), and
- * apps/ai's own tests cover the service itself. Director's plans, takes and scene checks
- * are what a test sets for its short (`PUT /__fake/director/<videoId>`, the
- * `fakeDirector` command). A workspace's library is what a test sets for it
- * (`PUT /__fake/library/<orgId>`, the `fakeLibrary` command), and indexing a short adds
- * to it as the real service does: once per member, a short already there answered with
- * its plan.
+ * apps/ai's own tests cover the service itself. Director's plans, takes, cuts and scene
+ * checks are what a test sets for its short (`PUT /__fake/director/<videoId>`, the
+ * `fakeDirector` command); cuts the editor saves are added, each the caller's own (the
+ * `userId` of a cut a test sets), as My media lists them. A workspace's library is what a
+ * test sets for it (`PUT /__fake/library/<orgId>`, the `fakeLibrary` command), and
+ * indexing a short adds to it as the real service does: once per member, a short already
+ * there answered with its plan.
  */
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage } from "node:http";
@@ -43,13 +44,23 @@ function orgOf(request: IncomingMessage): string {
 interface DirectorShort {
   plan?: Record<string, unknown>;
   takes: Record<string, unknown>[];
+  cuts: Record<string, unknown>[];
   scene?: Record<string, unknown>;
+}
+
+/** Who the API says is calling: the subject of its token (checked by the real service). */
+function callerOf(request: IncomingMessage): string {
+  const token = request.headers.authorization?.split(".")[1] ?? "";
+  const claims = JSON.parse(Buffer.from(token, "base64url").toString() || "{}") as {
+    sub?: string;
+  };
+  return claims.sub ?? "";
 }
 
 export async function startFakeAi() {
   const shorts = new Map<string, DirectorShort>();
   const short = (videoId: string) => {
-    const found = shorts.get(videoId) ?? { takes: [] };
+    const found = shorts.get(videoId) ?? { takes: [], cuts: [] };
     shorts.set(videoId, found);
     return found;
   };
@@ -77,7 +88,9 @@ export async function startFakeAi() {
     if (indexed) {
       return reply(indexed.status, indexed.body);
     }
-    const director = directorRoute(route, input, short);
+    const director =
+      directorRoute(route, input, short) ??
+      cutRoute(route, input, callerOf(request), shorts, short);
     if (director) {
       return reply(director.status, director.body);
     }
@@ -206,4 +219,57 @@ function directorRoute(
     return { status: 201, body: take };
   }
   return null;
+}
+
+/** How long a picked take lasts in a cut: its best part, or its shot's length. */
+function pickMs(found: DirectorShort, pick: { shotIndex: number; takeId: string }): number {
+  const take = found.takes.find((each) => each.id === pick.takeId);
+  if (typeof take?.bestStartMs === "number" && typeof take.bestEndMs === "number") {
+    return take.bestEndMs - take.bestStartMs;
+  }
+  const plan = found.plan?.plan as { shots: { durationSeconds: number }[] } | undefined;
+  return Math.round((plan?.shots[pick.shotIndex]?.durationSeconds ?? 0) * 1000);
+}
+
+/** The caller's cuts (apps/ai/app/director.py's save_cut and cuts), without who made them. */
+function cutRoute(
+  route: string,
+  input: Record<string, unknown>,
+  caller: string,
+  shorts: Map<string, DirectorShort>,
+  short: (videoId: string) => DirectorShort,
+): { status: number; body?: unknown } | null {
+  const own = (cuts: Record<string, unknown>[]) =>
+    cuts.filter((cut) => cut.userId === caller).map(({ userId: _, ...cut }) => cut);
+  if (route === "POST /v1/director/cuts") {
+    const videoId = String(input.videoId);
+    const found = short(videoId);
+    const picks = input.picks as { shotIndex: number; takeId: string }[];
+    const plan = found.plan?.plan as { title: string } | undefined;
+    const cut = {
+      id: randomUUID(),
+      planId: randomUUID(),
+      videoId,
+      templateTitle: plan?.title ?? "",
+      title: input.title,
+      picks,
+      fileId: input.fileId,
+      durationMs: picks.reduce((sum, pick) => sum + pickMs(found, pick), 0),
+      createdAt: now(),
+      publishStatus: "none",
+      youtubeVideoId: null,
+      visibility: null,
+    };
+    found.cuts.unshift({ ...cut, userId: caller });
+    return { status: 201, body: cut };
+  }
+  if (route === "GET /v1/director/cuts") {
+    const all = own([...shorts.values()].flatMap((found) => found.cuts));
+    return {
+      status: 200,
+      body: all.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))),
+    };
+  }
+  const cuts = /^GET \/v1\/director\/plans\/([\w-]{11})\/cuts$/.exec(route);
+  return cuts?.[1] ? { status: 200, body: own(short(cuts[1]).cuts) } : null;
 }
