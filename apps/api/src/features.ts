@@ -39,4 +39,5 @@ export const features: Record<Feature, boolean> = {
   files,
   // Director live on the shoot screen: Gemini Live, billed to the project (src/server.ts).
   live: Boolean(env.GOOGLE_CLOUD_PROJECT),
+  demoGuests: env.DEMO_GUESTS === "on",
 };

@@ -166,7 +166,15 @@ declare const messages: {
       "title": "Try Director with the demo account",
       "description": "Everyone trying Director shares it, so publishing and account changes are off.",
       "use": "Use demo account",
-      "loading": "Getting the demo account…"
+      "loading": "Getting the demo account…",
+      "signingIn": "Opening the demo…",
+      "guestTitle": "Just looking? Use the demo.",
+      "guestDescription": "Your footage is deleted after a day, and posting to YouTube is off.",
+      "start": "Use the demo",
+      "fallback": "Your own demo couldn't start just now. The shared demo account below works too, but anyone trying Director can see what's filmed in it."
+    },
+    "guest": {
+      "name": "Guest"
     }
   },
   "validation": {
@@ -200,7 +208,8 @@ declare const messages: {
     "ORGANIZATION_NEEDS_OWNER": "You own a shared workspace. Make someone else its owner before deleting your account.",
     "generic": "Something went wrong. Please try again.",
     "SIGN_IN_INCOMPLETE": "The sign-in didn't finish. Please try again.",
-    "DEMO_ACCOUNT_LOCKED": "Everyone shares the demo account, so its settings can't be changed. Create your own account for that."
+    "DEMO_ACCOUNT_LOCKED": "The demo's settings can't be changed. Create your own account for that.",
+    "DEMO_GUESTS_FULL": "The demo is full right now. Try again in a little while."
   },
   "settings": {
     "title": "Settings",
@@ -381,7 +390,7 @@ declare const messages: {
     "TOO_MANY_REDIRECTS": "The address redirected too many times.",
     "UPSTREAM_UNAVAILABLE": "A service we depend on is unavailable. Please try again.",
     "NO_ACTIVE_ORGANIZATION": "Choose a workspace first.",
-    "DEMO_ACCOUNT_LOCKED": "The demo account can't do that. Create your own account to publish and change settings.",
+    "DEMO_ACCOUNT_LOCKED": "The demo can't do that. Create your own account to publish and change settings.",
     "FILE_NOT_FOUND": "That file doesn't exist, or it isn't yours.",
     "FILE_TYPE_NOT_ALLOWED": "That kind of file isn't allowed here. Use one of: {types}.",
     "FILE_TOO_LARGE": "That file is too big. The limit is {maxBytes, number, ::unit/byte unit-width-narrow compact-short}.",
@@ -400,7 +409,7 @@ declare const messages: {
     "DIRECTOR_TAKE_KIND_MISMATCH": "This shot needs a different kind of take: a video for a video shot, a photo for a photo shot.",
     "DIRECTOR_CALL_TOO_FAST": "Director was sent more than it can take in, so it stopped. Try again.",
     "DIRECTOR_CUT_NOT_FOUND": "That video isn't in My media.",
-    "PUBLISH_DEMO_DISABLED": "The demo account can't publish to YouTube. Sign in with your own Google account to publish your video.",
+    "PUBLISH_DEMO_DISABLED": "Posting is off for the demo. Sign in with Google to post your own.",
     "PUBLISH_NEEDS_YOUTUBE": "Director needs your permission to upload to your YouTube channel.",
     "PUBLISH_CUT_NOT_READY": "This video isn't ready to publish yet. Save it again from the editor.",
     "PUBLISH_NO_CHANNEL": "Your Google account doesn't have a YouTube channel yet. Create one on YouTube, then publish again.",

@@ -3,7 +3,7 @@
  * loads doesn't pull in the schema library. The schemas built from them are in auth.ts,
  * which re-exports all of this.
  */
-import { HOUR_S } from "./time";
+import { DAY_S, HOUR_S } from "./time";
 export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_MAX_LENGTH = 128;
 export const NAME_MAX_LENGTH = 100;
@@ -32,13 +32,22 @@ export const WORKSPACE_MEMBER_LIMIT = 1;
  * `authClient.updateUser({ locale })` and `session.user.timezone` are typed on both
  * sides. No defaultValue: see the sign-up hook in apps/api/src/auth/auth.ts.
  *
- * `demo` marks Director's shared demo account (apps/api/src/auth/demo.ts):
- * publishing and account changes are off for it, and `session.user.demo` is how the
- * server and the web app tell. Never input: better-auth refuses it in sign-up and profile
- * bodies, so only the demo command sets it (the column defaults to false).
+ * `demo` marks Director's demo (apps/api/src/auth/demo.ts): the shared demo account and
+ * every demo guest. Publishing and account changes are off for it, and
+ * `session.user.demo` is how the server and the web app tell. `guestUntil` is set on a
+ * demo guest only (apps/api/src/auth/guest.ts): when it's deleted, with everything it
+ * made. Neither is input: better-auth refuses them in sign-up and profile bodies, so only
+ * the demo command and the guest sign-in set them (the columns default to false and null).
  */
 export const userAdditionalFields = {
   locale: { type: "string", required: false, input: true },
   timezone: { type: "string", required: false, input: true },
   demo: { type: "boolean", required: false, input: false },
+  guestUntil: { type: "date", required: false, input: false },
 } as const;
+
+/**
+ * How long a demo guest lasts: its session ends, and the worker deletes it with its
+ * workspace, its takes and its videos, this long after it was made.
+ */
+export const DEMO_GUEST_LIFETIME_S = DAY_S;

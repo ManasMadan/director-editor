@@ -45,9 +45,9 @@ export const ERROR_CODES = {
   // Tenancy
   NO_ACTIVE_ORGANIZATION: 403,
   /**
-   * The shared demo account can't do this: publish, or change the account itself (its
-   * password, two-step verification, sessions, deletion). Everyone trying Director signs
-   * in to the same one.
+   * The demo can't do this: change the account itself (its password, two-step
+   * verification, sessions, deletion, picture). The shared demo account is everyone's,
+   * and a demo guest is deleted after a day.
    */
   DEMO_ACCOUNT_LOCKED: 403,
   // Files
@@ -84,7 +84,10 @@ export const ERROR_CODES = {
   /** No cut of the member's has this id. */
   DIRECTOR_CUT_NOT_FOUND: 404,
   // Publishing a cut to YouTube Shorts
-  /** The shared demo account can't publish: everyone trying Director signs in to it. */
+  /**
+   * The demo (the shared account, or a guest) can't publish: posting needs the member's
+   * own Google account. Drafting the post still works.
+   */
   PUBLISH_DEMO_DISABLED: 403,
   /**
    * No Google account is linked, or it hasn't allowed uploads to YouTube (or that
@@ -162,6 +165,8 @@ export const AUTH_ERROR_CODES = [
   "PASSKEY_CANCELLED",
   "ORGANIZATION_NEEDS_OWNER",
   "SIGN_IN_INCOMPLETE",
+  // The demo has as many guests as it takes at once (apps/api/src/auth/guest.ts).
+  "DEMO_GUESTS_FULL",
   // From ERROR_CODES.
   "VALIDATION_FAILED",
   "RATE_LIMITED",

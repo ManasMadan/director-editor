@@ -535,6 +535,69 @@ describe("maintenance", () => {
     });
   });
 
+  it("deletes the demo guests whose day is over, with their workspaces, plans and footage", {
+    tags: ["files"],
+  }, async () => {
+    const [expired, live, member, fileId, orgId] = [1, 2, 3, 4, 5].map(() => randomUUID());
+    await asRole("postgres", async (client) => {
+      await client.query(
+        `INSERT INTO auth."user" (id, name, email, demo, guest_until, updated_at) VALUES
+           ($1::uuid, 'Guest', $1::text || '@guest.invalid', true, now() - interval '1 minute', now()),
+           ($2::uuid, 'Guest', $2::text || '@guest.invalid', true, now() + interval '1 hour', now()),
+           ($3::uuid, 'Member', $3::text || '@test.dev', false, NULL, now())`,
+        [expired, live, member],
+      );
+      // More than one batch of expired guests, with nothing of their own.
+      await client.query(
+        `INSERT INTO auth."user" (name, email, demo, guest_until, updated_at)
+         SELECT 'Guest', 'batch-' || n || '-' || $1 || '@guest.invalid', true,
+                now() - interval '1 hour', now()
+           FROM generate_series(1, 100) n`,
+        [expired],
+      );
+      await client.query(
+        `INSERT INTO auth.organization (id, name, slug) VALUES ($1, 'Guest', 'personal-' || $2::text)`,
+        [orgId, expired],
+      );
+      await client.query(
+        "INSERT INTO auth.member (organization_id, user_id, role) VALUES ($1, $2, 'owner')",
+        [orgId, expired],
+      );
+      await client.query(
+        `INSERT INTO ai.director_plan (org_id, video_id, source, status, stage, updated_at)
+         VALUES ($1, 'GuestShort1', 'seed', 'ready', 'ready', now())`,
+        [orgId],
+      );
+      await client.query(
+        `INSERT INTO files.file (id, user_id, purpose, status, filename, declared_type, declared_size, updated_at)
+         VALUES ($1, $2, 'director-take-video', 'ready', 'take.webm', 'video/webm', 3, now())`,
+        [fileId, expired],
+      );
+    });
+    await storage.write(`files/${fileId}`, Buffer.from("take"), "video/webm");
+
+    const result = await maintenance.run("demo-guests");
+    expect(result.guests).toBeGreaterThanOrEqual(101);
+    expect(result.objects).toBeGreaterThanOrEqual(2);
+    expect(await storage.head(`files/${fileId}`)).toBeNull();
+    const left = await asRole("postgres", async (client) => {
+      const users = await client.query<{ id: string }>(
+        `SELECT id FROM auth."user" WHERE id = ANY($1::uuid[]) OR email LIKE $2 ORDER BY name`,
+        [[expired, live, member], `batch-%-${expired}@guest.invalid`],
+      );
+      const rows = await client.query<{ n: number }>(
+        `SELECT (SELECT count(*) FROM auth.organization WHERE id = $1)
+              + (SELECT count(*) FROM ai.director_plan WHERE org_id = $1)
+              + (SELECT count(*) FROM files.file WHERE id = $2) AS n`,
+        [orgId, fileId],
+      );
+      return { users: users.rows.map((user) => user.id).sort(), rows: Number(rows.rows[0]?.n) };
+    });
+    // The guest still in its day and the member stay; nothing of the expired guest does.
+    expect(left).toEqual({ users: [live, member].sort(), rows: 0 });
+    expect((await maintenance.run("demo-guests")).guests).toBe(0);
+  });
+
   it("registers every schedule with BullMQ once", async () => {
     const queue = new Queue("maintenance", {
       connection: createRedis(process.env.REDIS_URL as string),
@@ -543,6 +606,7 @@ describe("maintenance", () => {
     const schedulers = await queue.getJobSchedulers();
     expect(schedulers.map((s) => s.key).sort()).toEqual([
       "audit-partitions",
+      "demo-guests",
       "files-cleanup",
       "outbox-retention",
       "session-retention",
@@ -556,6 +620,12 @@ describe("maintenance", () => {
     ).rejects.toThrow(/permission denied/);
     await expect(
       asRole("app_api", (client) => client.query("SELECT auth.purge_expired()")),
+    ).rejects.toThrow(/permission denied/);
+    await expect(
+      asRole("app_api", (client) => client.query("SELECT auth.purge_expired_guests(1)")),
+    ).rejects.toThrow(/permission denied/);
+    await expect(
+      asRole("app_worker", (client) => client.query(`DELETE FROM auth."user"`)),
     ).rejects.toThrow(/permission denied/);
   });
 });

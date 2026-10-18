@@ -21,6 +21,12 @@
  *   limit would let anyone lock it.
  * It indexes a Short of its own like anyone (the usual one), and its library starts with
  * the seeded templates.
+ *
+ * With demo guests on (guest.ts), each browser gets a private guest instead, flagged
+ * `demo` too, so every restriction here holds for guests as well: a guest can't publish
+ * (it has no Google account to post with), and nothing it could change about its account
+ * (a password, a passkey, a linked Google account) would outlive its day. The shared
+ * account then stays as the fallback for when a guest can't be made.
  */
 import { fieldOf } from "@repo/contracts/objects";
 import { APIError } from "better-auth/api";
@@ -55,14 +61,14 @@ export const DEMO_LOCKED_PATHS: ReadonlySet<string> = new Set([
 const isDemo = (user: unknown) => fieldOf(user, "demo") === true;
 
 /**
- * Refuses one of DEMO_LOCKED_PATHS when the session's user is the demo account. The user
- * as a hook gets it, whose extra fields better-auth leaves untyped.
+ * Refuses one of DEMO_LOCKED_PATHS when the session's user is the demo account or a demo
+ * guest. The user as a hook gets it, whose extra fields better-auth leaves untyped.
  */
 export function refuseForDemo(user: unknown) {
   if (isDemo(user)) {
     throw new APIError("FORBIDDEN", {
       code: "DEMO_ACCOUNT_LOCKED",
-      message: "The shared demo account can't change itself.",
+      message: "The demo can't change its account.",
     });
   }
 }

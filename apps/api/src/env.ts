@@ -83,6 +83,16 @@ export const envSchema = {
   // `system.info` shows on the sign-in page, on purpose: anyone may try Director with it.
   // Unset: no demo account is offered.
   DEMO_PASSWORD: z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH).optional(),
+  // Director's demo guests (src/auth/guest.ts): "on" gives each browser that tries the
+  // demo a private guest of its own, deleted with everything it made after a day, so
+  // nobody sees anyone else's footage. The shared demo account above, when set, is then
+  // the fallback for a guest that can't be made.
+  DEMO_GUESTS: z.enum(["on", "off"]).default("off"),
+  // How many guests may exist at once (each holds a workspace and its footage until it's
+  // deleted): past it the demo falls back to the shared account, or says it's full.
+  DEMO_GUEST_LIMIT: z.coerce.number().int().positive().default(300),
+  // How many guests one address may make an hour: one browser needs one a day.
+  DEMO_GUESTS_PER_ADDRESS: z.coerce.number().int().positive().default(5),
   // Optional: the Python AI service, and the secret this API signs its calls with
   // (the same AI_SERVICE_SECRET the service verifies with).
   AI_URL: z.url().optional(),

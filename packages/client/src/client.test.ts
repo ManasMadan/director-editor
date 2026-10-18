@@ -8,6 +8,7 @@ const info = {
   features: {
     ai: false,
     captcha: false,
+    demoGuests: false,
     director: false,
     files: false,
     google: false,

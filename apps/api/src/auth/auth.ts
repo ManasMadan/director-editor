@@ -35,6 +35,7 @@ import { features } from "../features";
 import { type AuthContext, type AuthDependencies, authContext } from "./auth-context";
 import { accountDeletion, databaseHooks, requestHooks } from "./auth-hooks";
 import { captchaPlugins, emailOtpPlugin, organizationPlugin } from "./auth-plugins";
+import { guestPlugins } from "./guest";
 
 /** The product's name, as authenticator apps and passkey prompts show it. */
 const APP_NAME = "Director";
@@ -124,6 +125,7 @@ function plugins(context: AuthContext) {
     organizationPlugin(context),
     admin({ impersonationSessionDuration: 60 * MINUTE_S }),
     ...captchaPlugins(env),
+    ...guestPlugins(context),
   );
 }
 

@@ -23,10 +23,15 @@ model User {
   banned           Boolean         @default(false)
   banReason        String?         @map("ban_reason")
   banExpires       DateTime?       @map("ban_expires") @db.Timestamptz(3)
-  /// Director's shared demo account (apps/api/src/auth/demo.ts): publishing and
-  /// account changes are off for it. Registered with better-auth (user.additionalFields,
-  /// never client input), so a session's user carries it.
+  /// Director's demo (apps/api/src/auth/demo.ts): the shared demo account, and each
+  /// demo guest. Publishing and account changes are off for it. Registered with
+  /// better-auth (user.additionalFields, never client input), so a session's user
+  /// carries it.
   demo             Boolean         @default(false)
+  /// A demo guest's (apps/api/src/auth/guest.ts): when it and everything made in its
+  /// workspace are deleted (the worker's demo-guests task). Null for everyone else.
+  /// Registered with better-auth like `demo`, never client input.
+  guestUntil       DateTime?       @map("guest_until") @db.Timestamptz(3)
   createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
   sessions         Session[]

@@ -44,7 +44,12 @@ const SCHEDULES: Record<Task, string> = {
   "outbox-retention": "15 3 * * *",
   "session-retention": "0 * * * *",
   "files-cleanup": "30 * * * *",
+  "demo-guests": "20 * * * *",
 };
+
+// Demo guests deleted a call (auth.purge_expired_guests); the task calls again while a
+// call fills its batch, so a backlog clears in one run without one long transaction.
+const GUEST_BATCH = 100;
 
 // Partitions exist this far around "now", so late and early timestamps always land.
 const PARTITIONS_BACK = 1;
@@ -137,6 +142,9 @@ export class MaintenanceProcessor extends JobProcessor implements OnApplicationB
       case "files-cleanup":
         Object.assign(result, await this.files.run());
         break;
+      case "demo-guests":
+        Object.assign(result, await this.demoGuests());
+        break;
       case "session-retention": {
         const purged = await row(count, db.$queryRaw`SELECT auth.purge_expired() AS n`);
         result.expired = Number(purged.n);
@@ -145,5 +153,26 @@ export class MaintenanceProcessor extends JobProcessor implements OnApplicationB
     }
     this.log.info({ task, ...result }, "maintenance task finished");
     return result;
+  }
+
+  /**
+   * Deletes the demo guests whose day is over (apps/api/src/auth/guest.ts): each with its
+   * workspace, takes and videos. Their files' objects are queued for deletion as their rows
+   * go, so the files cleanup runs straight after, and the footage leaves storage now
+   * rather than at its next turn.
+   */
+  private async demoGuests() {
+    let guests = 0;
+    for (;;) {
+      const purged = await row(
+        count,
+        this.database.write.$queryRaw`SELECT auth.purge_expired_guests(${GUEST_BATCH}::int) AS n`,
+      );
+      guests += Number(purged.n);
+      if (purged.n < GUEST_BATCH) {
+        break;
+      }
+    }
+    return { guests, ...(await this.files.run()) };
   }
 }

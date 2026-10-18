@@ -9,6 +9,7 @@ describe("system info", () => {
       features: {
         ai: true,
         captcha: false,
+        demoGuests: false,
         director: false,
         files: true,
         google: false,

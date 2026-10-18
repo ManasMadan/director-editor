@@ -173,6 +173,7 @@ export const queues = {
       "audit-partitions": z.object({}),
       "session-retention": z.object({}),
       "files-cleanup": z.object({}),
+      "demo-guests": z.object({}),
     },
     options: {
       attempts: 3,
