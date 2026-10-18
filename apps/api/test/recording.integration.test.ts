@@ -367,6 +367,9 @@ describe("a session's parts and marks", () => {
     // before the screen was reloaded, numbered below the last, is refused.
     await mark(rpc, sessionId, "start", 4, 30_000);
     await expectError(mark(rpc, sessionId, "start", 3, 35_000), "RECORDING_MARK_OUT_OF_ORDER");
+    // One attempt per start in a part: a second start at the same moment is refused too.
+    await expectError(mark(rpc, sessionId, "start", 5, 30_000), "RECORDING_MARK_OUT_OF_ORDER");
+    expect(await mark(rpc, sessionId, "start", 5, 31_000)).toMatchObject({ number: 5 });
   });
 
   it("ends an attempt at a pause, refuses marks while paused, and takes them after a touch", async () => {

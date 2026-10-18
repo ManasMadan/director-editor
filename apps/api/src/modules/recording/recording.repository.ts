@@ -285,6 +285,15 @@ export class RecordingRepository {
     return _max.number ?? 0;
   }
 
+  /** Whether an attempt already starts at this moment of the part (one per start). */
+  async attemptStartsAt(tx: Tx, sessionId: RecordingSessionId, partIndex: number, startMs: number) {
+    const found = await tx.recordingAttempt.findUnique({
+      where: { sessionId_partIndex_startMs: { sessionId, partIndex, startMs } },
+      select: { id: true },
+    });
+    return found !== null;
+  }
+
   startAttempt(
     tx: Tx,
     data: {

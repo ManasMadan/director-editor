@@ -497,6 +497,11 @@ export class RecordingService {
     if (input.attempt <= (await this.recordings.lastAttemptNumber(tx, input.sessionId))) {
       throw new AppError("RECORDING_MARK_OUT_OF_ORDER");
     }
+    // An attempt is one start in a part (the post-session pass relies on it to add each
+    // it finds once): a second start at the very same moment is out of order too.
+    if (await this.recordings.attemptStartsAt(tx, input.sessionId, input.partIndex, input.atMs)) {
+      throw new AppError("RECORDING_MARK_OUT_OF_ORDER");
+    }
   }
 
   private async startAttempt(tx: Tx, orgId: OrgId, input: Mark) {

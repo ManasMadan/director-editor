@@ -187,6 +187,9 @@ model RecordingAttempt {
   take        DirectorTake?    @relation(fields: [takeId], references: [id], onDelete: SetNull)
 
   @@unique([sessionId, number])
+  /// One attempt per start in a part: the post-session pass adds the ones it finds with
+  /// ON CONFLICT on it, so each is added once.
+  @@unique([sessionId, partIndex, startMs])
   /// At most one attempt open at a time.
   @@unique([sessionId], map: "recording_attempt_one_open", where: raw("status = 'open'"))
   @@index([fileId])
