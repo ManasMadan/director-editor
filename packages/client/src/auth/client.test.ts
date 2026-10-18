@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { authClientPlugins, createAppAuthClient } from "./client";
+import { authClientPlugins, createAppAuthClient, GUEST_SIGN_IN_PATH } from "./client";
 
 // The API's auth endpoints, as far as these calls see them: no session, and a password
 // sign-in that needs a second factor.
@@ -54,6 +54,16 @@ describe("the auth client", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it("signs in as the demo's guest with a POST, and has every session look again", async () => {
+    const auth = createAppAuthClient({ baseUrl });
+    const before = paths.length;
+    const listened = vi.fn();
+    auth.$store.listen("$sessionSignal", listened);
+    await auth.$fetch(GUEST_SIGN_IN_PATH, { method: "POST", body: {} });
+    expect(paths.slice(before)).toEqual(["/api/auth/sign-in/guest"]);
+    await vi.waitFor(() => expect(listened).toHaveBeenCalled());
   });
 
   it("gives mobile the same plugins, so both expose the same methods", () => {

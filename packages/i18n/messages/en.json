@@ -170,8 +170,7 @@
       "guestTitle": "Just looking? Use the demo.",
       "guestDescription": "Your footage is deleted after a day, and posting to YouTube is off.",
       "start": "Use the demo",
-      "fallback": "Your own demo couldn't start just now. The shared demo account below works too, but anyone trying Director can see what's filmed in it.",
-      "failed": "The demo couldn't start just now. Try again in a minute."
+      "fallback": "Your own demo couldn't start just now. The shared demo account below works too, but anyone trying Director can see what's filmed in it."
     },
     "guest": {
       "name": "Guest"

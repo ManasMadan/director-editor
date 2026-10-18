@@ -3,7 +3,24 @@ import { commands, userEvent } from "vitest/browser";
 import { SignInPage } from "@/modules/auth";
 import { DEMO } from "../demo";
 import { cleanup, currentUrl, renderPage, router } from "../render";
-import { auth, enableTwoFactor, newUser, signOut, signUp } from "../users";
+import { auth, currentSession, enableTwoFactor, newUser, signOut, signUp } from "../users";
+
+/** system.info as the full API answers it, changed to an environment it isn't running as. */
+interface SystemInfo {
+  features: { demoGuests: boolean };
+  demo: { email: string; password: string } | null;
+}
+
+/** Answers the page's system.info with the full API's own answer, after `change`. */
+async function serveSystemInfo(change: (info: SystemInfo) => void) {
+  const answer = await fetch("/rpc/system/info", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  }).then((response) => response.json() as Promise<{ json: SystemInfo }>);
+  change(answer.json);
+  await commands.failRequests("/rpc/system/info", { status: 200, body: answer });
+}
 
 async function fillIn(
   page: Awaited<ReturnType<typeof renderPage>>,
@@ -90,7 +107,69 @@ describe("sign in", () => {
       );
   });
 
-  it("offers the demo account, showing its email and password, and fills the form with them", async () => {
+  it("offers the demo as a guest of this browser's own, and signs in as one", async () => {
+    const page = await renderPage(<SignInPage />, { url: "/sign-in" });
+    const card = page.getByRole("region", { name: "Just looking? Use the demo." });
+    await expect
+      .element(
+        card.getByText("Your footage is deleted after a day, and posting to YouTube is off."),
+      )
+      .toBeVisible();
+    // The shared account's password stays out of sight while guests are given out.
+    expect(page.getByText(DEMO.password).elements()).toHaveLength(0);
+
+    await userEvent.click(card.getByRole("button", { name: "Use the demo" }));
+    await expect.poll(currentUrl).toBe("/library");
+    const { user } = await currentSession();
+    expect(user).toMatchObject({ name: "Guest", demo: true });
+    expect(user.email).toMatch(/@guest\.invalid$/);
+  });
+
+  it("starts the guest at once from ?demo=1, the landing page's link", async () => {
+    await renderPage(<SignInPage />, { url: "/sign-in?demo=1&next=/director/22k0fZarxh8" });
+    await expect.poll(currentUrl).toBe("/director/22k0fZarxh8");
+    expect((await currentSession()).user.demo).toBe(true);
+  });
+
+  it("falls back to the shared demo account, in the form, when no guest can be made", async () => {
+    await commands.failRequests("/api/auth/sign-in/guest", {
+      status: 503,
+      body: { code: "DEMO_GUESTS_FULL", message: "Full." },
+    });
+    const page = await renderPage(<SignInPage />, { url: "/sign-in?demo=1" });
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent(
+        "Your own demo couldn't start just now. The shared demo account below works too, but anyone trying Director can see what's filmed in it.",
+      );
+    const card = page.getByRole("region", { name: "Try Director with the demo account" });
+    await expect.element(card.getByText(DEMO.password)).toBeVisible();
+    await expect.element(page.getByLabelText("Email")).toHaveValue(DEMO.email);
+    await expect.element(page.getByLabelText("Password")).toHaveValue(DEMO.password);
+    expect(currentUrl()).toBe("/sign-in?demo=1");
+  });
+
+  it("says why when no guest can be made and there's no shared account", async () => {
+    await serveSystemInfo((info) => {
+      info.demo = null;
+    });
+    await commands.failRequests("/api/auth/sign-in/guest", {
+      status: 503,
+      body: { code: "DEMO_GUESTS_FULL", message: "Full." },
+    });
+    const page = await renderPage(<SignInPage />, { url: "/sign-in" });
+    const card = page.getByRole("region", { name: "Just looking? Use the demo." });
+    await userEvent.click(card.getByRole("button", { name: "Use the demo" }));
+    await expect
+      .element(card.getByRole("alert"))
+      .toHaveTextContent("The demo is full right now. Try again in a little while.");
+    await expect.element(page.getByLabelText("Email")).toHaveValue("");
+  });
+
+  it("offers the shared demo account, its email and password, when guests are off", async () => {
+    await serveSystemInfo((info) => {
+      info.features.demoGuests = false;
+    });
     const page = await renderPage(<SignInPage />, { url: "/sign-in" });
     const card = page.getByRole("region", { name: "Try Director with the demo account" });
     await expect.element(card.getByText(DEMO.email)).toBeVisible();
@@ -102,10 +181,23 @@ describe("sign in", () => {
     await expect.element(page.getByLabelText("Password")).toHaveValue(DEMO.password);
   });
 
-  it("fills the form with the demo account from ?demo=1, the landing page's link", async () => {
+  it("fills the form with the shared demo account from ?demo=1 when guests are off", async () => {
+    await serveSystemInfo((info) => {
+      info.features.demoGuests = false;
+    });
     const page = await renderPage(<SignInPage />, { url: "/sign-in?demo=1" });
     await expect.element(page.getByLabelText("Email")).toHaveValue(DEMO.email);
     await expect.element(page.getByLabelText("Password")).toHaveValue(DEMO.password);
+  });
+
+  it("offers no demo while system.info can't be read", async () => {
+    await commands.failRequests("/rpc/system/info", { status: 503 });
+    const page = await renderPage(<SignInPage />, { url: "/sign-in" });
+    await expect
+      .element(page.getByRole("button", { name: "Sign in with a passkey" }))
+      .toBeVisible();
+    expect(page.getByText("Just looking? Use the demo.").elements()).toHaveLength(0);
+    expect(page.getByText("Try Director with the demo account").elements()).toHaveLength(0);
   });
 
   it("says it's getting the demo account while ?demo=1 waits for it", async () => {
