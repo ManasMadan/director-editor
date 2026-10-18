@@ -60,7 +60,7 @@ const stockCreditSchema = z.object({
 export type StockCredit = z.infer<typeof stockCreditSchema>;
 
 /** One of the member's own images for a slot. */
-const assetImageSchema = z.object({
+export const assetImageSchema = z.object({
   id: imageIdSchema,
   origin: z.enum(["created", "upload", "stock"]),
   /** A still, or a clip (a gap's Veo clip: AI footage, flagged as synthetic on publish). */
