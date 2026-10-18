@@ -69,6 +69,11 @@ export class TurnMeter {
     this.voiceBytes += bytes;
   }
 
+  /** Whether Director's voice has come in the turn so far. */
+  speaking(): boolean {
+    return this.spokeAt !== null;
+  }
+
   /** A piece of the transcript of Director's voice. */
   said() {
     this.saidAt ??= this.now();

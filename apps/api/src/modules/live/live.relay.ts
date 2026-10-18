@@ -43,6 +43,7 @@ import { type RawData, WebSocket } from "ws";
 import type { GoogleAuth } from "./google-auth";
 import { SlidingBudget } from "./live.budget";
 import { NoteGate, type NoteKind } from "./live.gate";
+import { hasVoice, REFUSALS, ToolRepeats } from "./live.guards";
 import { POINT_AT_ANSWER_MS } from "./live.marks";
 import {
   UPSTREAM_MAX_PAYLOAD_BYTES,
@@ -311,6 +312,9 @@ export class LiveRelay {
   private screen: ScreenState = { roll: null, take: null, rollUntold: false, takeUntold: false };
   /** An attempt Director marked as started, until it's marked as ended. */
   private attemptTimer: NodeJS.Timeout | undefined;
+  private attemptOpen = false;
+  /** Each tool's recent calls, so one called in a loop is refused (live.guards.ts). */
+  private readonly repeats: ToolRepeats;
   /** When the move to a fresh connection began, and by when it must be done. */
   private rotatedAt = 0;
   private handOverBy = 0;
@@ -329,6 +333,7 @@ export class LiveRelay {
     this.moves = new SlidingBudget(SHOT_MOVES, TEXT_WINDOW_MS, options.now);
     this.notes = new SlidingBudget(NOTES, TEXT_WINDOW_MS, options.now);
     this.turn = new TurnMeter(options.now);
+    this.repeats = new ToolRepeats(options.now);
     this.pacer = new Pacer(
       {
         onQuiet: (nudge) => this.tell("quiet", quietMessage(nudge)),
@@ -599,6 +604,10 @@ export class LiveRelay {
       return;
     }
     this.audioOver = false;
+    if (hasVoice(pcm16)) {
+      // The member is talking, before any transcript of it: the quiet is over.
+      this.pacer.heard();
+    }
     send(line, { realtimeInput: { audio: { mimeType: "audio/pcm;rate=16000", data: pcm16 } } });
   }
 
@@ -871,6 +880,10 @@ export class LiveRelay {
       });
       this.gate.turnGoesOn();
     };
+    if (!this.repeats.allows(call.name)) {
+      this.options.log("warn", { tool: call.name }, "live tool called over and over");
+      return answerNow(REFUSALS.repeated);
+    }
     if (call.name === RATE_TOOL) {
       this.turn.tool(RATE_TOOL);
       return this.rate(call.args, answerNow);
@@ -883,6 +896,10 @@ export class LiveRelay {
     const browserCall = checkTool(this.options.plan, name, call.args);
     if ("response" in browserCall) {
       return answerNow(browserCall.response);
+    }
+    const refused = this.markRefused(browserCall.call);
+    if (refused) {
+      return answerNow(refused);
     }
     this.toolIds += 1;
     const id = `tool-${this.toolIds}`;
@@ -935,6 +952,7 @@ export class LiveRelay {
    * length and some, whether the attempt is over.
    */
   private attemptStarted() {
+    this.attemptOpen = true;
     this.pacer.take(true);
     clearTimeout(this.attemptTimer);
     const { durationSeconds: seconds } = required(this.options.plan.shots[this.shot], "the shot");
@@ -948,7 +966,25 @@ export class LiveRelay {
   private attemptOver() {
     clearTimeout(this.attemptTimer);
     this.attemptTimer = undefined;
+    this.attemptOpen = false;
     this.pacer.take(false);
+  }
+
+  /**
+   * A mark that can't be right, refused before the browser sees it (live.guards.ts): an
+   * end with nothing open, a start with one open, or a start while Director is talking.
+   */
+  private markRefused(call: LiveToolCall) {
+    if (call.name !== "mark") {
+      return null;
+    }
+    if (call.event === "end") {
+      return this.attemptOpen ? null : REFUSALS.noneOpen;
+    }
+    if (this.attemptOpen) {
+      return REFUSALS.alreadyOpen;
+    }
+    return this.turn.speaking() ? REFUSALS.ownVoice : null;
   }
 
   /**
