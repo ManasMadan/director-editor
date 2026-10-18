@@ -206,7 +206,9 @@ null for the rest:
   on screen, or a fact about it such as "3 years of practice", wherever it sits); a label or
   a callout, with its words; or captions, which have no text of their own, with
   captionStyle ("word-by-word", "line", or "boxed" for words on a box) and position
-  ("between-halves" when they sit on a split screen's seam).
+  ("between-halves" when they sit on a split screen's seam). Every piece of text on screen
+  that isn't the captions (a label over B-roll, a fact, a name) is its own text edit at
+  its own time, with its words.
 - "transition": cut, match-cut with its anchor, whip, fade, zoom, spin or glitch, at the
   moment it happens.
 - "speed": fromRate to toRate (1 is normal speed), with easing.

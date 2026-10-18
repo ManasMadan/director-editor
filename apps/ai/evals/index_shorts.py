@@ -43,6 +43,7 @@ from app.log import configure_logging, log
 from app.schemas import (
     VIDEO_ID_PATTERN,
     CaptionStyle,
+    GapEdit,
     LayoutEdit,
     LayoutKind,
     ShotMode,
@@ -245,11 +246,26 @@ def _text_checks(plan: ShotPlan, expect: Expectation) -> list[Check]:
         (bool(captions) or not expect.captions, "no captions"),
         (expect.captionStyle is None or styled, f"no {expect.captionStyle} captions"),
         (between or not expect.captionsBetweenHalves, "no captions between the halves"),
-        (
-            any(edit.style == "lower-third" for edit in texts) or not expect.lowerThirds,
-            "no lower thirds",
-        ),
+        (_lower_thirds(plan, texts) or not expect.lowerThirds, "no lower thirds"),
     ]
+
+
+def _lower_thirds(plan: ShotPlan, texts: list[TextEdit]) -> bool:
+    """Whether the plan labels what's on screen: a lower third, or a label or callout
+    over a B-roll gap (the editor puts the member's words there either way; spec 8.9's
+    "lower thirds in the member's words")."""
+    gaps = [edit for edit in plan.edits if isinstance(edit, GapEdit)]
+    return any(
+        edit.style == "lower-third"
+        or (
+            edit.style in {"label", "callout"}
+            and any(
+                edit.startSeconds < gap.endSeconds and gap.startSeconds < edit.endSeconds
+                for gap in gaps
+            )
+        )
+        for edit in texts
+    )
 
 
 def _ending_checks(plan: ShotPlan, expect: Expectation) -> list[Check]:

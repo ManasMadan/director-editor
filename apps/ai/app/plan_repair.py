@@ -29,6 +29,7 @@ from collections.abc import Callable
 
 from pydantic import TypeAdapter
 
+from app.branding import unbranding
 from app.schemas import (
     COLOR_PATTERN,
     MAX_ASSET_ID,
@@ -100,6 +101,7 @@ def repair_plan(plan: ShotPlanDraft, video_seconds: float | None) -> ShotPlan:
     ]
     end = _end_of_short([shot.sourceEndSeconds for shot in repaired], video_seconds)
     assets, renamed = _repair_assets(plan.assets, end)
+    unbranded = _unbranded_by(plan.assets)
     # Validated against the real ShotPlan (its Field constraints, not the draft's looser
     # ones): a trim that still leaves too much of something raises here, loudly, rather
     # than writing an inconsistent plan.
@@ -109,9 +111,15 @@ def repair_plan(plan: ShotPlanDraft, video_seconds: float | None) -> ShotPlan:
             "shots": [shot.model_dump(mode="json") for shot in repaired],
             "durationSeconds": sum(shot.durationSeconds for shot in repaired),
             "assets": assets,
-            "edits": _repair_edits(plan.edits, renamed, end),
+            "edits": _repair_edits(plan.edits, renamed, end, unbranded),
         }
     )
+
+
+def _unbranded_by(assets: list[AssetDraft]) -> Callable[[str], str]:
+    """What takes the original's branding (every asset's brands, handles, web addresses)
+    out of an edit's words: they go on the member's version as they are (app/branding.py)."""
+    return unbranding(brand for asset in assets for brand in asset.reference.brands)
 
 
 def with_assets_and_edits(plan: ShotPlan, source: ShotPlan) -> ShotPlan:
@@ -123,12 +131,13 @@ def with_assets_and_edits(plan: ShotPlan, source: ShotPlan) -> ShotPlan:
     assets, renamed = _repair_assets(
         [AssetDraft.model_validate(asset.model_dump()) for asset in source.assets], end
     )
+    drafts = [AssetDraft.model_validate(asset.model_dump()) for asset in source.assets]
     edits = [_draft_of(edit.model_dump(mode="json")) for edit in source.edits]
     return ShotPlan.model_validate(
         {
             **plan.model_dump(mode="json"),
             "assets": assets,
-            "edits": _repair_edits(edits, renamed, end),
+            "edits": _repair_edits(edits, renamed, end, _unbranded_by(drafts)),
         }
     )
 
@@ -380,10 +389,16 @@ def _span(start: float, stop: float, end: float) -> tuple[float, float]:
     return (start, stop) if stop - start >= MIN_EDIT_SECONDS else (0, end)
 
 
-def _repair_edits(drafts: list[EditDraft], renamed: dict[str, str], end: float) -> list[Fields]:
+def _repair_edits(
+    drafts: list[EditDraft],
+    renamed: dict[str, str],
+    end: float,
+    unbranded: Callable[[str], str],
+) -> list[Fields]:
     """Each edit as its type's own model, inside the Short and in order of when it
     starts (ties as they came), at most `MAX_EDITS`; one its type can't be made whole
-    from is dropped. An asset it names is the repaired one (`renamed`), or none."""
+    from is dropped. An asset it names is the repaired one (`renamed`), or none, and its
+    words carry no branding of the original's (`unbranded`)."""
 
     def asset_of(asset_id: str | None) -> str | None:
         return renamed.get(asset_id) if asset_id is not None else None
@@ -391,7 +406,10 @@ def _repair_edits(drafts: list[EditDraft], renamed: dict[str, str], end: float) 
     edits: list[tuple[float, float, Fields]] = []
     for draft in drafts:
         timing = _edit_timing(draft, end)
-        fields = _EDITS[draft.type](draft, asset_of)
+        words = _text(draft.text)
+        fields = _EDITS[draft.type](
+            draft.model_copy(update={"text": unbranded(words) if words else None}), asset_of
+        )
         if timing is not None and fields is not None:
             start, stop = timing
             edit = {"type": draft.type, "startSeconds": start, "endSeconds": stop, **fields}

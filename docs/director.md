@@ -155,13 +155,15 @@ prompt to make it from, and its `edits` (a split screen, captions, a grade, over
 transitions, speed, an end card, gaps for B-roll), timed in the original's seconds. A
 shot's `mode` says what the edit uses of its take: the member `on-camera`, only their
 voice (`voice-over`, a video take), or nothing (`asset`, a photo take standing in until
-the editor places the asset). Right
-after a plan is saved, the worker draws a default image for each still among its assets
-with Nano Banana (`ASSET_MODEL`, the `assets` job, `apps/ai/app/assets.py`): at most 5 a
-plan and 30 a day per member (`ai.images_today`), each counted in `ai.usage`, kept in
-`MEDIA_BUCKET` under the plan, and linked on the template's own page (`director.plan`) as
-each asset's `image`. A seeded template's come with its media (`seeds:assets`, then
-`seeds:media`).
+the editor places the asset). Right after a plan is saved, the worker draws a default
+image for each still among its assets with Nano Banana (`ASSET_MODEL`, the `assets` job,
+`apps/ai/app/assets.py`): at most 5 a plan and 30 a day per member (`ai.images_today`,
+counted under a per-member lock), each counted in `ai.usage`, kept in `MEDIA_BUCKET`
+under the plan, and linked on the template's own page (`director.plan`) as each asset's
+`image`. The original's branding (the brands the planner lists, handles, web addresses)
+never reaches a default image or an edit's words: a neutral placeholder ("Your Name")
+stands there instead (`apps/ai/app/branding.py`). A seeded template's images come with
+its media (`seeds:assets`, then `seeds:media`).
 
 ## Phones
 

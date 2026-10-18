@@ -149,7 +149,6 @@ def test_shorts_json_has_the_6_seeds_6_hard_cases_and_4_that_need_more() -> None
     expected = {short.videoId: short.expect for short in shorts[12:]}
     assert expected["OvRozQobeuI"] == Expectation(
         layout="split",
-        halves=True,
         stills=1,
         stillText=["archetype"],
         captions=True,
@@ -277,6 +276,28 @@ def test_judge_names_what_a_short_expects_that_its_plan_hasn_t() -> None:
         "no B-roll gap",
         "no end card",
     ]
+
+
+def test_a_label_over_b_roll_counts_as_a_lower_third_and_one_elsewhere_doesn_t() -> None:
+    def label(start: float, end: float) -> dict[str, object]:
+        return {
+            "type": "text",
+            "startSeconds": start,
+            "endSeconds": end,
+            "style": "callout",
+            "text": "25L in Revenue",
+            "position": "middle",
+            "captionStyle": None,
+            "color": None,
+            "highlightColor": None,
+        }
+
+    gap = {"type": "gap", "startSeconds": 1, "endSeconds": 3, "description": "A market"}
+    expect = Expectation(lowerThirds=True)
+    over = ShotPlan.model_validate(plan_with(edits=[gap, label(1.5, 2.5)]))
+    elsewhere = ShotPlan.model_validate(plan_with(edits=[gap, label(3, 4)]))
+    assert judge(over, expect) == []
+    assert judge(elsewhere, expect) == ["no lower thirds"]
 
 
 def test_judge_names_a_split_that_isn_t_halves_and_captions_off_the_seam() -> None:

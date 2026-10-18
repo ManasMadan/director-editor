@@ -18,8 +18,6 @@ Off without MEDIA_BUCKET: there would be nowhere to keep them.
 """
 
 import asyncio
-import re
-from collections.abc import Callable
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -38,6 +36,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.activity import Target, log_activity, outcome_of
+from app.branding import unbranding
 from app.contracts.error_response import ErrorCode
 from app.contracts.realtime_message import DirectorChanged
 from app.db.models import DirectorAsset, DirectorPlan
@@ -68,15 +67,6 @@ _GENERIC_PERSON = (
     "Anyone in it is a generic, anonymous adult, not a likeness of any real or recognisable person."
 )
 _NO_MARKS = "No logos, watermarks or brand names anywhere."
-# What stands where the original's branding was, in a default image.
-PLACEHOLDER_NAME = "Your Name"
-PLACEHOLDER_HANDLE = "@yourname"
-PLACEHOLDER_WEBSITE = "yourwebsite.com"
-_HANDLE = re.compile(r"(?<![\w.])@[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*")
-_WEB_ADDRESS = re.compile(
-    r"\b(?:https?://\S+|www\.\S+|[A-Za-z0-9-]+\.(?:com|in|io|org|net|co|app|ai|me|tv)\b)",
-    re.IGNORECASE,
-)
 # What screens showing a plan, its takes or its images are told when one changes.
 CHANGED = DirectorChanged(type="director.changed")
 
@@ -89,13 +79,10 @@ def default_assets(plan: ShotPlan) -> list[Asset]:
 
 def image_prompt(asset: Asset) -> str:
     """What Nano Banana is asked for: the asset's own prompt, held to its reference's look
-    and its text, and never anyone's likeness or the original's branding. A brand, a
-    handle, a website or the creator's name (the planner lists them in
-    `reference.brands`, and handles and web addresses are caught whatever it lists) is
-    the original creator's own: the member's version carries a neutral placeholder there,
-    for them to make it theirs (spec 7.4)."""
+    and its text, and never anyone's likeness or the original's branding (app/branding.py:
+    a placeholder stands there instead)."""
     reference = asset.reference
-    unbranded = _unbranding(reference.brands)
+    unbranded = unbranding(reference.brands)
     lines = [
         unbranded(asset.prompt),
         f"Style: {reference.style}. Palette: {reference.palette}.",
@@ -105,22 +92,6 @@ def image_prompt(asset: Asset) -> str:
         lines.append("Black and white only, no colour.")
     lines += [f'The text "{unbranded(text)}", spelt exactly like that.' for text in reference.text]
     return "\n".join([*lines, _GENERIC_PERSON, _NO_MARKS])
-
-
-def _unbranding(brands: list[str]) -> Callable[[str], str]:
-    """What takes the original's branding out of a piece of the prompt: each of `brands`
-    (whatever its case), any handle and any web address, each replaced with a placeholder."""
-    names = sorted({brand.strip() for brand in brands if brand.strip()}, key=len, reverse=True)
-    brand = (
-        re.compile("|".join(re.escape(name) for name in names), re.IGNORECASE) if names else None
-    )
-
-    def unbranded(text: str) -> str:
-        text = _WEB_ADDRESS.sub(PLACEHOLDER_WEBSITE, text)
-        text = _HANDLE.sub(PLACEHOLDER_HANDLE, text)
-        return brand.sub(PLACEHOLDER_NAME, text) if brand else text
-
-    return unbranded
 
 
 def images_lock_key(user_id: UUID) -> str:

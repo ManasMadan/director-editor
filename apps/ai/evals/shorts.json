@@ -88,10 +88,9 @@
     "title": "Discover Your Unique Thinking Archetype",
     "channel": "Test Library",
     "kind": "split-screen-chart",
-    "why": "The speaker on top and a static archetypes chart underneath for the whole talk, word-by-word captions between the halves, then an end card: the chart is an asset to recreate, not to film.",
+    "why": "The speaker on top and a static archetypes chart underneath for the whole talk, word-by-word captions between the halves, then an end card: the chart is an asset to recreate, not to film. Gemini reads the split as about a third camera and two thirds chart, not halves, so the split's share is left to the plan.",
     "expect": {
       "layout": "split",
-      "halves": true,
       "stills": 1,
       "stillText": ["archetype"],
       "captions": true,

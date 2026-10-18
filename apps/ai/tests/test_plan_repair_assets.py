@@ -4,12 +4,14 @@ and every edit turned into its own type's model, or dropped when it can't be mad
 """
 
 import pytest
+from pydantic import TypeAdapter
 
 from app.plan_repair import repair_plan, with_assets_and_edits
 from app.schemas import (
     MAX_ASSET_TEXT_LINES,
     MAX_ASSETS,
     MAX_EDITS,
+    Box,
     EditDraft,
     EndCardEdit,
     GapEdit,
@@ -57,15 +59,16 @@ def asset(**overrides: object) -> dict[str, object]:
 
 
 BOX: dict[str, object] = {"x": 0.1, "y": 0.5, "width": 0.8, "height": 0.4}
+_BOX: TypeAdapter[Box | None] = TypeAdapter(Box | None)
 
 
 def edit(kind: str, **fields: object) -> dict[str, object]:
     """An edit as the planner writes it: every field it doesn't set null, and a `box`
     given as the four numbers the draft carries."""
     unused: dict[str, object] = {field: None for field in EditDraft.model_fields}
-    box = fields.pop("box", None)
-    if isinstance(box, dict):
-        unused |= {f"box{side[0].upper()}{side[1:]}": value for side, value in box.items()}
+    box = _BOX.validate_python(fields.pop("box", None))
+    if box is not None:
+        unused |= {"boxX": box.x, "boxY": box.y, "boxWidth": box.width, "boxHeight": box.height}
     return {**unused, "type": kind, "startSeconds": 0, "endSeconds": 8, **fields}
 
 
@@ -238,6 +241,8 @@ def test_every_edit_type_becomes_its_own_model() -> None:
     [
         edit("layout"),
         edit("layout", layout="picture-in-picture"),
+        # A box with a side missing is no box.
+        edit("layout", layout="picture-in-picture", boxX=0.1, boxY=0.1, boxWidth=0.3),
         edit("overlay", box=BOX),
         edit("overlay", assetId="nowhere", box=BOX),
         edit("overlay", mark="circle"),
@@ -312,3 +317,25 @@ def test_a_plan_takes_another_index_s_assets_and_edits_without_changing_its_shot
     [layout] = merged.edits
     assert isinstance(layout, LayoutEdit)
     assert (layout.assetId, layout.endSeconds) == ("chart", 10)
+
+
+def test_an_edit_s_words_carry_no_branding_of_the_original_s() -> None:
+    branded = asset(
+        id="end card",
+        kind="end-card",
+        reference={**REFERENCE, "brands": ["Mesa School of Business", "Mesa"]},
+    )
+    edits = [
+        edit("text", style="label", text="Mesa SCHOOL OF BUSINESS"),
+        edit("end-card", text="Mesa: apply now at mesa.school, @mesa.school"),
+        edit("text", style="lower-third", text="25L in Revenue"),
+    ]
+    label, end_card, revenue = repair_plan(
+        plan(assets=[branded], edits=edits), video_seconds=None
+    ).edits
+    assert isinstance(label, TextEdit)
+    assert label.text == "Your Name"
+    assert isinstance(end_card, EndCardEdit)
+    assert end_card.text == "Your Name: apply now at yourwebsite.com, @yourname"
+    assert isinstance(revenue, TextEdit)
+    assert revenue.text == "25L in Revenue"
