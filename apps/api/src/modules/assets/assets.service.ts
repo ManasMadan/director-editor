@@ -82,7 +82,7 @@ export function imageKeyAllowed(planId: string, image: WireCandidate): boolean {
   const slotFolder = `director-assets/${planId}/${image.assetId}/`;
   return (
     key.startsWith(slotFolder) &&
-    new RegExp(`^${UUID}\\.(png|jpg)$`).test(key.slice(slotFolder.length))
+    new RegExp(`^${UUID}\\.(png|jpg|mp4)$`).test(key.slice(slotFolder.length))
   );
 }
 
@@ -147,6 +147,7 @@ export class AssetsService {
       instruction?: string | undefined;
       baseId?: string | undefined;
       referenceFileId?: FileId | undefined;
+      clip?: boolean | undefined;
     },
   ): Promise<AssetImage> {
     if (input.referenceFileId) {
@@ -160,6 +161,7 @@ export class AssetsService {
         baseId: input.baseId ?? null,
         referenceKey: input.referenceFileId ? `files/${input.referenceFileId}` : null,
         demo,
+        clip: input.clip ?? false,
       }),
     );
     return this.served(plan.id, wireCandidate.parse(row));
@@ -216,6 +218,20 @@ export class AssetsService {
     return { ok: true };
   }
 
+  /**
+   * Whether the caller's video of `videoId` uses AI footage: a Veo clip chosen for a gap,
+   * which YouTube asks to be declared as altered or synthetic content.
+   */
+  async usesSyntheticMedia(userId: UserId, orgId: OrgId, videoId: VideoId): Promise<boolean> {
+    const assets = await this.list(userId, orgId, videoId);
+    return assets.slots.some((slot) =>
+      slot.images.some(
+        (image) =>
+          image.id === slot.chosenId && image.origin === "created" && image.media === "video",
+      ),
+    );
+  }
+
   searchStock(input: { query: string; orientation: Orientation }): Promise<StockPhoto[]> {
     return this.stock.search(input.query, input.orientation);
   }
@@ -227,6 +243,7 @@ export class AssetsService {
     return {
       id: image.id,
       origin: image.origin === "default" ? "created" : image.origin,
+      media: image.objectKey?.endsWith(".mp4") ? "video" : "image",
       status,
       url:
         allowed && image.objectKey

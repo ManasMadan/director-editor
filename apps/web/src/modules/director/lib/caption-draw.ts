@@ -45,6 +45,8 @@ export function drawCaption(
   words: readonly CaptionWord[] | null,
   style: CaptionStyle,
   ink: CaptionInk,
+  /** Where the caption's middle sits, as a fraction of the height (a split's seam, say). */
+  centreY = CENTRE_Y,
 ) {
   if (!words || style === "off") {
     return;
@@ -62,7 +64,7 @@ export function drawCaption(
   const space = ctx.measureText(" ").width;
   const rows = wrapWords(shown, (text) => ctx.measureText(text).width, width * MAX_WIDTH);
   const rowHeight = size * look.lineHeight;
-  const top = height * CENTRE_Y - (rows.length * rowHeight) / 2;
+  const top = height * centreY - (rows.length * rowHeight) / 2;
   rows.forEach((row, index) => {
     const measured = row.map((word) => ({ word, w: ctx.measureText(word.text).width }));
     const rowWidth = measured.reduce((sum, { w }) => sum + w, 0) + space * (row.length - 1);

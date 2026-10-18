@@ -3,15 +3,17 @@
 import "@fontsource/gochi-hand/400.css";
 import "../live.css";
 import { useApiErrorMessage } from "@repo/client";
+import { useAssetSlotsQuery } from "@repo/client/api/assets/slots";
 import { useDirectorPlanQuery } from "@repo/client/api/director/plan";
 import { useSaveCutMutation } from "@repo/client/api/director/save-cut";
 import { useDirectorShotsQuery } from "@repo/client/api/director/shots";
 import { useYourVersionQuery } from "@repo/client/api/director/your-version";
 import type {
+  AssetSlot,
   DirectorCut,
   DirectorShot,
   EditorReply,
-  ShotPlan,
+  ServedShotPlan,
   YourVersion,
 } from "@repo/contracts/api";
 import { uploadPurposes } from "@repo/contracts/files";
@@ -40,6 +42,7 @@ import { DirectorGate } from "@/modules/shorts";
 import { BackToPicks } from "../components/directors-picks";
 import { EditPlayer } from "../components/edit-player";
 import { SoundPanel, StylePicker, type Tool } from "../components/edit-tools";
+import { GapStrip } from "../components/gap-strip";
 import { MatchCutNotes } from "../components/match-cut";
 import { ShotBoard } from "../components/shot-board";
 import { TellDirector } from "../components/tell-director";
@@ -53,7 +56,8 @@ import { type MediaState, useTakeMedia } from "../hooks/use-take-media";
 import { useTellDirector } from "../hooks/use-tell-director";
 import { type AudioMode, parseAudio } from "../lib/audio";
 import { type CaptionLine, webVtt } from "../lib/captions";
-import { type Clip, clipsOf, complete, editLines, editSeconds } from "../lib/edit";
+import { composer, type Picture } from "../lib/compose";
+import { type Clip, clipsOf, editLines, editSeconds } from "../lib/edit";
 import {
   applyActions,
   arrange,
@@ -67,13 +71,15 @@ import { gradeFilter } from "../lib/grades";
 import { captionInk } from "../lib/ink";
 import type { MatchCutTransform } from "../lib/match-cuts";
 import { cutPicks, pickedTakes } from "../lib/picks";
+import { gapSlots } from "../lib/scene";
 import { MAX_SECONDS, type Segment, stitch } from "../lib/stitch";
 import { timecode } from "../lib/track";
+import { loadVisuals, releaseVisuals, type SlotMedia, slotMedia } from "../lib/visuals";
 import { adaptationOf, films, yourVersion } from "../lib/your-version";
 
 /**
  * A filmed clip's take once it's in memory (not while it loads, nor when it couldn't be).
- * Asked only once every clip is filmed and reviewed (lib/edit.ts `complete`).
+ * Asked only of a filmed clip (a missing one is a gap, with no take).
  */
 function loadedTake(media: Map<DirectorTakeId, MediaState>, clip: Clip) {
   const state = media.get(required(clip.take, "a filmed take").id);
@@ -85,7 +91,11 @@ function segmentsOf(
   media: Map<DirectorTakeId, MediaState>,
   transforms: ReadonlyMap<number, MatchCutTransform>,
 ): Segment[] {
-  return clips.map((clip) => {
+  return clips.map((clip): Segment => {
+    // A skipped shot is a gap: its B-roll, or the nearest shot held (lib/compose.ts).
+    if (clip.state === "missing") {
+      return { kind: "gap", seconds: clip.seconds };
+    }
     const take = required(loadedTake(media, clip), "a loaded take");
     const filter = gradeFilter(clip.grade);
     return clip.shot.kind === "video"
@@ -111,6 +121,9 @@ type Saving =
 
 /** What a save is made from: the clips playing, their takes in memory, the choices. */
 interface SaveInput {
+  plan: ServedShotPlan;
+  /** Each slot's chosen picture (assets and gaps), read when the video is made. */
+  slots: ReadonlyMap<string, SlotMedia>;
   clips: readonly Clip[];
   media: Map<DirectorTakeId, MediaState>;
   choices: EditChoices;
@@ -121,15 +134,17 @@ interface SaveInput {
 
 /** Renders the edit in the browser, at a size a saved video may be, until `signal` cancels. */
 async function render(
-  { clips, media, choices, transforms }: SaveInput,
+  { plan, slots, clips, media, choices, transforms }: SaveInput,
   onProgress: (done: number) => void,
   signal: AbortSignal,
 ) {
   // Made in the tap itself: Safari starts audio only there (see lib/stitch.ts).
   const audio = new AudioContext();
   const resumed = audio.resume();
+  const visuals = await loadVisuals(slots);
   try {
     await resumed;
+    const hold = await heldPicture(clips, media);
     return await stitch(segmentsOf(clips, media, transforms), {
       audio,
       withSound: choices.sound,
@@ -140,10 +155,29 @@ async function render(
         ink: captionInk(),
       },
       signal,
+      look: (ctx) => composer(ctx, plan, clips, visuals, hold),
     });
   } finally {
+    releaseVisuals(visuals);
     await audio.close();
   }
+}
+
+/**
+ * The first filmed shot's card frame: what a skipped shot at the very start holds when
+ * nothing fills it (later ones hold the shot before them).
+ */
+async function heldPicture(
+  clips: readonly Clip[],
+  media: Map<DirectorTakeId, MediaState>,
+): Promise<Picture | null> {
+  const first = clips.find((clip) => clip.state === "cut");
+  const take = first ? loadedTake(media, first) : undefined;
+  if (!take) {
+    return null;
+  }
+  const image = await createImageBitmap(await (await fetch(take.poster)).blob());
+  return { source: image, width: image.width, height: image.height };
 }
 
 const MEGABYTE = 1_000_000;
@@ -425,6 +459,8 @@ function Transport({ editor }: { editor: EditorState }) {
 }
 
 const NO_CLIPS: readonly Clip[] = [];
+// The slots while they load (or when the picker's off): every asset shows its default.
+const NO_SLOTS: readonly AssetSlot[] = [];
 
 /** A take Director offered as a choice, as a clip, so it loads for its preview. */
 function candidateClips(
@@ -470,7 +506,7 @@ function useHighlight(clips: readonly Clip[], seek: (seconds: number) => void) {
  */
 function useArrangedClips(
   videoId: string,
-  plan: ShotPlan,
+  plan: ServedShotPlan,
   shots: readonly DirectorShot[],
   choices: EditChoices,
   version: YourVersion,
@@ -490,7 +526,9 @@ function useArrangedClips(
       clipsOf(
         plan.shots.map((shot, index) => yourVersion(shot, adaptationOf(version, index)).shot),
         played,
-        (index) => films(version, index),
+        // A shot the member's version leaves as a gap (an angle they chose not to film)
+        // stays in the edit with no take: the editor fills it with B-roll.
+        (index) => films(version, index) || version.gaps.includes(index),
       ),
     [plan.shots, played, version],
   );
@@ -507,10 +545,23 @@ function useArrangedClips(
   return { playing, byShot, clips, matchCuts };
 }
 
+/**
+ * Whether the video can be made: no take still being reviewed, at least one shot filmed,
+ * and every filmed one in memory. A shot not filmed is a gap the editor fills.
+ */
+function readyToSave(clips: readonly Clip[], media: Map<DirectorTakeId, MediaState>) {
+  const filmed = clips.filter((clip) => clip.state === "cut");
+  return (
+    filmed.length > 0 &&
+    clips.every((clip) => clip.state !== "reviewing") &&
+    filmed.every((clip) => loadedTake(media, clip))
+  );
+}
+
 /** Everything the editor holds: the shots and their picks, the takes, the clock, the choices. */
 function useEditor(
   videoId: string,
-  plan: ShotPlan,
+  plan: ServedShotPlan,
   shots: readonly DirectorShot[],
   audio: AudioMode,
   version: YourVersion,
@@ -553,7 +604,8 @@ function useEditor(
     ),
     matchCuts,
     cutPicks: cutPicks(playing),
-    ready: clips.length > 0 && complete(clips) && clips.every((clip) => loadedTake(media, clip)),
+    ready: readyToSave(clips, media),
+    gaps: useMemo(() => gapSlots(plan, clips), [plan, clips]),
     left: clips.filter((clip) => clip.state === "missing").length,
     pick: (shotIndex: number, takeId: DirectorTakeId) => {
       history.change(withPick(history.choices, shotIndex, takeId));
@@ -715,14 +767,17 @@ function BoardPanel({
   editor,
   shots,
   busy,
+  slots,
 }: {
   videoId: string;
   audio: AudioMode;
-  plan: ShotPlan;
+  plan: ServedShotPlan;
   version: YourVersion;
   editor: EditorState;
   shots: readonly DirectorShot[];
   busy: boolean;
+  /** The asset picker's slots, the gaps' among them. */
+  slots: readonly AssetSlot[];
 }) {
   const t = useTranslations("director");
   const { playback, history, clips, media } = editor;
@@ -740,6 +795,7 @@ function BoardPanel({
         picks={history.choices.picks}
         onReset={(picks) => history.change({ picks })}
       />
+      <GapStrip videoId={videoId} plan={plan} gaps={editor.gaps} slots={slots} locked={busy} />
       <ShotBoard
         clips={clips}
         shots={shots}
@@ -811,7 +867,7 @@ function Editor({
   version,
 }: {
   videoId: string;
-  plan: ShotPlan;
+  plan: ServedShotPlan;
   shots: readonly DirectorShot[];
   audio: AudioMode;
   wrap: boolean;
@@ -820,10 +876,13 @@ function Editor({
 }) {
   const editor = useEditor(videoId, plan, shots, audio, version);
   const saver = useSaveVideo(videoId, plan.title);
+  const assetSlots = useAssetSlotsQuery(videoId).data?.slots ?? NO_SLOTS;
   const { playback, history, clips, media } = editor;
   const save = () => {
     playback.pause();
     void saver.save({
+      plan,
+      slots: slotMedia(plan, assetSlots),
       clips,
       media,
       choices: history.choices,
@@ -869,6 +928,7 @@ function Editor({
         editor={editor}
         shots={shots}
         busy={saver.busy}
+        slots={assetSlots}
       />
       {saver.saving.step === "saved" ? (
         <Saved video={saver.saving.video} lines={saver.saving.lines} onClose={saver.close} />

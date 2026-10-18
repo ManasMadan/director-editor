@@ -10,6 +10,7 @@
 import { uploadPurposes } from "@repo/contracts/files";
 import { type CaptionInk, drawCaption } from "./caption-draw";
 import { type CaptionLine, type CaptionStyle, captionAt } from "./captions";
+import type { Composer, Picture } from "./compose";
 import { recorderFormat } from "./media";
 
 export const OUTPUT_WIDTH = 720;
@@ -50,7 +51,9 @@ export type Segment =
       transform?: FrameTransform | undefined;
       filter?: string;
     }
-  | { kind: "photo"; source: Blob; seconds: number; filter?: string };
+  | { kind: "photo"; source: Blob; seconds: number; filter?: string }
+  /** A skipped shot: no take, its picture painted by the look (a gap's B-roll or a held frame). */
+  | { kind: "gap"; seconds: number };
 
 /** Canvas filters together, for a grade on top of another filter. */
 function filters(...each: (string | undefined)[]) {
@@ -83,6 +86,27 @@ export function applyTransform(
 
 /** How much the edges a moved frame uncovers are blurred: a soft copy, never black. */
 const EDGE_BLUR = "blur(24px)";
+
+/**
+ * A video segment's picture for this frame: the video itself, or, when a match cut lined
+ * it up, the frame drawn moved onto a frame-sized canvas (the look then places it).
+ */
+function framed(
+  video: HTMLVideoElement,
+  transform: FrameTransform | undefined,
+  grade: string | undefined,
+  canvas: HTMLCanvasElement,
+): Picture {
+  if (!transform && grade === undefined) {
+    return { source: video, width: video.videoWidth, height: video.videoHeight };
+  }
+  const ctx = canvas.getContext("2d");
+  ctx?.clearRect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+  if (ctx) {
+    drawFrame(ctx, video, coverRect(video.videoWidth, video.videoHeight), transform, grade);
+  }
+  return { source: canvas, width: OUTPUT_WIDTH, height: OUTPUT_HEIGHT };
+}
 
 /** Draws one frame of a video segment, moved when a match cut lined it up. */
 function drawFrame(
@@ -137,8 +161,11 @@ interface Stage {
   withSound: boolean;
   /** Cancelling the render: the segment playing stops at its next frame. */
   signal: AbortSignal | undefined;
-  /** Called after each frame is drawn, `seconds` into the current segment. */
-  onFrame: (seconds: number) => void;
+  /**
+   * Draws the frame `seconds` into the current segment, with the camera's picture (null
+   * in a gap): the plain picture, or the plan's look over it (lib/compose.ts).
+   */
+  onFrame: (seconds: number, picture: Picture | null) => void;
 }
 
 const cancelled = (stage: Stage) => stage.signal?.aborted === true;
@@ -169,10 +196,15 @@ async function playVideo(stage: Stage, segment: Extract<Segment, { kind: "video"
     await video.play();
     // The recorder waited while the take loaded: no black or frozen gap between shots.
     stage.recorder.resume();
-    const rect = coverRect(video.videoWidth, video.videoHeight);
+    // One frame-sized canvas for the segment's moved frames, reused frame after frame.
+    const moved = document.createElement("canvas");
+    moved.width = OUTPUT_WIDTH;
+    moved.height = OUTPUT_HEIGHT;
     while (video.currentTime < segment.endSeconds && !video.ended && !cancelled(stage)) {
-      drawFrame(stage.ctx, video, rect, segment.transform, segment.filter);
-      stage.onFrame(video.currentTime - segment.startSeconds);
+      stage.onFrame(
+        video.currentTime - segment.startSeconds,
+        framed(video, segment.transform, segment.filter, moved),
+      );
       await nextFrame();
     }
     video.pause();
@@ -184,6 +216,9 @@ async function playVideo(stage: Stage, segment: Extract<Segment, { kind: "video"
 
 async function showPhoto(stage: Stage, segment: Extract<Segment, { kind: "photo" }>) {
   const image = await createImageBitmap(segment.source);
+  const frame = document.createElement("canvas");
+  frame.width = OUTPUT_WIDTH;
+  frame.height = OUTPUT_HEIGHT;
   stage.recorder.resume();
   const start = performance.now();
   for (;;) {
@@ -192,13 +227,49 @@ async function showPhoto(stage: Stage, segment: Extract<Segment, { kind: "photo"
       break;
     }
     const zoom = 1 + PHOTO_ZOOM * (elapsed / segment.seconds);
-    const rect = coverRect(image.width, image.height, zoom);
-    drawGraded(stage.ctx, image, rect, segment.filter);
-    stage.onFrame(elapsed);
+    // The push-in is the photo's own: it's drawn zoomed onto a frame-sized picture.
+    stage.onFrame(elapsed, zoomed(frame, image, zoom, segment.filter));
     await nextFrame();
   }
   image.close();
   stage.recorder.pause();
+}
+
+/** A gap: the look paints it for its length, with no camera picture. */
+async function showGap(stage: Stage, segment: Extract<Segment, { kind: "gap" }>) {
+  stage.recorder.resume();
+  const start = performance.now();
+  for (;;) {
+    const elapsed = (performance.now() - start) / 1000;
+    if (elapsed >= segment.seconds || cancelled(stage)) {
+      break;
+    }
+    stage.onFrame(elapsed, null);
+    await nextFrame();
+  }
+  stage.recorder.pause();
+}
+
+/** `image` drawn covering a frame-sized canvas at `zoom`, as a picture to place. */
+function zoomed(
+  canvas: HTMLCanvasElement,
+  image: ImageBitmap,
+  zoom: number,
+  grade: string | undefined,
+): Picture {
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    drawGraded(ctx, image, coverRect(image.width, image.height, zoom), grade);
+  }
+  return { source: canvas, width: OUTPUT_WIDTH, height: OUTPUT_HEIGHT };
+}
+
+function drawPlain(ctx: CanvasRenderingContext2D, picture: Picture | null) {
+  if (!picture) {
+    return;
+  }
+  const rect = coverRect(picture.width, picture.height);
+  ctx.drawImage(picture.source, rect.x, rect.y, rect.w, rect.h);
 }
 
 /**
@@ -216,6 +287,7 @@ export async function stitch(
     onProgress,
     captions,
     signal,
+    look,
   }: {
     audio: AudioContext;
     withSound: boolean;
@@ -226,6 +298,11 @@ export async function stitch(
      * take playing is paused, and the promise rejects with an AbortError.
      */
     signal?: AbortSignal;
+    /**
+     * The plan's look (lib/compose.ts): layout, assets, grades, words, gaps and the end
+     * card, painted on the edit's clock. Without it, each picture fills the frame.
+     */
+    look?: (ctx: CanvasRenderingContext2D) => Composer;
   },
 ): Promise<Blob> {
   const format = recorderFormat();
@@ -257,6 +334,7 @@ export async function stitch(
   const total = totalSeconds(segments);
   // Where the current segment starts in the short: frames are captioned on its clock.
   let offset = 0;
+  const painter = look?.(ctx);
   const stage: Stage = {
     ctx,
     audio,
@@ -264,10 +342,14 @@ export async function stitch(
     recorder,
     withSound,
     signal,
-    onFrame: (seconds) => {
+    onFrame: (seconds, picture) => {
       const at = offset + seconds;
+      const captionsY = painter?.paint(at, picture);
+      if (!painter) {
+        drawPlain(ctx, picture);
+      }
       const words = captionAt(captions.lines, at);
-      drawCaption(ctx, OUTPUT_WIDTH, OUTPUT_HEIGHT, words, captions.style, captions.ink);
+      drawCaption(ctx, OUTPUT_WIDTH, OUTPUT_HEIGHT, words, captions.style, captions.ink, captionsY);
       onProgress(Math.min(1, at / total));
     },
   };
@@ -279,10 +361,17 @@ export async function stitch(
       if (cancelled(stage)) {
         break;
       }
-      await (segment.kind === "video" ? playVideo(stage, segment) : showPhoto(stage, segment));
+      if (segment.kind === "video") {
+        await playVideo(stage, segment);
+      } else if (segment.kind === "photo") {
+        await showPhoto(stage, segment);
+      } else {
+        await showGap(stage, segment);
+      }
       offset += totalSeconds([segment]);
     }
   } finally {
+    painter?.stop();
     recorder.stop();
     await stopped;
     // `audio` is the caller's (made in its tap), so the caller closes it.

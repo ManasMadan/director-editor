@@ -1,6 +1,7 @@
 "use client";
 
 import { errorCode, useApiErrorMessage } from "@repo/client";
+import { useAssetSlotsQuery } from "@repo/client/api/assets/slots";
 import { useFileDownloadUrl } from "@repo/client/api/files/download-url";
 import { usePublishCopyMutation } from "@repo/client/api/publish/copy";
 import { usePublishMutation } from "@repo/client/api/publish/upload";
@@ -193,6 +194,22 @@ function DraftForm({ initial, onSubmit }: { initial: Draft; onSubmit: (draft: Dr
   );
 }
 
+/**
+ * Says when the video uses an AI clip (a gap's Veo clip): the API declares it to YouTube
+ * as altered or synthetic content, and the member sees that before they post.
+ */
+function SyntheticNotice({ videoId }: { videoId: string }) {
+  const t = useTranslations("director.publish");
+  const slots = useAssetSlotsQuery(videoId).data?.slots ?? [];
+  const synthetic = slots.some((slot) =>
+    slot.images.some(
+      (image) =>
+        image.id === slot.chosenId && image.origin === "created" && image.media === "video",
+    ),
+  );
+  return synthetic ? <p className="text-sm text-muted-foreground">{t("synthetic")}</p> : null;
+}
+
 function WatchLink({ youtubeVideoId, size }: { youtubeVideoId: string; size?: "sm" }) {
   const t = useTranslations("director.publish");
   return (
@@ -320,6 +337,7 @@ function PublishBody({
           {errorMessage(publish.error)}
         </p>
       ) : null}
+      <SyntheticNotice videoId={cut.videoId} />
       <DraftForm initial={draft} onSubmit={(chosen) => send(chosen, { again: false })} />
     </div>
   );

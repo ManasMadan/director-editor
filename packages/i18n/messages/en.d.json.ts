@@ -810,6 +810,14 @@ declare const messages: {
         "use": "Use this one",
         "noMic": "Your microphone isn't available. Type it instead.",
         "dismiss": "Dismiss"
+      },
+      "gaps": {
+        "title": "Moments to fill",
+        "hint": "Cutaways the original had, and shots you skipped. Pick a photo, a clip or stock for each; empty ones hold your nearest shot.",
+        "fill": "Fill: {description}",
+        "filled": "Filled",
+        "empty": "Holds your shot",
+        "skipped": "Skipped shot"
       }
     },
     "live": {
@@ -896,7 +904,8 @@ declare const messages: {
         "title": "The post Director wrote",
         "description": "Posting is off for the demo. Sign in with Google to post your own.",
         "failed": "Director couldn't write a post this time."
-      }
+      },
+      "synthetic": "Your video uses an AI clip, so YouTube will show it as altered or synthetic content."
     },
     "whatYouNeed": {
       "title": "What you'll need",
@@ -978,7 +987,9 @@ declare const messages: {
       "use": "Use this",
       "using": "In your video",
       "placed": "Placed in your video",
-      "undo": "Undo"
+      "undo": "Undo",
+      "clip": "Make a video clip",
+      "clipHint": "Director films a short clip for this moment with Google's Veo. Up to 3 a video; YouTube labels videos with AI footage."
     },
     "matchCut": {
       "aligning": "Lining up the cut into shot {index, number} on {anchor}…",

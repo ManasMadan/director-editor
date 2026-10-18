@@ -36,6 +36,7 @@ export const zAssetChoiceCreate = z.object({
  */
 export const zAssetDrawingCreate = z.object({
     baseId: z.uuid().nullable(),
+    clip: z.boolean().optional().default(false),
     demo: z.boolean(),
     instruction: z.string().min(1).max(500).nullable(),
     prompt: z.string().min(1).max(2000),

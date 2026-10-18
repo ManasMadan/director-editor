@@ -43209,6 +43209,13 @@
                                   ],
                                   "type": "string"
                                 },
+                                "media": {
+                                  "enum": [
+                                    "image",
+                                    "video"
+                                  ],
+                                  "type": "string"
+                                },
                                 "status": {
                                   "enum": [
                                     "making",
@@ -43295,6 +43302,7 @@
                               "required": [
                                 "id",
                                 "origin",
+                                "media",
                                 "status",
                                 "url",
                                 "prompt",
@@ -44597,6 +44605,9 @@
                   "referenceFileId": {
                     "type": "string",
                     "format": "uuid"
+                  },
+                  "clip": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -44623,6 +44634,13 @@
                         "created",
                         "upload",
                         "stock"
+                      ],
+                      "type": "string"
+                    },
+                    "media": {
+                      "enum": [
+                        "image",
+                        "video"
                       ],
                       "type": "string"
                     },
@@ -44712,6 +44730,7 @@
                   "required": [
                     "id",
                     "origin",
+                    "media",
                     "status",
                     "url",
                     "prompt",
@@ -45955,6 +45974,13 @@
                       ],
                       "type": "string"
                     },
+                    "media": {
+                      "enum": [
+                        "image",
+                        "video"
+                      ],
+                      "type": "string"
+                    },
                     "status": {
                       "enum": [
                         "making",
@@ -46041,6 +46067,7 @@
                   "required": [
                     "id",
                     "origin",
+                    "media",
                     "status",
                     "url",
                     "prompt",
@@ -47293,6 +47320,13 @@
                       ],
                       "type": "string"
                     },
+                    "media": {
+                      "enum": [
+                        "image",
+                        "video"
+                      ],
+                      "type": "string"
+                    },
                     "status": {
                       "enum": [
                         "making",
@@ -47379,6 +47413,7 @@
                   "required": [
                     "id",
                     "origin",
+                    "media",
                     "status",
                     "url",
                     "prompt",
