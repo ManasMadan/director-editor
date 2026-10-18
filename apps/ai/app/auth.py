@@ -65,7 +65,7 @@ def caller(
         raise AppError("UNAUTHENTICATED")
     verified = verify(authorization.removeprefix("Bearer "), settings.service_secret)
     structlog.contextvars.bind_contextvars(
-        request_id=x_request_id, org_id=str(verified.org_id), user_id=str(verified.user_id)
+        requestId=x_request_id, orgId=str(verified.org_id), userId=str(verified.user_id)
     )
     return verified
 
