@@ -50,9 +50,13 @@ grafana:
       requests: { cpu: 10m, memory: 64Mi }
       limits: { cpu: 100m, memory: 128Mi }
     # Dashboards are ConfigMaps labelled grafana_dashboard: "1" in any namespace, so
-    # each chart can ship its own next to what it shows.
+    # each chart can ship its own next to what it shows, filed in the folder their
+    # grafana_folder annotation names.
     dashboards:
       searchNamespace: ALL
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true
   # From deploy/platform/secrets/<environment>/grafana.sops.yaml (keys admin-user and
   # admin-password). Reached at grafana.<the cluster's zone>, behind the gateway's basic
   # auth (deploy/platform/internal-tools), and still asks for this login.
@@ -60,8 +64,9 @@ grafana:
     existingSecret: grafana-admin
   # Traces and logs next to the metrics, linked both ways: a log line's trace id opens
   # the trace in Jaeger, and a trace's spans open the logs that mention its id. The
-  # services write the id as trace_id (and the activity log as traceId). `$$` is a
-  # literal `$`: Grafana expands environment variables in these files.
+  # services write the id as traceId (trace_id in older lines). Dashboards address the
+  # data sources by these uids. `$$` is a literal `$`: Grafana expands environment
+  # variables in these files.
   additionalDataSources:
     - name: Jaeger
       type: jaeger
