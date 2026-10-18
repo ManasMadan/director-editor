@@ -482,16 +482,18 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
 /** "Leave? This take isn't kept yet.", with Leave and Stay. */
 function LeaveDialog({ leaving }: { leaving: ReturnType<typeof useLeaveGuard> }) {
   const t = useTranslations("director.shoot.leaving");
+  // Focus starts on Stay, so Enter on a laptop never leaves by accident.
+  const stay = useRef<HTMLButtonElement>(null);
   return (
     // Only ever closed from inside (Stay, Escape, a tap outside): each of those means stay.
     <AlertDialog open={leaving.asking} onOpenChange={() => leaving.stay()}>
-      <AlertDialogContent>
+      <AlertDialogContent initialFocus={stay}>
         <AlertDialogHeader>
           <AlertDialogTitle>{t("title")}</AlertDialogTitle>
           <AlertDialogDescription>{t("body")}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{t("stay")}</AlertDialogCancel>
+          <AlertDialogCancel ref={stay}>{t("stay")}</AlertDialogCancel>
           <Button variant="destructive" onClick={leaving.confirm}>
             {t("leave")}
           </Button>
