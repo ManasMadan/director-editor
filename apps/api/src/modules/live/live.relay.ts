@@ -20,6 +20,7 @@
 import { DIRECTOR_MAX_SHOTS, type ShotPlan } from "@repo/contracts/api";
 import { ERROR_CODES, type ErrorCode } from "@repo/contracts/errors";
 import {
+  LIVE_ADAPTATION_MAX_LENGTH,
   LIVE_TOOLS,
   type LiveAdaptation,
   type LiveClientMessage,
@@ -642,7 +643,8 @@ export class LiveRelay {
     }
     const adaptation = liveAdaptation.safeParse({ shot: shot - 1, where, action, line });
     if (!adaptation.success) {
-      return { response: { error: "each of where, action and line is one to 300 characters" } };
+      const error = `each of where, action and line is one to ${LIVE_ADAPTATION_MAX_LENGTH} characters`;
+      return { response: { error } };
     }
     const { data } = adaptation;
     if (!(data.where || data.action || data.line)) {
