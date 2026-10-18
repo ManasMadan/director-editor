@@ -3,7 +3,6 @@
 addon: platform-config
 namespace: gateway-system
 path: deploy/platform/config
-wave: "0"
 clusterParameters:
   domain: domain
   previews: label:previews

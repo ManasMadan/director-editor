@@ -1,5 +1,9 @@
+# One admission controller: the only policy here is production's image signatures
+# (platform/config's verify-image-signatures), checked as pods are admitted. While it
+# restarts, new pods in the application's namespace wait (the policy fails closed),
+# which a one-node cluster accepts; raise replicas with more nodes.
 admissionController:
-  replicas: 3
+  replicas: 1
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 10001
@@ -7,6 +11,7 @@ admissionController:
     seccompProfile: { type: RuntimeDefault }
   container:
     resources:
+      requests: { cpu: 50m, memory: 128Mi }
       limits: { cpu: "1" }
 # Each pod as user and group 10001 (Kyverno's images need no particular id), and a CPU
 # limit beside the chart's memory limits, as for every container here (the
@@ -14,17 +19,27 @@ admissionController:
 crds:
   migration:
     podSecurityContext: &pod { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+# A label on the CRDs: with none, the chart renders an empty `labels: {}` that the API
+# server drops, so Argo CD would see them out of sync forever.
+kyverno-api:
+  labels:
+    app.kubernetes.io/part-of: kyverno
 webhooksCleanup:
   podSecurityContext: *pod
 backgroundController:
   podSecurityContext: *pod
   resources:
+    requests: { cpu: 20m, memory: 64Mi }
     limits: { cpu: 500m }
+# No cleanup policies and no policy reports are used: their controllers would only take
+# memory and CPU.
 cleanupController:
+  enabled: false
   podSecurityContext: *pod
   resources:
     limits: { cpu: 500m }
 reportsController:
+  enabled: false
   podSecurityContext: *pod
   resources:
     limits: { cpu: 500m }

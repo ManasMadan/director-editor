@@ -1,0 +1,7 @@
+# Logs: every pod's output, kept 30 days (deploy/platform/values/loki.yaml), on clusters
+# labelled director-editor.dev/observability. Grafana reads it.
+addon: loki
+namespace: observability
+repoURL: https://grafana.github.io/helm-charts
+chart: loki
+version: 7.3.0

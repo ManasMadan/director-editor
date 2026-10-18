@@ -4,7 +4,14 @@ import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { $ } from "bun";
+import { GIT_REPOSITORY_VARIABLES } from "../../scripts/lib";
 import { printStatusline, servicePorts, statusline } from "./statusline";
+
+// Run from a git hook (the pre-push one), these tests inherit GIT_DIR and friends, and
+// every git command below would act on the real repository instead of the temporary one.
+for (const key of GIT_REPOSITORY_VARIABLES) {
+  delete process.env[key];
+}
 
 let repo: string;
 let server: Server;

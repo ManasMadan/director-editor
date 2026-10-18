@@ -7,6 +7,9 @@
     "global": { "type": "object" },
     "image": { "type": "string", "minLength": 1 },
     "maxTraces": { "type": "integer", "minimum": 1000 },
+    "domain": { "type": "string" },
+    "directZone": { "type": "string" },
+    "grafanaUrl": { "type": "string" },
     "resources": {
       "type": "object",
       "additionalProperties": false,

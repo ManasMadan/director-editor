@@ -1,7 +1,8 @@
 {{- /*
 The mail ports take connections from anywhere (other mail servers, the services
-submitting mail); nothing else on the pod does. Its management port (8080) stays out
-of reach of every other pod: the settings are applied from inside the pod.
+submitting mail). Its management port (8080) is reachable only from the gateway's
+proxies, for the web admin (webAdmin), behind the gateway's basic auth and the server's
+own sign-in; the settings are applied from inside the pod.
 */}}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -21,3 +22,12 @@ spec:
         {{- range $name, $l := include "mail.listeners" . | fromYaml }}
         - port: {{ $l.containerPort }}
         {{- end }}
+    {{- if .Values.webAdmin.enabled }}
+    # The web admin, from the gateway's proxies only (behind its basic auth).
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.webAdmin.gatewayNamespaceSelector | nindent 14 }}
+      ports:
+        - port: 8080
+    {{- end }}

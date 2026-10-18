@@ -4,8 +4,9 @@ site:
   host: director.mmadan.in
 env:
   LOG_LEVEL: info
-# Sized for one 16 GB machine (a demo on a fixed budget): one replica of each service,
-# scaling out a little under load. Raise these with the machine.
+# Sized for one machine (an e2-standard-8: 8 vCPUs, 32 GB) that also runs the platform
+# and observability: one replica of each service, scaling out a little under load. Raise
+# these with the machine.
 defaults:
   replicas: 1
   resources:

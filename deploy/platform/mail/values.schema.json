@@ -51,6 +51,15 @@
         }
       }
     },
+    "webAdmin": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "account": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+        "gatewayNamespaceSelector": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
     "tls": {
       "type": "object",
       "additionalProperties": false,

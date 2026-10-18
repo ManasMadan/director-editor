@@ -1,0 +1,11 @@
+# The operators' web tools on hosts of their own, behind the gateway's basic auth
+# (deploy/platform/internal-tools): Argo CD, the mail server's admin and the storage
+# consoles everywhere, Grafana, Prometheus, Alertmanager and Jaeger with observability.
+# The password is the internal-tools-auth Secret, from deploy/platform/secrets/<env>/.
+addon: internal-tools
+namespace: gateway-system
+path: deploy/platform/internal-tools
+clusterParameters:
+  domain: domain
+  directZone: direct-zone
+  observability: label:observability

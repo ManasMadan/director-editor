@@ -130,7 +130,8 @@
               "type": "array",
               "items": { "type": "string", "pattern": "^https?://[^/]+$" }
             },
-            "secretName": { "type": "string", "minLength": 1 }
+            "secretName": { "type": "string", "minLength": 1 },
+            "console": { "type": "boolean" }
           }
         },
         "backups": {
@@ -140,7 +141,8 @@
             "storage": { "$ref": "#/$defs/storage" },
             "resources": { "$ref": "#/$defs/resources" },
             "bucket": { "$ref": "#/$defs/bucket" },
-            "nodeSelector": { "type": "object", "additionalProperties": { "type": "string" } }
+            "nodeSelector": { "type": "object", "additionalProperties": { "type": "string" } },
+            "console": { "type": "boolean" }
           }
         }
       }

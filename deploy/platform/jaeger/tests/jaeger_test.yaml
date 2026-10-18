@@ -22,3 +22,23 @@ tests:
       - equal: { path: "spec.template.spec.containers[0].args", value: [--config, /etc/jaeger/config.yaml] }
       - equal: { path: "spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem", value: true }
       - equal: { path: spec.template.spec.securityContext.runAsNonRoot, value: true }
+
+  - it: links each trace to its logs in Grafana, under the direct zone when there is one
+    set: { domain: example.com, directZone: app.example.com }
+    documentSelector: { path: kind, value: ConfigMap }
+    asserts:
+      - matchRegex: { path: 'data["config.yaml"]', pattern: 'config_file: /etc/jaeger/ui.json' }
+      - matchRegex: { path: 'data["ui.json"]', pattern: 'https://grafana\.app\.example\.com/explore\?' }
+      - matchRegex: { path: 'data["ui.json"]', pattern: '#\{traceID\}' }
+
+  - it: takes Grafana's address as given
+    set: { domain: example.com, grafanaUrl: "https://grafana.internal/" }
+    documentSelector: { path: kind, value: ConfigMap }
+    asserts:
+      - matchRegex: { path: 'data["ui.json"]', pattern: '"url":"https://grafana\.internal/explore\?' }
+
+  - it: has no link without a domain
+    documentSelector: { path: kind, value: ConfigMap }
+    asserts:
+      - notExists: { path: 'data["ui.json"]' }
+      - notMatchRegex: { path: 'data["config.yaml"]', pattern: 'ui:' }

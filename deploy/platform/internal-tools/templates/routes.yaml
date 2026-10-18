@@ -1,0 +1,113 @@
+{{- /*
+Each tool: an HTTPRoute for its host in this namespace (the Gateway's), to its Service in
+the tool's own namespace (which a ReferenceGrant there allows), and a SecurityPolicy
+that asks for the basic-auth password on everything but the tool's open paths. The
+basic-auth Authorization header stops at the gateway: a tool that reads it (Grafana)
+would take it for a sign-in of its own.
+*/}}
+{{- $zone := .Values.directZone | default (required "domain is required" .Values.domain) }}
+{{- $direct := ne .Values.directZone "" }}
+{{- $observability := eq (toString .Values.observability) "true" }}
+{{- $namespaces := dict }}
+{{- range $name := keys .Values.tools | sortAlpha }}
+{{- $tool := index $.Values.tools $name }}
+{{- if and (ne (toString $tool.enabled) "false") (or $observability (not $tool.observability)) }}
+{{- $_ := set $namespaces $tool.service.namespace true }}
+{{- /* Every field the API server would default, spelled out: Argo CD's server-side diff
+       can't see a CRD's defaults, and would find the route out of sync forever. */ -}}
+{{- $backend := dict "group" "" "kind" "Service" "name" $tool.service.name "namespace" $tool.service.namespace "port" $tool.service.port "weight" 1 }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: internal-{{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "internal-tools.labels" $ | nindent 4 }}
+  {{- if not $direct }}
+  annotations:
+    director-editor.dev/external-dns: "true"
+  {{- end }}
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ $.Values.gateway }}
+  hostnames:
+    - {{ printf "%s.%s" $tool.host $zone | quote }}
+  rules:
+    {{- with $tool.openPaths }}
+    - name: open
+      matches:
+        {{- range . }}
+        - path: { type: PathPrefix, value: {{ . | quote }} }
+        {{- end }}
+      backendRefs:
+        - {{ toJson $backend }}
+    {{- end }}
+    {{- with $tool.home }}
+    # A browser opening the bare host goes to the tool's page. Only a navigation: the
+    # tool's own API may answer at / (RustFS's S3 calls, GET /?x-id=ListBuckets).
+    - name: home
+      matches:
+        - path: { type: Exact, value: / }
+          method: GET
+          headers:
+            - { type: Exact, name: Sec-Fetch-Mode, value: navigate }
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            path: { type: ReplaceFullPath, replaceFullPath: {{ . | quote }} }
+            statusCode: 302
+    {{- end }}
+    - name: protected
+      matches:
+        {{- range $tool.protectedPaths | default (list "/") }}
+        - path: { type: PathPrefix, value: {{ . | quote }} }
+        {{- end }}
+      filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier:
+            remove: [Authorization]
+      backendRefs:
+        - {{ toJson $backend }}
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: internal-{{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "internal-tools.labels" $ | nindent 4 }}
+spec:
+  targetRefs:
+    {{- range $section := concat (ternary (list "home") list (not (empty $tool.home))) (list "protected") }}
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: internal-{{ $name }}
+      sectionName: {{ $section }}
+    {{- end }}
+  basicAuth:
+    users:
+      name: {{ $.Values.basicAuth.secretName }}
+{{- end }}
+{{- end }}
+{{- range $namespace := keys $namespaces | sortAlpha }}
+---
+# The routes in {{ $.Release.Namespace }} may send to this namespace's Services.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: internal-tools
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "internal-tools.labels" $ | nindent 4 }}
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: {{ $.Release.Namespace }}
+  to:
+    - group: ""
+      kind: Service
+{{- end }}

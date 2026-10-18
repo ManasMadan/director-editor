@@ -66,7 +66,7 @@ resource "helm_release" "argocd" {
     yamlencode({
       configs = {
         params = {
-          # The envs and previews ApplicationSets roll out data before stack.
+          # The previews ApplicationSet rolls out a preview's data before its stack.
           "applicationsetcontroller.enable.progressive.syncs" = true
         }
         cm = {

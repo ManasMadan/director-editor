@@ -32,6 +32,7 @@ cli:
 #   STALWART_WEBHOOK_SECRET  signs the delivery-failure webhooks, 32 characters or more
 #                            (the webhooks service's Secret has the same value)
 #   dkim.key                 the DKIM private key, PEM (see infra/tofu/README.md, DNS)
+#   WEBADMIN_PASSWORD        optional: the web admin's password (webAdmin below)
 secretName: stalwart
 
 # The account the application sends as (<account>@<email domain>, also EMAIL_FROM).
@@ -66,6 +67,19 @@ relay:
   # true for SMTPS (465); otherwise STARTTLS, which the relay must offer.
   implicitTls: false
   username: resend
+
+# Stalwart's web admin (/admin on the management port), for people: an administrator
+# account, <account>@<email domain>, with the Secret's WEBADMIN_PASSWORD (letters,
+# digits and ._~- only), and a Service, `<release>-admin`, that the gateway's proxies
+# may reach (the internal tools' mail-admin host, behind basic auth:
+# deploy/platform/internal-tools). Without WEBADMIN_PASSWORD there's no account, and the
+# page has no one to sign in.
+webAdmin:
+  enabled: true
+  account: admin
+  # Where the gateway's proxies run (Envoy Gateway's namespace).
+  gatewayNamespaceSelector:
+    kubernetes.io/metadata.name: envoy-gateway-system
 
 # The certificate for the server's name, from cert-manager.
 tls:

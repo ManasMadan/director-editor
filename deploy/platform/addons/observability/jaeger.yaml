@@ -2,4 +2,7 @@
 addon: jaeger
 namespace: observability
 path: deploy/platform/jaeger
-wave: "0"
+# Where Grafana is, for each trace's link to its logs.
+clusterParameters:
+  domain: domain
+  directZone: direct-zone

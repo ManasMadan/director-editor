@@ -4,4 +4,3 @@ namespace: envoy-gateway-system
 repoURL: registry-1.docker.io/envoyproxy
 chart: gateway-helm
 version: v1.9.2
-wave: "-20"

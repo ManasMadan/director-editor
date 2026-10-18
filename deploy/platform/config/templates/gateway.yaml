@@ -31,7 +31,7 @@ spec:
           {{- toYaml . | nindent 10 }}
         {{- end }}
       envoyDeployment:
-        replicas: 2
+        replicas: {{ .Values.gateway.proxy.replicas }}
         # The proxy image named, not left to Envoy Gateway's built-in default: the image
         # scan (scripts/image-scan.ts) reads it here, and the clusters run what it scanned.
         container:
