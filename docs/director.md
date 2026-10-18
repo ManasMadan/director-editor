@@ -162,9 +162,18 @@ iOS asks before a page may read the tilt: the level shows a button for that.
   column validated by `ShotPlan` on the way in and out.
 - AI service: `apps/ai/app/director.py` (the three Gemini calls, their token budgets and
   failures), queue `ai-director` (`plan`, `review-take`) in `packages/jobs`.
-- Seed templates: `apps/ai/app/seeds/templates.json`, the 6 seed Shorts (`seeds.json`)
-  indexed for real on Vertex AI and committed. Rebuild it with
-  `bun run --filter @repo/ai seeds:build` whenever the plan schema changes.
+- Seed templates: `packages/contracts/src/director-seeds.json`, the 6 seed Shorts
+  (`apps/ai/app/seeds/seeds.json`) indexed for real on Vertex AI and committed. Rebuild it
+  with `bun run --filter @repo/ai seeds:build` whenever the plan schema changes. It sits in
+  `packages/contracts` because the AI service writes it and the API reads it (services never
+  import each other); `src/director-seeds.ts` parses it against the plan's contract when the
+  API loads. Every workspace gets its own copy of the 6 the moment it's created
+  (`apps/api/src/modules/director/seeds.repository.ts`, in the same transaction as the
+  workspace): rows with `source = 'seed'`, ready, in nobody's name, so they never count as
+  anyone's one index. Workspaces made before that get theirs from
+  `bun run --filter @repo/api director:seed-workspaces` (deployed: `node
+  dist/director-seed-workspaces.mjs` in the api image), which adds only what's missing and
+  is safe to run again.
 - API: `apps/api/src/modules/shorts` (YouTube; `youtube.ts` is the only code that knows its
   wire format), `apps/api/src/modules/director` (checks, then the AI service).
 - Contracts: `packages/contracts/src/api/{shorts,director}.ts`; the plan's shape is checked
