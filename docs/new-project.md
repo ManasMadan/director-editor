@@ -134,7 +134,7 @@ metadata:
 stringData:
   BETTER_AUTH_SECRET: ""   # openssl rand -base64 48
   AI_SERVICE_SECRET: ""    # openssl rand -base64 32; the same in ai
-  YOUTUBE_API_KEY: ""      # the Shorts feed (YouTube Data API v3); Director is off without it
+  YOUTUBE_API_KEY: ""      # checks pasted Shorts links (YouTube Data API v3); Director is off without it
   # GOOGLE_CLIENT_ID: ""           # Google sign-in (step 6)
   # GOOGLE_CLIENT_SECRET: ""
   # TURNSTILE_SITE_KEY: ""         # tofu output -json turnstile

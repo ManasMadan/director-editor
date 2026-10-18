@@ -8,7 +8,7 @@ paths:
 
 The contract is the public API: the web app and the REST API at `/api/v1` depend on it.
 
-- New procedures copy `src/api/shorts.ts`: limits as `SCREAMING_CASE` consts, an output
+- New procedures copy `src/api/director.ts`: limits as `SCREAMING_CASE` consts, an output
   schema with its inferred type, input schemas, then
   `base.meta(...).route({ method, path, tags, summary }).input(...).output(...)`.
   Register the file in `src/api/index.ts`.

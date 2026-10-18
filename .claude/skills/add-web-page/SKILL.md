@@ -16,9 +16,9 @@ The web app renders and nothing else: data comes from `@repo/client` hooks, text
 2. **Module.** `apps/web/src/modules/<feature>/pages/<page>.tsx` (a client component
    when it uses hooks: `"use client"`), its parts in `components/`, and the page exported
    from `apps/web/src/modules/<feature>/index.ts`. Copy the shape of
-   `apps/web/src/modules/shorts/`.
+   `apps/web/src/modules/director/` (its library page).
 3. **Route.** `apps/web/src/app/(app)/<route>/page.tsx` for signed-in pages (or
-   `(auth)` for sign-in flows), two lines like `apps/web/src/app/(app)/saved/page.tsx`:
+   `(auth)` for sign-in flows), two lines like `apps/web/src/app/(app)/library/page.tsx`:
    `export const generateMetadata = pageTitle("<namespace>.<key>")` and
    `export default <Page>`. Dynamic segments use `PageProps<"/route/[id]">` and
    `await params`.

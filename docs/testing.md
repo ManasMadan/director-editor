@@ -202,7 +202,7 @@ address.
   `userEvent` and `page` locators from `vitest/browser`. They call the real API: the
   global setup builds apps/api and runs it twice, once with every optional feature on
   (files on RustFS, a stand-in for the AI service in
-  `test/fake-ai.ts`, Google sign-in, Director's Shorts feed from the mock YouTube in
+  `test/fake-ai.ts`, Google sign-in, YouTube's link check from the mock YouTube in
   `packages/fake-google`) and once with them all off except captcha, where
   Turnstile's script is a stand-in (`test/commands.ts`) and tokens are checked with
   Cloudflare's always-pass test secret. Files named `*.features-off.test.tsx` run against

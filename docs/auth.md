@@ -41,7 +41,7 @@ ships with it.
 ## Organizations and roles
 
 Every user gets a personal workspace at sign-up, so organization-scoped features
-(Director's plans and takes, saved shorts) work from the first sign-in, and new
+(Director's library, takes and cuts) work from the first sign-in, and new
 sessions start in the user's first workspace. The web app shows no workspace UI: there
 is no switcher, member list or invitation. A workspace holds one member
 (`WORKSPACE_MEMBER_LIMIT` in `packages/contracts/src/auth-settings.ts`): better-auth's
@@ -120,9 +120,9 @@ builders (`apps/api/src/rpc/procedures.ts`) apply it once they know who's callin
 user or per workspace, with `createRateLimiter` (`packages/nest-common/src/rate-limit.ts`),
 shared across replicas through Redis; past it the call gets `RATE_LIMITED` with
 `retryAfterSeconds`. Declared limits, per user: file uploads (30 an hour), Director
-plans (30 an hour), scene checks (30 a minute), takes (120 an hour), Shorts link lookups
-(30 a minute) and Shorts reads (120 a minute). Everyday changes (the profile, likes and
-saves) share one allowance of 120 a minute per user, which lets Redis outages through.
+plans (30 an hour), indexing a short (10 an hour), scene checks (30 a minute) and takes
+(120 an hour). Everyday changes (the profile, saving a cut) share one allowance of 120 a
+minute per user, which lets Redis outages through.
 
 The client IP comes from `X-Forwarded-For` only when the peer is in `TRUSTED_PROXIES`;
 the API overwrites the header better-auth sees with that resolved address, so a client
