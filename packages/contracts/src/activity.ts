@@ -51,6 +51,8 @@ export const ACTIVITIES = [
   "director.take_recorded",
   "director.take_reviewed",
   "director.cut_saved",
+  // A request in the editor, typed or said: its outcome and how many edits it made.
+  "director.editor_request",
   "director.publish_copy_drafted",
   // The cut was claimed and its video is on its way to YouTube.
   "director.publish_started",

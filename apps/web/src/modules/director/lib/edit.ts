@@ -6,7 +6,7 @@
  * film (skipped, or a gap the edit fills) has no clip. The captions are the shots'
  * scripts moved to where their clips play.
  */
-import type { DirectorTake, Shot } from "@repo/contracts/api";
+import type { DirectorTake, EditorGrade, Shot } from "@repo/contracts/api";
 import type { CaptionLine } from "./captions";
 
 type ClipState = "cut" | "missing" | "reviewing";
@@ -22,6 +22,8 @@ export interface Clip {
   /** For a filmed video: the part played, in seconds from the take's start. */
   from: number;
   to: number;
+  /** The look graded over its picture, when one was asked for (lib/grades.ts). */
+  grade?: EditorGrade;
 }
 
 function stateOf(take: DirectorTake | undefined): ClipState {

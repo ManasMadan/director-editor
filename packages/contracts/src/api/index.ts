@@ -9,6 +9,7 @@ import { populateContractRouterPaths } from "@orpc/contract";
 import { assetsContract } from "./assets";
 import { directorContract } from "./director";
 import { directorChatContract } from "./director-chat";
+import { editorContract } from "./editor";
 import { filesContract } from "./files";
 import { publishContract } from "./publish";
 import { realtimeContract } from "./realtime";
@@ -24,6 +25,7 @@ export const contract = populateContractRouterPaths({
   files: filesContract,
   director: { ...directorContract, ...directorChatContract },
   assets: assetsContract,
+  editor: editorContract,
   publish: publishContract,
   recording: recordingContract,
   yourVersion: yourVersionContract,
@@ -35,6 +37,7 @@ export * from "./assets";
 export * from "./base";
 export * from "./director";
 export * from "./director-chat";
+export * from "./editor";
 export * from "./files";
 export * from "./publish";
 export * from "./realtime";

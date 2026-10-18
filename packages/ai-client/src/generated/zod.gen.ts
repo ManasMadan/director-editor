@@ -180,6 +180,14 @@ export const zCameraMove = z.enum([
 ]);
 
 /**
+ * CaptionFix
+ */
+export const zCaptionFix = z.object({
+    replacement: z.string().max(80),
+    text: z.string().min(1).max(80)
+});
+
+/**
  * ClipPause
  *
  * A stretch nothing was recorded: no take is ever cut across one.
@@ -322,6 +330,128 @@ export const zDirectorTakeOut = z.object({
         'ready',
         'failed'
     ])
+});
+
+export const zEditorCaptions = z.enum([
+    'pop',
+    'classic',
+    'off'
+]);
+
+/**
+ * EditorChoice
+ */
+export const zEditorChoice = z.object({
+    atSeconds: z.number(),
+    note: z.string(),
+    shotIndex: z.int(),
+    takeId: z.uuid()
+});
+
+export const zEditorGrade = z.enum([
+    'none',
+    'black-and-white',
+    'warm',
+    'cool',
+    'high-contrast',
+    'vintage',
+    'vivid'
+]);
+
+export const zEditorOp = z.enum([
+    'pick_take',
+    'trim',
+    'move_shot',
+    'swap_shots',
+    'drop_shot',
+    'restore_shot',
+    'captions',
+    'edit_caption',
+    'set_grade',
+    'set_volume',
+    'asset_request',
+    'reset_to_picks',
+    'undo',
+    'redo',
+    'reshoot'
+]);
+
+/**
+ * EditorAction
+ *
+ * One edit for the browser to apply, with shots by index and takes by id.
+ */
+export const zEditorAction = z.object({
+    endSeconds: z.number().nullable(),
+    level: z.number().nullable(),
+    op: zEditorOp,
+    otherShotIndex: z.int().nullable(),
+    position: z.int().nullable(),
+    replacement: z.string().nullable(),
+    shotIndex: z.int().nullable(),
+    startSeconds: z.number().nullable(),
+    steps: z.int().nullable(),
+    takeId: z.uuid().nullable(),
+    text: z.string().nullable(),
+    value: z.string().nullable()
+});
+
+export const zEditorOutcome = z.enum([
+    'applied',
+    'ask',
+    'no-match',
+    'declined',
+    'confirm',
+    'answer'
+]);
+
+/**
+ * EditorReply
+ */
+export const zEditorReply = z.object({
+    actions: z.array(zEditorAction),
+    choices: z.array(zEditorChoice),
+    heard: z.string(),
+    outcome: zEditorOutcome,
+    say: z.string()
+});
+
+/**
+ * EditorShotState
+ */
+export const zEditorShotState = z.object({
+    endSeconds: z.number().gte(0).lte(60),
+    grade: zEditorGrade,
+    position: z.int().gte(0).lt(12).nullable(),
+    shotIndex: z.int().gte(0).lt(12),
+    startSeconds: z.number().gte(0).lte(60),
+    takeId: z.uuid().nullable()
+});
+
+/**
+ * EditorState
+ */
+export const zEditorState = z.object({
+    captions: zEditorCaptions,
+    fixes: z.array(zCaptionFix).max(20),
+    music: z.boolean(),
+    shots: z.array(zEditorShotState).max(12),
+    sound: z.boolean()
+});
+
+/**
+ * EditorRequest
+ */
+export const zEditorRequest = z.object({
+    audio: z.string().min(100).max(1400000).nullable(),
+    audioType: z.enum([
+        'audio/webm',
+        'audio/mp4',
+        'audio/ogg'
+    ]).nullable(),
+    state: zEditorState,
+    text: z.string().min(1).max(500).nullable(),
+    videoId: z.string().regex(/^[A-Za-z0-9_-]{11}$/)
 });
 
 /**
@@ -1226,6 +1356,18 @@ export const zGetDirectorCutPath = z.object({
  * Successful Response
  */
 export const zGetDirectorCutResponse = zDirectorCutOut;
+
+export const zAskDirectorEditorBody = zEditorRequest;
+
+export const zAskDirectorEditorHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+/**
+ * Successful Response
+ */
+export const zAskDirectorEditorResponse = zEditorReply;
 
 export const zGetDirectorLibraryHeaders = z.object({
     authorization: z.string().nullish(),

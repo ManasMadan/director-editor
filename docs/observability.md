@@ -59,6 +59,7 @@ Failed lines are written at `warn`, the rest at `info`. When an admin acts on so
 | `director.indexed` | the AI worker finished watching a short: `model`, `inputTokens`, `outputTokens`, or why it failed (`refused` when the workspace was out of tokens) | `apps/ai/app/director.py` |
 | `director.asset_drawn` | the AI worker drew (or gave up on) the default image of one of a plan's assets: `planId`, `assetId`, `model`, `inputTokens`, `outputTokens`, or why it failed (`refused` when the workspace was out of tokens) | `apps/ai/app/assets.py` |
 | `director.take_reviewed` | a take's review: its `score` and tokens, or why it failed | `apps/ai/app/director.py` |
+| `director.editor_request` | a request in the editor: its `outcome`, how many edits, spoken or typed, and tokens | `apps/ai/app/director.py` |
 | `director.call_started`, `director.call_ended` | a live call started (or was refused, with its code), and how it ended: `reason` is `HUNG_UP`, `TIMEOUT` or an error code, with its length | `apps/api/src/modules/live/live.gateway.ts` |
 | `director.publish_started` | a cut was claimed and its video is on its way to YouTube | `apps/api/src/modules/publish/publish.service.ts` |
 | `job.finished` | a background job ran, in the worker, notifications or the AI worker: its queue, job, attempt and outcome, for the user and request it ran for | `JobProcessor` (`packages/nest-common`), `apps/ai/app/worker.py` |

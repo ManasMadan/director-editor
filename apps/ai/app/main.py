@@ -54,6 +54,8 @@ from app.schemas import (
     DirectorPlanOut,
     DirectorTakeCreate,
     DirectorTakeOut,
+    EditorReply,
+    EditorRequest,
     HealthResponse,
     Located,
     LocateRequest,
@@ -320,6 +322,14 @@ async def revise_director_version(
 ) -> ReviseResult:
     """The member's version of a template, re-planned by Gemini from one instruction."""
     return await director.revise(caller.org_id, caller.user_id, video_id, body)
+
+
+@app.post("/v1/director/editor-requests", operation_id="askDirectorEditor")
+async def ask_director_editor(
+    body: EditorRequest, caller: CallerDep, director: DirectorDep
+) -> EditorReply:
+    """Director's answer to a request in the editor: edits, a question, or a kind no."""
+    return await director.edit(caller.org_id, caller.user_id, body)
 
 
 @app.post("/v1/director/takes", operation_id="createDirectorTake", status_code=201)

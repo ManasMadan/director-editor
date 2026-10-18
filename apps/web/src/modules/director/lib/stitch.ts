@@ -40,6 +40,7 @@ export interface FrameTransform {
   rotation: number;
 }
 
+/** `filter` is a canvas filter for the segment's picture (its grade, lib/grades.ts). */
 export type Segment =
   | {
       kind: "video";
@@ -47,8 +48,27 @@ export type Segment =
       startSeconds: number;
       endSeconds: number;
       transform?: FrameTransform | undefined;
+      filter?: string;
     }
-  | { kind: "photo"; source: Blob; seconds: number };
+  | { kind: "photo"; source: Blob; seconds: number; filter?: string };
+
+/** Canvas filters together, for a grade on top of another filter. */
+function filters(...each: (string | undefined)[]) {
+  const used = each.filter((one) => one !== undefined && one !== "none");
+  return used.length > 0 ? used.join(" ") : "none";
+}
+
+/** Draws one frame of a photo in its grade, leaving the captions ungraded. */
+function drawGraded(
+  ctx: CanvasRenderingContext2D,
+  picture: CanvasImageSource,
+  rect: { x: number; y: number; w: number; h: number },
+  filter: string | undefined,
+) {
+  ctx.filter = filters(filter);
+  ctx.drawImage(picture, rect.x, rect.y, rect.w, rect.h);
+  ctx.filter = "none";
+}
 
 /** Sets `ctx` up to draw the frame with `transform` applied (the CSS preview's maths). */
 export function applyTransform(
@@ -70,18 +90,20 @@ function drawFrame(
   video: HTMLVideoElement,
   rect: ReturnType<typeof coverRect>,
   transform: FrameTransform | undefined,
+  grade: string | undefined,
 ) {
   if (!transform) {
-    ctx.drawImage(video, rect.x, rect.y, rect.w, rect.h);
+    drawGraded(ctx, video, rect, grade);
     return;
   }
-  ctx.filter = EDGE_BLUR;
+  ctx.filter = filters(EDGE_BLUR, grade);
   ctx.drawImage(video, rect.x, rect.y, rect.w, rect.h);
-  ctx.filter = "none";
   ctx.save();
+  ctx.filter = filters(grade);
   applyTransform(ctx, transform);
   ctx.drawImage(video, rect.x, rect.y, rect.w, rect.h);
   ctx.restore();
+  ctx.filter = "none";
 }
 
 /** Where to draw a `width`×`height` picture so it covers the frame, cropped in the middle. */
@@ -149,7 +171,7 @@ async function playVideo(stage: Stage, segment: Extract<Segment, { kind: "video"
     stage.recorder.resume();
     const rect = coverRect(video.videoWidth, video.videoHeight);
     while (video.currentTime < segment.endSeconds && !video.ended && !cancelled(stage)) {
-      drawFrame(stage.ctx, video, rect, segment.transform);
+      drawFrame(stage.ctx, video, rect, segment.transform, segment.filter);
       stage.onFrame(video.currentTime - segment.startSeconds);
       await nextFrame();
     }
@@ -171,7 +193,7 @@ async function showPhoto(stage: Stage, segment: Extract<Segment, { kind: "photo"
     }
     const zoom = 1 + PHOTO_ZOOM * (elapsed / segment.seconds);
     const rect = coverRect(image.width, image.height, zoom);
-    stage.ctx.drawImage(image, rect.x, rect.y, rect.w, rect.h);
+    drawGraded(stage.ctx, image, rect, segment.filter);
     stage.onFrame(elapsed);
     await nextFrame();
   }

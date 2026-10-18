@@ -17,6 +17,7 @@ import { createClient } from "./generated/client";
 import {
   addDirectorAsset,
   alignDirectorMatchCut,
+  askDirectorEditor,
   brainstormDirectorTemplate,
   checkDirectorScene,
   chooseDirectorAsset,
@@ -49,6 +50,7 @@ import type {
   CreatePlanRequest,
   DirectorCutCreate,
   DirectorTakeCreate,
+  EditorRequest,
   ErrorCode,
   ErrorIssue,
   LocateRequest,
@@ -214,6 +216,15 @@ function takeCalls(forCall: ClientFor) {
   };
 }
 
+/** The conversational editor's call (apps/ai/app/editor.py). */
+function editorCalls(forCall: ClientFor) {
+  return {
+    async askEditor(caller: AiCaller, body: EditorRequest) {
+      return unwrap(askDirectorEditor({ client: await forCall(caller), body }));
+    },
+  };
+}
+
 /** Director's calls (apps/ai/app/director.py), each on a client made for that call. */
 function directorCalls(forCall: ClientFor) {
   return {
@@ -317,6 +328,7 @@ export function createAiClient(options: { baseUrl: string; secret: string; timeo
       takeCalls(forCall),
       assetCalls(forCall),
       templateCalls(forCall),
+      editorCalls(forCall),
     ),
   };
 }

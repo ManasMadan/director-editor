@@ -830,6 +830,28 @@
         ],
         "type": "string"
       },
+      "CaptionFix": {
+        "additionalProperties": false,
+        "properties": {
+          "replacement": {
+            "maxLength": 80,
+            "title": "Replacement",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "replacement"
+        ],
+        "title": "CaptionFix",
+        "type": "object"
+      },
       "ClipPause": {
         "additionalProperties": false,
         "description": "A stretch nothing was recorded: no take is ever cut across one.",
@@ -1591,6 +1613,442 @@
             "$ref": "#/components/schemas/GapEdit"
           }
         ]
+      },
+      "EditorAction": {
+        "description": "One edit for the browser to apply, with shots by index and takes by id.",
+        "properties": {
+          "endSeconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endseconds"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level"
+          },
+          "op": {
+            "$ref": "#/components/schemas/EditorOp"
+          },
+          "otherShotIndex": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Othershotindex"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "replacement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacement"
+          },
+          "shotIndex": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shotindex"
+          },
+          "startSeconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Startseconds"
+          },
+          "steps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steps"
+          },
+          "takeId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Takeid"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "op",
+          "shotIndex",
+          "takeId",
+          "otherShotIndex",
+          "position",
+          "startSeconds",
+          "endSeconds",
+          "value",
+          "level",
+          "text",
+          "replacement",
+          "steps"
+        ],
+        "title": "EditorAction",
+        "type": "object"
+      },
+      "EditorCaptions": {
+        "enum": [
+          "pop",
+          "classic",
+          "off"
+        ],
+        "type": "string"
+      },
+      "EditorChoice": {
+        "properties": {
+          "atSeconds": {
+            "title": "Atseconds",
+            "type": "number"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "shotIndex": {
+            "title": "Shotindex",
+            "type": "integer"
+          },
+          "takeId": {
+            "format": "uuid",
+            "title": "Takeid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shotIndex",
+          "takeId",
+          "atSeconds",
+          "note"
+        ],
+        "title": "EditorChoice",
+        "type": "object"
+      },
+      "EditorGrade": {
+        "enum": [
+          "none",
+          "black-and-white",
+          "warm",
+          "cool",
+          "high-contrast",
+          "vintage",
+          "vivid"
+        ],
+        "type": "string"
+      },
+      "EditorOp": {
+        "enum": [
+          "pick_take",
+          "trim",
+          "move_shot",
+          "swap_shots",
+          "drop_shot",
+          "restore_shot",
+          "captions",
+          "edit_caption",
+          "set_grade",
+          "set_volume",
+          "asset_request",
+          "reset_to_picks",
+          "undo",
+          "redo",
+          "reshoot"
+        ],
+        "type": "string"
+      },
+      "EditorOutcome": {
+        "enum": [
+          "applied",
+          "ask",
+          "no-match",
+          "declined",
+          "confirm",
+          "answer"
+        ],
+        "type": "string"
+      },
+      "EditorReply": {
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/EditorAction"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/EditorChoice"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "heard": {
+            "title": "Heard",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/EditorOutcome"
+          },
+          "say": {
+            "title": "Say",
+            "type": "string"
+          }
+        },
+        "required": [
+          "heard",
+          "outcome",
+          "say",
+          "actions",
+          "choices"
+        ],
+        "title": "EditorReply",
+        "type": "object"
+      },
+      "EditorRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "audio": {
+            "anyOf": [
+              {
+                "maxLength": 1400000,
+                "minLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The request said, base64.",
+            "title": "Audio"
+          },
+          "audioType": {
+            "anyOf": [
+              {
+                "enum": [
+                  "audio/webm",
+                  "audio/mp4",
+                  "audio/ogg"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audiotype"
+          },
+          "state": {
+            "$ref": "#/components/schemas/EditorState"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "videoId": {
+            "pattern": "^[A-Za-z0-9_-]{11}$",
+            "title": "Videoid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "videoId",
+          "text",
+          "audio",
+          "audioType",
+          "state"
+        ],
+        "title": "EditorRequest",
+        "type": "object"
+      },
+      "EditorShotState": {
+        "additionalProperties": false,
+        "properties": {
+          "endSeconds": {
+            "description": "Out point in the take.",
+            "maximum": 60.0,
+            "minimum": 0.0,
+            "title": "Endseconds",
+            "type": "number"
+          },
+          "grade": {
+            "$ref": "#/components/schemas/EditorGrade"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "exclusiveMaximum": 12.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its place; null if dropped.",
+            "title": "Position"
+          },
+          "shotIndex": {
+            "exclusiveMaximum": 12.0,
+            "minimum": 0.0,
+            "title": "Shotindex",
+            "type": "integer"
+          },
+          "startSeconds": {
+            "description": "In point in the take.",
+            "maximum": 60.0,
+            "minimum": 0.0,
+            "title": "Startseconds",
+            "type": "number"
+          },
+          "takeId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The take playing; null if none.",
+            "title": "Takeid"
+          }
+        },
+        "required": [
+          "shotIndex",
+          "takeId",
+          "startSeconds",
+          "endSeconds",
+          "position",
+          "grade"
+        ],
+        "title": "EditorShotState",
+        "type": "object"
+      },
+      "EditorState": {
+        "additionalProperties": false,
+        "properties": {
+          "captions": {
+            "$ref": "#/components/schemas/EditorCaptions"
+          },
+          "fixes": {
+            "items": {
+              "$ref": "#/components/schemas/CaptionFix"
+            },
+            "maxItems": 20,
+            "title": "Fixes",
+            "type": "array"
+          },
+          "music": {
+            "description": "Whether the video has a music track.",
+            "title": "Music",
+            "type": "boolean"
+          },
+          "shots": {
+            "items": {
+              "$ref": "#/components/schemas/EditorShotState"
+            },
+            "maxItems": 12,
+            "title": "Shots",
+            "type": "array"
+          },
+          "sound": {
+            "title": "Sound",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "shots",
+          "captions",
+          "sound",
+          "music",
+          "fixes"
+        ],
+        "title": "EditorState",
+        "type": "object"
       },
       "EndCardEdit": {
         "properties": {
@@ -4198,6 +4656,79 @@
           }
         },
         "summary": "Get Director Cut"
+      }
+    },
+    "/v1/director/editor-requests": {
+      "post": {
+        "description": "Director's answer to a request in the editor: edits, a question, or a kind no.",
+        "operationId": "askDirectorEditor",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorReply"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Ask Director Editor"
       }
     },
     "/v1/director/library": {

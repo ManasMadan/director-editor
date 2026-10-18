@@ -149,6 +149,8 @@ class DirectorTake(Base):
         TIMESTAMP(timezone=True, precision=3)
     )
     origin: Mapped[TakeOrigin] = mapped_column(Text, server_default=text("'shoot'::text"))
+    # app/schemas.py TakeIndex, as JSON: what the editor finds a take by.
+    take_index: Mapped[dict[str, object] | None] = mapped_column(JSONB)
     created_at: Mapped[datetime.datetime] = _now()
     updated_at: Mapped[datetime.datetime] = mapped_column(TIMESTAMP(timezone=True, precision=3))
 

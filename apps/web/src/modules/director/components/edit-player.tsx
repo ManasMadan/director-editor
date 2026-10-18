@@ -8,6 +8,7 @@ import { useEffect, useRef } from "react";
 import type { MediaState, TakeMedia } from "../hooks/use-take-media";
 import type { CaptionLine, CaptionStyle } from "../lib/captions";
 import { type Clip, clipAt } from "../lib/edit";
+import { gradeFilter } from "../lib/grades";
 import { cssTransform, type MatchCutTransform } from "../lib/match-cuts";
 import { CaptionLayer } from "./caption-layer";
 
@@ -177,7 +178,10 @@ function ClipMedia({
         alt={clip.shot.title}
         data-take={id}
         className={cn("absolute inset-0 size-full object-cover", !active && "invisible")}
-        style={{ transform: `scale(${1 + PHOTO_ZOOM * progress})` }}
+        style={{
+          transform: `scale(${1 + PHOTO_ZOOM * progress})`,
+          filter: gradeFilter(clip.grade),
+        }}
       />
     );
   }
@@ -191,7 +195,10 @@ function ClipMedia({
       preload="auto"
       aria-hidden
       className={cn("absolute inset-0 size-full object-cover", !active && "invisible")}
-      style={transform ? { transform: cssTransform(transform) } : undefined}
+      style={{
+        filter: gradeFilter(clip.grade),
+        ...(transform ? { transform: cssTransform(transform) } : {}),
+      }}
     />
   );
 }
