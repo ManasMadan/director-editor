@@ -63,6 +63,23 @@ function refuse(status: number, reason: string): Answer {
 
 const videoId = () => randomBytes(8).toString("base64url").slice(0, 11);
 
+/**
+ * The video resource YouTube answers a finished upload with: private, whatever was asked
+ * for, until the app is `audited`.
+ */
+function videoAnswer(upload: YouTubeUpload, audited: boolean): Answer {
+  const privacyStatus = audited ? upload.status.privacyStatus : "private";
+  return {
+    status: 200,
+    body: {
+      kind: "youtube#video",
+      id: upload.id,
+      snippet: upload.snippet,
+      status: { ...upload.status, privacyStatus, uploadStatus: "uploaded" },
+    },
+  };
+}
+
 /** Why YouTube won't take an upload from this account now, if it won't. */
 function refusalOf(grant: Grant, quotaSpent: boolean): Answer | null {
   if (!grant.scopes.some((scope) => UPLOAD_SCOPES.includes(scope))) {
@@ -150,16 +167,7 @@ export function createYouTubeUploads({
         ...session.metadata,
       };
       uploads.push(upload);
-      const privacyStatus = audited ? upload.status.privacyStatus : "private";
-      return {
-        status: 200,
-        body: {
-          kind: "youtube#video",
-          id: upload.id,
-          snippet: upload.snippet,
-          status: { ...upload.status, privacyStatus, uploadStatus: "uploaded" },
-        },
-      };
+      return videoAnswer(upload, audited);
     },
   };
 }
