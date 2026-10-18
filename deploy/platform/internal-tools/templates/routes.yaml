@@ -41,6 +41,17 @@ spec:
       backendRefs:
         - {{ toJson $backend }}
     {{- end }}
+    {{- with $tool.home }}
+    # The bare host goes to the tool's page.
+    - name: home
+      matches:
+        - path: { type: Exact, value: / }
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            path: { type: ReplaceFullPath, replaceFullPath: {{ . | quote }} }
+            statusCode: 302
+    {{- end }}
     - name: protected
       filters:
         - type: RequestHeaderModifier
@@ -58,10 +69,12 @@ metadata:
     {{- include "internal-tools.labels" $ | nindent 4 }}
 spec:
   targetRefs:
+    {{- range $section := concat (ternary (list "home") list (not (empty $tool.home))) (list "protected") }}
     - group: gateway.networking.k8s.io
       kind: HTTPRoute
       name: internal-{{ $name }}
-      sectionName: protected
+      sectionName: {{ $section }}
+    {{- end }}
   basicAuth:
     users:
       name: {{ $.Values.basicAuth.secretName }}

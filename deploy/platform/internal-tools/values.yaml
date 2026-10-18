@@ -20,7 +20,8 @@ gateway: public
 basicAuth:
   secretName: internal-tools-auth
 
-# The tools: the host's first label, and the Service it routes to. `openPaths` are path
+# The tools: the host's first label, and the Service it routes to. `home` is where the
+# bare host redirects to, for a tool whose page isn't at /. `openPaths` are path
 # prefixes left to the tool's own sign-in, without basic auth: requests the tool's page
 # makes with its own Authorization header, which basic auth would refuse. Everything
 # else asks for the basic-auth password, and the Authorization header it adds is
@@ -48,12 +49,15 @@ tools:
   # Stalwart's web admin (deploy/platform/mail, webAdmin).
   mail-admin:
     host: mail-admin
+    home: /admin/
     service: { namespace: mail, name: mail-admin, port: 8080 }
   # RustFS's consoles (deploy/charts/data, storage.<server>.console), in the
   # environment's namespace.
   storage:
     host: storage
+    home: /rustfs/console/
     service: { namespace: director-editor, name: director-editor-uploads, port: 9001 }
   backups:
     host: backups
+    home: /rustfs/console/
     service: { namespace: director-editor, name: director-editor-backups, port: 9001 }

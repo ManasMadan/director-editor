@@ -22,19 +22,39 @@ tests:
       - notExists: { path: metadata.annotations }
 
   - it: asks for the basic-auth password on every tool, and keeps its header from the tool
-    documentSelector: { path: "spec.hostnames[0]", value: mail-admin.example.com }
+    documentSelector: { path: "spec.hostnames[0]", value: argocd.example.com }
     asserts:
       - equal: { path: "spec.rules[0].name", value: protected }
       - equal:
           path: "spec.rules[0].filters"
           value: [{ type: RequestHeaderModifier, requestHeaderModifier: { remove: [Authorization] } }]
 
-  - it: protects each route's rule with the shared basic-auth Secret
-    documentSelector: { path: kind, value: SecurityPolicy, matchMany: true }
+  - it: sends the bare host to the tool's page, behind the same password
     asserts:
-      - equal: { path: "spec.targetRefs[0].sectionName", value: protected }
-      - equal: { path: "spec.targetRefs[0].kind", value: HTTPRoute }
+      - equal:
+          path: "spec.rules[0]"
+          value:
+            name: home
+            matches: [{ path: { type: Exact, value: / } }]
+            filters:
+              - type: RequestRedirect
+                requestRedirect: { path: { type: ReplaceFullPath, replaceFullPath: /admin/ }, statusCode: 302 }
+        documentSelector: { path: "spec.hostnames[0]", value: mail-admin.example.com }
+      - equal:
+          path: spec.targetRefs
+          value:
+            - { group: gateway.networking.k8s.io, kind: HTTPRoute, name: internal-mail-admin, sectionName: home }
+            - { group: gateway.networking.k8s.io, kind: HTTPRoute, name: internal-mail-admin, sectionName: protected }
+        documentSelector: { path: "spec.targetRefs[0].name", value: internal-mail-admin }
+
+  - it: protects each route's rule with the shared basic-auth Secret
+    asserts:
       - equal: { path: spec.basicAuth.users, value: { name: internal-tools-auth } }
+        documentSelector: { path: kind, value: SecurityPolicy, matchMany: true }
+      - equal:
+          path: spec.targetRefs
+          value: [{ group: gateway.networking.k8s.io, kind: HTTPRoute, name: internal-argocd, sectionName: protected }]
+        documentSelector: { path: "spec.targetRefs[0].name", value: internal-argocd }
 
   - it: leaves a tool's open paths to its own sign-in
     set:
@@ -42,11 +62,12 @@ tests:
     documentSelector: { path: "spec.hostnames[0]", value: mail-admin.example.com }
     asserts:
       - equal: { path: "spec.rules[0].name", value: open }
+      - equal: { path: "spec.rules[1].name", value: home }
       - equal:
           path: "spec.rules[0].matches"
           value: [{ path: { type: PathPrefix, value: /api } }, { path: { type: PathPrefix, value: /auth } }]
       - notExists: { path: "spec.rules[0].filters" }
-      - equal: { path: "spec.rules[1].name", value: protected }
+      - equal: { path: "spec.rules[2].name", value: protected }
 
   - it: has no observability tools on a cluster without observability
     asserts:

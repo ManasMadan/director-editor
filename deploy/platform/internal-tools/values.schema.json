@@ -25,6 +25,7 @@
           "enabled": { "type": "boolean" },
           "host": { "type": "string", "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$" },
           "observability": { "type": "boolean" },
+          "home": { "type": "string", "pattern": "^/" },
           "openPaths": {
             "type": "array",
             "items": { "type": "string", "pattern": "^/" }
