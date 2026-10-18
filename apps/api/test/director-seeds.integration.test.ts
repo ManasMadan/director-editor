@@ -11,7 +11,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from "node:net";
 import { directorSeeds } from "@repo/contracts/director-seeds";
 import { type OrgId, orgIdSchema } from "@repo/contracts/ids";
-import { required } from "@repo/contracts/objects";
+import { fieldOf, required } from "@repo/contracts/objects";
 import { type Database, transaction } from "@repo/db";
 import { factories } from "@repo/db/testing";
 import { DATABASE } from "@repo/nest-common";
@@ -101,13 +101,17 @@ async function aiRoute(request: IncomingMessage, response: ServerResponse) {
     issuer: "api",
     audience: "ai",
   });
-  if (`${request.method} ${request.url}` !== "GET /v1/director/library") {
+  const route = `${request.method} ${request.url}`;
+  const planOf = /^GET \/v1\/director\/plans\/([\w-]{11})$/.exec(route)?.[1];
+  const { templates, indexUsed: used } = await library(String(payload.org), String(payload.sub));
+  // apps/ai's getPlan: the workspace's plan of that Short.
+  const plan = planOf && templates.find((row) => fieldOf(row, "videoId") === planOf);
+  if (route !== "GET /v1/director/library" && !plan) {
     response.writeHead(404).end();
     return;
   }
-  const body = await library(String(payload.org), String(payload.sub));
   response.writeHead(200, { "content-type": "application/json" });
-  response.end(JSON.stringify(body));
+  response.end(JSON.stringify(plan || { templates, indexUsed: used }));
 }
 
 beforeAll(async () => {
@@ -148,31 +152,35 @@ describe("Director's seeded templates", () => {
     expect(templates.map((template) => template.videoId)).toEqual(SEED_IDS);
     for (const [index, template] of templates.entries()) {
       const seed = required(directorSeeds[index], "a seed");
-      const { musicKey, shots, ...plan } = seed.plan;
       expect(template).toMatchObject({
         source: "seed",
         status: "ready",
         stage: "ready",
         error: null,
         model: seed.model,
-        plan: {
-          ...plan,
-          shots: shots.map(({ storyboardKey, previewKey, ...shot }) => shot),
-        },
+        plan: seed.plan,
         audio: { status: "ready" },
       });
-      // Short-lived links to the seed's audio and its media, through the storage seam,
-      // where the copy holds only their keys.
+      // A short-lived link to the seed's audio, through the storage seam.
       expect(template.audio.url).toContain(`seed-audio/${template.videoId}.m4a`);
-      expect(template.plan?.musicUrl).toContain(required(musicKey, "a music key"));
-      for (const [shotIndex, shot] of shots.entries()) {
-        const served = template.plan?.shots[shotIndex];
-        expect(served?.storyboardUrl).toContain(required(shot.storyboardKey, "a storyboard"));
-        expect(served?.previewUrl).toContain(required(shot.previewKey, "a preview"));
-        expect(served).not.toHaveProperty("storyboardKey");
-      }
+      // The library leaves the media to each template's own page.
+      expect(JSON.stringify(template.plan)).not.toContain('Url"');
     }
     expect(used).toBe(false);
+  });
+
+  it("each link their storyboard cards, previews and music on their own page", async () => {
+    const { session } = await signedUp();
+    for (const seed of directorSeeds) {
+      const { plan } = await session.rpc.director.plan({ videoId: seed.videoId });
+      const media = required(seed.media, "the seed's media");
+      expect(plan?.musicUrl).toContain(required(media.music, "a track"));
+      for (const [index, shot] of media.shots.entries()) {
+        const served = plan?.shots[index];
+        expect(served?.storyboardUrl).toContain(required(shot.storyboard, "a storyboard"));
+        expect(served?.previewUrl).toContain(required(shot.preview, "a preview"));
+      }
+    }
   });
 
   it("are copied once into each workspace: a team gets its own, and again adds nothing", async () => {

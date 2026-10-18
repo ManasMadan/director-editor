@@ -17,7 +17,7 @@ const caller = { orgId, userId, role: "member" as const, signedInAt: new Date(0)
 function options(overrides: Partial<Parameters<typeof liveCallOptions>[0]> = {}) {
   return liveCallOptions({
     caller: () => Promise.resolve(caller),
-    director: { plan: vi.fn(() => Promise.reject(new Error("not needed"))) },
+    director: { planOf: vi.fn(() => Promise.reject(new Error("not needed"))) },
     analytics: { record: vi.fn() },
     calls: { take: vi.fn(() => Promise.resolve()) },
     logger: { warn: vi.fn(), error: vi.fn() },
@@ -26,11 +26,11 @@ function options(overrides: Partial<Parameters<typeof liveCallOptions>[0]> = {})
 }
 
 describe("the live call's wiring", () => {
-  it("asks the director service for the caller's plan in their workspace", async () => {
-    const plan = vi.fn(() => Promise.reject(new Error("not needed")));
-    const live = options({ director: { plan } });
+  it("asks the director service for the caller's plan in their workspace, without its media", async () => {
+    const planOf = vi.fn(() => Promise.reject(new Error("not needed")));
+    const live = options({ director: { planOf } });
     await expect(live.plan(caller, videoId)).rejects.toThrow("not needed");
-    expect(plan).toHaveBeenCalledWith(userId, orgId, videoId);
+    expect(planOf).toHaveBeenCalledWith(userId, orgId, videoId);
   });
 
   it("spends the caller's call against the rate limiter", async () => {

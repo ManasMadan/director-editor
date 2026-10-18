@@ -28,12 +28,14 @@ import {
 } from "@repo/contracts/api";
 import type { UploadPurpose } from "@repo/contracts/files";
 import type { FileId, OrgId, UserId, VideoId } from "@repo/contracts/ids";
+import { required } from "@repo/contracts/objects";
 import { HOUR_S, MINUTE_S } from "@repo/contracts/time";
 import { AppError } from "@repo/nest-common";
 import * as z from "zod";
 import { aiCaller, callAi } from "../ai";
 import { FilesService } from "../files";
 import { ShortsService } from "../shorts";
+import { seedMediaFor } from "./seed-media";
 import { shotsOf } from "./shots";
 
 // Long enough for the review job's retries (three, minutes apart), no longer.
@@ -54,7 +56,8 @@ function speechKey({ text, voice }: { text: string; voice: DirectorVoice }) {
   const digest = createHash("sha256").update(`${voice}\n${text}`).digest("hex");
   return `director/speech/v1/${digest}.wav`;
 }
-// A seed's storyboard cards, previews and music: shown while the template is open.
+// A seed's storyboard cards, previews and music: signed only for a template's own page
+// (director.plan), which is read again before then.
 const MEDIA_READ_EXPIRES_S = HOUR_S;
 
 const PURPOSE: Record<DirectorTake["kind"], UploadPurpose> = {
@@ -65,8 +68,7 @@ const PURPOSE: Record<DirectorTake["kind"], UploadPurpose> = {
 const takeContentType = z.enum(["video/webm", "video/mp4", "image/jpeg"]);
 
 // The AI service's JSON carries dates as strings; the contract's schemas want Dates. A
-// plan's audio, and a seed's media, come as their stored objects' keys, which only this
-// API turns into links.
+// plan's audio comes as its stored object's key, which only this API turns into a link.
 const wirePlan = directorPlanSchema.omit({ audio: true, plan: true }).extend({
   plan: shotPlanSchema.nullable(),
   audioStatus: directorPlanSchema.shape.audio.shape.status,
@@ -103,17 +105,31 @@ export class DirectorService {
     const { templates, indexUsed } = await callAi((ai) =>
       ai.director.library(aiCaller(userId, orgId)),
     );
-    return { templates: await Promise.all(templates.map((plan) => this.toPlan(plan))), indexUsed };
+    // Without the seeds' media: dozens of signed links per read (each an IAM call on
+    // GCS), for cards no list shows. A template's own page asks for them (plan).
+    const plans = templates.map((plan) => this.toPlan(plan, { media: false }));
+    return { templates: await Promise.all(plans), indexUsed };
   }
 
   /** Indexes the short a link points at, once it's known to be one Director can film. */
   async index(userId: UserId, orgId: OrgId, url: string): Promise<DirectorPlan> {
     const { videoId } = await this.shorts.filmable(url);
-    return this.toPlan(await callAi((ai) => ai.director.index(aiCaller(userId, orgId), videoId)));
+    const row = await callAi((ai) => ai.director.index(aiCaller(userId, orgId), videoId));
+    return this.toPlan(row, { media: false });
   }
 
+  /** A template's own page (director.plan): with a seed's media linked. */
   async plan(userId: UserId, orgId: OrgId, videoId: VideoId): Promise<DirectorPlan> {
-    return this.toPlan(await callAi((ai) => ai.director.getPlan(aiCaller(userId, orgId), videoId)));
+    return this.toPlan(await this.planRow(userId, orgId, videoId), { media: true });
+  }
+
+  /** The plan without its media, for what only needs the shots (the takes, the live call). */
+  async planOf(userId: UserId, orgId: OrgId, videoId: VideoId): Promise<DirectorPlan> {
+    return this.toPlan(await this.planRow(userId, orgId, videoId), { media: false });
+  }
+
+  private planRow(userId: UserId, orgId: OrgId, videoId: VideoId) {
+    return callAi((ai) => ai.director.getPlan(aiCaller(userId, orgId), videoId));
   }
 
   async checkScene(
@@ -175,7 +191,7 @@ export class DirectorService {
   /** Each shot of a ready plan with the caller's takes of it, the pick and the retakes. */
   async shots(userId: UserId, orgId: OrgId, videoId: VideoId): Promise<DirectorShot[]> {
     const [plan, takes] = await Promise.all([
-      this.plan(userId, orgId, videoId),
+      this.planOf(userId, orgId, videoId),
       this.takes(userId, orgId, videoId),
     ]);
     if (plan.status !== "ready" || !plan.plan) {
@@ -215,34 +231,44 @@ export class DirectorService {
     return toCut(row);
   }
 
-  private async toPlan(row: unknown): Promise<DirectorPlan> {
+  /**
+   * The row as the contract serves it, with a short-lived link to its audio and, when
+   * `media` is asked for, to a seeded template's storyboard cards, previews and music.
+   */
+  private async toPlan(row: unknown, { media }: { media: boolean }): Promise<DirectorPlan> {
     const { audioStatus, audioKey, plan: shotPlan, ...plan } = wirePlan.parse(row);
     const [url, served] = await Promise.all([
       audioStatus === "ready" && audioKey
         ? this.files.objectUrl(audioKey, AUDIO_READ_EXPIRES_S)
         : null,
-      shotPlan && this.served(shotPlan, plan.source === "seed"),
+      shotPlan && media && plan.source === "seed"
+        ? this.withSeedMedia(plan.videoId, shotPlan)
+        : shotPlan,
     ]);
     return { ...plan, plan: served, audio: { status: audioStatus, url } };
   }
 
   /**
-   * The plan with each media key swapped for a link to it. Only a seeded template's: its
-   * keys come from the committed seed file (apps/api copies them in), while a member's
-   * plan never has media, so a key one somehow carried is dropped rather than signed.
+   * A seeded template's plan with links to its media: the committed seed's
+   * (seedMediaFor), never anything its stored plan names. Each link left out with
+   * uploads off, like the audio's.
    */
-  private async served(shotPlan: ShotPlan, seed: boolean): Promise<ServedShotPlan> {
-    // Null with uploads off, like the audio's link: the plan is served without the media.
+  private async withSeedMedia(videoId: VideoId, shotPlan: ShotPlan): Promise<ServedShotPlan> {
+    const media = seedMediaFor(videoId, shotPlan.shots.length);
+    if (!media) {
+      return shotPlan;
+    }
     const link = async (key: string | undefined) =>
-      seed && key ? this.files.objectUrl(key, MEDIA_READ_EXPIRES_S) : null;
-    const { musicKey, shots, ...rest } = shotPlan;
-    const [musicUrl, servedShots] = await Promise.all([
-      link(musicKey),
+      key ? this.files.objectUrl(key, MEDIA_READ_EXPIRES_S) : null;
+    const [musicUrl, shots] = await Promise.all([
+      link(media.music),
       Promise.all(
-        shots.map(async ({ storyboardKey, previewKey, ...shot }) => {
+        shotPlan.shots.map(async (shot, index) => {
+          // One entry per shot, checked when the seed file loaded.
+          const made = required(media.shots[index], "the shot's media");
           const [storyboardUrl, previewUrl] = await Promise.all([
-            link(storyboardKey),
-            link(previewKey),
+            link(made.storyboard),
+            link(made.preview),
           ]);
           return {
             ...shot,
@@ -252,6 +278,6 @@ export class DirectorService {
         }),
       ),
     ]);
-    return { ...rest, shots: servedShots, ...(musicUrl && { musicUrl }) };
+    return { ...shotPlan, shots, ...(musicUrl && { musicUrl }) };
   }
 }
