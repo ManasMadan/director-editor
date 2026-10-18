@@ -399,7 +399,27 @@ describe("a seeded template's media", () => {
     play.mock.contexts
       .filter((media) => media instanceof HTMLMediaElement)
       .find((media) => media.src.includes("/music.mp3"));
+  /** The link of every soundtrack asked to play, in order. */
+  const tracksPlayed = () =>
+    play.mock.contexts
+      .filter((media) => media instanceof HTMLMediaElement)
+      .map((media) => media.src)
+      .filter((link) => link.includes("/music.mp3"));
   const planReads = () => commands.answeredRequests("/rpc/director/plan");
+  /**
+   * The plan read again as a director nudge does it, exactly once: published only once
+   * the API listens on the page's channel (a message sent before is lost, and one sent
+   * again and again reads the plan again and again).
+   */
+  async function readAgainByNudge() {
+    const { session } = await currentSession();
+    const channel = `org:${session.activeOrganizationId}`;
+    await expect.poll(() => commands.realtimeListeners(channel)).toBeGreaterThan(0);
+    const before = await planReads();
+    await commands.publishRealtime(channel, { type: "director.changed" });
+    await expect.poll(planReads).toBe(before + 1);
+  }
+
   /** Every link a preview <video> is put on the page with, from now on. */
   function clipsShown() {
     const shown: string[] = [];
@@ -505,16 +525,7 @@ describe("a seeded template's media", () => {
 
     // Links are signed to the second: a read a second later has new ones for everything.
     await expect.poll(() => Date.now() - opened).toBeGreaterThan(SECOND_MS);
-    const { session } = await currentSession();
-    // Nudged until the page's realtime stream, which may still be connecting, hears it.
-    await expect
-      .poll(async () => {
-        await commands.publishRealtime(`org:${session.activeOrganizationId}`, {
-          type: "director.changed",
-        });
-        return planReads();
-      })
-      .toBeGreaterThan(1);
+    await readAgainByNudge();
     const fresh = await api.director.plan({ videoId: seed.videoId });
     expect(fresh.plan?.musicUrl).not.toBe(soundtrack()?.src);
 
@@ -545,16 +556,9 @@ describe("a seeded template's media", () => {
     expect(firstRead).not.toBeNull();
     // The plan is read again a second on (a nudge), with every link signed anew...
     await expect.poll(() => Date.now() - opened).toBeGreaterThan(SECOND_MS);
-    const { session } = await currentSession();
-    await expect
-      .poll(async () => {
-        await commands.publishRealtime(`org:${session.activeOrganizationId}`, {
-          type: "director.changed",
-        });
-        return planReads();
-      })
-      .toBeGreaterThan(1);
+    await readAgainByNudge();
     const reads = await planReads();
+    expect(reads).toBe(2);
     // ...and then the first read's links run out.
     await commands.failRequests(`X-Amz-Date=${firstRead}`, { status: 403 });
     const clips = clipsShown();
@@ -603,8 +607,11 @@ describe("a seeded template's media", () => {
       .element(page.getByRole("button", { name: /preview of shot 1$/ }))
       .not.toBeInTheDocument();
     expect(card()).not.toBeNull();
+    // The soundtrack's link failed after the plan was read again: the fresh link it already
+    // has is played at once, without another read; failing too, the player is left out.
     await userEvent.click(page.getByRole("button", { name: "Play the soundtrack" }));
     await expect.element(page.getByText("Soundtrack, made with Lyria")).not.toBeInTheDocument();
+    expect(new Set(tracksPlayed()).size).toBe(2);
     expect(await planReads()).toBe(2);
   });
 

@@ -416,6 +416,20 @@ const publishRealtime: BrowserCommand<[channel: string, message: { type: string 
 };
 
 /**
+ * How many subscribers the realtime `channel` has (`PUBSUB NUMSUB`): the API subscribes
+ * once a page's stream for it is open, so a message published from then on is heard.
+ */
+const realtimeListeners: BrowserCommand<[channel: string]> = async (_context, channel) => {
+  const redis = new Redis(REDIS_URL);
+  try {
+    const [, count] = await redis.pubsub("NUMSUB", `realtime:${channel}`);
+    return Number(count);
+  } finally {
+    redis.disconnect();
+  }
+};
+
+/**
  * What apps/worker does with an upload once it has checked it (it isn't running here):
  * accepted, the bytes leave quarantine and the file is ready; refused, it says why.
  */
@@ -496,6 +510,7 @@ export const commands = {
   checkUpload,
   fakeDirector,
   publishRealtime,
+  realtimeListeners,
   editSession,
   storageCors,
   refuseNextPut,
@@ -531,6 +546,7 @@ declare module "vitest/browser" {
       },
     ): Promise<void>;
     publishRealtime(channel: string, message: { type: string }): Promise<void>;
+    realtimeListeners(channel: string): Promise<number>;
     storageCors(): Promise<void>;
     refuseNextPut(status: number): Promise<void>;
     signInElsewhere(

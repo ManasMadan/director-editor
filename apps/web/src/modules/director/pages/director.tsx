@@ -259,11 +259,14 @@ function scrollToPlayer() {
 /**
  * Music on a loop from `url`, played and paused by the member. An Audio of its own
  * rather than an <audio> element, which would want a captions track: music has no words.
- * Nothing loads until it's played, a fresh link starts over, and leaving stops it.
+ * Nothing loads until it's played, and leaving stops it. A failed link that a fresher one
+ * replaces goes on playing from it, as the member asked.
  */
-function useLoop(url: string | undefined, onFailed: () => void) {
+function useLoop(url: string | undefined, onFailed: () => boolean) {
   const [playing, setPlaying] = useState(false);
   const audio = useRef<HTMLAudioElement>(null);
+  // The member asked for it to play: a fresher link that takes over a failed one plays on.
+  const wanted = useRef(false);
   const failed = useRef(onFailed);
   useLayoutEffect(() => {
     failed.current = onFailed;
@@ -284,11 +287,17 @@ function useLoop(url: string | undefined, onFailed: () => void) {
       "error",
       () => {
         setPlaying(false);
-        failed.current();
+        // No fresher link to take over: the player is left out, and asked for nothing.
+        if (!failed.current()) {
+          wanted.current = false;
+        }
       },
       { signal },
     );
     audio.current = element;
+    if (wanted.current) {
+      element.play().catch(() => undefined);
+    }
     return () => {
       listening.abort();
       element.pause();
@@ -298,9 +307,11 @@ function useLoop(url: string | undefined, onFailed: () => void) {
   }, [url]);
   const toggle = () => {
     if (audio.current?.paused) {
-      // A link that fails says so through the element's error, which drops the player.
+      wanted.current = true;
+      // A link that fails says so through the element's error, handled there.
       audio.current.play().catch(() => undefined);
     } else {
+      wanted.current = false;
       audio.current?.pause();
     }
   };
