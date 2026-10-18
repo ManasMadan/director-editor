@@ -86,7 +86,7 @@ tests:
 
   - it: has no observability tools on a cluster without observability
     asserts:
-      - hasDocuments: { count: 11 }
+      - hasDocuments: { count: 9 }
       - notContains: { path: spec.hostnames, content: grafana.example.com }
         documentSelector: { path: kind, value: HTTPRoute, matchMany: true }
 
@@ -108,11 +108,28 @@ tests:
           value: [{ group: gateway.networking.k8s.io, kind: HTTPRoute, namespace: gateway-system }]
       - equal: { path: spec.to, value: [{ group: "", kind: Service }] }
 
-  - it: leaves out a tool that's turned off
+  - it: leaves out a tool that's turned off, and the grant for a namespace no tool uses
     set:
-      tools.backups.enabled: false
+      tools.storage.enabled: false
     asserts:
-      - hasDocuments: { count: 9 }
+      - hasDocuments: { count: 6 }
+      - notContains: { path: spec.hostnames, content: storage.example.com }
+        documentSelector: { path: kind, value: HTTPRoute, matchMany: true }
+
+  - it: keeps the backups server's console off unless it's turned on
+    asserts:
+      - notContains: { path: spec.hostnames, content: backups.example.com }
+        documentSelector: { path: kind, value: HTTPRoute, matchMany: true }
+
+  - it: routes the backups server's console when it's turned on
+    set:
+      tools.backups.enabled: true
+    documentSelector: { path: "spec.hostnames[0]", value: backups.example.com }
+    asserts:
+      - equal: { path: metadata.name, value: internal-backups }
+      - equal:
+          path: "spec.rules[0].backendRefs"
+          value: [{ group: "", kind: Service, name: director-editor-backups, namespace: director-editor, port: 9001, weight: 1 }]
 
   - it: needs the cluster's domain
     set: { domain: "" }

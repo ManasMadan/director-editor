@@ -67,7 +67,12 @@ tools:
     protectedPaths: [/rustfs/console]
     openPaths: [/]
     service: { namespace: director-editor, name: director-editor-uploads, port: 9001 }
+  # The backups server's console is off: behind the gateway, its S3 API would answer
+  # on the internet with only the server's keys in the way, and that server holds
+  # every copy of the database. Reach its console through a port-forward instead
+  # (deploy/README.md, "Internal tools"); `enabled: true` routes backups.<zone> to it.
   backups:
+    enabled: false
     host: backups
     home: /rustfs/console/
     protectedPaths: [/rustfs/console]

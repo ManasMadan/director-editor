@@ -260,7 +260,8 @@ Two RustFS servers per environment (data chart), each with its own root keys:
 
 Each server also serves RustFS's web console on port 9001 (`storage.<server>.console`,
 on by default), signed in with that server's keys: the internal tools route
-`storage.<zone>` and `backups.<zone>` to them (see Internal tools).
+`storage.<zone>` to the uploads server's, and the backups server's is opened through a
+port-forward (see Internal tools).
 
 A Job after every sync creates the buckets and sets the CORS rule, so both are
 declared here rather than done by hand.
@@ -463,9 +464,9 @@ repository with no activity for 60 days; re-enable it from the Actions tab.
 ## Internal tools
 
 The operators' web tools are on hosts of their own under the cluster's zone
-(`platform/internal-tools`, in every cluster): `argocd.`, `mail-admin.`, `storage.`
-(the uploads server's console) and `backups.` (the backups server's), and with
-observability `grafana.`, `prometheus.`, `alertmanager.` and `jaeger.`. In production
+(`platform/internal-tools`, in every cluster): `argocd.`, `mail-admin.` and `storage.`
+(the uploads server's console), and with observability `grafana.`, `prometheus.`,
+`alertmanager.` and `jaeger.`. In production
 that's `https://grafana.director.mmadan.in` and so on. With a direct zone they're under
 it, like the files host: OpenTofu's DNS-only wildcard names them and the gateway serves
 them with its own wildcard certificate; without one, external-dns publishes each,
@@ -476,15 +477,27 @@ auth, its users in the `internal-tools-auth` Secret. Nothing else restricts them
 address allow-lists), so anyone with the password reaches the tools, and the tools that
 have their own sign-in still ask for it: Argo CD (`admin`, its
 `argocd-initial-admin-secret`), Grafana (the `grafana-admin` Secret), Stalwart's web
-admin (`admin@<email domain>`, `WEBADMIN_PASSWORD`) and RustFS's consoles (each server's
-keys, in the `storage` and `<release>-backups-storage` Secrets). Prometheus,
+admin (`admin@<email domain>`, `WEBADMIN_PASSWORD`) and RustFS's uploads console (that
+server's keys, in the `storage` Secret). Prometheus,
 Alertmanager and Jaeger have no sign-in of their own. The basic-auth header is removed
 before a request reaches a tool. Two tools call their own API with their own
 Authorization header once signed in, which basic auth would refuse, so those paths are
 left to the tool (`openPaths`): Stalwart's `/jmap` and `/api` (bearer tokens), and on
-the storage hosts everything but the console's page `/rustfs/console` (S3 calls signed
-with the server's keys). RustFS refuses any S3 call not signed with its keys, but it does
-mean the backups server's S3 API answers on the internet behind its keys alone.
+`storage.` everything but the console's page `/rustfs/console` (S3 calls signed with the
+server's keys). RustFS refuses any S3 call not signed with its keys, but it does mean the
+uploads server's S3 API answers there behind its keys alone, as it already does on the
+files host.
+
+The backups server's console has no host (`tools.backups.enabled: false`), since the
+same open paths would put the S3 API of the server holding every copy of the database
+on the internet behind its keys alone. Open it through a port-forward, and sign in with
+the keys in the `<release>-backups-storage` Secret:
+
+```sh
+kubectl -n director-editor port-forward svc/director-editor-backups 9001:9001
+```
+
+then <http://localhost:9001/rustfs/console/>.
 
 To change the shared password: write the new `.htpasswd` line into
 `platform/secrets/<env>/internal-tools-auth.sops.yaml` with `sops`, commit, and release.

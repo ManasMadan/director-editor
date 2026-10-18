@@ -144,7 +144,8 @@ storage:
   backups:
     bucket: backups
     nodeSelector: {}
-    # As the uploads server's, at backups.<zone>.
+    # As the uploads server's, but the internal tools give it no host by default, so
+    # it's opened through a port-forward (deploy/README.md, "Internal tools").
     console: true
     storage:
       size: 50Gi
