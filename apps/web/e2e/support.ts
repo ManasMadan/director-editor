@@ -21,6 +21,7 @@ import {
 } from "@playwright/test";
 import { totp } from "@repo/testing/totp";
 import { Redis } from "ioredis";
+import pg from "pg";
 import { FAKE_TURNSTILE } from "../test/turnstile";
 
 // Authenticator codes (RFC 6238).
@@ -293,6 +294,25 @@ export async function expireCodes(email: string) {
     expired += 1;
   }
   expect(expired, `a pending code for ${email}`).toBeGreaterThan(0);
+}
+
+/**
+ * Runs `work` as the AI service does: its own database role, inside a transaction scoped
+ * to the workspace by row-level security. For Director's tables, which only the AI
+ * service reads, and which a stack with Director off can't serve through the API.
+ */
+export async function asWorkspace<T>(orgId: string, work: (client: pg.Client) => Promise<T>) {
+  const client = new pg.Client({ connectionString: process.env.AI_DATABASE_URL });
+  await client.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT set_config('app.org_id', $1, true)", [orgId]);
+    const result = await work(client);
+    await client.query("COMMIT");
+    return result;
+  } finally {
+    await client.end();
+  }
 }
 
 /**
