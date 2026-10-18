@@ -8,11 +8,11 @@ tests:
     documentSelector: { path: "spec.hostnames[0]", value: argocd.example.com }
     asserts:
       - equal: { path: metadata.name, value: internal-argocd }
-      - equal: { path: spec.parentRefs, value: [{ name: public }] }
+      - equal: { path: spec.parentRefs, value: [{ group: gateway.networking.k8s.io, kind: Gateway, name: public }] }
       - equal: { path: metadata.annotations, value: { director-editor.dev/external-dns: "true" } }
       - equal:
           path: "spec.rules[0].backendRefs"
-          value: [{ name: argocd-server, namespace: argocd, port: 80 }]
+          value: [{ group: "", kind: Service, name: argocd-server, namespace: argocd, port: 80, weight: 1 }]
 
   - it: uses the direct zone when the cluster has one, under OpenTofu's wildcard record
     set: { directZone: app.example.com }
@@ -86,7 +86,7 @@ tests:
       - equal: { path: metadata.name, value: internal-grafana }
       - equal:
           path: "spec.rules[0].backendRefs"
-          value: [{ name: kube-prometheus-stack-grafana, namespace: observability, port: 80 }]
+          value: [{ group: "", kind: Service, name: kube-prometheus-stack-grafana, namespace: observability, port: 80, weight: 1 }]
 
   - it: lets the routes reach each tool's namespace, and only Services there
     set: { observability: "true" }
