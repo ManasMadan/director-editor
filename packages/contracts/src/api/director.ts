@@ -465,7 +465,7 @@ export const directorCutSchema = z.object({
 export type DirectorCut = z.infer<typeof directorCutSchema>;
 
 /** A match cut's anchor: what stays on the same spot across the cut ("the watch"). */
-export const MATCH_CUT_ANCHOR_MAX_LENGTH = 120;
+const MATCH_CUT_ANCHOR_MAX_LENGTH = 120;
 const takeMs = z
   .number()
   .int()

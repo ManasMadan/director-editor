@@ -16,7 +16,7 @@ const GHOST_HEIGHT = 640;
 const BEFORE_END_SECONDS = 0.05;
 
 /** The take the editor would play for a shot: its pick, else its newest filmed video. */
-export function ghostTake(shot: DirectorShot | undefined): DirectorTake | undefined {
+function ghostTake(shot: DirectorShot | undefined): DirectorTake | undefined {
   const videos = (shot?.takes ?? []).filter(
     (take) => take.kind === "video" && take.status === "ready",
   );
