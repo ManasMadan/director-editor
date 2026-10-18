@@ -31,6 +31,7 @@ from sqlalchemy import text
 
 from app.contracts.realtime_message import DirectorChanged
 from app.contracts.recording_clip_job import RecordingClipJob
+from app.contracts.recording_job_name import RecordingJobName
 from app.db.models import DirectorPlan
 from app.db.session import tenant
 from app.director import create_google_model
@@ -195,8 +196,10 @@ class ClipQueue:
                 "payload": {"attemptId": attempt_id, "orgId": org_id},
             }
         )
+        # The job's name, checked against the queue's contract (packages/jobs).
+        name: RecordingJobName = "clip"
         await self._queue.add(  # pyright: ignore[reportUnknownMemberType]  # bullmq leaves the job's data untyped
-            "clip",
+            name,
             data.model_dump(mode="json", exclude_none=True),
             job_options(RECORDING, str(attempt_id)),
         )
