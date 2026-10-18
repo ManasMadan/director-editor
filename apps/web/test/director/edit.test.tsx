@@ -364,6 +364,10 @@ describe("the editor", { tags: ["files"] }, () => {
     await expect
       .poll(() => document.querySelector("video")?.getAttribute("src"))
       .toContain(cut?.fileId ?? "no file");
+    // With the captions the editor burned in, as a track for screen readers' players.
+    await expect
+      .poll(() => document.querySelector("video track")?.getAttribute("src"))
+      .toMatch(/^blob:/);
   });
 
   it("refuses a video too long to save before putting it together", async () => {

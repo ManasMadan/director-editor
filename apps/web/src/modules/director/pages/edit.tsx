@@ -46,9 +46,12 @@ import { hush, say } from "../lib/speech";
 import { MAX_SECONDS, type Segment, stitch } from "../lib/stitch";
 import { timecode } from "../lib/track";
 
-/** A clip's take once it's in memory (not while it loads, nor when it couldn't be). */
+/**
+ * A filmed clip's take once it's in memory (not while it loads, nor when it couldn't be).
+ * Asked only once every clip is filmed and reviewed (lib/edit.ts `complete`).
+ */
 function loadedTake(media: Map<DirectorTakeId, MediaState>, clip: Clip) {
-  const state = clip.take ? media.get(clip.take.id) : undefined;
+  const state = media.get(required(clip.take, "a filmed take").id);
   return typeof state === "object" ? state : undefined;
 }
 
@@ -392,23 +395,20 @@ function Stage({ editor, saving }: { editor: EditorState; saving: Saving }) {
 }
 
 /** The open setting, under the transport. */
-function Panel({ editor, audio }: { editor: EditorState; audio: AudioMode }) {
-  const { history, tool } = editor;
+function Panel({ editor, tool, audio }: { editor: EditorState; tool: Tool; audio: AudioMode }) {
+  const { history } = editor;
   if (tool === "captions") {
     return (
       <StylePicker value={history.choices.style} onChange={(style) => history.change({ style })} />
     );
   }
-  if (tool === "sound") {
-    return (
-      <SoundPanel
-        voice={audio === "voice"}
-        on={history.choices.sound}
-        onChange={(sound) => history.change({ sound })}
-      />
-    );
-  }
-  return null;
+  return (
+    <SoundPanel
+      voice={audio === "voice"}
+      on={history.choices.sound}
+      onChange={(sound) => history.change({ sound })}
+    />
+  );
 }
 
 /**
@@ -497,7 +497,7 @@ function Editor({
         <Transport editor={editor} />
         {editor.tool ? (
           <div className="px-4 pb-3">
-            <Panel editor={editor} audio={audio} />
+            <Panel editor={editor} tool={editor.tool} audio={audio} />
           </div>
         ) : null}
       </div>
