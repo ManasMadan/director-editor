@@ -360,6 +360,21 @@ export class RecordingRepository {
     });
   }
 
+  /** Whether the session is done and its post-session pass not queued yet. */
+  async passDue(orgId: OrgId, sessionId: RecordingSessionId) {
+    const due = await this.read(orgId).recordingSession.count({
+      where: { id: sessionId, status: "done", passQueuedAt: null },
+    });
+    return due > 0;
+  }
+
+  async passQueued(orgId: OrgId, sessionId: RecordingSessionId) {
+    await this.write(orgId).recordingSession.updateMany({
+      where: { id: sessionId, passQueuedAt: null },
+      data: { passQueuedAt: new Date() },
+    });
+  }
+
   /** Ended attempts whose footage isn't at the clipper yet. */
   waitingAttempts(orgId: OrgId, sessionId: RecordingSessionId) {
     return this.read(orgId).recordingAttempt.findMany({

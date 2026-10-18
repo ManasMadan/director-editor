@@ -88,6 +88,9 @@ model RecordingSession {
   createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
   finishedAt   DateTime?          @map("finished_at") @db.Timestamptz(3)
+  /// When its post-session pass was queued (once it's done): apps/api at Done, or the
+  /// worker's retention for any it missed.
+  passQueuedAt DateTime?          @map("pass_queued_at") @db.Timestamptz(3)
   organization Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
   user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   plan         DirectorPlan       @relation(fields: [planId], references: [id], onDelete: Cascade)

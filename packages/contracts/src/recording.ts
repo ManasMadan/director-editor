@@ -53,6 +53,13 @@ export const RECORDING_FOOTAGE_MAX_BYTES = 1_000_000_000;
  * most; the demo account's 24 hours. Takes cut from it are kept with the member's videos.
  */
 export const RECORDING_KEEP_DAYS = 7;
+
+/**
+ * How long after Done the post-session pass starts: the shoot screen may still be sending
+ * the last slices it queued, and the pass goes through what's stored when it runs.
+ * apps/api queues it at Done, and apps/worker any it missed, with the same delay.
+ */
+export const SESSION_PASS_DELAY_MS = 2 * MINUTE_MS;
 export const RECORDING_KEEP_MAX_DAYS = 14;
 export const RECORDING_DEMO_KEEP_HOURS = 24;
 /**

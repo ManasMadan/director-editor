@@ -10,8 +10,13 @@
 import { InjectQueue, Processor } from "@nestjs/bullmq";
 import { Inject, type OnApplicationBootstrap } from "@nestjs/common";
 import { authSessionKeys, DEMO_GUEST_LIFETIME_S } from "@repo/contracts/auth-settings";
-import { orgIdSchema, recordingAttemptIdSchema } from "@repo/contracts/ids";
+import {
+  orgIdSchema,
+  recordingAttemptIdSchema,
+  recordingSessionIdSchema,
+} from "@repo/contracts/ids";
 import { entriesOf } from "@repo/contracts/objects";
+import { SESSION_PASS_DELAY_MS } from "@repo/contracts/recording";
 import {
   type JobName,
   jobName,
@@ -50,9 +55,13 @@ const idleAttempt = z.object({ org_id: orgIdSchema, attempt_id: recordingAttempt
  * never came back): it's finished for its member, and its attempts are cut.
  */
 const RECORDING_IDLE_HOURS = 6;
+const duePass = z.object({ org_id: orgIdSchema, session_id: recordingSessionIdSchema });
+// Passes queued a call (app.session_passes_due); the task calls again while one fills it.
+const PASS_BATCH = 100;
 
 /** Where the attempts of the sessions it finishes go, with the queue's own options. */
 export const RECORDING_QUEUE = Symbol("RECORDING_QUEUE");
+export const DIRECTOR_QUEUE = Symbol("DIRECTOR_QUEUE");
 
 type Task = JobName<"maintenance">;
 
@@ -80,6 +89,7 @@ export class MaintenanceProcessor extends JobProcessor implements OnApplicationB
     @InjectDatabase() private readonly database: Database,
     @InjectQueue("maintenance") private readonly queue: QueueOf<"maintenance">,
     @Inject(RECORDING_QUEUE) private readonly recording: Producer<"recording">,
+    @Inject(DIRECTOR_QUEUE) private readonly director: Producer<"ai-director">,
     private readonly files: FilesCleanup,
     @InjectRedis() private readonly redis: Redis,
     @InjectPinoLogger(MaintenanceProcessor.name) private readonly log: PinoLogger,
@@ -243,6 +253,43 @@ export class MaintenanceProcessor extends JobProcessor implements OnApplicationB
         options: { jobId: attemptId, meta: { orgId } },
       })),
     );
-    return { expired: Number(expired.n), finished: idle.length };
+    return {
+      expired: Number(expired.n),
+      finished: idle.length,
+      passes: await this.queueSessionPasses(),
+    };
+  }
+
+  /**
+   * The post-session pass of every done session that has none queued: one apps/api's Done
+   * failed to queue, or one this task finished (now, or before). Queued, then stamped, so
+   * a queue that fails leaves them for the next run; the session's id is the job's.
+   */
+  private async queueSessionPasses() {
+    const db = this.database.write;
+    let queued = 0;
+    for (;;) {
+      const due = await rows(
+        duePass,
+        db.$queryRaw`
+          SELECT org_id, session_id
+            FROM app.session_passes_due(${PASS_BATCH}::int)`,
+      );
+      await this.director.addBulk(
+        due.map(({ org_id: orgId, session_id: sessionId }) => ({
+          name: "session-pass" as const,
+          payload: { sessionId, orgId },
+          // Delayed as apps/api's are: a session Done a moment ago may be getting its last
+          // slices, and one apps/api is queueing now is the same job (its id), not a second.
+          options: { jobId: sessionId, meta: { orgId }, delay: SESSION_PASS_DELAY_MS },
+        })),
+      );
+      const ids = due.map((pass) => pass.session_id);
+      await db.$queryRaw`SELECT app.session_passes_queued(${ids}::uuid[])`;
+      queued += due.length;
+      if (due.length < PASS_BATCH) {
+        return queued;
+      }
+    }
   }
 }

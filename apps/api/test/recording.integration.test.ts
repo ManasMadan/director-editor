@@ -449,6 +449,36 @@ describe("a session's parts and marks", () => {
     expect((await rpc.uploadSlice(slice(sessionId, 0, 0))).upload).not.toBeNull();
   });
 
+  it("queues the post-session pass once Done, and again if it wasn't the first time", async () => {
+    const director = new Queue("ai-director", {
+      connection: harness.redis.duplicate(),
+      prefix: queuePrefix("ai-director"),
+    });
+    try {
+      const { rpc, sessionId, org } = await recording();
+      await rpc.finish({ sessionId });
+      expect((await director.getJob(sessionId))?.data.payload).toEqual({ sessionId, orgId: org });
+      const [stamped] = await sql<{ queued: Date | null }>(
+        "SELECT pass_queued_at AS queued FROM app.recording_session WHERE id = $1",
+        [sessionId],
+      );
+      expect(stamped?.queued).toBeInstanceOf(Date);
+
+      // Done, but its pass never made it onto the queue (Redis failed after the commit):
+      // Done again queues it, though it changes nothing else.
+      const lost = await recording();
+      await lost.rpc.finish({ sessionId: lost.sessionId });
+      await director.remove(lost.sessionId);
+      await sql("UPDATE app.recording_session SET pass_queued_at = NULL WHERE id = $1", [
+        lost.sessionId,
+      ]);
+      await lost.rpc.finish({ sessionId: lost.sessionId });
+      expect((await director.getJob(lost.sessionId))?.data.payload.sessionId).toBe(lost.sessionId);
+    } finally {
+      await director.close();
+    }
+  });
+
   it("pauses and finishes a session with no attempt open in it", async () => {
     const { rpc, sessionId } = await recording();
     expect((await rpc.pause({ sessionId, partIndex: 0, atMs: 1_000 })).paused).toBe(true);
@@ -538,8 +568,13 @@ describe("deleting a session", () => {
       "SELECT key FROM files.object_deletion WHERE key LIKE $1 OR key LIKE $2",
       [`recordings/${sessionId}/%`, `files/${take.file}`],
     );
+    // The part's joined copy too, in case a post-session pass left it behind.
     expect(queued.map((row) => row.key).sort()).toEqual(
-      [`files/${take.file}`, `recordings/${sessionId}/0/0`].sort(),
+      [
+        `files/${take.file}`,
+        `recordings/${sessionId}/0/0`,
+        `recordings/${sessionId}/0/whole`,
+      ].sort(),
     );
     await expectError(rpc.session({ sessionId }), "RECORDING_NOT_FOUND");
   });
