@@ -181,7 +181,7 @@ function ShotCard({
           {index + 1}
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <p className="font-semibold">{shot.title}</p>
+          <h3 className="font-semibold">{shot.title}</h3>
           <p className="text-sm text-studio-foreground/70">{shot.purpose}</p>
         </div>
         <span className="flex shrink-0 items-center gap-1 rounded-full bg-studio-foreground/10 px-2 py-1 text-xs font-medium">
@@ -201,6 +201,7 @@ function ShotCard({
         <button
           type="button"
           onClick={onWatch}
+          aria-label={t("template.watchShot", { index: index + 1, title: shot.title })}
           className="flex items-center gap-1.5 rounded-full bg-studio-foreground/10 px-3 py-1.5 text-xs font-semibold hover:bg-studio-foreground/15"
         >
           <Play className="size-3.5 fill-current" aria-hidden />

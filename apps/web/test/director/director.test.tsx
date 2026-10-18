@@ -3,7 +3,7 @@
  * filmed of it, and the button to start; before that, Gemini at work or why it failed.
  */
 import { fileIdSchema } from "@repo/contracts/ids";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { commands, userEvent } from "vitest/browser";
 import { DirectorPage } from "@/modules/director";
 import { currentUrl, renderPage } from "../render";
@@ -52,7 +52,14 @@ describe("Director's page for a ready plan", () => {
     await readyPlan(videoId, plan);
     const page = await showPlan(videoId);
 
-    await expect.element(page.getByRole("heading", { name: "Morning routine" })).toBeVisible();
+    // The short's title is the page's heading, in a bar of its own above the player
+    // (where YouTube's own title overlay can't be covered), with no "Director" pill.
+    await expect
+      .element(page.getByRole("heading", { level: 1, name: "Morning routine" }))
+      .toBeVisible();
+    expect(page.getByRole("banner").element().contains(hero())).toBe(false);
+    expect(page.getByText("Director", { exact: true }).query()).toBeNull();
+    await expect.element(page.getByRole("heading", { level: 3, name: "The look" })).toBeVisible();
     await expect.element(page.getByText("GRWM")).toBeVisible();
     await expect.element(page.getByText("01:15")).toBeVisible();
     await expect.element(page.getByText("2 shots", { exact: true })).toBeVisible();
@@ -86,7 +93,9 @@ describe("Director's page for a ready plan", () => {
     expect(page.getByText("Filmed", { exact: false }).query()).toBeNull();
 
     // Tapping a shot in the storyboard plays just its part of the original.
-    const second = page.getByRole("button", { name: "Watch shot 2: The look" });
+    const second = page
+      .getByRole("list", { name: "Storyboard" })
+      .getByRole("button", { name: "Watch shot 2: The look" });
     await userEvent.click(second);
     await expect.element(second).toHaveAttribute("aria-pressed", "true");
     await expect.element(page.getByText("Playing shot 2: The look")).toBeVisible();
@@ -94,7 +103,8 @@ describe("Director's page for a ready plan", () => {
     expect(heroParams().get("end")).toBe("6");
     expect(heroParams().get("loop")).toBeNull();
 
-    await userEvent.click(page.getByRole("button", { name: "Watch this part" }).first());
+    // Each shot card's button names its shot.
+    await userEvent.click(page.getByRole("button", { name: "Watch shot 1: Walk in" }).last());
     await expect.element(page.getByText("Playing shot 1: Walk in")).toBeVisible();
     await expect.element(second).toHaveAttribute("aria-pressed", "false");
     expect(heroParams().get("start")).toBe("1");
@@ -115,7 +125,10 @@ describe("Director's page for a ready plan", () => {
     await expect
       .element(page.getByRole("link", { name: "Back to the library" }))
       .toHaveAttribute("href", "/library");
-    await userEvent.click(page.getByRole("button", { name: "Start shooting" }));
+    await expect
+      .element(page.getByRole("link", { name: "Start shooting" }))
+      .toHaveAttribute("href", `/director/${videoId}/shoot?shot=0&audio=original`);
+    await userEvent.click(page.getByRole("link", { name: "Start shooting" }));
     expect(currentUrl()).toBe(`/director/${videoId}/shoot?shot=0&audio=original`);
   });
 
@@ -129,9 +142,34 @@ describe("Director's page for a ready plan", () => {
     await expect.element(page.getByText(note)).toBeVisible();
     expect(page.getByRole("radio").query()).toBeNull();
     await expect.element(page.getByText("You need 1 shot: 1 video and no photos.")).toBeVisible();
-    await userEvent.click(page.getByRole("button", { name: "Start shooting" }));
+    await expect
+      .element(page.getByRole("link", { name: "Start shooting" }))
+      .toHaveAttribute("href", `/director/${videoId}/shoot?shot=0&audio=original`);
+    await userEvent.click(page.getByRole("link", { name: "Start shooting" }));
     expect(currentUrl()).toBe(`/director/${videoId}/shoot?shot=0&audio=original`);
   });
+
+  it.each([
+    [false, "smooth"],
+    [true, "auto"],
+  ])(
+    "scrolls back to the player (reduced motion: %s) with %s scrolling",
+    async (reduce, behavior) => {
+      const videoId = newVideoId();
+      await readyPlan(videoId, plan);
+      const matchMedia = window.matchMedia.bind(window);
+      vi.spyOn(window, "matchMedia").mockImplementation((query) =>
+        query === "(prefers-reduced-motion: reduce)"
+          ? { ...matchMedia(query), matches: reduce }
+          : matchMedia(query),
+      );
+      const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+      const page = await showPlan(videoId);
+      await userEvent.click(page.getByRole("button", { name: "Watch shot 2: The look" }).first());
+      expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior });
+      vi.restoreAllMocks();
+    },
+  );
 
   it("says the mic will be used when the original's audio couldn't be fetched", async () => {
     const videoId = newVideoId();
@@ -143,7 +181,7 @@ describe("Director's page for a ready plan", () => {
       .element(page.getByText("The original audio couldn't be fetched, so your mic will be used."))
       .toBeVisible();
     expect(page.getByRole("radio").query()).toBeNull();
-    await userEvent.click(page.getByRole("button", { name: "Start shooting" }));
+    await userEvent.click(page.getByRole("link", { name: "Start shooting" }));
     expect(currentUrl()).toBe(`/director/${videoId}/shoot?shot=0&audio=voice`);
   });
 
@@ -162,7 +200,7 @@ describe("Director's page for a ready plan", () => {
     await expect.element(page.getByText("Filmed, 82/100")).toBeVisible();
     await expect.element(page.getByText("Needs a retake (40/100)")).toBeVisible();
     await expect.element(page.getByText("Director is reviewing your take")).toBeVisible();
-    await userEvent.click(page.getByRole("button", { name: "Continue shooting" }));
+    await userEvent.click(page.getByRole("link", { name: "Continue shooting" }));
     expect(currentUrl()).toBe(`/director/${videoId}/shoot?shot=2&audio=voice`);
   });
 
@@ -175,7 +213,7 @@ describe("Director's page for a ready plan", () => {
     const page = await showPlan(videoId);
     await expect.element(page.getByText("Filmed", { exact: true })).toBeVisible();
     // Every shot has a take: starting again from the top.
-    await expect.element(page.getByRole("button", { name: "Start shooting" })).toBeVisible();
+    await expect.element(page.getByRole("link", { name: "Start shooting" })).toBeVisible();
   });
 });
 

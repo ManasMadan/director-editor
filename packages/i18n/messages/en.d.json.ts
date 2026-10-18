@@ -792,7 +792,7 @@ declare const messages: {
     "empty": "Nothing here yet. Paste a Shorts link above and Gemini will turn it into a template.",
     "card": {
       "seed": "Starter",
-      "user": "Indexed",
+      "user": "Yours",
       "shots": "{count, plural, one {# shot} other {# shots}}",
       "pending": "New Short",
       "failed": "Couldn't index"

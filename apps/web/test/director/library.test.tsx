@@ -66,9 +66,7 @@ describe("the library", () => {
     await expect.element(starter).toMatchTextContent(/Starter/);
     await expect.element(starter).toMatchTextContent(/2 shots/);
     await expect.element(starter).toMatchTextContent(/00:26/);
-    await expect
-      .element(page.getByRole("link", { name: /My dance/ }))
-      .toMatchTextContent(/Indexed/);
+    await expect.element(page.getByRole("link", { name: /My dance/ })).toMatchTextContent(/Yours/);
     // Not ready yet: what Gemini is doing, or that it failed, on the picture.
     await expect
       .element(page.getByRole("link", { name: /Writing the shot list/ }))
@@ -161,6 +159,8 @@ describe("indexing a short of your own", () => {
     expect(dialog.getByRole("link").all()).toHaveLength(1);
     await userEvent.click(dialog.getByRole("button", { name: "Got it" }));
     await expect.element(dialog).not.toBeInTheDocument();
+    // Focus goes back to the link field, not to the top of the page.
+    await expect.element(link()).toHaveFocus();
     // Nothing was added, and the form is there to paste a link already in the library.
     await expect.element(page.getByText("2 Shorts")).toBeVisible();
     expect(page.getByRole("alert").query()).toBeNull();

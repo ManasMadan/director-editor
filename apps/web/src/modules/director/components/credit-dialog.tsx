@@ -14,6 +14,7 @@ import { Sparkles } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
+import type { RefObject } from "react";
 import { thumbnailUrl } from "@/modules/shorts";
 
 /**
@@ -24,16 +25,20 @@ export function CreditDialog({
   open,
   onOpenChange,
   seeds,
+  finalFocus,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   seeds: DirectorPlan[];
+  /** Where focus goes once it closes: the link field, to paste another link. */
+  finalFocus: RefObject<HTMLInputElement | null>;
 }) {
   const t = useTranslations("library.credit");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
+        finalFocus={finalFocus}
         className="max-h-[calc(100dvh-2rem)] gap-5 overflow-y-auto sm:max-w-md"
       >
         <DialogHeader>

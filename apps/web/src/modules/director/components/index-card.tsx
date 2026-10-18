@@ -10,7 +10,7 @@ import { CircleAlert, CircleCheck, Link2, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useId, useState } from "react";
+import { type RefObject, useId, useState } from "react";
 import { indexStep } from "../lib/library";
 import { IndexProgress } from "./index-progress";
 
@@ -62,11 +62,13 @@ function LinkForm({
   error,
   indexUsed,
   onSubmit,
+  inputRef,
 }: {
   pending: boolean;
   error: unknown;
   indexUsed: boolean;
   onSubmit: (link: string) => void;
+  inputRef: RefObject<HTMLInputElement | null>;
 }) {
   const t = useTranslations("library.index");
   const errorMessage = useApiErrorMessage();
@@ -90,6 +92,7 @@ function LinkForm({
             aria-hidden
           />
           <Input
+            ref={inputRef}
             id={id}
             value={link}
             onChange={(event) => setLink(event.target.value)}
@@ -136,10 +139,13 @@ export function IndexCard({
   templates,
   indexUsed,
   onLimit,
+  inputRef,
 }: {
   templates: DirectorPlan[];
   indexUsed: boolean;
   onLimit: () => void;
+  /** The link field, for the credit dialog to hand focus back to. */
+  inputRef: RefObject<HTMLInputElement | null>;
 }) {
   const t = useTranslations("library.index");
   const router = useRouter();
@@ -189,6 +195,7 @@ export function IndexCard({
             error={index.error}
             indexUsed={indexUsed}
             onSubmit={submit}
+            inputRef={inputRef}
           />
         )}
       </div>

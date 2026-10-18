@@ -6,7 +6,7 @@ import type { DirectorLibrary } from "@repo/contracts/api";
 import { Button } from "@repo/ui/components/button";
 import { GeminiLoader, GeminiShimmer } from "@repo/ui/components/gemini-loader";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { DirectorGate } from "@/modules/shorts";
 import { CreditDialog } from "../components/credit-dialog";
 import { IndexCard } from "../components/index-card";
@@ -65,6 +65,7 @@ function Library() {
   const errorMessage = useApiErrorMessage();
   const library = useDirectorLibraryQuery();
   const [creditOpen, setCreditOpen] = useState(false);
+  const linkField = useRef<HTMLInputElement>(null);
   const seeds = (library.data?.templates ?? []).filter(
     (plan) => plan.source === "seed" && plan.status === "ready",
   );
@@ -81,6 +82,7 @@ function Library() {
           templates={library.data?.templates ?? []}
           indexUsed={library.data?.indexUsed ?? false}
           onLimit={() => setCreditOpen(true)}
+          inputRef={linkField}
         />
       </div>
       {library.isPending ? <Loading /> : null}
@@ -95,7 +97,12 @@ function Library() {
         </div>
       ) : null}
       {library.data ? <Templates library={library.data} /> : null}
-      <CreditDialog open={creditOpen} onOpenChange={setCreditOpen} seeds={seeds} />
+      <CreditDialog
+        open={creditOpen}
+        onOpenChange={setCreditOpen}
+        seeds={seeds}
+        finalFocus={linkField}
+      />
     </div>
   );
 }
