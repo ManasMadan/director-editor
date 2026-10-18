@@ -18,6 +18,15 @@ TypeScript client is `packages/ai-client`.
 - After changing the plan schema (`ShotPlan`): `bun run --filter @repo/ai seeds:build`
   re-indexes the 6 seed Shorts on Vertex AI into `packages/contracts/src/director-seeds.json`
   (commit it; the API copies it into every new workspace)
+- Then `bun run --filter @repo/ai seeds:media -- --bucket <bucket>` makes each seed's
+  storyboard cards, preview clips and music on Vertex AI (Nano Banana, Veo, Lyria) as
+  the signed-in gcloud account, uploads them and writes their keys into each seed's
+  `media` in the same file; it only makes what's missing, so run it again after a
+  failure, and commit the file and `scripts/seed-media-ledger.json` (every Veo clip
+  billed, which the 40-clip cap counts). `<bucket>` must be the bucket the API serves
+  files from (production's GCS bucket): locally the API reads RustFS, where those keys
+  404. `--dry-run` needs no bucket and lists every prompt and the cost
+  (`scripts/seed_media.py`)
 - After changing indexing (the planner prompt, `repair_plan`, `INDEX_MODEL`):
   `bun run --filter @repo/ai evals:index` indexes the 12 Shorts in `evals/shorts.json`
   on Vertex AI and fails unless every one gives a filmable plan

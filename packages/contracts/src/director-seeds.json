@@ -652,7 +652,52 @@
       ]
     },
     "model": "gemini-4-argon",
-    "audioKey": "seed-audio/22k0fZarxh8.m4a"
+    "audioKey": "seed-audio/22k0fZarxh8.m4a",
+    "media": {
+      "music": "seed-media/22k0fZarxh8/music.mp3",
+      "shots": [
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-0.png",
+          "preview": "seed-media/22k0fZarxh8/shot-0.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-1.png",
+          "preview": "seed-media/22k0fZarxh8/shot-1.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-2.png",
+          "preview": "seed-media/22k0fZarxh8/shot-2.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-3.png",
+          "preview": "seed-media/22k0fZarxh8/shot-3.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-4.png",
+          "preview": "seed-media/22k0fZarxh8/shot-4.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-5.png",
+          "preview": "seed-media/22k0fZarxh8/shot-5.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-6.png",
+          "preview": "seed-media/22k0fZarxh8/shot-6.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-7.png",
+          "preview": "seed-media/22k0fZarxh8/shot-7.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-8.png",
+          "preview": "seed-media/22k0fZarxh8/shot-8.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-9.png",
+          "preview": "seed-media/22k0fZarxh8/shot-9.mp4"
+        }
+      ]
+    }
   },
   {
     "videoId": "152Jy2c3XSM",
@@ -1191,7 +1236,56 @@
       ]
     },
     "model": "gemini-4-argon",
-    "audioKey": "seed-audio/152Jy2c3XSM.m4a"
+    "audioKey": "seed-audio/152Jy2c3XSM.m4a",
+    "media": {
+      "music": "seed-media/152Jy2c3XSM/music.mp3",
+      "shots": [
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-0.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-0.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-1.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-1.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-2.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-2.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-3.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-3.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-4.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-4.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-5.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-5.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-6.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-6.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-7.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-7.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-8.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-8.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-9.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-9.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-10.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-10.mp4"
+        }
+      ]
+    }
   },
   {
     "videoId": "_HonL1arbaA",
@@ -1565,7 +1659,36 @@
       ]
     },
     "model": "gemini-4-argon",
-    "audioKey": "seed-audio/_HonL1arbaA.m4a"
+    "audioKey": "seed-audio/_HonL1arbaA.m4a",
+    "media": {
+      "music": "seed-media/_HonL1arbaA/music.mp3",
+      "shots": [
+        {
+          "storyboard": "seed-media/_HonL1arbaA/shot-0.png",
+          "preview": "seed-media/_HonL1arbaA/shot-0.mp4"
+        },
+        {
+          "storyboard": "seed-media/_HonL1arbaA/shot-1.png",
+          "preview": "seed-media/_HonL1arbaA/shot-1.mp4"
+        },
+        {
+          "storyboard": "seed-media/_HonL1arbaA/shot-2.png",
+          "preview": "seed-media/_HonL1arbaA/shot-2.mp4"
+        },
+        {
+          "storyboard": "seed-media/_HonL1arbaA/shot-3.png",
+          "preview": "seed-media/_HonL1arbaA/shot-3.mp4"
+        },
+        {
+          "storyboard": "seed-media/_HonL1arbaA/shot-4.png",
+          "preview": "seed-media/_HonL1arbaA/shot-4.mp4"
+        },
+        {
+          "storyboard": "seed-media/_HonL1arbaA/shot-5.png",
+          "preview": "seed-media/_HonL1arbaA/shot-5.mp4"
+        }
+      ]
+    }
   },
   {
     "videoId": "WvGUjw7OwZo",
@@ -1982,7 +2105,36 @@
       ]
     },
     "model": "gemini-4-argon",
-    "audioKey": "seed-audio/WvGUjw7OwZo.m4a"
+    "audioKey": "seed-audio/WvGUjw7OwZo.m4a",
+    "media": {
+      "music": "seed-media/WvGUjw7OwZo/music.mp3",
+      "shots": [
+        {
+          "storyboard": "seed-media/WvGUjw7OwZo/shot-0.png",
+          "preview": "seed-media/WvGUjw7OwZo/shot-0.mp4"
+        },
+        {
+          "storyboard": "seed-media/WvGUjw7OwZo/shot-1.png",
+          "preview": "seed-media/WvGUjw7OwZo/shot-1.mp4"
+        },
+        {
+          "storyboard": "seed-media/WvGUjw7OwZo/shot-2.png",
+          "preview": "seed-media/WvGUjw7OwZo/shot-2.mp4"
+        },
+        {
+          "storyboard": "seed-media/WvGUjw7OwZo/shot-3.png",
+          "preview": "seed-media/WvGUjw7OwZo/shot-3.mp4"
+        },
+        {
+          "storyboard": "seed-media/WvGUjw7OwZo/shot-4.png",
+          "preview": "seed-media/WvGUjw7OwZo/shot-4.mp4"
+        },
+        {
+          "storyboard": "seed-media/WvGUjw7OwZo/shot-5.png",
+          "preview": "seed-media/WvGUjw7OwZo/shot-5.mp4"
+        }
+      ]
+    }
   },
   {
     "videoId": "8OLAi6Eba98",
@@ -2102,7 +2254,16 @@
       ]
     },
     "model": "gemini-4-argon",
-    "audioKey": "seed-audio/8OLAi6Eba98.m4a"
+    "audioKey": "seed-audio/8OLAi6Eba98.m4a",
+    "media": {
+      "music": "seed-media/8OLAi6Eba98/music.mp3",
+      "shots": [
+        {
+          "storyboard": "seed-media/8OLAi6Eba98/shot-0.png",
+          "preview": "seed-media/8OLAi6Eba98/shot-0.mp4"
+        }
+      ]
+    }
   },
   {
     "videoId": "vUZWe5kAsSM",
@@ -2256,6 +2417,15 @@
       ]
     },
     "model": "gemini-4-argon",
-    "audioKey": "seed-audio/vUZWe5kAsSM.m4a"
+    "audioKey": "seed-audio/vUZWe5kAsSM.m4a",
+    "media": {
+      "music": "seed-media/vUZWe5kAsSM/music.mp3",
+      "shots": [
+        {
+          "storyboard": "seed-media/vUZWe5kAsSM/shot-0.png",
+          "preview": "seed-media/vUZWe5kAsSM/shot-0.mp4"
+        }
+      ]
+    }
   }
 ]

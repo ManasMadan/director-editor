@@ -162,6 +162,18 @@ export const shotPlanSchema = z.object({
 });
 export type ShotPlan = z.infer<typeof shotPlanSchema>;
 
+// A plan as the API serves it. A seeded template opened on its own (`director.plan`, not
+// the library) also links its media, made once for each seed (director-seeds.ts's
+// `media`): short-lived links to a storyboard card and a preview clip per shot and a
+// music track, while uploads are on. A plan names no storage path itself.
+const mediaUrl = z.url().optional();
+const servedShotSchema = shotSchema.extend({ storyboardUrl: mediaUrl, previewUrl: mediaUrl });
+const servedShotPlanSchema = shotPlanSchema.extend({
+  shots: z.array(servedShotSchema).min(1).max(DIRECTOR_MAX_SHOTS),
+  musicUrl: mediaUrl,
+});
+export type ServedShotPlan = z.infer<typeof servedShotPlanSchema>;
+
 export const directorPlanSchema = z.object({
   id: directorPlanIdSchema,
   videoId: videoIdSchema,
@@ -172,7 +184,7 @@ export const directorPlanSchema = z.object({
   /** How far indexing got, finer than `status`, for showing its progress. */
   stage: z.enum(["queued", "watching", "writing", "ready", "failed"]),
   error: z.string().nullable(),
-  plan: shotPlanSchema.nullable(),
+  plan: servedShotPlanSchema.nullable(),
   model: z.string().nullable(),
   /**
    * The short's original audio, to film along to: `url` is a short-lived link to it,

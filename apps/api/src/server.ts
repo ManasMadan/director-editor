@@ -68,7 +68,7 @@ export function createApiServer() {
  */
 export function liveCallOptions(deps: {
   caller: ReturnType<typeof orgCallerFor>;
-  director: Pick<DirectorService, "plan">;
+  director: Pick<DirectorService, "planOf">;
   analytics: Pick<AnalyticsService, "record">;
   // Only the one method this needs, so a test gives a plain stand-in, not a real limiter.
   calls: { take(userId: string): Promise<void> };
@@ -77,7 +77,7 @@ export function liveCallOptions(deps: {
   return {
     allowedOrigins: [env.WEB_URL],
     caller: deps.caller,
-    plan: (caller, videoId) => deps.director.plan(caller.userId, caller.orgId, videoId),
+    plan: (caller, videoId) => deps.director.planOf(caller.userId, caller.orgId, videoId),
     spendCallLimit: async (userId) => {
       await deps.calls.take(userId);
     },

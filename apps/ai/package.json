@@ -15,6 +15,7 @@
     "worker": "bun --env-file=../../.env run uv run python -m app.worker",
     "seeds:build": "bun --env-file=../../.env run uv run python -m scripts.build_seeds",
     "evals:index": "bun --env-file=../../.env run uv run python -m evals.index_shorts --live",
+    "seeds:media": "bun --env-file=../../.env run uv run python -m scripts.seed_media",
     "coverage": "uv run pytest -m 'integration or not integration' --cov --cov-report=term --cov-report=lcov:coverage/lcov.info"
   },
   "devDependencies": {

@@ -1,11 +1,14 @@
 /**
  * Director with uploads off (no S3_BUCKET), against a stand-in for the AI service: a
- * plan's captured audio is still listed as captured, with no link to it, rather than the
- * library failing. (A separate file: it needs a server started with storage unconfigured.)
+ * plan's captured audio is still listed as captured, with no link to it, and a seed's
+ * media goes unlinked, rather than the library or the plan failing. (A separate file: it
+ * needs a server started with storage unconfigured.)
  */
 import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { directorSeeds } from "@repo/contracts/director-seeds";
+import { required } from "@repo/contracts/objects";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createSession, type Harness, newEmail, newPassword, startApi, takeOtp } from "./harness";
 
@@ -13,27 +16,35 @@ let harness: Harness;
 let ai: Server;
 let aiRequests = 0;
 
+// A committed seed, whose media would be linked if uploads were on.
+const seed = required(directorSeeds[0], "a committed seed");
 const plan = {
   id: randomUUID(),
-  videoId: "SeedSinger1",
+  videoId: seed.videoId,
   source: "seed",
-  status: "pending",
-  stage: "queued",
+  status: "ready",
+  stage: "ready",
   error: null,
-  plan: null,
-  model: null,
+  plan: seed.plan,
+  model: "gemini-test",
   audioStatus: "ready",
-  audioKey: "seed-audio/SeedSinger1.m4a",
+  audioKey: `seed-audio/${seed.videoId}.m4a`,
   createdAt: "2026-10-18T10:00:00Z",
   updatedAt: "2026-10-18T10:00:00Z",
 };
 
 beforeAll(async () => {
-  // The library is all this file asks the AI service for.
-  ai = createServer((_request, response) => {
+  // The library and the one plan are all this file asks the AI service for.
+  ai = createServer((request, response) => {
     aiRequests += 1;
     response.writeHead(200, { "content-type": "application/json" });
-    response.end(JSON.stringify({ templates: [plan], indexUsed: false }));
+    response.end(
+      JSON.stringify(
+        request.url?.startsWith("/v1/director/plans/")
+          ? plan
+          : { templates: [plan], indexUsed: false },
+      ),
+    );
   });
   await new Promise<void>((resolve) => ai.listen(0, "127.0.0.1", resolve));
   delete process.env.S3_BUCKET;
@@ -50,7 +61,7 @@ afterAll(async () => {
 });
 
 describe("Director without uploads", () => {
-  it("lists a template's captured audio with no link to it", async () => {
+  it("lists a template's captured audio and its media with no link to either", async () => {
     const session = createSession(harness);
     const email = newEmail();
     await session.auth("/sign-up/email", { email, password: newPassword(), name: "No files" });
@@ -58,6 +69,11 @@ describe("Director without uploads", () => {
     await session.auth("/email-otp/verify-email", { email, otp });
     const { templates } = await session.rpc.director.library();
     expect(templates.map((template) => template.audio)).toEqual([{ status: "ready", url: null }]);
+    const one = await session.rpc.director.plan({ videoId: seed.videoId });
+    expect(one.audio).toEqual({ status: "ready", url: null });
+    expect(one.plan).not.toHaveProperty("musicUrl");
+    expect(one.plan?.shots[0]).not.toHaveProperty("storyboardUrl");
+    expect(one.plan?.shots[0]).not.toHaveProperty("previewUrl");
   });
 
   it("has no voice of its own: there's nowhere to keep a spoken line", async () => {

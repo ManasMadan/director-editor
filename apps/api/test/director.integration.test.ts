@@ -7,6 +7,8 @@ import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { ORPCError } from "@orpc/client";
+import { directorSeeds } from "@repo/contracts/director-seeds";
+import { required } from "@repo/contracts/objects";
 import { jwtVerify } from "jose";
 import pg from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -26,6 +28,8 @@ const KEY = "test-youtube-key";
 const VIDEO = "dQw4w9WgXcQ";
 const LONG = "LongVideo01";
 const GONE = "GoneVideo01";
+/** A committed seed, with its plan and media. */
+const SEED = required(directorSeeds[0], "a committed seed");
 /** A take the AI service says isn't the member's take of the shot. */
 const SOMEONE_ELSES_TAKE = randomUUID();
 /** A plan the AI service fails to read. */
@@ -117,6 +121,22 @@ const PLAN = {
   ],
 };
 
+/** Another workspace's object: what a stored plan must never get anyone a link to. */
+const FOREIGN_KEY = `files/${randomUUID()}/take.webm`;
+
+/** `plan` with storage keys planted in it, as a tampered or stale row might hold. */
+function withForeignKeys(plan: { shots: object[] }) {
+  return {
+    ...plan,
+    musicKey: FOREIGN_KEY,
+    shots: plan.shots.map((shot) => ({
+      ...shot,
+      storyboardKey: FOREIGN_KEY,
+      previewKey: FOREIGN_KEY,
+    })),
+  };
+}
+
 interface StandInPlan {
   id: string;
   org: string;
@@ -125,6 +145,8 @@ interface StandInPlan {
   videoId: string;
   status: string;
   audioKey: string | null;
+  /** The plan the AI service answers with, once ready (PLAN unless a test says). */
+  plan?: unknown;
 }
 const plans: StandInPlan[] = [];
 const takes: {
@@ -149,6 +171,7 @@ const cuts: {
 
 function planOut(plan: StandInPlan) {
   const now = new Date().toISOString();
+  const written = plan.plan ?? PLAN;
   return {
     id: plan.id,
     videoId: plan.videoId,
@@ -156,7 +179,7 @@ function planOut(plan: StandInPlan) {
     status: plan.status,
     stage: plan.status === "ready" ? "ready" : "queued",
     error: null,
-    plan: plan.status === "ready" ? PLAN : null,
+    plan: plan.status === "ready" ? written : null,
     model: plan.status === "ready" ? "gemini-test" : null,
     audioStatus: plan.audioKey ? "ready" : "none",
     audioKey: plan.audioKey,
@@ -166,8 +189,13 @@ function planOut(plan: StandInPlan) {
 }
 
 /** A plan of the workspace's, ready to film, as a seeded template is. */
-function readyTemplate(org: string, videoId: string, audioKey: string | null = null) {
-  const plan = { id: randomUUID(), org, user: null, videoId, status: "ready", audioKey };
+function readyTemplate(
+  org: string,
+  videoId: string,
+  audioKey: string | null = null,
+  extra: Partial<StandInPlan> = {},
+) {
+  const plan = { id: randomUUID(), org, user: null, videoId, status: "ready", audioKey, ...extra };
   plans.unshift(plan);
   return plan;
 }
@@ -531,6 +559,58 @@ describe("Director's library", () => {
       templates: [],
       indexUsed: false,
     });
+  });
+
+  it("links a seeded template's media on its own page, from the committed seed only", async () => {
+    const { session, me } = await signedIn();
+    const org = String(me.activeOrganizationId);
+    // A seed's copy, made before the seeds had media (or tampered with): the keys planted
+    // in its stored plan are never signed; the committed seed's are.
+    readyTemplate(org, SEED.videoId, null, { plan: withForeignKeys(SEED.plan) });
+    const one = await session.rpc.director.plan({ videoId: SEED.videoId });
+    const media = required(SEED.media, "the committed seed's media");
+    const signed = (url: string | undefined, key: string | undefined) => {
+      const link = new URL(String(url));
+      expect(link.pathname).toContain(required(key, "a key"));
+      expect(link.searchParams.get("X-Amz-Expires")).toBe("3600");
+    };
+    signed(one.plan?.musicUrl, media.music);
+    for (const [index, shot] of media.shots.entries()) {
+      signed(one.plan?.shots[index]?.storyboardUrl, shot.storyboard);
+      signed(one.plan?.shots[index]?.previewUrl, shot.preview);
+    }
+    expect(JSON.stringify(one)).not.toContain("files/");
+    expect(JSON.stringify(one)).not.toMatch(/"(music|storyboard|preview)Key"/);
+
+    // The library lists it without its media: that's dozens of signatures per read, for
+    // cards no list shows.
+    const { templates } = await session.rpc.director.library();
+    expect(JSON.stringify(templates)).not.toMatch(/Url"|files\//);
+  });
+
+  it("links no media for any other plan, whatever its stored plan names", async () => {
+    const { session, me } = await signedIn();
+    const org = String(me.activeOrganizationId);
+    // Not a committed seed: nothing to link, and the planted keys aren't signed.
+    readyTemplate(org, "NotASeed001", null, { plan: withForeignKeys(PLAN) });
+    // A committed seed's Short with another number of shots than the seed has (an old
+    // copy): its media would show the wrong scenes.
+    readyTemplate(org, SEED.videoId, null, { plan: PLAN });
+    // A member's own index of a seeded Short.
+    const other = await signedIn();
+    readyTemplate(String(other.me.activeOrganizationId), SEED.videoId, null, {
+      user: other.me.id,
+      plan: SEED.plan,
+    });
+    const plans = [
+      await session.rpc.director.plan({ videoId: "NotASeed001" }),
+      await session.rpc.director.plan({ videoId: SEED.videoId }),
+      await other.session.rpc.director.plan({ videoId: SEED.videoId }),
+    ];
+    expect(plans.map((plan) => plan.source)).toEqual(["seed", "seed", "user"]);
+    for (const plan of plans) {
+      expect(JSON.stringify(plan)).not.toMatch(/Url"|Key"|files\//);
+    }
   });
 });
 
