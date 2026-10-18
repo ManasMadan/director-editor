@@ -17,6 +17,7 @@ import { requestNotification } from "../notifications";
 import { emitAnyEvent, emitEvent } from "../outbox";
 import type { AuthContext } from "./auth-context";
 import { auditEventForAlert, sessionEndReason, sessionMethod } from "./auth-events";
+import { DEMO_LOCKED_PATHS, refuseForDemo } from "./demo";
 import { orgIdOf, removedMemberSchema, userIdOf } from "./ids";
 import { type SecurityAlert, securityAlertFor } from "./security-alerts";
 
@@ -105,6 +106,10 @@ export function requestHooks(context: AuthContext) {
         if (session && typeof email === "string") {
           await emailLimits.invitation(session.user.id, email);
         }
+      }
+      // Everyone trying Director shares the demo account: nobody may change or lock it.
+      if (DEMO_LOCKED_PATHS.has(ctx.path)) {
+        refuseForDemo((await getSessionFromCtx(ctx))?.user);
       }
       // Per account, on top of the per-address limits above (account-limits.ts).
       await accountLimits({

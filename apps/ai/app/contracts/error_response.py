@@ -29,6 +29,7 @@ type ErrorCode = Annotated[
         "TOO_MANY_REDIRECTS",
         "UPSTREAM_UNAVAILABLE",
         "NO_ACTIVE_ORGANIZATION",
+        "DEMO_ACCOUNT_LOCKED",
         "FILE_NOT_FOUND",
         "FILE_TYPE_NOT_ALLOWED",
         "FILE_TOO_LARGE",

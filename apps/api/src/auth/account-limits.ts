@@ -14,6 +14,7 @@ import { fieldOf } from "@repo/contracts/objects";
 import { HOUR_S } from "@repo/contracts/time";
 import { createRateLimiter, type Redis } from "@repo/nest-common";
 import { APIError } from "better-auth/api";
+import { DEMO_EMAIL } from "./demo";
 
 const QUARTER_HOUR = 15 * 60;
 
@@ -23,11 +24,21 @@ interface Limit {
   windowSeconds: number;
   /** What identifies the account in the request. */
   by: "email" | "second factor";
+  /** Accounts left out: the demo account's sign-in (see ACCOUNT_LIMITS). */
+  exempt?: readonly string[];
 }
 
 /** better-auth paths and their limits. */
 export const ACCOUNT_LIMITS: Record<string, Limit> = {
-  "/sign-in/email": { points: 10, windowSeconds: QUARTER_HOUR, by: "email" },
+  // Not Director's shared demo account: its password is public (the sign-in page shows
+  // it), so there's nothing to guess, and everyone trying Director signs in to it, so a
+  // per-account limit would let anyone lock them all out. The per-address limit stays.
+  "/sign-in/email": {
+    points: 10,
+    windowSeconds: QUARTER_HOUR,
+    by: "email",
+    exempt: [DEMO_EMAIL],
+  },
   "/email-otp/send-verification-otp": { points: 5, windowSeconds: QUARTER_HOUR, by: "email" },
   "/forget-password/email-otp": { points: 5, windowSeconds: QUARTER_HOUR, by: "email" },
   "/email-otp/reset-password": { points: 10, windowSeconds: QUARTER_HOUR, by: "email" },
@@ -50,7 +61,10 @@ export interface LimitedRequest {
   secondFactor?: string;
 }
 
-/** The account a request is about, or undefined when it names none (it then fails validation). */
+/**
+ * The account a request is about, or undefined when there's none to limit: it names none
+ * (it then fails validation), or the limit leaves it out.
+ */
 export function accountKey(limit: Limit, request: LimitedRequest): string | undefined {
   if (limit.by === "second factor") {
     return request.secondFactor
@@ -58,7 +72,8 @@ export function accountKey(limit: Limit, request: LimitedRequest): string | unde
       : undefined;
   }
   const email = fieldOf(request.body, "email");
-  return typeof email === "string" && email.trim() ? email.trim().toLowerCase() : undefined;
+  const key = typeof email === "string" ? email.trim().toLowerCase() : "";
+  return key && !limit.exempt?.includes(key) ? key : undefined;
 }
 
 /** Consumes the request's account limit; throws 429 (RATE_LIMITED to clients) past it. */

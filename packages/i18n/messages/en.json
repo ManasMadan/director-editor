@@ -138,7 +138,13 @@
     "useBackupCode": "Use a backup code instead",
     "backupCode": "Backup code",
     "useAuthenticator": "Use your authenticator app",
-    "trustDevice": "Trust this device for 30 days"
+    "trustDevice": "Trust this device for 30 days",
+    "demo": {
+      "title": "Try Director with the demo account",
+      "description": "Everyone trying Director shares it, so publishing and account changes are off.",
+      "use": "Use demo account",
+      "loading": "Getting the demo account…"
+    }
   },
   "validation": {
     "email": "Enter a valid email address",
@@ -170,7 +176,8 @@
     "PASSKEY_CANCELLED": "The passkey prompt was closed before finishing. Try again, or use your password.",
     "ORGANIZATION_NEEDS_OWNER": "You own a shared workspace. Make someone else its owner before deleting your account.",
     "generic": "Something went wrong. Please try again.",
-    "SIGN_IN_INCOMPLETE": "The sign-in didn't finish. Please try again."
+    "SIGN_IN_INCOMPLETE": "The sign-in didn't finish. Please try again.",
+    "DEMO_ACCOUNT_LOCKED": "Everyone shares the demo account, so its settings can't be changed. Create your own account for that."
   },
   "settings": {
     "title": "Settings",
@@ -352,6 +359,7 @@
     "TOO_MANY_REDIRECTS": "The address redirected too many times.",
     "UPSTREAM_UNAVAILABLE": "A service we depend on is unavailable. Please try again.",
     "NO_ACTIVE_ORGANIZATION": "Choose a workspace first.",
+    "DEMO_ACCOUNT_LOCKED": "The demo account can't do that. Create your own account to publish and change settings.",
     "FILE_NOT_FOUND": "That file doesn't exist, or it isn't yours.",
     "FILE_TYPE_NOT_ALLOWED": "That kind of file isn't allowed here. Use one of: {types}.",
     "FILE_TOO_LARGE": "That file is too big. The limit is {maxBytes, number, ::unit/byte unit-width-narrow compact-short}.",

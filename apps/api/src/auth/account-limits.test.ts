@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ACCOUNT_LIMITS, accountKey } from "./account-limits";
+import { DEMO_EMAIL } from "./demo";
 
 const signIn = ACCOUNT_LIMITS["/sign-in/email"];
 const totp = ACCOUNT_LIMITS["/two-factor/verify-totp"];
@@ -24,6 +25,18 @@ describe("the account a limited request is about", () => {
     });
     expect(key).toMatch(/^[0-9a-f]{64}$/);
     expect(key).not.toContain("signed");
+  });
+
+  it("is missing for the demo account's sign-in, whose password is public", () => {
+    if (!signIn) {
+      throw new Error("sign-in is limited");
+    }
+    expect(
+      accountKey(signIn, {
+        path: "/sign-in/email",
+        body: { email: ` ${DEMO_EMAIL.toUpperCase()}` },
+      }),
+    ).toBeUndefined();
   });
 
   it("is missing when the request names no account (it then fails validation)", () => {

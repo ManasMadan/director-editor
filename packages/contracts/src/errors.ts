@@ -45,6 +45,12 @@ export const ERROR_CODES = {
   UPSTREAM_UNAVAILABLE: 502,
   // Tenancy
   NO_ACTIVE_ORGANIZATION: 403,
+  /**
+   * The shared demo account can't do this: publish, or change the account itself (its
+   * password, two-step verification, sessions, deletion). Everyone trying Director signs
+   * in to the same one.
+   */
+  DEMO_ACCOUNT_LOCKED: 403,
   // Files
   FILE_NOT_FOUND: 404,
   FILE_TYPE_NOT_ALLOWED: 422,
@@ -142,6 +148,7 @@ export const AUTH_ERROR_CODES = [
   // From ERROR_CODES.
   "VALIDATION_FAILED",
   "RATE_LIMITED",
+  "DEMO_ACCOUNT_LOCKED",
 ] as const satisfies readonly string[];
 export type AuthErrorCode = (typeof AUTH_ERROR_CODES)[number];
 

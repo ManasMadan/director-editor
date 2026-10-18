@@ -17,6 +17,7 @@ import { eventually } from "@repo/testing/eventually";
 import { Queue } from "bullmq";
 import { Redis } from "ioredis";
 import pg from "pg";
+import { vi } from "vitest";
 
 export interface Harness {
   baseUrl: string;
@@ -36,6 +37,7 @@ const OPTIONAL_FEATURES_OFF = {
   AI_URL: "",
   AI_SERVICE_SECRET: "",
   YOUTUBE_API_KEY: "",
+  DEMO_PASSWORD: "",
 };
 
 /** Local object storage (docker compose --profile files); CI runs the same. */
@@ -306,3 +308,49 @@ export async function expireOtps(harness: Harness, email: string) {
 
 export const newEmail = () => `user-${randomUUID()}@test.dev`;
 export const newPassword = () => `Pw-${randomUUID()}`;
+
+/**
+ * Runs one of the API's commands (its entry point, relative to this directory) in this
+ * process, with `argv` after its name and `env` laid over the environment, and returns
+ * what it logged, or what it threw and logged as errors. Each run reloads the API's
+ * modules, so the command reads `env` afresh.
+ */
+export async function command(
+  entry: string,
+  env: Record<string, string | undefined> = {},
+  argv: string[] = [],
+) {
+  vi.resetModules();
+  for (const [name, value] of Object.entries(env)) {
+    vi.stubEnv(name, value);
+  }
+  const savedArgv = process.argv;
+  process.argv = [process.argv[0] ?? "node", entry, ...argv];
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+  const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  try {
+    const module = await import(entry);
+    return { module, lines: log.mock.calls.map((call) => String(call[0])) };
+  } catch (thrown) {
+    return { thrown, errors: error.mock.calls.map((call) => String(call[0])) };
+  } finally {
+    process.argv = savedArgv;
+    log.mockRestore();
+    error.mockRestore();
+    vi.unstubAllEnvs();
+  }
+}
+
+/** Production, as far as the configuration's own checks let a test go. */
+export const PRODUCTION = {
+  NODE_ENV: "production",
+  // .env.example points at the local mock Google, which production refuses.
+  YOUTUBE_API_URL: "https://www.googleapis.com/youtube/v3",
+};
+
+/** process.exit, stopped short so a command's refusal can be seen. */
+export function refusingExit() {
+  return vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+    throw new Error(`exit ${code}`);
+  }) as never);
+}

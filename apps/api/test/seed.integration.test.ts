@@ -15,7 +15,14 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import type { Auth } from "../src/auth/auth.module";
 import { DEMO_PASSWORD, DEMO_PEOPLE, seedDemo } from "../src/seed/demo";
 import { loadEmail, signInLoadUsers } from "../src/seed/load-users";
-import { createSession, type Harness, startApi } from "./harness";
+import {
+  command,
+  createSession,
+  type Harness,
+  PRODUCTION,
+  refusingExit,
+  startApi,
+} from "./harness";
 
 let harness: Harness;
 let seed: () => ReturnType<typeof seedDemo>;
@@ -33,40 +40,6 @@ beforeAll(async () => {
     });
 });
 afterAll(() => harness?.close());
-
-/** Runs a command's entry point in this process, with what it logs. */
-async function command(entry: string, env: Record<string, string | undefined> = {}) {
-  vi.resetModules();
-  for (const [name, value] of Object.entries(env)) {
-    vi.stubEnv(name, value);
-  }
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
-  try {
-    const module = await import(entry);
-    return { module, lines: log.mock.calls.map((call) => String(call[0])) };
-  } catch (thrown) {
-    return { thrown, errors: error.mock.calls.map((call) => String(call[0])) };
-  } finally {
-    log.mockRestore();
-    error.mockRestore();
-    vi.unstubAllEnvs();
-  }
-}
-
-/** Production, as far as the configuration's own checks let a test go. */
-const PRODUCTION = {
-  NODE_ENV: "production",
-  // .env.example points at the local mock Google, which production refuses.
-  YOUTUBE_API_URL: "https://www.googleapis.com/youtube/v3",
-};
-
-/** process.exit, stopped short so the refusal can be seen. */
-function refusingExit() {
-  return vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
-    throw new Error(`exit ${code}`);
-  }) as never);
-}
 
 afterEach(() => {
   vi.restoreAllMocks();

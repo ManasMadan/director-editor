@@ -31,7 +31,7 @@ async function expectError(promise: Promise<unknown>, code: string) {
 }
 
 describe("features off", () => {
-  it("reports every optional feature off, with no keys for the browser", async () => {
+  it("reports every optional feature off, with no keys or demo account for the browser", async () => {
     const info = await createSession(harness).rpc.system.info();
     expect(info).toMatchObject({
       features: {
@@ -42,6 +42,7 @@ describe("features off", () => {
         files: false,
       },
       captchaSiteKey: null,
+      demo: null,
     });
   });
 
