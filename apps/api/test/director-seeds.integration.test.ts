@@ -11,6 +11,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from "node:net";
 import { directorSeeds } from "@repo/contracts/director-seeds";
 import { type OrgId, orgIdSchema } from "@repo/contracts/ids";
+import { required } from "@repo/contracts/objects";
 import { type Database, transaction } from "@repo/db";
 import { factories } from "@repo/db/testing";
 import { DATABASE } from "@repo/nest-common";
@@ -146,18 +147,30 @@ describe("Director's seeded templates", () => {
     // The first seed first, as the seed list orders them.
     expect(templates.map((template) => template.videoId)).toEqual(SEED_IDS);
     for (const [index, template] of templates.entries()) {
-      const seed = directorSeeds[index];
+      const seed = required(directorSeeds[index], "a seed");
+      const { musicKey, shots, ...plan } = seed.plan;
       expect(template).toMatchObject({
         source: "seed",
         status: "ready",
         stage: "ready",
         error: null,
-        model: seed?.model,
-        plan: seed?.plan,
+        model: seed.model,
+        plan: {
+          ...plan,
+          shots: shots.map(({ storyboardKey, previewKey, ...shot }) => shot),
+        },
         audio: { status: "ready" },
       });
-      // A short-lived link to the seed's audio, through the storage seam.
+      // Short-lived links to the seed's audio and its media, through the storage seam,
+      // where the copy holds only their keys.
       expect(template.audio.url).toContain(`seed-audio/${template.videoId}.m4a`);
+      expect(template.plan?.musicUrl).toContain(required(musicKey, "a music key"));
+      for (const [shotIndex, shot] of shots.entries()) {
+        const served = template.plan?.shots[shotIndex];
+        expect(served?.storyboardUrl).toContain(required(shot.storyboardKey, "a storyboard"));
+        expect(served?.previewUrl).toContain(required(shot.previewKey, "a preview"));
+        expect(served).not.toHaveProperty("storyboardKey");
+      }
     }
     expect(used).toBe(false);
   });
