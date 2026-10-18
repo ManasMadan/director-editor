@@ -12,7 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 from psycopg.types.json import Jsonb
 
-from app.create import CREATE_PER_DAY, Creator
+from app.create import CREATE_PER_DAY, MAX_PHOTO_BYTES, CreateInterrupted, Creator
 from app.queues import JobLike
 from app.schemas import BrainstormReply, DirectorLibraryOut, DirectorPlanOut
 from app.worker import director_processor
@@ -27,7 +27,7 @@ from tests.fakes import (
     serve_files,
 )
 from tests.support import as_org, error_of, headers, new_org, on_app_loop, stored_job
-from tests.test_director import PLAN, Job, director, insert_plan
+from tests.test_director import PLAN, Job, director, insert_plan, spend_the_month
 
 pytestmark = pytest.mark.integration
 
@@ -193,6 +193,33 @@ def test_a_photo_that_cant_be_read_refuses_the_turn(client: TestClient, storage:
     assert error_of(response).code == "FILE_NOT_FOUND"
 
 
+@pytest.mark.parametrize(
+    ("path", "kind", "data"),
+    [
+        # Every brief photo is stored as a JPEG: anything else isn't one.
+        ("/kitchen.png", "image/png", KITCHEN),
+        # Bigger than an upload may be.
+        ("/huge.jpg", "image/jpeg", b"\xff\xd8\xff" + b"\x00" * MAX_PHOTO_BYTES),
+    ],
+)
+def test_a_photo_that_isn_t_a_brief_photo_refuses_the_turn(
+    client: TestClient, path: str, kind: str, data: bytes
+) -> None:
+    org, user = new_org()
+    with serve_files({path: (kind, data)}) as photos:
+        response = brainstorm(client, org, user, brief(photos, photo=path))
+    assert (response.status_code, error_of(response).code) == (404, "FILE_NOT_FOUND")
+
+
+def test_a_brainstorm_turn_without_budget_left_is_refused(
+    client: TestClient, storage: Fake
+) -> None:
+    org, user = new_org()
+    spend_the_month(org)
+    response = brainstorm(client, org, user, brief(storage))
+    assert (response.status_code, error_of(response).code) == (429, "AI_BUDGET_EXCEEDED")
+
+
 def test_a_failed_brainstorm_turn_is_upstream_unavailable(
     client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]], storage: Fake
 ) -> None:
@@ -308,6 +335,34 @@ def test_a_plan_gemini_cant_write_fails_with_its_own_code(
     gemini[1][GEMINI_PATH] = gemini_error(400, "INVALID_ARGUMENT")
     # A photo gone since it was checked is left out, never the reason it fails.
     on_app_loop(client, lambda: creator().write(org, plan.id, [storage.url + "/gone.jpg"], user))
+    failed = plan_of(client, org, user, plan.videoId)
+    assert (failed.status, failed.error) == ("failed", "DIRECTOR_CREATE_FAILED")
+
+
+def test_a_plan_without_budget_left_fails_without_asking_gemini(
+    client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]], storage: Fake
+) -> None:
+    org, user = new_org()
+    plan = created_plan(client, org, user, storage)
+    spend_the_month(org)
+    asked = len(gemini[0].received)
+    on_app_loop(client, lambda: creator().write(org, plan.id, [], user))
+    failed = plan_of(client, org, user, plan.videoId)
+    assert (failed.status, failed.error) == ("failed", "AI_BUDGET_EXCEEDED")
+    assert len(gemini[0].received) == asked
+
+
+def test_gemini_down_while_writing_is_tried_again_until_the_last_attempt(
+    client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]], storage: Fake
+) -> None:
+    org, user = new_org()
+    plan = created_plan(client, org, user, storage)
+    gemini[1][GEMINI_PATH] = gemini_error(503, "UNAVAILABLE")
+    with pytest.raises(CreateInterrupted, match=str(plan.id)):
+        on_app_loop(client, lambda: creator().write(org, plan.id, [], user, final=False))
+    # Left being written, for the retry.
+    assert plan_of(client, org, user, plan.videoId).status == "analyzing"
+    on_app_loop(client, lambda: creator().write(org, plan.id, [], user, final=True))
     failed = plan_of(client, org, user, plan.videoId)
     assert (failed.status, failed.error) == ("failed", "DIRECTOR_CREATE_FAILED")
 
