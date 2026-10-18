@@ -913,7 +913,7 @@ class Director:
             raise AppError("UPSTREAM_UNAVAILABLE", {"service": "gemini"}) from None
         finally:
             await settle(reservation, usage.input_tokens, usage.output_tokens)
-        return tidy(result.output, cut.title)
+        return tidy(result.output, cut.title, shots.title)
 
     async def _download(self, url: str) -> tuple[bytes, TakeContentType]:
         """The take's bytes and type, read from its presigned URL up to MAX_TAKE_BYTES."""

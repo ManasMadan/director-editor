@@ -4,7 +4,10 @@ apps/api's contract accept (app/publish_copy.py)."""
 import re
 from pathlib import Path
 
+import pytest
+
 from app.director import COPY_TIMEOUT_SECONDS
+from app.errors import AppError
 from app.publish_copy import tidy
 from app.schemas import (
     MAX_PUBLISH_HASHTAGS,
@@ -110,3 +113,17 @@ def test_gemini_answers_before_the_api_stops_waiting_for_the_post() -> None:
     assert found is not None
     client_seconds = int(found.group(1).replace("_", "")) / 1000
     assert client_seconds - 5 >= COPY_TIMEOUT_SECONDS
+
+
+def test_with_no_title_left_of_the_cut_s_either_it_takes_the_original_s() -> None:
+    copy = tidy(draft(title="#Shorts"), "<>", "Get <ready> with me")
+    assert copy.title == "Get ready with me"
+
+
+def test_with_no_title_left_at_all_gemini_s_post_is_unusable() -> None:
+    with pytest.raises(AppError) as raised:
+        _ = tidy(draft(title="<>"), "#Shorts", " ")
+    assert (raised.value.code, raised.value.params) == (
+        "UPSTREAM_UNAVAILABLE",
+        {"service": "gemini"},
+    )

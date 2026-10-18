@@ -9,6 +9,7 @@ credits and the original Short's link itself, so the draft carries none of those
 import re
 import unicodedata
 
+from app.errors import AppError
 from app.schemas import (
     MAX_PUBLISH_CREDITS,
     MAX_PUBLISH_DESCRIPTION,
@@ -101,14 +102,24 @@ def _hashtags(raw: list[str]) -> list[str]:
     return tags[:MAX_PUBLISH_HASHTAGS]
 
 
-def tidy(draft: PublishCopyDraft, fallback_title: str) -> PublishCopy:
+def _first_title(*titles: str) -> str:
+    """The first of `titles` with something left once cleaned. UPSTREAM_UNAVAILABLE when
+    none has: Gemini's post can't be used (the sheet then has the member write one)."""
+    for title in titles:
+        if cleaned := _title(title):
+            return cleaned
+    raise AppError("UPSTREAM_UNAVAILABLE", {"service": "gemini"})
+
+
+def tidy(draft: PublishCopyDraft, *fallback_titles: str) -> PublishCopy:
     """The draft within PublishCopy's limits, and the description within YouTube's in
-    bytes; `fallback_title` (the cut's own, cleaned the same way) when nothing of the
-    draft's title is left."""
+    bytes. When nothing of the draft's title is left, the first of `fallback_titles`
+    (the cut's own, then the original's) that has something left, cleaned the same way;
+    a member can save a cut titled only `<>` or `#Shorts`."""
     hashtags = _hashtags(draft.hashtags)
     credits = _shorten(_without_brackets(draft.credits).strip(), MAX_PUBLISH_CREDITS)
     return PublishCopy(
-        title=_shorten(_title(draft.title) or _title(fallback_title), MAX_PUBLISH_TITLE),
+        title=_shorten(_first_title(draft.title, *fallback_titles), MAX_PUBLISH_TITLE),
         description=_description(draft.description, hashtags, credits),
         hashtags=hashtags,
         credits=credits,
