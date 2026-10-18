@@ -15,6 +15,7 @@ import { useCheckSceneMutation } from "./check-scene";
 import { useIndexShortMutation } from "./index-short";
 import { latestTakes, takeInProgress } from "./latest";
 import { useDirectorPlanQuery } from "./plan";
+import { useSpeakMutation } from "./speak";
 import { useSubmitTakeMutation } from "./submit-take";
 import { useDirectorTakesQuery } from "./takes";
 
@@ -211,6 +212,26 @@ describe("checking the scene", () => {
       .mutateAsync({ videoId, shotIndex: 0, image })
       .catch((e: unknown) => e);
     expect(errorCode(error)).toBe("AI_BUDGET_EXCEEDED");
+  });
+});
+
+describe("hearing a line in Director's voice", () => {
+  it("asks for the line in the voice and answers with the link to play it from", async () => {
+    const sent: unknown[] = [];
+    const speech = { url: "https://files.example.com/speech.wav", expiresAt: new Date() };
+    const api = standIn((os) => ({
+      director: {
+        speak: os.director.speak.handler(({ input }) => {
+          sent.push(input);
+          return speech;
+        }),
+      },
+    }));
+    const { result } = renderHook(() => useSpeakMutation(), api);
+    await expect(
+      result.current.mutateAsync({ text: "Step back.", voice: "Puck" }),
+    ).resolves.toEqual(speech);
+    expect(sent).toEqual([{ text: "Step back.", voice: "Puck" }]);
   });
 });
 

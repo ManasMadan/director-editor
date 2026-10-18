@@ -78,7 +78,12 @@ Controls fade after a few seconds untouched; any touch brings them back.
   the steps) offers a cue to `lib/cues.ts`, which picks the one that matters most, waits
   a breath between lines, never repeats a line inside its cooldown, and gives the member
   the floor when they talk. The line is shown as a caption and, with the voice on, said
-  aloud. It talks to someone filming for the first time, a grandparent or a child: warm,
+  aloud in Director's own voice: Gemini's text-to-speech (`TTS_MODEL`, through
+  `director.speak`), which the API keeps in storage per line and voice, so each line is
+  spoken once for everyone. When that voice is off (no uploads), fails or takes more than
+  two seconds, the browser's speech synthesis says the line instead (for a minute after a
+  failure, and for good once it's off); on a live call,
+  Gemini Live does all the talking. It talks to someone filming for the first time, a grandparent or a child: warm,
   short, one thing at a time, and patient (a breath of 4.5 seconds between lines, 25
   before a nudge comes back). A few calls punctuate it: "Get ready! Here we go in 3",
   "Action!", "Cut!", "Let's try that one more time", "That's a wrap".

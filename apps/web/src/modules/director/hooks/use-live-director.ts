@@ -25,6 +25,7 @@ import {
 } from "../lib/cues";
 import { favouriteThing, type Memory, usualLight } from "../lib/memory";
 import { hush, onSaying, say, saying } from "../lib/speech";
+import { useDirectorVoice } from "./use-director-voice";
 
 /** How often Director reconsiders when nothing on screen changes (cooldowns run out). */
 const TICK_MS = 400;
@@ -101,6 +102,16 @@ function useWords(greeting: string): Words {
   );
 }
 
+/**
+ * Says a line aloud, in the member's language: in Director's own voice (Gemini's), or the
+ * browser's when that can't be had in time.
+ */
+function useSayAloud() {
+  const locale = useLocale();
+  const voice = useDirectorVoice();
+  return useCallback((text: string) => say(text, locale, voice), [locale, voice]);
+}
+
 /** Whether Director is speaking right now (for the glow and the Live pill). */
 export function useSpeaking() {
   // On a server nothing is being said, which `saying` already answers.
@@ -126,7 +137,7 @@ export function useLiveDirector({
   shot: Shot;
   index: number;
 }) {
-  const locale = useLocale();
+  const sayAloud = useSayAloud();
   const words = useWords(useGreeting(memory, shot, index));
   const log = useRef<Log>(QUIET_LOG);
   const counter = useRef(0);
@@ -144,10 +155,10 @@ export function useLiveDirector({
       counter.current += 1;
       setLine({ text, mood, key: counter.current });
       if (voiced.current) {
-        say(text, locale);
+        sayAloud(text);
       }
     },
-    [locale],
+    [sayAloud],
   );
 
   const tick = useCallback(() => {
