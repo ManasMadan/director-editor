@@ -204,4 +204,12 @@ describe("a credential's name", () => {
       "/cb?code=[redacted]&state=s1&key=[redacted]&token=[redacted]&sig=[redacted]&X-Amz-Expires=60&access_token=[redacted]",
     );
   });
+
+  it("finds a parameter after a stray separator, and gets through a long run of them at once", () => {
+    expect(scrub("/cb?x?code=abc&&state=s1")).toBe("/cb?x?code=[redacted]&&state=s1");
+    const separators = "?a".repeat(50_000);
+    const started = performance.now();
+    expect(scrub(separators)).toBe(separators);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
 });

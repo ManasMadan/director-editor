@@ -58,8 +58,12 @@ const SECRET_FIELD_PARTS = [
 const SECRET_PARAM_PARTS = ["signature", "credential", "token", "secret", "password", "apikey"];
 /** A presigned URL's signature and key, an API key, an OAuth code. */
 const SECRET_PARAMS = new Set(["sig", "key", "code", "otp"]);
-/** A query parameter anywhere in a string: a URL, an error's message, a stack trace. */
-const QUERY_PARAM = /([?&])([^=&#\s"'<>]+)=([^&#\s"'<>]*)/g;
+/**
+ * A query parameter anywhere in a string: a URL, an error's message, a stack trace. A
+ * name never holds `?` or `&`, so each attempt stops at the next separator and a long
+ * run of them can't make the match quadratic.
+ */
+const QUERY_PARAM = /([?&])([^=?&#\s"'<>]+)=([^&#\s"'<>]*)/g;
 
 const normalized = (name: string) => name.toLowerCase().replaceAll(/[-_]/g, "");
 
