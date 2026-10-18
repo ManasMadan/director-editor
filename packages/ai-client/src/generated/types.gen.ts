@@ -33,6 +33,82 @@ export type Box = {
 export type CameraMove = 'static' | 'up' | 'down' | 'left' | 'right' | 'forward' | 'back' | 'orbit' | 'tilt-up' | 'tilt-down';
 
 /**
+ * ClipPause
+ *
+ * A stretch nothing was recorded: no take is ever cut across one.
+ */
+export type ClipPause = {
+    /**
+     * Endms
+     *
+     * None: to the part's end.
+     */
+    endMs: number | null;
+    /**
+     * Startms
+     */
+    startMs: number;
+};
+
+/**
+ * ClipRequest
+ */
+export type ClipRequest = {
+    /**
+     * Attemptid
+     *
+     * For the logs.
+     */
+    attemptId: string;
+    /**
+     * Contenttype
+     */
+    contentType: 'video/webm' | 'video/mp4';
+    /**
+     * Endms
+     *
+     * Director's end mark; None: to the footage's end.
+     */
+    endMs: number | null;
+    /**
+     * Pauses
+     */
+    pauses: Array<ClipPause>;
+    /**
+     * Slices
+     *
+     * The part's, from its first.
+     */
+    slices: Array<ClipSlice>;
+    /**
+     * Startms
+     *
+     * Director's start mark.
+     */
+    startMs: number;
+};
+
+/**
+ * ClipSlice
+ */
+export type ClipSlice = {
+    /**
+     * Durationms
+     */
+    durationMs: number;
+    /**
+     * Startms
+     */
+    startMs: number;
+    /**
+     * Url
+     *
+     * A presigned read of the slice.
+     */
+    url: string;
+};
+
+/**
  * CutPick
  *
  * The take picked for one shot of a cut.
@@ -294,7 +370,7 @@ export type DirectorTakeOut = {
 /**
  * ErrorCode
  */
-export type ErrorCode = 'BAD_REQUEST' | 'VALIDATION_FAILED' | 'UNAUTHENTICATED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT' | 'RATE_LIMITED' | 'INTERNAL' | 'SERVICE_UNAVAILABLE' | 'METHOD_NOT_SUPPORTED' | 'TIMEOUT' | 'PAYLOAD_TOO_LARGE' | 'UNSUPPORTED_MEDIA_TYPE' | 'IDEMPOTENCY_IN_PROGRESS' | 'FEATURE_DISABLED' | 'CLIENT_OUTDATED' | 'DESTINATION_NOT_ALLOWED' | 'RESPONSE_TOO_LARGE' | 'TOO_MANY_REDIRECTS' | 'UPSTREAM_UNAVAILABLE' | 'NO_ACTIVE_ORGANIZATION' | 'DEMO_ACCOUNT_LOCKED' | 'FILE_NOT_FOUND' | 'FILE_TYPE_NOT_ALLOWED' | 'FILE_TOO_LARGE' | 'FILE_SIZE_MISMATCH' | 'FILE_INFECTED' | 'FILE_UNREADABLE' | 'FILE_NOT_UPLOADED' | 'FILE_NOT_READY' | 'INVALID_SIGNATURE' | 'AI_BUDGET_EXCEEDED' | 'DIRECTOR_INDEX_LIMIT' | 'DIRECTOR_VIDEO_UNAVAILABLE' | 'DIRECTOR_TOO_LONG' | 'DIRECTOR_PLAN_NOT_FOUND' | 'DIRECTOR_PLAN_NOT_READY' | 'DIRECTOR_SHOT_NOT_FOUND' | 'DIRECTOR_TAKE_NOT_FOUND' | 'DIRECTOR_TAKE_KIND_MISMATCH' | 'DIRECTOR_CALL_TOO_FAST' | 'DIRECTOR_CUT_NOT_FOUND' | 'PUBLISH_DEMO_DISABLED' | 'PUBLISH_NEEDS_YOUTUBE' | 'PUBLISH_CUT_NOT_READY' | 'PUBLISH_NO_CHANNEL' | 'PUBLISH_QUOTA_EXHAUSTED' | 'DIRECTOR_VIDEO_UNREADABLE' | 'DIRECTOR_ANALYSIS_FAILED' | 'DIRECTOR_REVIEW_FAILED';
+export type ErrorCode = 'BAD_REQUEST' | 'VALIDATION_FAILED' | 'UNAUTHENTICATED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT' | 'RATE_LIMITED' | 'INTERNAL' | 'SERVICE_UNAVAILABLE' | 'METHOD_NOT_SUPPORTED' | 'TIMEOUT' | 'PAYLOAD_TOO_LARGE' | 'UNSUPPORTED_MEDIA_TYPE' | 'IDEMPOTENCY_IN_PROGRESS' | 'FEATURE_DISABLED' | 'CLIENT_OUTDATED' | 'DESTINATION_NOT_ALLOWED' | 'RESPONSE_TOO_LARGE' | 'TOO_MANY_REDIRECTS' | 'UPSTREAM_UNAVAILABLE' | 'NO_ACTIVE_ORGANIZATION' | 'DEMO_ACCOUNT_LOCKED' | 'FILE_NOT_FOUND' | 'FILE_TYPE_NOT_ALLOWED' | 'FILE_TOO_LARGE' | 'FILE_SIZE_MISMATCH' | 'FILE_INFECTED' | 'FILE_UNREADABLE' | 'FILE_NOT_UPLOADED' | 'FILE_NOT_READY' | 'INVALID_SIGNATURE' | 'AI_BUDGET_EXCEEDED' | 'DIRECTOR_INDEX_LIMIT' | 'DIRECTOR_VIDEO_UNAVAILABLE' | 'DIRECTOR_TOO_LONG' | 'DIRECTOR_PLAN_NOT_FOUND' | 'DIRECTOR_PLAN_NOT_READY' | 'DIRECTOR_SHOT_NOT_FOUND' | 'DIRECTOR_TAKE_NOT_FOUND' | 'DIRECTOR_TAKE_KIND_MISMATCH' | 'DIRECTOR_CALL_TOO_FAST' | 'DIRECTOR_CUT_NOT_FOUND' | 'PUBLISH_DEMO_DISABLED' | 'PUBLISH_NEEDS_YOUTUBE' | 'PUBLISH_CUT_NOT_READY' | 'PUBLISH_NO_CHANNEL' | 'PUBLISH_QUOTA_EXHAUSTED' | 'RECORDING_NOT_FOUND' | 'RECORDING_FINISHED' | 'RECORDING_LIMIT_REACHED' | 'RECORDING_STORAGE_FULL' | 'RECORDING_PAUSED' | 'RECORDING_PART_NOT_FOUND' | 'RECORDING_PART_CLOSED' | 'RECORDING_SLICE_NOT_UPLOADED' | 'RECORDING_ATTEMPT_NOT_OPEN' | 'RECORDING_MARK_OUT_OF_ORDER' | 'RECORDING_SLICE_INVALID' | 'DIRECTOR_VIDEO_UNREADABLE' | 'DIRECTOR_ANALYSIS_FAILED' | 'DIRECTOR_REVIEW_FAILED' | 'RECORDING_CLIP_FAILED';
 
 /**
  * ErrorData
@@ -782,6 +858,41 @@ export type ReadyResponses = {
 };
 
 export type ReadyResponse = ReadyResponses[keyof ReadyResponses];
+
+export type ClipDirectorAttemptData = {
+    body: ClipRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/director/clips';
+};
+
+export type ClipDirectorAttemptErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type ClipDirectorAttemptError = ClipDirectorAttemptErrors[keyof ClipDirectorAttemptErrors];
+
+export type ClipDirectorAttemptResponses = {
+    /**
+     * The attempt's take, an MP4; where it was cut in the part's clock in the x-clip-start-ms and x-clip-end-ms headers.
+     */
+    200: Blob | File;
+};
+
+export type ClipDirectorAttemptResponse = ClipDirectorAttemptResponses[keyof ClipDirectorAttemptResponses];
 
 export type ListDirectorMediaData = {
     body?: never;

@@ -54,6 +54,137 @@
         ],
         "type": "string"
       },
+      "ClipPause": {
+        "additionalProperties": false,
+        "description": "A stretch nothing was recorded: no take is ever cut across one.",
+        "properties": {
+          "endMs": {
+            "anyOf": [
+              {
+                "maximum": 1260000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "None: to the part's end.",
+            "title": "Endms"
+          },
+          "startMs": {
+            "maximum": 1260000.0,
+            "minimum": 0.0,
+            "title": "Startms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "startMs",
+          "endMs"
+        ],
+        "title": "ClipPause",
+        "type": "object"
+      },
+      "ClipRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "attemptId": {
+            "description": "For the logs.",
+            "format": "uuid",
+            "title": "Attemptid",
+            "type": "string"
+          },
+          "contentType": {
+            "enum": [
+              "video/webm",
+              "video/mp4"
+            ],
+            "title": "Contenttype",
+            "type": "string"
+          },
+          "endMs": {
+            "anyOf": [
+              {
+                "maximum": 1260000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Director's end mark; None: to the footage's end.",
+            "title": "Endms"
+          },
+          "pauses": {
+            "items": {
+              "$ref": "#/components/schemas/ClipPause"
+            },
+            "maxItems": 200,
+            "title": "Pauses",
+            "type": "array"
+          },
+          "slices": {
+            "description": "The part's, from its first.",
+            "items": {
+              "$ref": "#/components/schemas/ClipSlice"
+            },
+            "maxItems": 150,
+            "minItems": 1,
+            "title": "Slices",
+            "type": "array"
+          },
+          "startMs": {
+            "description": "Director's start mark.",
+            "maximum": 1260000.0,
+            "minimum": 0.0,
+            "title": "Startms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "attemptId",
+          "contentType",
+          "slices",
+          "startMs",
+          "endMs",
+          "pauses"
+        ],
+        "title": "ClipRequest",
+        "type": "object"
+      },
+      "ClipSlice": {
+        "additionalProperties": false,
+        "properties": {
+          "durationMs": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 15000.0,
+            "title": "Durationms",
+            "type": "integer"
+          },
+          "startMs": {
+            "maximum": 1260000.0,
+            "minimum": 0.0,
+            "title": "Startms",
+            "type": "integer"
+          },
+          "url": {
+            "description": "A presigned read of the slice.",
+            "maxLength": 4000,
+            "pattern": "^https?://",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "startMs",
+          "durationMs"
+        ],
+        "title": "ClipSlice",
+        "type": "object"
+      },
       "CutPick": {
         "additionalProperties": false,
         "description": "The take picked for one shot of a cut.",
@@ -603,9 +734,21 @@
           "PUBLISH_CUT_NOT_READY",
           "PUBLISH_NO_CHANNEL",
           "PUBLISH_QUOTA_EXHAUSTED",
+          "RECORDING_NOT_FOUND",
+          "RECORDING_FINISHED",
+          "RECORDING_LIMIT_REACHED",
+          "RECORDING_STORAGE_FULL",
+          "RECORDING_PAUSED",
+          "RECORDING_PART_NOT_FOUND",
+          "RECORDING_PART_CLOSED",
+          "RECORDING_SLICE_NOT_UPLOADED",
+          "RECORDING_ATTEMPT_NOT_OPEN",
+          "RECORDING_MARK_OUT_OF_ORDER",
+          "RECORDING_SLICE_INVALID",
           "DIRECTOR_VIDEO_UNREADABLE",
           "DIRECTOR_ANALYSIS_FAILED",
-          "DIRECTOR_REVIEW_FAILED"
+          "DIRECTOR_REVIEW_FAILED",
+          "RECORDING_CLIP_FAILED"
         ],
         "title": "ErrorCode",
         "type": "string"
@@ -1439,6 +1582,80 @@
           }
         },
         "summary": "Ready"
+      }
+    },
+    "/v1/director/clips": {
+      "post": {
+        "description": "Cuts a recorded attempt out of its session's footage into a take: Director's marks\nsnapped to the first and last words, never across a pause (RECORDING_CLIP_FAILED when\nthere's nothing to cut; UPSTREAM_UNAVAILABLE while the footage can't be reached).",
+        "operationId": "clipDirectorAttempt",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClipRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "video/mp4": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The attempt's take, an MP4; where it was cut in the part's clock in the x-clip-start-ms and x-clip-end-ms headers."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Clip Director Attempt"
       }
     },
     "/v1/director/cuts": {

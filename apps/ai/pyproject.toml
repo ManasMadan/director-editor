@@ -117,8 +117,9 @@ addopts = "-m 'not integration'"
 [tool.coverage.run]
 source = ["app", "scripts", "evals"]
 branch = true
-# The worker runs as a subprocess in the integration tests; measure it there too.
-patch = ["subprocess"]
+# The worker runs as a subprocess in the integration tests; measure it there too, and
+# app/jail.py up to the moment it becomes ffmpeg (exec ends the process's measuring).
+patch = ["subprocess", "execv"]
 
 [tool.coverage.report]
 # Every line and every branch, unit and integration tests together. Nothing is excluded:

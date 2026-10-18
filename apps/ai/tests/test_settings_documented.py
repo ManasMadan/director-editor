@@ -3,15 +3,20 @@ TypeScript services' (scripts/env-docs.test.ts)."""
 
 import re
 
-from app.settings import IndexerSettings, Settings
+from app.settings import ClipperSettings, IndexerSettings, Settings
 from tests import ENV_EXAMPLE
 
 DOCS = ENV_EXAMPLE.parent / "docs" / "environment.md"
 
 
 def variables() -> list[str]:
-    """The service's, and the Cloud Run indexer's (app/indexer.py)."""
-    fields = {**Settings.model_fields, **IndexerSettings.model_fields}
+    """The service's, and the Cloud Run indexer's and clipper's (app/indexer.py,
+    app/clipper.py)."""
+    fields = {
+        **Settings.model_fields,
+        **IndexerSettings.model_fields,
+        **ClipperSettings.model_fields,
+    }
     return [field.alias or name.upper() for name, field in fields.items()]
 
 

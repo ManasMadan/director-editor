@@ -722,24 +722,39 @@ class Director:
     async def add_take(
         self, org_id: UUID, user_id: UUID, body: DirectorTakeCreate, request_id: str | None
     ) -> DirectorTake:
-        """Records a take for the caller and queues its review."""
+        """Records a take for the caller and queues its review. A file is one take: adding
+        it again (a clipped attempt whose job ran twice) answers the take it already is."""
         plan = await self.plan(org_id, body.videoId)
         shot = _shot(plan, body.shotIndex)
         if shot.kind != body.kind:
             raise AppError("DIRECTOR_TAKE_KIND_MISMATCH")
         async with tenant(org_id) as session:
-            take = DirectorTake(
-                org_id=org_id,
-                plan_id=plan.id,
-                user_id=user_id,
-                shot_index=body.shotIndex,
-                file_id=body.fileId,
-                kind=body.kind,
-                updated_at=func.now(),
+            # One statement, held by the unique index on file_id: two adds of one file
+            # racing each other make one take, and only the one that made it is reviewed.
+            made = await session.scalar(
+                insert(DirectorTake)
+                .values(
+                    org_id=org_id,
+                    plan_id=plan.id,
+                    user_id=user_id,
+                    shot_index=body.shotIndex,
+                    file_id=body.fileId,
+                    kind=body.kind,
+                    updated_at=func.now(),
+                )
+                .on_conflict_do_nothing(index_elements=[DirectorTake.file_id])
+                .returning(DirectorTake.id)
             )
-            session.add(take)
-            await session.flush()
-            await session.refresh(take)
+            take = await session.scalar(
+                select(DirectorTake).where(
+                    DirectorTake.file_id == body.fileId, DirectorTake.user_id == user_id
+                )
+            )
+        if take is None:
+            # The file is someone else's take: apps/api only hands over the caller's own.
+            raise AppError("DIRECTOR_TAKE_NOT_FOUND")
+        if made is None:
+            return take
         await self._queue.add_review(
             take.id, org_id, body.sourceUrl, request_id=request_id, user_id=user_id
         )

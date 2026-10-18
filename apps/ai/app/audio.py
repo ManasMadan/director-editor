@@ -1,10 +1,10 @@
 """Capturing a short's original audio with yt-dlp, while it's indexed (app/indexing.py's
 LocalIndexer, once the plan is written).
 
-yt-dlp runs as a subprocess, behind an injectable runner so tests fake it instead of
-reaching the network or a real binary; what it extracts is uploaded to Cloud Storage with
-Application Default Credentials (no key file), behind an injectable uploader for the same
-reason. Any failure (yt-dlp can't reach the video, hangs past AUDIO_TIMEOUT_SECONDS, no
+yt-dlp runs as a subprocess (app/process.py), behind an injectable runner so tests fake
+it instead of reaching the network or a real binary; what it extracts is uploaded to Cloud
+Storage with Application Default Credentials (no key file), behind an injectable uploader
+for the same reason. Any failure (yt-dlp can't reach the video, hangs past AUDIO_TIMEOUT_SECONDS, no
 audio comes out, the upload fails) is logged and swallowed, never raised: a short with
 no audio capture still gets its plan.
 """
@@ -18,31 +18,14 @@ from pathlib import Path
 from google.cloud import storage  # pyright: ignore[reportMissingTypeStubs]
 
 from app.log import log
+from app.process import Runner, run_process
 from app.schemas import VIDEO_ID_PATTERN
 
-type Runner = Callable[[list[str]], Awaitable[tuple[int | None, bytes]]]
 type Uploader = Callable[[str, str, Path], Awaitable[None]]
 
 # A Short's audio (three minutes at most) downloads in seconds; past this yt-dlp is stuck
 # (a throttled or stalled stream), and the plan it follows is held up waiting for it.
 AUDIO_TIMEOUT_SECONDS = 120.0
-
-
-async def run_yt_dlp(args: list[str]) -> tuple[int | None, bytes]:
-    """Runs yt-dlp as a real subprocess: its exit code and whatever it wrote to stderr.
-    Given up on (cancelled, or timed out by the caller), the process is killed and
-    reaped, never left running."""
-    # No shell: each argument reaches the process as its own argv entry, never interpreted.
-    process = await asyncio.create_subprocess_exec(
-        *args, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE
-    )
-    try:
-        _, stderr = await process.communicate()
-    except asyncio.CancelledError:
-        process.kill()
-        _ = await process.wait()
-        raise
-    return process.returncode, stderr
 
 
 async def upload_to_gcs(bucket: str, key: str, path: Path) -> None:
@@ -63,7 +46,7 @@ async def fetch_audio(
     video_id: str,
     bucket: str,
     *,
-    run: Runner = run_yt_dlp,
+    run: Runner = run_process,
     upload: Uploader = upload_to_gcs,
     give_up_after: float = AUDIO_TIMEOUT_SECONDS,
 ) -> str | None:

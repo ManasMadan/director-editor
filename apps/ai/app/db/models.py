@@ -119,6 +119,7 @@ class DirectorTake(Base):
         Index("director_take_plan_id_user_id_shot_index_idx", "plan_id", "user_id", "shot_index"),
         Index("director_take_user_id_idx", "user_id"),
         Index("director_take_file_id_idx", "file_id"),
+        Index("director_take_one_per_file", "file_id", unique=True),
         {"schema": "ai"},
     )
 

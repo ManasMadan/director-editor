@@ -4,8 +4,8 @@ import * as z from 'zod';
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CheckDirectorSceneData, CheckDirectorSceneErrors, CheckDirectorSceneResponses, CreateDirectorCutData, CreateDirectorCutErrors, CreateDirectorCutResponses, CreateDirectorTakeData, CreateDirectorTakeErrors, CreateDirectorTakeResponses, DependenciesData, DependenciesErrors, DependenciesResponses, GetDirectorCutData, GetDirectorCutErrors, GetDirectorCutResponses, GetDirectorLibraryData, GetDirectorLibraryErrors, GetDirectorLibraryResponses, GetDirectorPlanData, GetDirectorPlanErrors, GetDirectorPlanResponses, IndexDirectorPlanData, IndexDirectorPlanErrors, IndexDirectorPlanResponses, ListDirectorCutsData, ListDirectorCutsErrors, ListDirectorCutsResponses, ListDirectorMediaData, ListDirectorMediaErrors, ListDirectorMediaResponses, ListDirectorTakesData, ListDirectorTakesErrors, ListDirectorTakesResponses, LiveData, LiveErrors, LiveResponses, ReadyData, ReadyErrors, ReadyResponses, SpeakDirectorLineData, SpeakDirectorLineErrors, SpeakDirectorLineResponses, WriteDirectorPublishCopyData, WriteDirectorPublishCopyErrors, WriteDirectorPublishCopyResponses } from './types.gen';
-import { zCheckDirectorSceneBody, zCheckDirectorSceneHeaders, zCheckDirectorSceneResponse, zCreateDirectorCutBody, zCreateDirectorCutHeaders, zCreateDirectorCutResponse, zCreateDirectorTakeBody, zCreateDirectorTakeHeaders, zCreateDirectorTakeResponse, zDependenciesResponse, zGetDirectorCutHeaders, zGetDirectorCutPath, zGetDirectorCutResponse, zGetDirectorLibraryHeaders, zGetDirectorLibraryResponse, zGetDirectorPlanHeaders, zGetDirectorPlanPath, zGetDirectorPlanResponse, zIndexDirectorPlanBody, zIndexDirectorPlanHeaders, zIndexDirectorPlanResponse, zListDirectorCutsHeaders, zListDirectorCutsPath, zListDirectorCutsResponse, zListDirectorMediaHeaders, zListDirectorMediaResponse, zListDirectorTakesHeaders, zListDirectorTakesPath, zListDirectorTakesResponse, zLiveResponse, zReadyResponse, zSpeakDirectorLineBody, zSpeakDirectorLineHeaders, zSpeakDirectorLineResponse, zWriteDirectorPublishCopyBody, zWriteDirectorPublishCopyHeaders, zWriteDirectorPublishCopyResponse } from './zod.gen';
+import type { CheckDirectorSceneData, CheckDirectorSceneErrors, CheckDirectorSceneResponses, ClipDirectorAttemptData, ClipDirectorAttemptErrors, ClipDirectorAttemptResponses, CreateDirectorCutData, CreateDirectorCutErrors, CreateDirectorCutResponses, CreateDirectorTakeData, CreateDirectorTakeErrors, CreateDirectorTakeResponses, DependenciesData, DependenciesErrors, DependenciesResponses, GetDirectorCutData, GetDirectorCutErrors, GetDirectorCutResponses, GetDirectorLibraryData, GetDirectorLibraryErrors, GetDirectorLibraryResponses, GetDirectorPlanData, GetDirectorPlanErrors, GetDirectorPlanResponses, IndexDirectorPlanData, IndexDirectorPlanErrors, IndexDirectorPlanResponses, ListDirectorCutsData, ListDirectorCutsErrors, ListDirectorCutsResponses, ListDirectorMediaData, ListDirectorMediaErrors, ListDirectorMediaResponses, ListDirectorTakesData, ListDirectorTakesErrors, ListDirectorTakesResponses, LiveData, LiveErrors, LiveResponses, ReadyData, ReadyErrors, ReadyResponses, SpeakDirectorLineData, SpeakDirectorLineErrors, SpeakDirectorLineResponses, WriteDirectorPublishCopyData, WriteDirectorPublishCopyErrors, WriteDirectorPublishCopyResponses } from './types.gen';
+import { zCheckDirectorSceneBody, zCheckDirectorSceneHeaders, zCheckDirectorSceneResponse, zClipDirectorAttemptBody, zClipDirectorAttemptHeaders, zClipDirectorAttemptResponse, zCreateDirectorCutBody, zCreateDirectorCutHeaders, zCreateDirectorCutResponse, zCreateDirectorTakeBody, zCreateDirectorTakeHeaders, zCreateDirectorTakeResponse, zDependenciesResponse, zGetDirectorCutHeaders, zGetDirectorCutPath, zGetDirectorCutResponse, zGetDirectorLibraryHeaders, zGetDirectorLibraryResponse, zGetDirectorPlanHeaders, zGetDirectorPlanPath, zGetDirectorPlanResponse, zIndexDirectorPlanBody, zIndexDirectorPlanHeaders, zIndexDirectorPlanResponse, zListDirectorCutsHeaders, zListDirectorCutsPath, zListDirectorCutsResponse, zListDirectorMediaHeaders, zListDirectorMediaResponse, zListDirectorTakesHeaders, zListDirectorTakesPath, zListDirectorTakesResponse, zLiveResponse, zReadyResponse, zSpeakDirectorLineBody, zSpeakDirectorLineHeaders, zSpeakDirectorLineResponse, zWriteDirectorPublishCopyBody, zWriteDirectorPublishCopyHeaders, zWriteDirectorPublishCopyResponse } from './zod.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -66,6 +66,29 @@ export const ready = <ThrowOnError extends boolean = false>(options?: Options<Re
     responseValidator: async (data) => await zReadyResponse.parseAsync(data),
     url: '/health/ready',
     ...options
+});
+
+/**
+ * Clip Director Attempt
+ *
+ * Cuts a recorded attempt out of its session's footage into a take: Director's marks
+ * snapped to the first and last words, never across a pause (RECORDING_CLIP_FAILED when
+ * there's nothing to cut; UPSTREAM_UNAVAILABLE while the footage can't be reached).
+ */
+export const clipDirectorAttempt = <ThrowOnError extends boolean = false>(options: Options<ClipDirectorAttemptData, ThrowOnError>): RequestResult<ClipDirectorAttemptResponses, ClipDirectorAttemptErrors, ThrowOnError> => (options.client ?? client).post<ClipDirectorAttemptResponses, ClipDirectorAttemptErrors, ThrowOnError>({
+    requestValidator: async (data) => await z.object({
+        body: zClipDirectorAttemptBody,
+        headers: zClipDirectorAttemptHeaders.optional(),
+        path: z.never().optional(),
+        query: z.never().optional()
+    }).parseAsync(data),
+    responseValidator: async (data) => await zClipDirectorAttemptResponse.parseAsync(data),
+    url: '/v1/director/clips',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
 });
 
 /**
