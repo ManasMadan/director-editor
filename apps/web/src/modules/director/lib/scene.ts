@@ -156,8 +156,8 @@ function assetOfShot(plan: ShotPlan, clip: Clip): Asset | undefined {
 }
 
 function gapAt(plan: ShotPlan, clips: readonly Clip[], at: number, clip: Clip | undefined) {
-  // A skipped shot is a gap for all of its length.
-  if (clip && clip.state === "missing") {
+  // A shot the version leaves as a gap is one for all of its length.
+  if (clip && clip.state === "gap") {
     return { slotId: shotSlotId(clip.index + 1), seconds: at - clip.at, length: clip.seconds };
   }
   let n = 0;
@@ -309,7 +309,7 @@ export function gapSlots(plan: ShotPlan, clips: readonly Clip[]): GapSlot[] {
       shotIndex: null,
     }));
   const skipped = clips
-    .filter((clip) => clip.state === "missing")
+    .filter((clip) => clip.state === "gap")
     .map((clip) => ({
       slotId: shotSlotId(clip.index + 1),
       description: clip.shot.scene ? `${clip.shot.title}: ${clip.shot.scene}` : clip.shot.title,

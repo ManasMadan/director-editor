@@ -85,7 +85,7 @@ import { adaptationOf, films, yourVersion } from "../lib/your-version";
 
 /**
  * A filmed clip's take once it's in memory (not while it loads, nor when it couldn't be).
- * Asked only of a filmed clip (a missing one is a gap, with no take).
+ * Asked only of a filmed clip (a gap has no take).
  */
 function loadedTake(media: Map<DirectorTakeId, MediaState>, clip: Clip) {
   const state = media.get(required(clip.take, "a filmed take").id);
@@ -98,8 +98,9 @@ function segmentsOf(
   transforms: ReadonlyMap<number, MatchCutTransform>,
 ): Segment[] {
   return clips.map((clip): Segment => {
-    // A skipped shot is a gap: its B-roll, or the nearest shot held (lib/compose.ts).
-    if (clip.state === "missing") {
+    // A shot the version leaves as a gap: its B-roll, or the nearest shot held
+    // (lib/compose.ts). Nothing else reaches the video unfilmed (readyToSave).
+    if (clip.state === "gap") {
       return { kind: "gap", seconds: clip.seconds };
     }
     const take = required(loadedTake(media, clip), "a loaded take");
@@ -533,7 +534,12 @@ function useArrangedClips(
         played,
         // A shot the member's version leaves as a gap (an angle they chose not to film)
         // stays in the edit with no take: the editor fills it with B-roll.
-        (index) => films(version, index) || version.gaps.includes(index),
+        (index) => {
+          if (version.gaps.includes(index)) {
+            return "gap";
+          }
+          return films(version, index) ? "filmed" : null;
+        },
       ),
     [plan.shots, played, version],
   );
@@ -551,14 +557,16 @@ function useArrangedClips(
 }
 
 /**
- * Whether the video can be made: no take still being reviewed, at least one shot filmed,
- * and every filmed one in memory. A shot not filmed is a gap the editor fills.
+ * Whether the video can be made: every shot the member films is filmed, reviewed and in
+ * memory, and at least one is. Only the shots their version leaves as gaps go in with no
+ * take; one simply not filmed yet would become a held frame, so it's filmed first (the
+ * editor says how many are left).
  */
 function readyToSave(clips: readonly Clip[], media: Map<DirectorTakeId, MediaState>) {
   const filmed = clips.filter((clip) => clip.state === "cut");
   return (
     filmed.length > 0 &&
-    clips.every((clip) => clip.state !== "reviewing") &&
+    clips.every((clip) => clip.state === "cut" || clip.state === "gap") &&
     filmed.every((clip) => loadedTake(media, clip))
   );
 }

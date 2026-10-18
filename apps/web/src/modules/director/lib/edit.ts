@@ -1,15 +1,25 @@
 /**
  * The edit, from the plan and the take picked for each shot (lib/picks.ts): one clip per
  * shot, laid end to end. A filmed clip plays the part of its take Gemini kept (or the
- * whole take when it kept none); a shot not filmed yet, or whose take is still being
- * reviewed, holds its place for the shot's length. A shot the member's version doesn't
- * film (skipped, or a gap the edit fills) has no clip. The captions are the shots'
- * scripts moved to where their clips play.
+ * whole take when it kept none, or kept too little to use); a shot not filmed yet, or
+ * whose take is still being reviewed, holds its place for the shot's length. A shot the
+ * member's version leaves as a gap holds its place too, for B-roll to fill; one it
+ * skips has no clip. The captions are the filmed shots' scripts moved to where their
+ * clips play.
  */
 import type { DirectorTake, EditorGrade, Shot } from "@repo/contracts/api";
 import type { CaptionLine } from "./captions";
 
-type ClipState = "cut" | "missing" | "reviewing";
+type ClipState = "cut" | "missing" | "reviewing" | "gap";
+
+/** Whether a shot is in the member's edit: filmed, left as a gap to fill, or not at all. */
+type InEdit = "filmed" | "gap" | null;
+
+/**
+ * The shortest kept part worth playing. Gemini has kept a tenth of a second of a take, a
+ * flash nobody can follow; the clipper won't cut a take shorter than this either.
+ */
+export const MIN_KEPT_SECONDS = 0.5;
 
 export interface Clip {
   index: number;
@@ -33,23 +43,32 @@ function stateOf(take: DirectorTake | undefined): ClipState {
   return take.status === "pending" || take.status === "reviewing" ? "reviewing" : "cut";
 }
 
+/** The part of a take that plays: Gemini's pick, or the whole take when it kept too little. */
+function keptPart(take: DirectorTake | undefined, shot: Shot) {
+  if (take && take.bestStartMs !== null && take.bestEndMs !== null) {
+    const from = take.bestStartMs / 1000;
+    const to = take.bestEndMs / 1000;
+    if (to - from >= MIN_KEPT_SECONDS) {
+      return { from, to };
+    }
+  }
+  return { from: 0, to: shot.durationSeconds };
+}
+
 export function clipsOf(
   shots: readonly Shot[],
   picked: Map<number, DirectorTake>,
-  filmed: (index: number) => boolean = () => true,
+  inEdit: (index: number) => InEdit = () => "filmed",
 ): Clip[] {
   let at = 0;
   return shots.flatMap((shot, index) => {
-    if (!filmed(index)) {
+    const part = inEdit(index);
+    if (part === null) {
       return [];
     }
-    const take = picked.get(index);
-    const state = stateOf(take);
-    const best = state === "cut" ? take : undefined;
-    const { from, to } =
-      best && best.bestStartMs !== null && best.bestEndMs !== null
-        ? { from: best.bestStartMs / 1000, to: best.bestEndMs / 1000 }
-        : { from: 0, to: shot.durationSeconds };
+    const take = part === "gap" ? undefined : picked.get(index);
+    const state = part === "gap" ? "gap" : stateOf(take);
+    const { from, to } = keptPart(state === "cut" ? take : undefined, shot);
     const seconds = shot.kind === "video" && state === "cut" ? to - from : shot.durationSeconds;
     const clip: Clip = { index, shot, take: take ?? null, state, at, seconds, from, to };
     at += seconds;
@@ -68,9 +87,15 @@ export function clipAt(clips: readonly Clip[], seconds: number): Clip | undefine
   return clips.find((clip) => seconds < clip.at + clip.seconds) ?? clips.at(-1);
 }
 
-/** The caption lines on the edit's clock, cut to their clip. */
+/**
+ * The caption lines on the edit's clock, cut to their clip. A gap has none: nobody says
+ * its lines over its B-roll.
+ */
 export function editLines(clips: readonly Clip[]): CaptionLine[] {
   return clips.flatMap((clip) => {
+    if (clip.state === "gap") {
+      return [];
+    }
     const from = clip.shot.kind === "video" && clip.state === "cut" ? clip.from : 0;
     const end = clip.at + clip.seconds;
     return clip.shot.script.flatMap((line) => {
