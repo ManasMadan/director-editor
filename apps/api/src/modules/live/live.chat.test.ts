@@ -7,12 +7,14 @@ import { createServer } from "node:http";
 import type { DirectorChatInput } from "@repo/contracts/api";
 import { type ShotPlan, shotPlanSchema } from "@repo/contracts/api";
 import { videoIdSchema } from "@repo/contracts/ids";
+import { LIVE_TOOLS } from "@repo/contracts/live";
 import { startFakeGoogle } from "@repo/fake-google";
 import { isAppError } from "@repo/nest-common";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import * as z from "zod";
 import { chatUpstream, DirectorChat } from "./live.chat";
 import { PERSONA } from "./live.persona";
+import { functionDeclarations } from "./live.setup";
 
 const TOKEN = "chat-token";
 const auth = { accessToken: () => Promise.resolve(TOKEN) };
@@ -137,11 +139,11 @@ describe("Director's slower line", () => {
       expect(system).toContain("Shot 1 of 2: The pour");
       expect(system).toContain('- Their line: "Coffee, then everything else."');
       expect(system).toContain("slower line");
-      expect(request.tools[0]?.functionDeclarations.map((tool) => tool.name)).toEqual([
-        "go_to_shot",
-        "switch_camera",
-        "adapt_shot",
-      ]);
+      // Live's own declarations, every tool of them.
+      expect(JSON.stringify(proxy.bodies[0])).toContain(JSON.stringify(functionDeclarations));
+      expect(request.tools[0]?.functionDeclarations.map((tool) => tool.name).sort()).toEqual(
+        [...LIVE_TOOLS].sort(),
+      );
       const parts = JSON.stringify(request.contents[0]?.parts);
       expect(parts).toContain("You: How much time have you got?");
       expect(parts).toContain("adapt_shot");
@@ -151,6 +153,27 @@ describe("Director's slower line", () => {
       expect(proxy.paths[0]).toBe(
         "/v1/projects/my-project/locations/global/publishers/google/models/gemini-x:generateContent",
       );
+    } finally {
+      await proxy.close();
+    }
+  });
+
+  it("tells Gemini to mark attempts while the roll records, and hears the roll's changes", async () => {
+    const proxy = await recorded();
+    try {
+      await chatAt(proxy.url).reply(plan, said("ok going", { rolling: true }));
+      expect(JSON.stringify(proxy.bodies[0])).toContain("call mark with event start");
+      const paused = await chatAt(proxy.url).reply(plan, {
+        ...said("x"),
+        turn: { kind: "roll", state: "paused" },
+      });
+      expect(paused).toEqual({ reply: "", calls: [] });
+      const done = await chatAt(proxy.url).reply(plan, {
+        ...said("x"),
+        turn: { kind: "roll", state: "done" },
+      });
+      expect(done.reply).toBe("Nice, that looked good.");
+      expect(proxy.bodies).toHaveLength(2);
     } finally {
       await proxy.close();
     }
