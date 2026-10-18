@@ -21,6 +21,7 @@ import { DIRECTOR_MAX_SHOTS, type ShotPlan } from "@repo/contracts/api";
 import { ERROR_CODES, type ErrorCode } from "@repo/contracts/errors";
 import {
   LIVE_ADAPTATION_MAX_LENGTH,
+  LIVE_MARK_TEXT_MAX_LENGTH,
   LIVE_TOOLS,
   type LiveAdaptation,
   type LiveClientMessage,
@@ -51,6 +52,7 @@ import {
   noiseMessage,
   quietMessage,
   resumedMessage,
+  rollMessage,
   shotMessage,
   takeMessage,
   versionMessage,
@@ -128,6 +130,11 @@ const TOOL_RESPONSES: Record<LiveToolResult | "unknown", object> = {
   },
   no_camera: { result: "refused", why: "Their camera isn't on." },
   not_found: NOT_FOUND_RESPONSE,
+  paused: {
+    result: "refused",
+    why: "Recording is paused. Only their own tap on Resume starts it again.",
+  },
+  not_recording: { result: "refused", why: "Nothing is recording right now." },
 };
 
 /** Tells the browser why Director is going away, then closes the socket. */
@@ -348,6 +355,10 @@ export class LiveRelay {
         // From the 3-2-1 to the take's end, quiet is the point.
         this.pacer.take(message.state === "countdown" || message.state === "recording");
         return this.note(takeMessage(message.state, this.shot));
+      case "roll":
+        // Paused, nobody's there to nudge; and Done is the end of it.
+        this.pacer.take(message.state === "paused" || message.state === "done");
+        return this.note(rollMessage(message.state));
       default:
         return this.forward(message);
     }
@@ -624,7 +635,26 @@ export class LiveRelay {
         return this.adaptCall(raw);
       case "point_at":
         return pointAtCall(raw);
+      case "mark":
+        return this.markCall(raw);
     }
+  }
+
+  /** An attempt starts or ends: no nudges while one runs, as with a take. */
+  private markCall(raw: unknown): { call: LiveToolCall } | { response: object } {
+    const args = toolArgsSchemas.mark.safeParse(raw ?? {});
+    if (!args.success) {
+      return { response: { error: 'event must be "start" or "end", line and note text' } };
+    }
+    const { event } = args.data;
+    const text = (value: string | undefined) =>
+      value?.trim().slice(0, LIVE_MARK_TEXT_MAX_LENGTH) || undefined;
+    this.pacer.take(event === "start");
+    const line = text(args.data.line);
+    const note = text(args.data.note);
+    return {
+      call: { name: "mark", event, ...(line ? { line } : {}), ...(note ? { note } : {}) },
+    };
   }
 
   /**

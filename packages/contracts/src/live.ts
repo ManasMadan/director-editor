@@ -21,7 +21,13 @@ export const LIVE_PATH = "/api/live";
  * What Director can do on the shoot screen (Gemini's function calls). Nothing here starts
  * or stops a take: only the member's own tap on the shutter does that.
  */
-export const LIVE_TOOLS = ["go_to_shot", "switch_camera", "adapt_shot", "point_at"] as const;
+export const LIVE_TOOLS = [
+  "go_to_shot",
+  "switch_camera",
+  "mark",
+  "adapt_shot",
+  "point_at",
+] as const;
 export type LiveTool = (typeof LIVE_TOOLS)[number];
 
 /** About two seconds of 16 kHz 16-bit mono audio, base64; the browser sends ~100 ms at a time. */
@@ -29,6 +35,8 @@ const LIVE_AUDIO_MAX_LENGTH = 90_000;
 const LIVE_TEXT_MAX_LENGTH = 2000;
 /** A tool call's id, as the relay hands it to the browser and the browser hands it back. */
 const LIVE_TOOL_ID_MAX_LENGTH = 64;
+/** A mark's line or note: Director's few words on an attempt. */
+export const LIVE_MARK_TEXT_MAX_LENGTH = 300;
 /** One row of a shot as the member's version has it: a sentence, not a script. */
 export const LIVE_ADAPTATION_MAX_LENGTH = 300;
 
@@ -63,15 +71,32 @@ const liveToolCall = z.discriminatedUnion("name", [
     target: z.string().trim().min(1).max(DIRECTOR_LOCATE_TARGET_MAX_LENGTH),
     label: z.string().trim().min(1).max(DIRECTOR_MARK_LABEL_MAX_LENGTH),
   }),
+  /**
+   * While the roll records: an attempt at the shot the member is on starts or ends now.
+   * The browser stamps it with the recording's own clock.
+   */
+  z.object({
+    name: z.literal("mark"),
+    event: z.enum(["start", "end"]),
+    line: z.string().trim().min(1).max(LIVE_MARK_TEXT_MAX_LENGTH).optional(),
+    note: z.string().trim().min(1).max(LIVE_MARK_TEXT_MAX_LENGTH).optional(),
+  }),
 ]);
 export type LiveToolCall = z.infer<typeof liveToolCall>;
 
 /**
- * What came of a tool call: done, or refused because a take is under way (counting down,
- * recording, being watched back or sent) or there's no camera on to switch, or (a mark)
- * what Director pointed at isn't in the camera's view.
+ * What came of a tool call: done; refused because a take is under way, the camera is
+ * off, the roll is paused (only the member's touch resumes it) or nothing is recording;
+ * or what Director pointed at isn't in the picture.
  */
-const LIVE_TOOL_RESULTS = ["done", "busy", "no_camera", "not_found"] as const;
+const LIVE_TOOL_RESULTS = [
+  "done",
+  "busy",
+  "no_camera",
+  "not_found",
+  "paused",
+  "not_recording",
+] as const;
 export type LiveToolResult = (typeof LIVE_TOOL_RESULTS)[number];
 
 /**
@@ -80,6 +105,13 @@ export type LiveToolResult = (typeof LIVE_TOOL_RESULTS)[number];
  */
 const LIVE_TAKE_STATES = ["countdown", "cancelled", "recording", "recorded", "discarded"] as const;
 export type LiveTakeState = (typeof LIVE_TAKE_STATES)[number];
+
+/**
+ * Where the roll (the continuous recording) is: recording from Start shooting, paused
+ * and resumed by the member's touch, done.
+ */
+const LIVE_ROLL_STATES = ["recording", "paused", "resumed", "done"] as const;
+export type LiveRollState = (typeof LIVE_ROLL_STATES)[number];
 
 /**
  * From the browser: the microphone, a camera frame, a typed line, a move to another shot,
@@ -102,6 +134,7 @@ export const liveClientMessage = z.discriminatedUnion("type", [
   /** The member flipped the camera: it faces this way now, and Director sees that side. */
   z.object({ type: z.literal("camera"), facing }),
   z.object({ type: z.literal("take"), state: z.enum(LIVE_TAKE_STATES) }),
+  z.object({ type: z.literal("roll"), state: z.enum(LIVE_ROLL_STATES) }),
   /**
    * What this shoot already changed, sent as Director (re)joins, so a fresh connection
    * knows the member's version of each shot.

@@ -59,6 +59,9 @@ const PERSONA_RULES = [
   "Then it's yours.",
   "Never point at something you can't see, and never during a take",
   "If it comes back not found, say you can't see it",
+  "When the app says the roll is on",
+  "call mark with event start",
+  "you can't pause or resume anything yourself",
 ];
 
 const shot: Shot = {
@@ -331,7 +334,7 @@ describe("a live call", () => {
       // The instruction arrives as JSON, its quotes escaped.
       expect(text).toContain(JSON.stringify(rule).slice(1, -1));
     }
-    expect(PERSONA_VERSION).toBe(3);
+    expect(PERSONA_VERSION).toBe(4);
     const tools = setup.tools as { functionDeclarations: { name: string }[] }[];
     expect(tools[0]?.functionDeclarations.map((tool) => tool.name)).toEqual([...LIVE_TOOLS]);
     // Director speaks first: hello, and one question.
@@ -944,6 +947,63 @@ const turnsWith = (fake: FakeLiveApi, part: string) =>
   fake.received.filter(
     (message) => "clientContent" in message && turnOf(message).text.includes(part),
   );
+
+describe("the roll", () => {
+  it("tells Director where the roll is, and hands its marks to the browser", async () => {
+    const { fake, browser } = await liveCall();
+    browser.send({ type: "roll", state: "recording" });
+    expect(turnOf(await fake.message(2))).toEqual({
+      text: expect.stringContaining("call mark with event start"),
+      answer: false,
+    });
+    fake.send({
+      toolCall: {
+        functionCalls: [
+          { id: "g1", name: "mark", args: { event: "start", line: "  Hi!  " } },
+          { id: "g2", name: "mark", args: { event: "end", note: "x".repeat(400), line: " " } },
+          { id: "g3", name: "mark", args: { event: "middle" } },
+          { id: "g4", name: "mark" },
+        ],
+      },
+    });
+    expect(await browser.message(0)).toEqual({
+      type: "tool",
+      id: "tool-1",
+      call: { name: "mark", event: "start", line: "Hi!" },
+    });
+    expect(await browser.message(1)).toEqual({
+      type: "tool",
+      id: "tool-2",
+      call: { name: "mark", event: "end", note: "x".repeat(300) },
+    });
+    expect(await fake.message(3)).toEqual(
+      toolResponse("g3", "mark", {
+        error: 'event must be "start" or "end", line and note text',
+      }),
+    );
+    expect(await fake.message(4)).toMatchObject(toolResponse("g4", "mark", {}));
+    browser.send({ type: "tool_result", id: "tool-1", result: "paused" });
+    browser.send({ type: "tool_result", id: "tool-2", result: "not_recording" });
+    expect(await fake.message(5)).toEqual(
+      toolResponse("g1", "mark", {
+        result: "refused",
+        why: "Recording is paused. Only their own tap on Resume starts it again.",
+      }),
+    );
+    expect(await fake.message(6)).toEqual(
+      toolResponse("g2", "mark", { result: "refused", why: "Nothing is recording right now." }),
+    );
+    browser.send({ type: "roll", state: "paused" });
+    browser.send({ type: "roll", state: "resumed" });
+    browser.send({ type: "roll", state: "done" });
+    expect(turnOf(await fake.message(7))).toMatchObject({ answer: false });
+    expect(turnOf(await fake.message(8))).toEqual({
+      text: "[They tapped Resume: the roll is recording again.]",
+      answer: true,
+    });
+    expect(turnOf(await fake.message(9)).text).toContain("They tapped Done");
+  });
+});
 
 describe("the member's version of a shot", () => {
   it("hands Director's change to the browser, and keeps it once the card shows it", async () => {
