@@ -5,15 +5,27 @@ it), whatever a test configures later."""
 
 from app.log import configure_logging, log
 
-SIGNED = "https://storage.example.com/t.webm?X-Amz-Credential=key&X-Amz-Signature=deadbeef"
+SIGNED = (
+    "https://storage.example.com/t.webm?X-Amz-Date=20261018&X-Amz-Credential=AKIA1"
+    "&X-Amz-Signature=deadbeef"
+)
 
 if __name__ == "__main__":
     configure_logging("info", json=True)
     log.info(
-        "activity",
+        f"fetching {SIGNED}",
         actor={"email": "ada@example.com"},
-        account={"token": "secret-token", "refresh_token": "1//refresh"},
+        account={
+            "token": "secret-token",
+            "refresh_token": "1//refresh",
+            "apiKey": "k-1",
+            "serviceSecret": "s-1",
+        },
         body={"otp": "123456", "items": [{"Password": "hunter22"}, SIGNED], "kept": 1},
         sourceUrl=SIGNED,
         gcs="https://storage.googleapis.com/b/o?X-Goog-Signature=cafe",
     )
+    try:
+        raise ValueError(f"couldn't fetch {SIGNED}")
+    except ValueError:
+        log.exception("take download failed")

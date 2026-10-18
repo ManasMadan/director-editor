@@ -9,12 +9,19 @@ from uuid import uuid4
 
 import pytest
 import structlog
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from pydantic import BaseModel, JsonValue, TypeAdapter
 from structlog.testing import capture_logs
 
 from app.activity import log_activity, outcome_of
+from app.auth import CallerDep
 from app.log import CENSOR, redact
 from app.queues import JobLike
+from app.settings import get_settings
 from app.worker import run_job
+from tests.support import ENV
+from tests.tokens import service_token
 
 
 class Job:
@@ -97,11 +104,22 @@ async def test_a_job_writes_its_line_however_it_ends() -> None:
 
 
 APP_ROOT = Path(__file__).parent.parent
+BOUND = TypeAdapter(dict[str, str | None])
+
+
+class Logged(BaseModel):
+    """A line as the production logger writes it: the fields these tests read."""
+
+    event: str
+    sourceUrl: str = ""
+    actor: dict[str, str] = {}
+    body: dict[str, JsonValue] = {}
+    exception: str = ""
 
 
 def test_no_line_carries_a_secret_or_a_signed_url() -> None:
     # Logged as production logs, in a process of its own (tests/log_secrets.py says why).
-    line = subprocess.run(
+    output = subprocess.run(
         [sys.executable, "-m", "tests.log_secrets"],
         cwd=APP_ROOT,
         capture_output=True,
@@ -109,20 +127,50 @@ def test_no_line_carries_a_secret_or_a_signed_url() -> None:
         timeout=30,
         check=True,
     ).stdout
-    secrets = (
-        "secret-token",
-        "1//refresh",
-        "123456",
-        "hunter22",
-        "deadbeef",
-        "X-Amz-Credential",
-        "cafe",
+    secrets = ("secret-token", "1//refresh", "k-1", "s-1", "123456", "hunter22")
+    for secret in (*secrets, "deadbeef", "AKIA1", "cafe"):
+        assert secret not in output
+    line, failure = (Logged.model_validate_json(text) for text in output.splitlines())
+    censored = (
+        "https://storage.example.com/t.webm?X-Amz-Date=20261018"
+        f"&X-Amz-Credential={CENSOR}&X-Amz-Signature={CENSOR}"
     )
-    for secret in secrets:
-        assert secret not in line
-    assert '"actor": {"email": "ada@example.com"}' in line
-    assert f'"sourceUrl": "https://storage.example.com/t.webm?{CENSOR}"' in line
-    assert '"kept": 1' in line
+    # The message too, and only the secret parameters: the rest of the URL stays.
+    assert line.event == f"fetching {censored}"
+    assert line.sourceUrl == censored
+    assert line.actor == {"email": "ada@example.com"}
+    assert line.body == {"otp": CENSOR, "items": [{"Password": CENSOR}, censored], "kept": 1}
+    # An exception's text keeps its traceback, with the URL in it censored.
+    assert "Traceback" in failure.exception
+    assert f"couldn't fetch {censored}" in failure.exception
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "password",
+        "newPassword",
+        "api_key",
+        "apiKey",
+        "X-Api-Key",
+        "serviceSecret",
+        "client-secret",
+        "access_token",
+        "sessionToken",
+        "Authorization",
+        "set-cookie",
+        "otp",
+        "AWS_CREDENTIALS",
+        "backupCodes",
+    ],
+)
+def test_a_credential_is_censored_whatever_its_casing_style(name: str) -> None:
+    assert redact(None, "info", {name: "s3cr3t"})[name] == CENSOR
+
+
+@pytest.mark.parametrize("name", ["inputTokens", "outputTokens", "email", "key", "signature"])
+def test_a_field_that_only_looks_like_one_is_kept(name: str) -> None:
+    assert redact(None, "info", {name: "v"})[name] == "v"
 
 
 def test_redaction_keeps_what_isn_t_secret_and_stops_at_a_depth() -> None:
@@ -145,3 +193,33 @@ def test_redaction_keeps_what_isn_t_secret_and_stops_at_a_depth() -> None:
     assert event["url"] == "https://youtube.com/shorts/abc?feature=share"
     assert event["n"] == 3
     assert "deepest" in json.dumps(event["deep"])
+
+
+def test_a_request_s_lines_carry_its_ids_and_its_caller(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key, value in ENV.items():
+        monkeypatch.setenv(key, value)
+    get_settings.cache_clear()
+    app = FastAPI()
+
+    @app.get("/who")
+    async def who(_: CallerDep) -> dict[str, str]:
+        bound = BOUND.validate_python(structlog.contextvars.get_contextvars())
+        return {key: str(value) for key, value in bound.items()}
+
+    user, org = uuid4(), uuid4()
+    first = {"authorization": f"Bearer {service_token(user, org)}", "x-request-id": "req-9"}
+    someone_else = uuid4()
+    second = {"authorization": f"Bearer {service_token(someone_else, org)}"}
+    try:
+        with TestClient(app) as client:
+            answer = TypeAdapter(dict[str, str]).validate_python(
+                client.get("/who", headers=first).json()
+            )
+            # The next request on the same client keeps none of the first one's ids.
+            other = TypeAdapter(dict[str, str]).validate_python(
+                client.get("/who", headers=second).json()
+            )
+    finally:
+        get_settings.cache_clear()
+    assert answer == {"requestId": "req-9", "orgId": str(org), "userId": str(user)}
+    assert other == {"requestId": "None", "orgId": str(org), "userId": str(someone_else)}
