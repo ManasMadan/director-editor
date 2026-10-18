@@ -6,6 +6,10 @@
  *   authed  + a valid session (UNAUTHENTICATED otherwise); `context.user`, `context.session`
  *   inOrg   a signed-in member of the active organization; `context.orgId` (tenant for
  *           row-level security), `context.userId`, `context.role`
+ *   inPrivateOrg
+ *           + not the shared demo account (DEMO_ACCOUNT_LOCKED): for what's kept as the
+ *           member's own (pictures, prompts, briefs, what Director remembers of them),
+ *           which on an account everyone signs in to would be the next visitor's to see
  *
  *   export const directorRouter = ({ inOrg }: Procedures, director: DirectorService) => ({
  *     media: inOrg.director.media.handler(({ context }) => director.media(context.userId, ...)),
@@ -285,7 +289,14 @@ export function createProcedures(auth: Auth, memberships: Memberships, redis: Re
     },
   );
 
-  return { os, base, authed, inOrg };
+  const inPrivateOrg = inOrg.use(({ context, next }) => {
+    if (context.sharedDemo) {
+      throw new AppError("DEMO_ACCOUNT_LOCKED");
+    }
+    return next();
+  });
+
+  return { os, base, authed, inOrg, inPrivateOrg };
 }
 
 export type Procedures = ReturnType<typeof createProcedures>;

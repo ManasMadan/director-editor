@@ -6,6 +6,7 @@
  */
 import { directorSeeds } from "@repo/contracts/director-seeds";
 import { userIdSchema } from "@repo/contracts/ids";
+import { required } from "@repo/contracts/objects";
 import { factories } from "@repo/db/testing";
 import { DATABASE, type Database } from "@repo/nest-common";
 import pg from "pg";
@@ -326,6 +327,42 @@ describe("what the demo account can't do", () => {
       }),
     ).toEqual({ name: "Director Demo" });
     expect(await database.write.member.count({ where: { userId: before.id } })).toBe(1);
+  });
+
+  // Everyone signed in to it is the same member: anything kept as theirs (a picture, a
+  // prompt, a brief, what Director remembers of them) would be the next visitor's to see.
+  const VIDEO = "dQw4w9WgXcQ";
+  const FILE = "0192f3a4-0000-7000-8000-000000000000";
+  const version = { notes: [], shots: [], skipped: [], gaps: [] };
+  const brief = { text: "A morning coffee routine", messages: [], photos: [] };
+  type Rpc = Awaited<ReturnType<typeof signedInAsDemo>>["rpc"];
+  const writes: [string, (rpc: Rpc) => Promise<unknown>][] = [
+    [
+      "assets.addUpload",
+      (rpc) => rpc.assets.addUpload({ videoId: VIDEO, assetId: "a", fileId: FILE }),
+    ],
+    ["assets.draw", (rpc) => rpc.assets.draw({ videoId: VIDEO, assetId: "a", prompt: "A mug" })],
+    [
+      "assets.addStock",
+      (rpc) =>
+        rpc.assets.addStock({ videoId: VIDEO, assetId: "a", provider: "pexels", photoId: "1" }),
+    ],
+    ["director.brainstorm", (rpc) => rpc.director.brainstorm(brief)],
+    ["director.create", (rpc) => rpc.director.create(brief)],
+    [
+      "director.editPlan",
+      (rpc) =>
+        rpc.director.editPlan({ videoId: VIDEO, plan: required(directorSeeds[0], "a seed").plan }),
+    ],
+    ["yourVersion.save", (rpc) => rpc.yourVersion.save({ videoId: VIDEO, version })],
+    [
+      "yourVersion.revise",
+      (rpc) => rpc.yourVersion.revise({ videoId: VIDEO, instruction: "Inside", version }),
+    ],
+  ];
+  it.each(writes)("%s answers DEMO_ACCOUNT_LOCKED", async (_name, write) => {
+    const session = await signedInAsDemo();
+    await expect(write(session.rpc)).rejects.toMatchObject({ code: "DEMO_ACCOUNT_LOCKED" });
   });
 
   it("can't rename itself or change its picture, but keeps its own time zone", async () => {

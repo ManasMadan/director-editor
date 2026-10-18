@@ -100,7 +100,8 @@ describe("declared errors", () => {
 
   // Codes the builders throw (procedures.ts), and the routers that use such a builder.
   const BUILDER_CODES: Record<string, RegExp> = {
-    NO_ACTIVE_ORGANIZATION: /\binOrg\./,
+    NO_ACTIVE_ORGANIZATION: /\bin(Private)?Org\./,
+    DEMO_ACCOUNT_LOCKED: /\binPrivateOrg\./,
   };
   const common = new Set<string>(COMMON_ERRORS);
   const thrownIn = (source: string) =>

@@ -2,7 +2,7 @@
 import type { Procedures } from "../../rpc/procedures";
 import type { DirectorService } from "./director.service";
 
-export const directorRouter = ({ inOrg }: Procedures, director: DirectorService) => ({
+export const directorRouter = ({ inOrg, inPrivateOrg }: Procedures, director: DirectorService) => ({
   library: inOrg.director.library.handler(({ context }) =>
     director.library(context.userId, context.orgId),
   ),
@@ -45,13 +45,13 @@ export const directorRouter = ({ inOrg }: Procedures, director: DirectorService)
   media: inOrg.director.media.handler(({ context }) =>
     director.media(context.userId, context.orgId),
   ),
-  brainstorm: inOrg.director.brainstorm.handler(({ context, input }) =>
+  brainstorm: inPrivateOrg.director.brainstorm.handler(({ context, input }) =>
     director.brainstorm(context.userId, context.orgId, input),
   ),
-  create: inOrg.director.create.handler(({ context, input }) =>
+  create: inPrivateOrg.director.create.handler(({ context, input }) =>
     director.create(context.userId, context.orgId, input),
   ),
-  editPlan: inOrg.director.editPlan.handler(({ context, input }) =>
+  editPlan: inPrivateOrg.director.editPlan.handler(({ context, input }) =>
     director.editPlan(context.userId, context.orgId, input),
   ),
 });

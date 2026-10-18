@@ -9,6 +9,7 @@ import type { INestApplicationContext } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import type { UploadPurpose } from "@repo/contracts/files";
 import { fileIdSchema } from "@repo/contracts/ids";
+import { required } from "@repo/contracts/objects";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
 import { queuePrefix } from "@repo/jobs";
 import {
@@ -726,6 +727,110 @@ describe("maintenance", () => {
       return rows.map((row) => row.id).sort();
     });
     expect(kept).toEqual([recent, theirs].sort());
+  });
+
+  it("deletes what the shared demo account kept as its own after a day: pictures, briefs, templates, versions", {
+    tags: ["files"],
+  }, async () => {
+    const [demo, member, demoOrg, memberOrg] = [
+      randomUUID(),
+      randomUUID(),
+      randomUUID(),
+      randomUUID(),
+    ];
+    const [photo, upload, fresh, theirs] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+    const ids = await asRole("postgres", async (client) => {
+      await client.query(
+        `INSERT INTO auth."user" (id, name, email, demo, updated_at) VALUES
+           ($1::uuid, 'Director Demo', $1::text || '@demo.test', true, now()),
+           ($2::uuid, 'Member', $2::text || '@test.dev', false, now())`,
+        [demo, member],
+      );
+      await client.query(
+        "INSERT INTO auth.organization (id, name, slug) VALUES ($1::uuid, 'Demo', $1::text), ($2::uuid, 'Member', $2::text)",
+        [demoOrg, memberOrg],
+      );
+      await client.query(
+        `INSERT INTO files.file (id, user_id, purpose, status, filename, declared_type, declared_size, created_at, updated_at)
+         VALUES ($1, $5, 'director-brief-photo', 'ready', 'me.jpg', 'image/jpeg', 3, now() - interval '25 hours', now()),
+                ($2, $5, 'director-asset-image', 'ready', 'mug.jpg', 'image/jpeg', 3, now() - interval '25 hours', now()),
+                ($3, $5, 'director-asset-image', 'ready', 'mug.jpg', 'image/jpeg', 3, now() - interval '1 hour', now()),
+                ($4, $6, 'director-brief-photo', 'ready', 'me.jpg', 'image/jpeg', 3, now() - interval '3 days', now())`,
+        [photo, upload, fresh, theirs, demo, member],
+      );
+      const plan = async (org: string, by: string, video: string, source: string, age: string) => {
+        const { rows } = await client.query<{ id: string }>(
+          `INSERT INTO ai.director_plan (org_id, created_by, video_id, source, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, now() - $5::interval, now()) RETURNING id`,
+          [org, by, video, source, age],
+        );
+        return required(rows[0], "a plan").id;
+      };
+      const seed = await plan(demoOrg, demo, "SeedVideo01", "seed", "3 days");
+      const created = await plan(demoOrg, demo, "Created0001", "created", "25 hours");
+      const createdToday = await plan(demoOrg, demo, "Created0002", "created", "1 hour");
+      const memberCreated = await plan(memberOrg, member, "Created0003", "created", "3 days");
+      const asset = async (
+        planId: string,
+        org: string,
+        by: string,
+        origin: string,
+        age: string,
+      ) => {
+        const { rows } = await client.query<{ id: string }>(
+          `INSERT INTO ai.director_asset (org_id, plan_id, user_id, asset_id, origin, created_at, updated_at)
+           VALUES ($1, $2, $3, 'mug', $4, now() - $5::interval, now()) RETURNING id`,
+          [org, planId, by, origin, age],
+        );
+        return required(rows[0], "an asset").id;
+      };
+      const defaultImage = await asset(seed, demoOrg, demo, "default", "3 days");
+      const drawn = await asset(seed, demoOrg, demo, "created", "25 hours");
+      const stock = await asset(seed, demoOrg, demo, "stock", "25 hours");
+      const drawnToday = await asset(seed, demoOrg, demo, "created", "1 hour");
+      const memberDrawn = await asset(memberCreated, memberOrg, member, "created", "3 days");
+      const version = async (org: string, by: string, video: string, age: string) => {
+        await client.query(
+          `INSERT INTO app.director_version (org_id, user_id, video_id, version, updated_at)
+           VALUES ($1, $2, $3, '{}', now() - $4::interval)`,
+          [org, by, video, age],
+        );
+      };
+      await version(demoOrg, demo, "SeedVideo01", "25 hours");
+      await version(demoOrg, demo, "Created0002", "1 hour");
+      await version(memberOrg, member, "Created0003", "3 days");
+      return {
+        plans: { seed, created, createdToday, memberCreated },
+        assets: { defaultImage, drawn, stock, drawnToday, memberDrawn },
+      };
+    });
+
+    await maintenance.run("demo-retention");
+    const left = await asRole("postgres", async (client) => {
+      const column = async (sql: string, values: unknown[]) =>
+        (await client.query<{ id: string }>(sql, values)).rows.map((row) => row.id).sort();
+      return {
+        files: await column("SELECT id FROM files.file WHERE id = ANY($1::uuid[])", [
+          [photo, upload, fresh, theirs],
+        ]),
+        plans: await column("SELECT id FROM ai.director_plan WHERE id = ANY($1::uuid[])", [
+          Object.values(ids.plans),
+        ]),
+        assets: await column("SELECT id FROM ai.director_asset WHERE id = ANY($1::uuid[])", [
+          Object.values(ids.assets),
+        ]),
+        versions: await column(
+          "SELECT video_id AS id FROM app.director_version WHERE user_id = ANY($1::uuid[])",
+          [[demo, member]],
+        ),
+      };
+    });
+    expect(left).toEqual({
+      files: [fresh, theirs].sort(),
+      plans: [ids.plans.seed, ids.plans.createdToday, ids.plans.memberCreated].sort(),
+      assets: [ids.assets.defaultImage, ids.assets.drawnToday, ids.assets.memberDrawn].sort(),
+      versions: ["Created0002", "Created0003"],
+    });
   });
 
   it("registers every schedule with BullMQ once", async () => {

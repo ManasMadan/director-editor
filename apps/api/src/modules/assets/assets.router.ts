@@ -2,17 +2,17 @@
 import type { Procedures } from "../../rpc/procedures";
 import type { AssetsService } from "./assets.service";
 
-export const assetsRouter = ({ inOrg }: Procedures, assets: AssetsService) => ({
+export const assetsRouter = ({ inOrg, inPrivateOrg }: Procedures, assets: AssetsService) => ({
   list: inOrg.assets.list.handler(({ context, input }) =>
     assets.list(context.userId, context.orgId, input.videoId),
   ),
-  draw: inOrg.assets.draw.handler(({ context, input }) =>
+  draw: inPrivateOrg.assets.draw.handler(({ context, input }) =>
     assets.draw(context.userId, context.orgId, context.demo, input),
   ),
-  addUpload: inOrg.assets.addUpload.handler(({ context, input }) =>
+  addUpload: inPrivateOrg.assets.addUpload.handler(({ context, input }) =>
     assets.addUpload(context.userId, context.orgId, input),
   ),
-  addStock: inOrg.assets.addStock.handler(({ context, input }) =>
+  addStock: inPrivateOrg.assets.addStock.handler(({ context, input }) =>
     assets.addStock(context.userId, context.orgId, input),
   ),
   choose: inOrg.assets.choose.handler(({ context, input }) =>
