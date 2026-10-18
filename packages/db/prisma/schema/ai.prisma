@@ -115,6 +115,10 @@ model DirectorTake {
   /// shoot (an attempt marked while shooting, or a take filmed) | pass (found in the
   /// whole recording after Done, such as a great line said while rehearsing)
   origin       String             @default("shoot")
+  /// What the take shows and says, written with its review, for finding it by
+  /// description in the editor: transcript with word times, what's visible, moments,
+  /// quality (apps/ai TakeIndex). Null for a take reviewed before the index existed.
+  takeIndex    Json?              @map("take_index")
   createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
   organization Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)

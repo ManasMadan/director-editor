@@ -899,6 +899,55 @@ class DirectorTakeCreate(BaseModel):
 # A pick's reason: one line under a tile in the editor.
 REASON_MAX_LENGTH = 160
 
+MAX_INDEX_WORDS = 300
+MAX_INDEX_MOMENTS = 20
+MAX_INDEX_THINGS = 30
+
+type MomentKind = Literal[
+    "laugh", "smile", "blink", "look-away", "stumble", "pause", "gesture", "other"
+]
+
+
+class SpokenWord(BaseModel):
+    text: str = Field(min_length=1, max_length=60)
+    startSeconds: float = Field(ge=0, le=MAX_SHOT_SECONDS)
+    endSeconds: float = Field(ge=0, le=MAX_SHOT_SECONDS)
+
+
+class TakeMoment(BaseModel):
+    kind: MomentKind
+    atSeconds: float = Field(ge=0, le=MAX_SHOT_SECONDS, description="From the take's start.")
+    note: str = Field(max_length=120, description='In a few words: "big smile at the camera".')
+
+
+class TakeQuality(BaseModel):
+    sharpness: Literal["sharp", "soft", "blurry"]
+    shake: Literal["steady", "slight", "shaky"]
+    exposure: Literal["good", "dark", "bright"]
+    audio: Literal["clear", "quiet", "noisy", "none"]
+
+
+class TakeIndex(BaseModel):
+    """What a take shows and says, written with its review so the editor can find it by
+    description later ("the one with the parrot behind me") without watching it again."""
+
+    visible: str = Field(
+        max_length=800,
+        description=(
+            "Everything visible, plainly: the people, their clothing and colours, the place,"
+            " objects and animals in the background, what they do, their expressions."
+        ),
+    )
+    things: list[str] = Field(
+        max_length=MAX_INDEX_THINGS,
+        description='Each visible object, animal or prop in two or three words: "red cup".',
+    )
+    transcript: list[SpokenWord] = Field(
+        max_length=MAX_INDEX_WORDS, description="Every word said, with its times."
+    )
+    moments: list[TakeMoment] = Field(max_length=MAX_INDEX_MOMENTS)
+    quality: TakeQuality
+
 
 class TakeReview(BaseModel):
     """Gemini's review of one take: the model's output type."""
@@ -919,6 +968,9 @@ class TakeReview(BaseModel):
             'about what you saw or heard: "the cleanest delivery, and you held the smile".'
         ),
     )
+    # A default only so a review written before the index still reads; Gemini is asked
+    # for it every time (REVIEW_INSTRUCTIONS).
+    index: TakeIndex | None = None
 
 
 class DirectorTakeOut(BaseModel):
@@ -1359,3 +1411,153 @@ class RevisionDraft(BaseModel):
 class ReviseResult(BaseModel):
     version: YourVersion
     summary: str = Field(max_length=MAX_REVISE_SUMMARY)
+
+
+# The conversational editor: the member's request, said or typed, with the editor's state,
+# and Director's answer as edits the browser applies (apps/web lib/editor-actions.ts).
+
+MAX_EDITOR_TEXT = 500
+# About a minute of Opus speech, base64: far more than a request takes to say.
+MAX_EDITOR_AUDIO_BASE64 = 1_400_000
+MAX_EDITOR_ACTIONS = 40
+MAX_EDITOR_CHOICES = 4
+MAX_EDITOR_FIXES = 20
+
+type CaptionStyle = Literal["pop", "classic", "off"]
+type Grade = Literal["none", "black-and-white", "warm", "cool", "high-contrast", "vintage", "vivid"]
+type EditorOp = Literal[
+    "pick_take",
+    "trim",
+    "move_shot",
+    "swap_shots",
+    "drop_shot",
+    "restore_shot",
+    "captions",
+    "edit_caption",
+    "set_grade",
+    "set_volume",
+    "asset_request",
+    "reset_to_picks",
+    "undo",
+    "redo",
+    "reshoot",
+]
+type EditorOutcome = Literal["applied", "ask", "no-match", "declined", "confirm", "answer"]
+
+
+class EditorShotState(BaseModel):
+    model_config = REQUEST
+
+    shotIndex: int = Field(ge=0, lt=MAX_SHOTS)
+    takeId: UUID | None = Field(strict=False, description="The take playing; null if none.")
+    startSeconds: float = Field(ge=0, le=MAX_SHOT_SECONDS, description="In point in the take.")
+    endSeconds: float = Field(ge=0, le=MAX_SHOT_SECONDS, description="Out point in the take.")
+    position: int | None = Field(ge=0, lt=MAX_SHOTS, description="Its place; null if dropped.")
+    grade: Grade
+
+
+class CaptionFix(BaseModel):
+    model_config = REQUEST
+
+    text: str = Field(min_length=1, max_length=80)
+    replacement: str = Field(max_length=80)
+
+
+class EditorState(BaseModel):
+    model_config = REQUEST
+
+    shots: list[EditorShotState] = Field(max_length=MAX_SHOTS)
+    captions: CaptionStyle
+    sound: bool
+    music: bool = Field(description="Whether the video has a music track.")
+    fixes: list[CaptionFix] = Field(max_length=MAX_EDITOR_FIXES)
+
+
+class EditorRequest(BaseModel):
+    model_config = REQUEST
+
+    videoId: str = Field(pattern=VIDEO_ID_PATTERN)
+    text: str | None = Field(min_length=1, max_length=MAX_EDITOR_TEXT)
+    audio: str | None = Field(
+        min_length=100, max_length=MAX_EDITOR_AUDIO_BASE64, description="The request said, base64."
+    )
+    audioType: Literal["audio/webm", "audio/mp4", "audio/ogg"] | None
+    state: EditorState
+
+
+class EditorDraftAction(BaseModel):
+    """One edit, as Gemini writes it: shots and takes by the numbers the member sees."""
+
+    op: EditorOp
+    shot: int | None = Field(ge=1, le=MAX_SHOTS, description="Shot number, from 1.")
+    take: int | None = Field(ge=1, le=99, description="pick_take: take number in its shot.")
+    otherShot: int | None = Field(
+        ge=1, le=MAX_SHOTS, description="swap_shots: the other shot number."
+    )
+    position: int | None = Field(ge=1, le=MAX_SHOTS, description="move_shot: new place, from 1.")
+    startSeconds: float | None = Field(
+        ge=0, le=MAX_SHOT_SECONDS, description="trim: new in point, seconds from the take's start."
+    )
+    endSeconds: float | None = Field(
+        ge=0, le=MAX_SHOT_SECONDS, description="trim: new out point, seconds from the take's start."
+    )
+    value: str | None = Field(
+        max_length=200,
+        description=(
+            "captions: pop | classic | off. set_grade: a grade or none. set_volume: voice |"
+            " music. asset_request: what to make or change, in a sentence."
+        ),
+    )
+    level: float | None = Field(ge=0, le=1, description="set_volume: 0 silent to 1 full.")
+    text: str | None = Field(max_length=80, description="edit_caption: the words to replace.")
+    replacement: str | None = Field(max_length=80, description="edit_caption: what to show.")
+    steps: int | None = Field(ge=1, le=20, description="undo / redo: how many requests.")
+
+
+class TakeChoiceDraft(BaseModel):
+    shot: int = Field(ge=1, le=MAX_SHOTS)
+    take: int = Field(ge=1, le=99)
+    atSeconds: float = Field(ge=0, le=MAX_SHOT_SECONDS, description="The moment to show.")
+    note: str = Field(max_length=120, description='Why it\'s a candidate: "parrot on the left".')
+
+
+class EditorDraft(BaseModel):
+    """Director's answer to one editor request: the model's output type."""
+
+    heard: str = Field(max_length=MAX_EDITOR_TEXT, description="What they asked, in their words.")
+    outcome: EditorOutcome
+    say: str = Field(min_length=1, max_length=240, description="One or two short sentences.")
+    actions: list[EditorDraftAction] = Field(max_length=MAX_EDITOR_ACTIONS)
+    choices: list[TakeChoiceDraft] = Field(max_length=MAX_EDITOR_CHOICES)
+
+
+class EditorAction(BaseModel):
+    """One edit for the browser to apply, with shots by index and takes by id."""
+
+    op: EditorOp
+    shotIndex: int | None
+    takeId: UUID | None
+    otherShotIndex: int | None
+    position: int | None
+    startSeconds: float | None
+    endSeconds: float | None
+    value: str | None
+    level: float | None
+    text: str | None
+    replacement: str | None
+    steps: int | None
+
+
+class TakeChoice(BaseModel):
+    shotIndex: int
+    takeId: UUID
+    atSeconds: float
+    note: str
+
+
+class EditorReply(BaseModel):
+    heard: str
+    outcome: EditorOutcome
+    say: str
+    actions: list[EditorAction]
+    choices: list[TakeChoice]

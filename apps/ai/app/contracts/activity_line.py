@@ -29,6 +29,7 @@ type ActivityName = Annotated[
         "director.take_recorded",
         "director.take_reviewed",
         "director.cut_saved",
+        "director.editor_request",
         "director.publish_copy_drafted",
         "director.publish_started",
         "director.published",

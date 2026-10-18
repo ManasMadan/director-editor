@@ -12,6 +12,7 @@ import { env } from "./env";
 import { AnalyticsModule } from "./modules/analytics";
 import { AssetsModule } from "./modules/assets";
 import { DirectorModule } from "./modules/director";
+import { EditorModule } from "./modules/editor";
 import { FilesModule } from "./modules/files";
 import { PublishModule } from "./modules/publish";
 import { RealtimeModule } from "./modules/realtime";
@@ -45,6 +46,7 @@ import { NotificationsProducerModule } from "./notifications";
     RecordingModule,
     DirectorModule,
     AssetsModule,
+    EditorModule,
     PublishModule,
     YourVersionModule,
   ],

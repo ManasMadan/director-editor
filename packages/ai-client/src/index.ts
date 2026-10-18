@@ -17,6 +17,7 @@ import { createClient } from "./generated/client";
 import {
   addDirectorAsset,
   alignDirectorMatchCut,
+  askDirectorEditor,
   brainstormDirectorTemplate,
   checkDirectorScene,
   chooseDirectorAsset,
@@ -49,6 +50,7 @@ import type {
   CreatePlanRequest,
   DirectorCutCreate,
   DirectorTakeCreate,
+  EditorRequest,
   ErrorCode,
   ErrorIssue,
   LocateRequest,
@@ -230,6 +232,9 @@ function directorCalls(forCall: ClientFor) {
     },
     async checkScene(caller: AiCaller, body: SceneCheckRequest) {
       return unwrap(checkDirectorScene({ client: await forCall(caller), body }));
+    },
+    async askEditor(caller: AiCaller, body: EditorRequest) {
+      return unwrap(askDirectorEditor({ client: await forCall(caller), body }));
     },
     async locate(caller: AiCaller, body: LocateRequest) {
       return unwrap(locateDirectorTarget({ client: await forCall(caller), body }));

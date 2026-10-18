@@ -9,6 +9,7 @@
 import type { INestApplicationContext } from "@nestjs/common";
 import { AssetsService, assetsRouter } from "../modules/assets";
 import { DirectorService, directorRouter } from "../modules/director";
+import { EditorService, editorRouter } from "../modules/editor";
 import { FilesService, filesRouter } from "../modules/files";
 import { PublishService, publishRouter } from "../modules/publish";
 import { RealtimeService, realtimeRouter } from "../modules/realtime";
@@ -26,6 +27,7 @@ export function createRouter(procedures: Procedures, app: INestApplicationContex
     files: filesRouter(procedures, app.get(FilesService)),
     director: directorRouter(procedures, app.get(DirectorService)),
     assets: assetsRouter(procedures, app.get(AssetsService)),
+    editor: editorRouter(procedures, app.get(EditorService)),
     publish: publishRouter(procedures, app.get(PublishService)),
     recording: recordingRouter(procedures, app.get(RecordingService)),
     yourVersion: yourVersionRouter(procedures, app.get(YourVersionService)),
