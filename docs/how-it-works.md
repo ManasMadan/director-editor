@@ -154,8 +154,13 @@ seconds' silent 720p preview clip per shot by Veo 3.1 Lite, and a soundtrack per
 by Lyria 3 Clip, matched to its moods and pace. Each prompt is made only from the shot's own directions, never its title or
 lines, which could name a brand, and anyone pictured is a generic person, never a likeness
 of the Short's creator. The files sit in Cloud Storage, and `director.plan` links them,
-with short-lived signed URLs, when a starter template's own page is opened.
-<!-- verify after the template page shows seed media -->
+with short-lived signed URLs, when a starter template's own page is opened. There each
+shot card shows its storyboard (lazy-loaded) and plays its Veo preview inline when tapped,
+one at a time, and a small player plays the Lyria soundtrack
+(`apps/web/src/modules/director/components/shot-list.tsx`, `pages/director.tsx`). Every
+element keeps the link it was first given, so reading the plan again doesn't restart
+what's playing; when a link has expired on a page left open, the element takes the
+freshest link the page has, or the page reads the plan once more for new ones.
 
 ## The live call
 
