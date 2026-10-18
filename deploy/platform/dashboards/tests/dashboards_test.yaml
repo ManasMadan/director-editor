@@ -26,4 +26,4 @@ tests:
   - it: reads the activity lines' JSON fields
     documentSelector: { path: metadata.name, value: dashboard-director }
     asserts:
-      - matchRegex: { path: 'data["director.json"]', pattern: '\| json \| activity=\\"director\.indexed\\"' }
+      - matchRegex: { path: 'data["director.json"]', pattern: '\| json activity, tokens=\\"target\.inputTokens\\" \| activity=\\"director\.indexed\\"' }

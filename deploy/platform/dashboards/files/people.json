@@ -225,7 +225,7 @@
                 "value": [
                   {
                     "title": "Everything they did",
-                    "url": "/d/director-who-did-what?var-namespace=${namespace}&var-person=${__value.raw}&${__url_time_range}"
+                    "url": "/d/director-who-did-what?var-namespace=${namespace}&var-person=${__value.raw:percentencode}&${__url_time_range}"
                   }
                 ]
               }

@@ -61,13 +61,13 @@
           "refId": "A",
           "queryType": "instant",
           "legendFormat": "input",
-          "expr": "sum(sum_over_time({namespace=\"$namespace\"} |= \"director.indexed\" | json | activity=\"director.indexed\" | unwrap target_inputTokens | __error__=\"\" [$__range]))"
+          "expr": "sum(sum_over_time({namespace=\"$namespace\"} |= \"director.indexed\" | json activity, tokens=\"target.inputTokens\" | activity=\"director.indexed\" | unwrap tokens | __error__=\"\" [$__range]) by (activity))"
         },
         {
           "refId": "B",
           "queryType": "instant",
           "legendFormat": "output",
-          "expr": "sum(sum_over_time({namespace=\"$namespace\"} |= \"director.indexed\" | json | activity=\"director.indexed\" | unwrap target_outputTokens | __error__=\"\" [$__range]))"
+          "expr": "sum(sum_over_time({namespace=\"$namespace\"} |= \"director.indexed\" | json activity, tokens=\"target.outputTokens\" | activity=\"director.indexed\" | unwrap tokens | __error__=\"\" [$__range]) by (activity))"
         }
       ]
     },
@@ -120,7 +120,7 @@
         {
           "refId": "A",
           "legendFormat": "average",
-          "expr": "avg_over_time({namespace=\"$namespace\"} |= \"director.call_ended\" | json | activity=\"director.call_ended\" | unwrap durationMs | __error__=\"\" [$__interval])"
+          "expr": "avg_over_time({namespace=\"$namespace\"} |= \"director.call_ended\" | json activity, durationMs | activity=\"director.call_ended\" | unwrap durationMs | __error__=\"\" [$__interval]) by (activity)"
         }
       ]
     },
@@ -153,7 +153,7 @@
         {
           "refId": "A",
           "legendFormat": "score",
-          "expr": "avg_over_time({namespace=\"$namespace\"} |= \"director.take_reviewed\" | json | activity=\"director.take_reviewed\" | outcome=\"ok\" | unwrap target_score | __error__=\"\" [$__interval])"
+          "expr": "avg_over_time({namespace=\"$namespace\"} |= \"director.take_reviewed\" | json activity, outcome, score=\"target.score\" | activity=\"director.take_reviewed\" | outcome=\"ok\" | unwrap score | __error__=\"\" [$__interval]) by (activity)"
         }
       ]
     },

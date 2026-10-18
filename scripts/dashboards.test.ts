@@ -48,4 +48,18 @@ describe("the activity dashboards", () => {
       expect(ACTIVITIES as readonly string[]).toContain(name);
     }
   });
+
+  // An unwrapped range aggregation keeps every label, and `| json` makes each line's ids
+  // labels: without a grouping, every line is a series of its own (and past Loki's
+  // max_query_series the panel fails). It must extract only what it reads, and group.
+  it.each(files)("%s groups every query that unwraps a value", (file) => {
+    const { panels } = dashboard.parse(JSON.parse(readFileSync(join(DIR, file), "utf8")));
+    const unwrapping = panels
+      .flatMap((panel) => panel.targets.map((target) => target.expr))
+      .filter((expr) => expr.includes("| unwrap "));
+    for (const expr of unwrapping) {
+      expect(expr).toMatch(/\]\) by \(/);
+      expect(expr).not.toContain("| json |");
+    }
+  });
 });

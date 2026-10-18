@@ -31,7 +31,7 @@
       {
         "name": "person",
         "label": "Person (email or user id)",
-        "description": "An email matches what they did while signed in; a user id also matches their background jobs, which carry only the id.",
+        "description": "Exactly their email or user id. An email finds what they did while signed in; a user id also finds their background jobs and every other line of their requests, which carry only the id.",
         "type": "textbox",
         "query": "",
         "current": { "text": "", "value": "" },
@@ -61,7 +61,7 @@
         {
           "refId": "A",
           "legendFormat": "{{activity}}",
-          "expr": "sum by (activity) (count_over_time({namespace=\"$namespace\"} |= \"$person\" | json | activity!=\"\" [$__interval]))"
+          "expr": "sum by (activity) (count_over_time({namespace=\"$namespace\"} |= \"$person\" | json | activity!=\"\" | actor_email=\"$person\" or actor_userId=\"$person\" [$__interval]))"
         }
       ]
     },
@@ -77,7 +77,7 @@
           "refId": "A",
           "queryType": "instant",
           "format": "table",
-          "expr": "sum by (ip, userAgent) (count_over_time({namespace=\"$namespace\"} |= \"$person\" | json | activity!=\"\" | ip!=\"\" [$__range]))"
+          "expr": "sum by (ip, userAgent) (count_over_time({namespace=\"$namespace\"} |= \"$person\" | json | activity!=\"\" | actor_email=\"$person\" or actor_userId=\"$person\" | ip!=\"\" [$__range]))"
         }
       ],
       "transformations": [
@@ -94,7 +94,7 @@
       "id": 3,
       "type": "table",
       "title": "Timeline",
-      "description": "Every activity line, newest first: sign-ins, every call with its outcome, Director's work and their background jobs. Click a trace id to open the trace.",
+      "description": "Every activity line, newest first: sign-ins, every call with its outcome, Director's work, and (looked up by user id) their background jobs. Click a trace id to open the trace.",
       "gridPos": { "x": 0, "y": 8, "w": 24, "h": 14 },
       "datasource": { "type": "loki", "uid": "${datasource}" },
       "targets": [
@@ -102,7 +102,7 @@
           "refId": "A",
           "queryType": "range",
           "maxLines": 1000,
-          "expr": "{namespace=\"$namespace\"} |= \"$person\" | json | activity!=\"\""
+          "expr": "{namespace=\"$namespace\"} |= \"$person\" | json | activity!=\"\" | actor_email=\"$person\" or actor_userId=\"$person\""
         }
       ],
       "transformations": [
@@ -197,7 +197,7 @@
       "id": 4,
       "type": "logs",
       "title": "Everything logged for them",
-      "description": "Every line naming them, activity or not (errors in their requests included). A line's traceId links to Jaeger.",
+      "description": "Every line that is theirs. With a user id: everything their requests and background jobs logged, errors included. With an email: their activity lines only, since the other lines carry the user id. A line's traceId links to Jaeger.",
       "gridPos": { "x": 0, "y": 22, "w": 24, "h": 12 },
       "datasource": { "type": "loki", "uid": "${datasource}" },
       "options": {
@@ -210,7 +210,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{namespace=\"$namespace\"} |= \"$person\""
+          "expr": "{namespace=\"$namespace\"} |= \"$person\" | json | actor_email=\"$person\" or actor_userId=\"$person\" or userId=\"$person\""
         }
       ]
     }
