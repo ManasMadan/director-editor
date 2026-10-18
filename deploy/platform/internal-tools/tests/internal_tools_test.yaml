@@ -32,7 +32,11 @@ tests:
   - it: sends the bare host to the tool's page, behind the same password
     asserts:
       - equal:
-          path: "spec.rules[0]"
+          path: "spec.rules[0].matches"
+          value: [{ path: { type: PathPrefix, value: /jmap } }]
+        documentSelector: { path: "spec.hostnames[0]", value: mail-admin.example.com }
+      - equal:
+          path: "spec.rules[1]"
           value:
             name: home
             matches: [{ path: { type: Exact, value: / } }]

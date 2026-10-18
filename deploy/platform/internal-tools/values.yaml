@@ -46,10 +46,13 @@ tools:
     host: jaeger
     observability: true
     service: { namespace: observability, name: jaeger, port: 16686 }
-  # Stalwart's web admin (deploy/platform/mail, webAdmin).
+  # Stalwart's web admin (deploy/platform/mail, webAdmin). Once signed in, the page calls
+  # JMAP with its own bearer token, which basic auth would refuse; JMAP asks for
+  # Stalwart's own sign-in on every call.
   mail-admin:
     host: mail-admin
     home: /admin/
+    openPaths: [/jmap]
     service: { namespace: mail, name: mail-admin, port: 8080 }
   # RustFS's consoles (deploy/charts/data, storage.<server>.console), in the
   # environment's namespace.
