@@ -130,6 +130,13 @@ export function useLiveUpdates(activeOrganizationId: string | null | undefined) 
   const refetch = {
     "files.changed": () => queryClient.invalidateQueries({ queryKey: api.files.key() }),
     "director.changed": () => queryClient.invalidateQueries({ queryKey: api.director.key() }),
+    // A clipped attempt is a new take too: the shots and takes change with the session.
+    "recording.changed": async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: api.recording.key() }),
+        queryClient.invalidateQueries({ queryKey: api.director.key() }),
+      ]);
+    },
   } satisfies Record<RealtimeMessage["type"], () => Promise<void>>;
 
   useRealtime(
