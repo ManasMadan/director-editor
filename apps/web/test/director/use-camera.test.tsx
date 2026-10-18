@@ -101,5 +101,10 @@ describe("useCamera", () => {
     hook.current.face("front");
     await expect.poll(() => hook.current.facing).toBe("front");
     await expect.poll(() => getUserMedia.mock.calls.length).toBe(3);
+    // Flipping twice comes back to the back camera.
+    hook.current.flip();
+    await expect.poll(() => hook.current.facing).toBe("back");
+    hook.current.flip();
+    await expect.poll(() => hook.current.facing).toBe("front");
   });
 });

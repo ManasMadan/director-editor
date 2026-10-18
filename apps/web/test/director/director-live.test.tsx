@@ -442,6 +442,31 @@ describe("Director live's hook", () => {
     expect(hook.current.state).toBe("idle");
   });
 
+  it("tells Director about a flip at once when the picture's already up, and not after it's gone", async () => {
+    canvasCamera();
+    const hook = await renderHook(() => useDirectorLive(options()));
+    await userEvent.click(document.body);
+    hook.current.start();
+    await expect.poll(() => FakeSocket.all.length).toBe(1);
+    // Still joining: nothing to tell yet.
+    hook.current.camera("back");
+    hook.current.answer("t0", "done");
+    hook.current.take("countdown");
+    FakeSocket.last.open();
+    // The camera's <video> already shows a picture: the note goes straight after a frame.
+    hook.current.camera("front");
+    await expect
+      .poll(() => FakeSocket.last.sentOf("camera"), { timeout: 5_000 })
+      .toEqual([{ type: "camera", facing: "front" }]);
+    expect(FakeSocket.last.sentOf("tool_result")).toEqual([]);
+    expect(FakeSocket.last.sentOf("take")).toEqual([]);
+    // Flipped, then gone before the frame could go: nothing more is sent on the old line.
+    hook.current.camera("back");
+    FakeSocket.last.hangUp("RATE_LIMITED");
+    await expect.poll(() => hook.current.state).toBe("unavailable");
+    expect(FakeSocket.last.sentOf("camera")).toHaveLength(1);
+  });
+
   it("tells the relay about a move to another shot made while it was still joining", async () => {
     canvasCamera();
     const events = options();

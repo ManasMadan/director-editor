@@ -175,8 +175,9 @@ function DirectorPill({ live }: { live: DirectorLive }) {
 function LiveNotice({ live, liveOn }: { live: DirectorLive; liveOn: boolean }) {
   const t = useTranslations("director.live");
   const failureMessage = useLiveFailure();
-  if (!liveOn || live.state === "unavailable") {
-    const failure = liveOn ? (live.failure ?? "INTERNAL") : "FEATURE_DISABLED";
+  // Set only once Director has given up (or when the site has it off), never mid-retry.
+  const failure = liveOn ? live.failure : "FEATURE_DISABLED";
+  if (failure) {
     return (
       <div role="status" className={cn("rounded-2xl px-3.5 py-2.5 text-sm", GLASS)}>
         <p className="font-semibold">{failureMessage(failure)}</p>
@@ -211,7 +212,9 @@ function TellBox({ live }: { live: DirectorLive }) {
   const send = (event: FormEvent) => {
     event.preventDefault();
     const line = text.trim();
-    if (line && live.say(line)) {
+    // The box is only enabled while Director is here to read it.
+    if (line) {
+      live.say(line);
       setText("");
     }
   };
@@ -479,7 +482,8 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
 function LeaveDialog({ leaving }: { leaving: ReturnType<typeof useLeaveGuard> }) {
   const t = useTranslations("director.shoot.leaving");
   return (
-    <AlertDialog open={leaving.asking} onOpenChange={(open) => (open ? null : leaving.stay())}>
+    // Only ever closed from inside (Stay, Escape, a tap outside): each of those means stay.
+    <AlertDialog open={leaving.asking} onOpenChange={() => leaving.stay()}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{t("title")}</AlertDialogTitle>

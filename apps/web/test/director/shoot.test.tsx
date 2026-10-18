@@ -292,6 +292,9 @@ describe("a shoot with Director", () => {
     await expect.element(page.getByRole("button", { name: "Record a take" })).toBeVisible();
     await userEvent.click(page.getByRole("button", { name: "Record a take" }));
     await expect.element(page.getByRole("button", { name: "Cancel the countdown" })).toBeVisible();
+    // Only Escape calls it off from the keyboard.
+    await userEvent.keyboard("x");
+    await expect.element(page.getByRole("button", { name: "Cancel the countdown" })).toBeVisible();
     await userEvent.keyboard("{Escape}");
     await expect.element(page.getByRole("button", { name: "Record a take" })).toBeVisible();
     expect(page.getByText("REC").query()).toBeNull();
@@ -338,6 +341,9 @@ describe("leaving the shoot", () => {
     canvasCamera();
     const { page, videoId } = await openShoot({ shots: [walkIn, smile] });
     await startShooting(page);
+    // A back with nothing at stake isn't the guard's business.
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    expect(page.getByRole("alertdialog").query()).toBeNull();
     await userEvent.click(page.getByRole("link", { name: "Leave the shoot" }));
     await expect.poll(currentUrl).toBe(`/director/${videoId}`);
   });
@@ -356,7 +362,11 @@ describe("leaving the shoot", () => {
     await userEvent.click(dialog.getByRole("button", { name: "Stay" }));
     await expect.element(page.getByLabelText("Your take, on loop")).toBeVisible();
     expect(currentUrl()).toBe(`/director/${videoId}/shoot?shot=0&audio=voice`);
-    // The browser's back asks too.
+    // The browser's back asks too, and asks again after Stay.
+    window.history.back();
+    await expect.element(page.getByRole("alertdialog", { name: "Leave?" })).toBeVisible();
+    await userEvent.click(page.getByRole("button", { name: "Stay" }));
+    await expect.element(page.getByRole("alertdialog")).not.toBeInTheDocument();
     window.history.back();
     await expect.element(page.getByRole("alertdialog", { name: "Leave?" })).toBeVisible();
     await userEvent.click(page.getByRole("button", { name: "Leave" }));
@@ -395,6 +405,47 @@ describe("when Director can't join", () => {
     expect(page.getByRole("textbox", { name: "Tell Director" }).query()).toBeNull();
     await expect.element(page.getByRole("button", { name: "Record a take" })).toBeEnabled();
     expect(await turns()).toEqual([]);
+    // Watching a take back, there's no one to type to either.
+    await userEvent.click(page.getByRole("button", { name: "Record a take" }));
+    await userEvent.click(page.getByRole("button", { name: "Stop recording" }), {
+      timeout: 6_000,
+    });
+    await expect.element(page.getByLabelText("Your take, on loop")).toBeVisible();
+    expect(page.getByRole("textbox", { name: "Tell Director" }).query()).toBeNull();
+  });
+});
+
+describe("filming", () => {
+  it("opens the first shot when the address names none", async () => {
+    canvasCamera();
+    const { page } = await openShoot({ shots: [walkIn, smile] }, "audio=voice");
+    await startShooting(page);
+    await expect.element(page.getByRole("img", { name: "Shot 1 of 2" })).toBeVisible();
+  });
+
+  it("plays the original's sound while a take films along to it", async () => {
+    canvasCamera();
+    const { page } = await openShoot(
+      { audio: "music", shots: [walkIn, smile] },
+      "shot=0&audio=original",
+    );
+    await startShooting(page);
+    await userEvent.click(page.getByRole("button", { name: "Record a take" }));
+    await expect
+      .element(page.getByTitle("The original's audio plays while you film."), { timeout: 6_000 })
+      .toBeInTheDocument();
+  });
+
+  it("says when this browser can't record, and goes back to getting ready", async () => {
+    canvasCamera();
+    vi.stubGlobal("MediaRecorder", undefined);
+    const { page } = await openShoot({ shots: [walkIn, smile] });
+    await startShooting(page);
+    await userEvent.click(page.getByRole("button", { name: "Record a take" }));
+    await expect
+      .poll(() => page.getByRole("alert").query()?.textContent, { timeout: 6_000 })
+      .toBe("Director couldn't start the camera's recording here. Try again, or another browser.");
+    await expect.element(page.getByRole("button", { name: "Record a take" })).toBeEnabled();
   });
 });
 

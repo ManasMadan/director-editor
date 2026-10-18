@@ -304,6 +304,9 @@ describe("useStudio", () => {
     vi.useRealTimers();
     hook.current.actions.shutter();
     await until(() => expect(hook.current.phase).toBe("preview"));
+    // The shutter does nothing while the take is being watched back.
+    hook.current.actions.shutter();
+    expect(hook.current.phase).toBe("preview");
 
     hook.current.actions.use();
     await until(() => expect(hook.current.submit.error).not.toBeNull());

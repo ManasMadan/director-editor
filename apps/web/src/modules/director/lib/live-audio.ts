@@ -78,7 +78,6 @@ async function loadWorklet(context: AudioContext) {
 export interface Microphone {
   /** From now on, each ~100 ms of what the member says goes to `onChunk`. */
   listen(onChunk: (pcm: Int16Array) => void): void;
-  setMuted(muted: boolean): void;
   stop(): void;
 }
 
@@ -119,11 +118,6 @@ export async function openMicrophone(
     listen(onChunk) {
       node.port.onmessage = (event: MessageEvent<Float32Array>) =>
         onChunk(toPcm16(down(event.data)));
-    },
-    setMuted(muted) {
-      for (const track of tracks) {
-        track.enabled = !muted;
-      }
     },
     stop() {
       node.port.onmessage = null;

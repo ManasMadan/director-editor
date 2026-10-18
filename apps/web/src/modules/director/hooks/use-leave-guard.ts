@@ -6,6 +6,15 @@ import { useEffect, useRef, useState } from "react";
 type Href = Parameters<ReturnType<typeof useRouter>["push"]>[0];
 
 /**
+ * Puts this page's extra history entry on top, with no state of our own: Next's App
+ * Router copies its own state into every entry pushed this way (its native History API
+ * support), so back to the entry under it restores the page as it was.
+ */
+function pushEntry() {
+  window.history.pushState(null, "", window.location.href);
+}
+
+/**
  * Leaving the shoot without losing a take by accident. While `guarded` (a countdown, a
  * recording, a take not kept yet), ✕ and the browser's back ask first instead of leaving:
  * `halt` runs at once (the count called off, the recording stopped, so the question sits
@@ -38,7 +47,7 @@ export function useLeaveGuard({
   useEffect(() => {
     if (guarded && !pushed.current) {
       pushed.current = true;
-      window.history.pushState(window.history.state, "", window.location.href);
+      pushEntry();
     }
     if (!guarded && pushed.current) {
       pushed.current = false;
@@ -88,7 +97,7 @@ export function useLeaveGuard({
       setAsking(false);
       if (latest.current.guarded && !pushed.current) {
         pushed.current = true;
-        window.history.pushState(window.history.state, "", window.location.href);
+        pushEntry();
       }
     },
     confirm: () => {
