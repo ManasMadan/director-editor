@@ -51,3 +51,16 @@ export const userAdditionalFields = {
  * workspace, its takes and its videos, this long after it was made.
  */
 export const DEMO_GUEST_LIFETIME_S = DAY_S;
+
+/**
+ * Where apps/api's better-auth keeps sessions in Valkey (its secondary storage), which it
+ * reads before Postgres: whatever deletes a user's sessions outside better-auth (the
+ * worker's demo guest purge) deletes these keys too, or the sessions live on there.
+ */
+export const AUTH_STORAGE_PREFIX = "auth:";
+
+/** A user's session keys in Valkey: each session by its token, and better-auth's list of them. */
+export const authSessionKeys = (userId: string, tokens: readonly string[]) => [
+  ...tokens.map((token) => `${AUTH_STORAGE_PREFIX}${token}`),
+  `${AUTH_STORAGE_PREFIX}active-sessions-${userId}`,
+];

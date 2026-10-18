@@ -102,6 +102,11 @@ class Settings(GeminiSettings):
 
     # Budget: tokens a workspace may use per calendar month, across every model call.
     monthly_tokens_per_org: int = Field(default=2_000_000, ge=0, alias="AI_MONTHLY_TOKENS_PER_ORG")
+    # A demo guest's workspace (apps/api/src/auth/guest.ts) gets this many at most: it
+    # lasts a day, and the demo may have dozens at once.
+    monthly_tokens_per_demo_guest: int = Field(
+        default=300_000, ge=0, alias="AI_MONTHLY_TOKENS_PER_DEMO_GUEST"
+    )
 
     # Director (app/director.py): the Gemini model that watches shorts and reviews takes, by
     # its Gemini API name ("gemini-3.5-flash"). Gemini, not any provider: it is the model

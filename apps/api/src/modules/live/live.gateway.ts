@@ -69,8 +69,11 @@ export interface LiveOptions {
   /** Who is calling, as `inOrg` resolves it; throws an AppError when no one may. */
   caller(headers: Headers): Promise<OrgCaller>;
   plan(caller: OrgCaller, videoId: VideoId): Promise<DirectorPlan>;
-  /** Spends one of the caller's connections for the hour; throws RATE_LIMITED past it. */
-  spendCallLimit(userId: UserId): Promise<void>;
+  /**
+   * Spends one of the caller's connections for the hour (a demo guest's against its own,
+   * smaller limit); throws RATE_LIMITED past it.
+   */
+  spendCallLimit(caller: Pick<OrgCaller, "userId" | "guest">): Promise<void>;
   upstream: LiveUpstream | null;
   log: LiveLog;
   /** The clock camera frames are paced by (Date.now). */
@@ -268,7 +271,7 @@ export function mountLive(fastify: FastifyInstance, options: LiveOptions) {
       userId = caller.userId;
       const plan = readyPlan(await options.plan(caller, query.data.videoId), query.data.shot);
       // Only a call that can really start is charged.
-      await options.spendCallLimit(caller.userId);
+      await options.spendCallLimit(caller);
       if (client.readyState !== WebSocket.OPEN) {
         // Hung up while the plan loaded: a call that ended before it began.
         options.activity(callEnded({ code: null, startedAt: null }, target, options.now()));

@@ -209,15 +209,28 @@ and posting to YouTube is off."
   either: publish (My media shows the post Director wrote, to read: "See the post Director
   wrote"), or change, lock or link anything to its account.
 - `auth.user.guest_until` is when it's deleted: a day after it was made
-  (`DEMO_GUEST_LIFETIME_S`). Its session ends then too and is never extended (it's
-  better-auth's "don't remember me" session, with both cookies set to last exactly that
-  long). The worker's hourly `demo-guests` task calls `auth.purge_expired_guests()`,
-  which deletes each expired guest with the workspaces only it belongs to (their plans,
-  takes and cuts cascade from the workspace, its files and sessions from the user), and
-  then runs the files cleanup, so the deleted files' objects leave storage in the same run.
+  (`DEMO_GUEST_LIFETIME_S`). Its session ends then too, whatever cookies the browser sends:
+  a database hook clamps any new session expiry to `guest_until`, so a refresh can't
+  stretch it, and the session's copy in Valkey expires with it.
+- The worker's hourly `demo-retention` task calls `auth.purge_expired_guests()`, which
+  deletes each expired guest with the workspaces only it belongs to (their plans, takes,
+  cuts and AI usage cascade from the workspace, its files and sessions from the user). It
+  first adds the guests' AI usage to `ai.demo_usage` (by month, feature and model), so the
+  demo's cost stays on record. The worker then deletes the guests' session keys from
+  Valkey and runs the files cleanup, so the deleted files' objects leave storage in the
+  same run.
+- A guest gets less than a member: `AI_MONTHLY_TOKENS_PER_DEMO_GUEST` tokens a month (the
+  AI service asks `ai.demo_guest_workspace()`) and `DEMO_GUEST_LIVE_CALLS_PER_HOUR` live
+  calls an hour.
 - A browser already signed in (a guest within its day, or a member) gets no new guest.
-- Abuse limits: `DEMO_GUESTS_PER_ADDRESS` guests an hour from one client IP (better-auth's
-  rate limiter, 429), and `DEMO_GUEST_LIMIT` guests at once in all (`DEMO_GUESTS_FULL`).
+- Abuse limits:
+  - Turnstile on the guest sign-in while captcha is on. The widget is invisible unless
+    Cloudflare wants an interaction, so it's still one tap.
+  - `DEMO_GUESTS_PER_ADDRESS` guests an hour from one client IP (better-auth's rate
+    limiter, 429).
+  - `DEMO_GUEST_LIMIT` guests at once in all (`DEMO_GUESTS_FULL`). The live guests are a
+    sorted set in Valkey, checked and added to in one script, so a burst of sign-ins
+    can't overshoot the cap.
 - When no guest can be made, the sign-in page says so and offers the shared demo account
   below, filled in the form, with a line saying that others see what's filmed in it.
   Without a shared account it says why (the demo is full, or too many tries) and the
@@ -267,6 +280,11 @@ with its account. Running the command again also puts back the account's and its
 workspace's names.
 
 It indexes a Short of its own like any account (one).
+
+Its footage lasts a day too, like a guest's: the worker's `demo-retention` task calls
+`files.purge_demo_footage()`, which deletes the account's takes and videos older than a
+day (their files, and the takes and cuts with them), and the files cleanup removes their
+objects from storage. Its library (the seeds and its own Short) stays.
 
 ## Limits
 

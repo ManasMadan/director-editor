@@ -21,6 +21,7 @@ import { features } from "../features";
 import { copySeedTemplates } from "../modules/director/seeds.repository";
 import { emitEvent } from "../outbox";
 import { type AuthContext } from "./auth-context";
+import { GUEST_SIGN_IN_PATH } from "./guest";
 import { membershipOf, orgIdOf, userIdOf } from "./ids";
 import { orgAccess, orgRoles } from "./org-access";
 
@@ -190,6 +191,9 @@ export function captchaPlugins(env: Env) {
         "/sign-up/email",
         "/email-otp/send-verification-otp",
         "/email-otp/request-password-reset",
+        // A demo guest is a workspace and an AI allowance for a day: a bot mustn't take
+        // every place (the web app's widget stays invisible to a person).
+        ...(features.demoGuests ? [GUEST_SIGN_IN_PATH] : []),
       ],
     }),
   ];

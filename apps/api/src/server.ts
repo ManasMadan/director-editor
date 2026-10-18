@@ -77,6 +77,8 @@ export function liveCallOptions(deps: {
   analytics: Pick<AnalyticsService, "record">;
   // Only the one method this needs, so a test gives a plain stand-in, not a real limiter.
   calls: { take(userId: string): Promise<void> };
+  // A demo guest's calls, counted against its own, smaller limit.
+  guestCalls: { take(userId: string): Promise<void> };
   logger: Pick<Logger, "warn" | "error">;
   activity: RecordActivity;
 }): LiveOptions {
@@ -84,8 +86,8 @@ export function liveCallOptions(deps: {
     allowedOrigins: [env.WEB_URL],
     caller: deps.caller,
     plan: (caller, videoId) => deps.director.planOf(caller.userId, caller.orgId, videoId),
-    spendCallLimit: async (userId) => {
-      await deps.calls.take(userId);
+    spendCallLimit: async ({ userId, guest }) => {
+      await (guest ? deps.guestCalls : deps.calls).take(userId);
     },
     upstream: liveUpstream({
       project: env.GOOGLE_CLOUD_PROJECT,
@@ -123,5 +125,11 @@ function mountDirectorCall(
     windowSeconds: HOUR_S,
     onRedisError: "deny",
   });
-  mountLive(fastify, liveCallOptions({ ...deps, calls }));
+  const guestCalls = createRateLimiter(deps.redis, {
+    name: "director-guest-calls",
+    points: env.DEMO_GUEST_LIVE_CALLS_PER_HOUR,
+    windowSeconds: HOUR_S,
+    onRedisError: "deny",
+  });
+  mountLive(fastify, liveCallOptions({ ...deps, calls, guestCalls }));
 }

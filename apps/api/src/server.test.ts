@@ -13,7 +13,14 @@ import { liveCallOptions } from "./server";
 const userId = userIdSchema.parse("5e2d7c3a-1b4f-4a8e-9c6d-7f0a2b3c4d5e");
 const orgId = orgIdSchema.parse("0b9f5c1e-3f4a-4c55-8f0e-2a6d1c7e9b10");
 const videoId = videoIdSchema.parse("dQw4w9WgXcQ");
-const caller = { orgId, userId, role: "member" as const, signedInAt: new Date(0), demo: false };
+const caller = {
+  orgId,
+  userId,
+  role: "member" as const,
+  signedInAt: new Date(0),
+  demo: false,
+  guest: false,
+};
 
 function options(overrides: Partial<Parameters<typeof liveCallOptions>[0]> = {}) {
   return liveCallOptions({
@@ -21,6 +28,7 @@ function options(overrides: Partial<Parameters<typeof liveCallOptions>[0]> = {})
     director: { planOf: vi.fn(() => Promise.reject(new Error("not needed"))) },
     analytics: { record: vi.fn() },
     calls: { take: vi.fn(() => Promise.resolve()) },
+    guestCalls: { take: vi.fn(() => Promise.resolve()) },
     logger: { warn: vi.fn(), error: vi.fn() },
     activity: vi.fn(),
     ...overrides,
@@ -35,11 +43,15 @@ describe("the live call's wiring", () => {
     expect(planOf).toHaveBeenCalledWith(userId, orgId, videoId);
   });
 
-  it("spends the caller's call against the rate limiter", async () => {
-    const take = vi.fn(() => Promise.resolve());
-    const live = options({ calls: { take } });
-    await live.spendCallLimit(userId);
+  it("spends the caller's call against the rate limiter, a demo guest's against its own", async () => {
+    const [take, takeGuest] = [vi.fn(() => Promise.resolve()), vi.fn(() => Promise.resolve())];
+    const live = options({ calls: { take }, guestCalls: { take: takeGuest } });
+    await live.spendCallLimit({ userId, guest: false });
     expect(take).toHaveBeenCalledWith(userId);
+    expect(takeGuest).not.toHaveBeenCalled();
+    await live.spendCallLimit({ userId, guest: true });
+    expect(takeGuest).toHaveBeenCalledWith(userId);
+    expect(take).toHaveBeenCalledTimes(1);
   });
 
   it("records a started call as a call_started analytics event", () => {

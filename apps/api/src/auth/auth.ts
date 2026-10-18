@@ -19,6 +19,7 @@
 import { passkey } from "@better-auth/passkey";
 import { redisStorage } from "@better-auth/redis-storage";
 import {
+  AUTH_STORAGE_PREFIX,
   FRESH_SESSION_AGE,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
@@ -145,7 +146,7 @@ export function createAuth({ database = undefined, ...dependencies }: AuthDepend
 
     database: database ?? prismaAdapter(db, { provider: "postgresql" }),
     // Session lookups hit Redis, not Postgres, on every request.
-    secondaryStorage: redisStorage({ client: redis, keyPrefix: "auth:" }),
+    secondaryStorage: redisStorage({ client: redis, keyPrefix: AUTH_STORAGE_PREFIX }),
     advanced: {
       // Ids come from Postgres (uuidv7() defaults), like every other table.
       database: { generateId: false },

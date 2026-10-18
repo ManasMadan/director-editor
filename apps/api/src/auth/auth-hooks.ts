@@ -30,6 +30,7 @@ import {
 import type { AuthContext } from "./auth-context";
 import { auditEventForAlert, sessionEndReason, sessionMethod } from "./auth-events";
 import { DEMO_LOCKED_PATHS, ownSessionOnly, refuseDemoProfileChange, refuseForDemo } from "./demo";
+import { clampToGuestDay } from "./guest";
 import { orgIdOf, removedMemberSchema, userIdOf } from "./ids";
 import { type SecurityAlert, securityAlertFor } from "./security-alerts";
 
@@ -268,6 +269,13 @@ async function logSignedIn(context: AuthContext, userId: UserId, path?: string) 
 function sessionHooks(context: AuthContext): DatabaseHooks["session"] {
   const { db, record, actor, activity } = context;
   return {
+    // A demo guest's session ends with its day, however it's refreshed (guest.ts). Only
+    // get-session moves an expiry, and it has found the session (and its user) by then.
+    update: {
+      before: async (session, ctx) => ({
+        data: clampToGuestDay(session, ctx?.context.session?.user),
+      }),
+    },
     create: {
       // New sessions start in the user's first workspace (their personal one).
       before: async (session) => {

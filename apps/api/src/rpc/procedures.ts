@@ -60,6 +60,8 @@ export interface OrgCaller {
   signedInAt: Date;
   /** The shared demo account, which may not publish (its user's `demo` flag). */
   demo: boolean;
+  /** A demo guest (auth/guest.ts), which gets fewer live calls than a member. */
+  guest: boolean;
 }
 
 type ErrorParams = ErrorData["params"];
@@ -208,6 +210,7 @@ export function orgCallerFor(auth: Auth, memberships: Memberships) {
       userId: result.user.id,
       signedInAt: new Date(result.session.createdAt),
       demo: result.user.demo === true,
+      guest: result.user.guestUntil != null,
     };
   };
 }

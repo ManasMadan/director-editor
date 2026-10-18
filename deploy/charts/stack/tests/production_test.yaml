@@ -28,6 +28,9 @@ tests:
       - contains:
           path: "spec.template.spec.containers[0].env"
           content: { name: DEMO_GUESTS, value: "on" }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: DEMO_GUEST_LIMIT, value: "50" }
 
   - it: keeps the worker on the same bucket as the api
     template: deployment.yaml

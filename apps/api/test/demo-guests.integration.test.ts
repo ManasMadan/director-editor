@@ -18,7 +18,7 @@ let harness: Harness;
 let database: Database;
 
 beforeAll(async () => {
-  harness = await startApi(29, {
+  harness = await startApi(30, {
     DEMO_GUESTS: "on",
     DEMO_PASSWORD,
     DEMO_GUEST_LIMIT: String(GUEST_LIMIT),
@@ -63,12 +63,18 @@ async function seedsIn(orgId: string) {
   }
 }
 
-/** Ends every live guest's day, so a test starts with the cap free. */
-const expireGuests = () =>
-  database.write.user.updateMany({
+/**
+ * Ends every live guest's day, so a test starts with the cap free: in the database, and
+ * their places in Valkey (LIVE_GUESTS_KEY in src/auth/guest.ts, named here: importing the
+ * API's modules before startApi would read its environment too early).
+ */
+async function expireGuests() {
+  await database.write.user.updateMany({
     where: { guestUntil: { gt: new Date() } },
     data: { guestUntil: new Date(Date.now() - 1000) },
   });
+  await harness.redis.del("demo:live-guests");
+}
 
 // Each test makes its own guests, more than GUEST_LIMIT between them: each starts with
 // the cap free (the guests stay signed in; only the count frees up).
@@ -127,6 +133,24 @@ describe("trying the demo as a guest", () => {
     await session.rpc.user.me();
     const after = await current(session);
     expect(after.session.expiresAt).toBe(before.session.expiresAt);
+  });
+
+  it("ends the guest's session with its day even when the browser sends only the session cookie", async () => {
+    const session = await guest();
+    const { user, session: before } = await current(session);
+    // Without the "don't remember me" cookie, better-auth refreshes the session at once,
+    // by its 7 days; the server keeps it to the guest's day all the same.
+    const cookies = session.cookies();
+    cookies.delete("better-auth.dont_remember");
+    session.useCookies(cookies);
+    const after = await current(session);
+    expect(after.session.expiresAt).toBe(before.expiresAt);
+    expect(new Date(after.session.expiresAt).getTime()).toBe(new Date(user.guestUntil).getTime());
+    // And Valkey's copy, which better-auth reads first, goes when the day ends.
+    const token = decodeURIComponent(cookies.get("better-auth.session_token") ?? "").split(".")[0];
+    const ttl = await harness.redis.ttl(`auth:${token}`);
+    expect(ttl).toBeGreaterThan(0);
+    expect(ttl).toBeLessThanOrEqual(DAY_S);
   });
 
   it("keeps a guest coming back as the same guest, and a member as themselves", async () => {
@@ -231,7 +255,21 @@ describe("the demo's limits", () => {
     // The shared demo account is the way in meanwhile.
     expect((await createSession(harness).rpc.system.info()).demo).not.toBeNull();
 
-    await expireGuests();
+    // A day ends: its place frees up, and the next browser gets it.
+    const [first] = await harness.redis.zrange("demo:live-guests", "0", "0");
+    await harness.redis.zadd("demo:live-guests", Date.now() - 1000, first ?? "");
     await guest();
+    expect((await createSession(harness).auth("/sign-in/guest", {})).status).toBe(503);
+  });
+
+  it("holds the limit when many browsers ask at once", async () => {
+    const answers = await Promise.all(
+      Array.from({ length: GUEST_LIMIT * 2 }, () =>
+        createSession(harness).auth("/sign-in/guest", {}),
+      ),
+    );
+    const made = answers.filter((answer) => answer.status === 200);
+    expect(made).toHaveLength(GUEST_LIMIT);
+    expect(answers.filter((answer) => answer.status === 503)).toHaveLength(GUEST_LIMIT);
   });
 });

@@ -29,7 +29,7 @@ model User {
   /// carries it.
   demo             Boolean         @default(false)
   /// A demo guest's (apps/api/src/auth/guest.ts): when it and everything made in its
-  /// workspace are deleted (the worker's demo-guests task). Null for everyone else.
+  /// workspace are deleted (the worker's demo-retention task). Null for everyone else.
   /// Registered with better-auth like `demo`, never client input.
   guestUntil       DateTime?       @map("guest_until") @db.Timestamptz(3)
   createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)

@@ -90,9 +90,13 @@ export const envSchema = {
   DEMO_GUESTS: z.enum(["on", "off"]).default("off"),
   // How many guests may exist at once (each holds a workspace and its footage until it's
   // deleted): past it the demo falls back to the shared account, or says it's full.
-  DEMO_GUEST_LIMIT: z.coerce.number().int().positive().default(300),
-  // How many guests one address may make an hour: one browser needs one a day.
-  DEMO_GUESTS_PER_ADDRESS: z.coerce.number().int().positive().default(5),
+  DEMO_GUEST_LIMIT: z.coerce.number().int().positive().default(50),
+  // How many guests one address may make an hour. One browser needs one a day, but a
+  // judging room or an office shares one address; with captcha on, a bot can't use them.
+  DEMO_GUESTS_PER_ADDRESS: z.coerce.number().int().positive().default(20),
+  // Live calls a guest may start an hour (a member gets 20): each is minutes of Gemini
+  // Live, and the demo may have DEMO_GUEST_LIMIT guests at once.
+  DEMO_GUEST_LIVE_CALLS_PER_HOUR: z.coerce.number().int().positive().default(6),
   // Optional: the Python AI service, and the secret this API signs its calls with
   // (the same AI_SERVICE_SECRET the service verifies with).
   AI_URL: z.url().optional(),

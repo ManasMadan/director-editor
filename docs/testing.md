@@ -158,8 +158,8 @@ shell, for one).
   the api's breached-password suite 17, the web's browser tests 18, jobs 19, the jobs
   CLI's suite 20 (its worker fails every job on a real queue, so it shares with nothing),
   Python 6, the pre-push hook's end-to-end run 21 (emptied before each run), and the
-  api's files 24 to 26, 28 and 29 (the demo guests). A new suite takes the next free
-  number, 22 onwards;
+  api's files 24 to 26, 28, 29 (the activity log) and 30 (the demo guests). A new suite
+  takes the next free number: 22, 23, 27 or 31;
   `scripts/redis-databases.test.ts` fails when two suites that flush share one. A change
   to the flag needs the local container recreated (`docker compose up -d valkey`).
 - Tests never read your `.env`: they run with `.env.example`'s values (the ports docker

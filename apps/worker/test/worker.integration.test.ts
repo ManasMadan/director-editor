@@ -539,6 +539,7 @@ describe("maintenance", () => {
     tags: ["files"],
   }, async () => {
     const [expired, live, member, fileId, orgId] = [1, 2, 3, 4, 5].map(() => randomUUID());
+    const [token, liveToken, model] = [`t-${expired}`, `t-${live}`, `m-${expired}`];
     await asRole("postgres", async (client) => {
       await client.query(
         `INSERT INTO auth."user" (id, name, email, demo, guest_until, updated_at) VALUES
@@ -573,10 +574,31 @@ describe("maintenance", () => {
          VALUES ($1, $2, 'director-take-video', 'ready', 'take.webm', 'video/webm', 3, now())`,
         [fileId, expired],
       );
+      // What the guest spent on models, and both guests' sessions.
+      await client.query(
+        `INSERT INTO ai.usage (org_id, feature, model, input_tokens, output_tokens)
+         VALUES ($1, 'director-plan', $2, 100, 20), ($1, 'director-plan', $2, -40, 5)`,
+        [orgId, model],
+      );
+      await client.query(
+        `INSERT INTO auth.session (token, user_id, expires_at, updated_at) VALUES
+           ($1, $2, now() + interval '1 hour', now()), ($3, $4, now() + interval '1 hour', now())`,
+        [token, expired, liveToken, live],
+      );
     });
     await storage.write(`files/${fileId}`, Buffer.from("take"), "video/webm");
+    // better-auth's copies of the sessions in Valkey, which it reads before Postgres.
+    const redis = createRedis(process.env.REDIS_URL as string);
+    const expiredKeys = [`auth:${token}`, `auth:active-sessions-${expired}`];
+    for (const key of [...expiredKeys, `auth:${liveToken}`]) {
+      await redis.set(key, "{}", "EX", 3600);
+    }
 
-    const result = await maintenance.run("demo-guests");
+    const result = await maintenance.run("demo-retention");
+    // The expired guest's sessions are gone from Valkey too; the live guest's stays.
+    expect(await redis.exists(...expiredKeys)).toBe(0);
+    expect(await redis.exists(`auth:${liveToken}`)).toBe(1);
+    await redis.quit();
     expect(result.guests).toBeGreaterThanOrEqual(101);
     expect(result.objects).toBeGreaterThanOrEqual(2);
     expect(await storage.head(`files/${fileId}`)).toBeNull();
@@ -595,7 +617,51 @@ describe("maintenance", () => {
     });
     // The guest still in its day and the member stay; nothing of the expired guest does.
     expect(left).toEqual({ users: [live, member].sort(), rows: 0 });
-    expect((await maintenance.run("demo-guests")).guests).toBe(0);
+    // Except what it spent, added to the demo's totals.
+    const totals = await asRole("postgres", async (client) => {
+      const { rows } = await client.query<{ input: string; output: string }>(
+        `SELECT input_tokens::text AS input, output_tokens::text AS output
+           FROM ai.demo_usage WHERE model = $1 AND feature = 'director-plan'`,
+        [model],
+      );
+      return rows;
+    });
+    expect(totals).toEqual([{ input: "60", output: "25" }]);
+    expect((await maintenance.run("demo-retention")).guests).toBe(0);
+  });
+
+  it("deletes the shared demo account's footage after a day, and nobody else's", {
+    tags: ["files"],
+  }, async () => {
+    const [demo, member, old, recent, theirs] = [1, 2, 3, 4, 5].map(() => randomUUID());
+    await asRole("postgres", async (client) => {
+      await client.query(
+        `INSERT INTO auth."user" (id, name, email, demo, updated_at) VALUES
+           ($1::uuid, 'Director Demo', $1::text || '@demo.test', true, now()),
+           ($2::uuid, 'Member', $2::text || '@test.dev', false, now())`,
+        [demo, member],
+      );
+      await client.query(
+        `INSERT INTO files.file (id, user_id, purpose, status, filename, declared_type, declared_size, created_at, updated_at)
+         VALUES ($1, $3, 'director-cut-video', 'ready', 'cut.mp4', 'video/mp4', 3, now() - interval '25 hours', now()),
+                ($2, $3, 'director-take-video', 'ready', 'take.webm', 'video/webm', 3, now() - interval '1 hour', now()),
+                ($4, $5, 'director-take-video', 'ready', 'take.webm', 'video/webm', 3, now() - interval '3 days', now())`,
+        [old, recent, demo, theirs, member],
+      );
+    });
+    await storage.write(`files/${old}`, Buffer.from("cut"), "video/mp4");
+
+    const result = await maintenance.run("demo-retention");
+    expect(result.sharedFootage).toBe(1);
+    expect(await storage.head(`files/${old}`)).toBeNull();
+    const kept = await asRole("postgres", async (client) => {
+      const { rows } = await client.query<{ id: string }>(
+        "SELECT id FROM files.file WHERE id = ANY($1::uuid[])",
+        [[old, recent, theirs]],
+      );
+      return rows.map((row) => row.id).sort();
+    });
+    expect(kept).toEqual([recent, theirs].sort());
   });
 
   it("registers every schedule with BullMQ once", async () => {
@@ -606,7 +672,7 @@ describe("maintenance", () => {
     const schedulers = await queue.getJobSchedulers();
     expect(schedulers.map((s) => s.key).sort()).toEqual([
       "audit-partitions",
-      "demo-guests",
+      "demo-retention",
       "files-cleanup",
       "outbox-retention",
       "session-retention",
@@ -623,6 +689,11 @@ describe("maintenance", () => {
     ).rejects.toThrow(/permission denied/);
     await expect(
       asRole("app_api", (client) => client.query("SELECT auth.purge_expired_guests(1)")),
+    ).rejects.toThrow(/permission denied/);
+    await expect(
+      asRole("app_api", (client) =>
+        client.query("SELECT files.purge_demo_footage(interval '1 second')"),
+      ),
     ).rejects.toThrow(/permission denied/);
     await expect(
       asRole("app_worker", (client) => client.query(`DELETE FROM auth."user"`)),
