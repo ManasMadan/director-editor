@@ -24,6 +24,7 @@ from sqlalchemy import text
 from app.auth import CallerDep
 from app.clipping import Clipper, LocalClipper, RemoteClipper, clip_response
 from app.contracts.error_response import ErrorResponse
+from app.create import Creator, create_creator
 from app.db.models import DirectorAsset, DirectorCut, DirectorPlan, DirectorTake
 from app.db.session import close_engine, engine, open_engine
 from app.director import Director, create_director
@@ -40,7 +41,11 @@ from app.schemas import (
     AssetDrawingCreate,
     AssetImageOut,
     AssetSlotsOut,
+    BrainstormReply,
+    BrainstormRequest,
+    Brief,
     ClipRequest,
+    CreatePlanRequest,
     CutPick,
     DirectorCutCreate,
     DirectorCutOut,
@@ -54,12 +59,14 @@ from app.schemas import (
     LocateRequest,
     MatchCutAlignment,
     MatchCutRequest,
+    PlanEditRequest,
     PublishCopy,
     PublishCopyRequest,
     SceneCheck,
     SceneCheckRequest,
     ShotPlan,
     SpeechRequest,
+    StoryboardOut,
 )
 from app.settings import get_settings
 from app.speech import Speaker, create_speaker
@@ -73,6 +80,7 @@ class Services:
 
     redis: Redis
     director: Director | None
+    creator: Creator | None
     speaker: Speaker | None
     clipper: Clipper
 
@@ -98,6 +106,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     _services = Services(
         redis=redis,
         director=create_director(settings, director_queue, redis, http),
+        creator=create_creator(settings, director_queue, redis, http),
         speaker=create_speaker(settings),
         # Recorded attempts are cut on the Cloud Run clipper when CLIPPER_URL names it,
         # off this machine; otherwise here, the same way.
@@ -146,7 +155,22 @@ def _speaker() -> Speaker:
 SpeakerDep = Annotated[Speaker, Depends(_speaker)]
 
 
-def _plan_out(plan: DirectorPlan, images: Sequence[DirectorAsset] = ()) -> DirectorPlanOut:
+def _creator() -> Creator:
+    # Describing a template is part of Director: on and off with it.
+    creator = services().creator
+    if not creator:
+        raise AppError("FEATURE_DISABLED", {"feature": "director"})
+    return creator
+
+
+CreatorDep = Annotated[Creator, Depends(_creator)]
+
+
+def _plan_out(
+    plan: DirectorPlan,
+    images: Sequence[DirectorAsset] = (),
+    storyboards: Sequence[StoryboardOut] = (),
+) -> DirectorPlanOut:
     return DirectorPlanOut(
         id=plan.id,
         videoId=plan.video_id,
@@ -162,6 +186,8 @@ def _plan_out(plan: DirectorPlan, images: Sequence[DirectorAsset] = ()) -> Direc
             AssetImageOut(assetId=image.asset_id, status=image.status, objectKey=image.object_key)
             for image in images
         ],
+        storyboards=list(storyboards),
+        brief=Brief.model_validate(plan.brief) if plan.brief is not None else None,
         createdAt=plan.created_at,
         updatedAt=plan.updated_at,
     )
@@ -253,9 +279,12 @@ async def get_director_plan(
     caller: CallerDep,
     director: DirectorDep,
 ) -> DirectorPlanOut:
-    """The workspace's plan for a short, with the default images of its assets."""
+    """The workspace's plan for a short, with the default images of its assets (and a
+    created plan's storyboard cards)."""
+    creator = services().creator
     plan = await director.plan(caller.org_id, video_id)
-    return _plan_out(plan, await director.asset_images(caller.org_id, plan))
+    storyboards = await creator.storyboards(caller.org_id, plan) if creator else []
+    return _plan_out(plan, await director.asset_images(caller.org_id, plan), storyboards)
 
 
 @app.post("/v1/director/scene-checks", operation_id="checkDirectorScene")
@@ -452,3 +481,33 @@ async def align_director_match_cut(
     to move the incoming clip so the anchor stays put (status `not-found` when it can't
     be seen in both)."""
     return await director.align_match_cut(caller.org_id, caller.user_id, body)
+
+
+@app.post("/v1/director/brainstorm", operation_id="brainstormDirectorTemplate")
+async def brainstorm_director_template(
+    body: BrainstormRequest, caller: CallerDep, creator: CreatorDep
+) -> BrainstormReply:
+    """Director's next turn while a member describes a template: a reaction and at most
+    one question, or ready to write their shots."""
+    return await creator.brainstorm(caller.org_id, caller.user_id, body)
+
+
+@app.post("/v1/director/created", operation_id="createDirectorTemplate", status_code=201)
+async def create_director_template(
+    body: CreatePlanRequest, caller: CallerDep, creator: CreatorDep, request: Request
+) -> DirectorPlanOut:
+    """A plan of the member's own, from their brief and photos, queued to be written
+    (DIRECTOR_CREATE_LIMIT past the day's limit)."""
+    plan = await creator.create(
+        caller.org_id, caller.user_id, body, request.headers.get("x-request-id")
+    )
+    return _plan_out(plan)
+
+
+@app.put("/v1/director/created", operation_id="editDirectorTemplate")
+async def edit_director_template(
+    body: PlanEditRequest, caller: CallerDep, creator: CreatorDep
+) -> DirectorPlanOut:
+    """Saves the member's changes to the shots of a plan they described."""
+    plan = await creator.edit(caller.org_id, caller.user_id, body)
+    return _plan_out(plan, (), await creator.storyboards(caller.org_id, plan))

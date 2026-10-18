@@ -421,6 +421,8 @@ declare const messages: {
     "DIRECTOR_INDEX_LIMIT": "You've already added your own Short. Film it, or pick one of the templates.",
     "DIRECTOR_IMAGE_LIMIT": "You've made all the images you can for now. Upload your own, or pick one from stock.",
     "DIRECTOR_ASSET_NOT_FOUND": "That picture isn't here any more. Pick another.",
+    "DIRECTOR_CREATE_LIMIT": "You've described {limit, number} of your own today. Shoot one of those, or come back tomorrow.",
+    "DIRECTOR_PLAN_NOT_EDITABLE": "Only the person who described this one can change its shots.",
     "DIRECTOR_VIDEO_UNAVAILABLE": "That video isn't on YouTube, or it's private. Check the link and try again.",
     "DIRECTOR_TOO_LONG": "Director works with Shorts up to {maxSeconds, number} seconds long. Pick a shorter video.",
     "DIRECTOR_PLAN_NOT_FOUND": "This Short isn't in your library yet.",
@@ -448,6 +450,7 @@ declare const messages: {
     "RECORDING_SLICE_INVALID": "Part of the recording couldn't be read, so it wasn't kept.",
     "DIRECTOR_VIDEO_UNREADABLE": "Director couldn't watch this short. It may be private, age-restricted or removed.",
     "DIRECTOR_ANALYSIS_FAILED": "Director couldn't work out how to film this short. Try again.",
+    "DIRECTOR_CREATE_FAILED": "Director couldn't write your shots this time. Try describing it again.",
     "DIRECTOR_REVIEW_FAILED": "Director couldn't review this take. Record it again.",
     "RECORDING_CLIP_FAILED": "Director couldn't cut this attempt out of your footage. Try the shot again.",
     "METHOD_NOT_SUPPORTED": "That isn't supported here.",
@@ -728,7 +731,9 @@ declare const messages: {
       "playPreview": "Play the Veo preview of shot {index, number}",
       "pausePreview": "Pause the preview of shot {index, number}",
       "soundtrack": "Soundtrack, made with Lyria",
-      "playSoundtrack": "Play the soundtrack"
+      "playSoundtrack": "Play the soundtrack",
+      "changeShots": "Change the shots",
+      "noStoryboard": "Director is still drawing this shot"
     },
     "editor": {
       "title": "Edit your video",
@@ -978,7 +983,8 @@ declare const messages: {
       "user": "Yours",
       "shots": "{count, plural, one {# shot} other {# shots}}",
       "pending": "New Short",
-      "failed": "Couldn't index"
+      "failed": "Couldn't index",
+      "created": "Yours"
     },
     "index": {
       "title": "Bring your own Short",
@@ -1004,13 +1010,69 @@ declare const messages: {
         "watching": "Watching",
         "writing": "Writing shots",
         "ready": "Ready"
-      }
+      },
+      "writingCreated": "Director is writing your shots"
     },
     "credit": {
       "title": "You've used your AI credit",
       "body": "Each account can index one Short of its own, and yours is already in your library.",
       "seeds": "These starter templates are ready to shoot right now:",
       "close": "Got it"
+    },
+    "describe": {
+      "title": "Describe your own",
+      "body": "Type the reel you have in mind, add a few photos, and Director writes the shots with you.",
+      "start": "Describe it"
+    }
+  },
+  "create": {
+    "title": "Describe your own",
+    "back": "Back to the library",
+    "heading": "What do you want to make?",
+    "label": "Your idea",
+    "placeholder": "My morning coffee, cosy, 20 seconds, no talking",
+    "photos": "Photos",
+    "photosHint": "Up to {max, number}: your space, a prop, a look you like.",
+    "addPhoto": "Add a photo",
+    "removePhoto": "Remove photo {index, number}",
+    "photoAlt": "Your photo {index, number}",
+    "uploading": "Checking your photo…",
+    "photoFailed": "That photo didn't upload. Remove it and try another.",
+    "rights": "Only upload photos you have the right to use.",
+    "talk": "Talk it through",
+    "thinking": "Director is thinking…",
+    "director": "Director",
+    "you": "You",
+    "answerLabel": "Your answer",
+    "answerPlaceholder": "Type your answer",
+    "send": "Send",
+    "dictate": "Say it instead of typing",
+    "stopDictating": "Stop listening",
+    "listening": "Listening…",
+    "write": "Write my shots",
+    "writing": "Asking Director…",
+    "conversation": "Your talk with Director",
+    "plan": {
+      "title": "Your shots",
+      "intro": "Change anything you like: move shots, cut one, add one. Then shoot it with Director.",
+      "shot": "Shot {index, number}",
+      "shotTitle": "What happens",
+      "scene": "Where",
+      "seconds": "Seconds",
+      "moveUp": "Move shot {index, number} up",
+      "moveDown": "Move shot {index, number} down",
+      "remove": "Delete shot {index, number}",
+      "add": "Add a shot",
+      "newShot": "A new shot",
+      "newScene": "Anywhere with good light",
+      "save": "Save changes",
+      "saving": "Saving…",
+      "saved": "Saved",
+      "shoot": "Looks good, let's shoot",
+      "failedHelp": "Nothing was used up. Try describing it again.",
+      "again": "Describe it again",
+      "notYours": "Only the person who described this one can change its shots.",
+      "storyboardAlt": "Storyboard for shot {index, number}"
     }
   }
 };

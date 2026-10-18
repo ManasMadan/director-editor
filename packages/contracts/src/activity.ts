@@ -38,6 +38,12 @@ export const ACTIVITIES = [
   // The AI worker drew the default image of one of a plan's assets: ok, failed, or
   // refused (out of budget).
   "director.asset_drawn",
+  // A member described a template: Director brainstormed a turn, the plan was asked for,
+  // and the AI worker wrote it (ok, failed, or refused out of budget).
+  "director.brainstormed",
+  "director.create_requested",
+  "director.created",
+  "director.plan_edited",
   "director.plan_opened",
   "director.call_started",
   "director.call_ended",

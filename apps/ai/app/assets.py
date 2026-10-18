@@ -48,6 +48,7 @@ from app.db.session import tenant
 from app.log import log
 from app.realtime import publish_to_org
 from app.schemas import AspectRatio, Asset, AssetKind, ShotPlan
+from app.storyboards import storyboard_asset, storyboard_id, storyboard_prompt
 from app.usage import Allowance, reserve, settle
 
 # Spec'd limits on generated images (Vertex AI prices to be checked before they're
@@ -348,6 +349,23 @@ class _Job:
     reference_key: str | None = None
     base_key: str | None = None
     base_prompt: str | None = None
+    # A created plan's storyboard card (origin storyboard): the prompt it's drawn from. Its
+    # asset stands in for the card, so it's stored and logged like a default.
+    storyboard: str | None = None
+
+
+async def _room_today(session: AsyncSession, user_id: UUID | None, wanted: int) -> int:
+    """How many of `wanted` images the member still has room for today. Their claims
+    take turns, so two at once can't both read the same count and pass the day's limit
+    together; the lock is the caller's transaction's. An image nobody asked for (a seed's,
+    none of this service's) counts against nobody's day."""
+    if user_id is None:
+        return wanted
+    await session.execute(
+        select(func.pg_advisory_xact_lock(func.hashtextextended(images_lock_key(user_id), 0)))
+    )
+    made = await session.scalar(select(type_coerce(func.ai.images_today(user_id), Integer)))
+    return min(wanted, max(IMAGES_PER_MEMBER_PER_DAY - (made or 0), 0))
 
 
 class AssetMaker:
@@ -379,16 +397,7 @@ class AssetMaker:
         that saves the plan); how many it queued. A plan nobody indexed (none of this
         service's) counts against nobody's day."""
         assets = default_assets(plan)
-        if user_id is not None:
-            # The member's claims take turns, so two at once can't both read the same
-            # count and pass the day's limit together; the lock is the transaction's.
-            await session.execute(
-                select(
-                    func.pg_advisory_xact_lock(func.hashtextextended(images_lock_key(user_id), 0))
-                )
-            )
-            made = await session.scalar(select(type_coerce(func.ai.images_today(user_id), Integer)))
-            assets = assets[: max(IMAGES_PER_MEMBER_PER_DAY - (made or 0), 0)]
+        assets = assets[: await _room_today(session, user_id, len(assets))]
         if not assets:
             return 0
         rows = [
@@ -412,6 +421,51 @@ class AssetMaker:
         )
         return len(claimed.all())
 
+    async def claim_storyboards(
+        self,
+        session: AsyncSession,
+        org_id: UUID,
+        plan_id: UUID,
+        user_id: UUID | None,
+        plan: ShotPlan,
+    ) -> int:
+        """Queues a storyboard card for each shot of a created plan that has none yet (a
+        new shot, or one whose directions changed), inside the caller's transaction and
+        the member's day's limit; how many it queued. Only the transaction that saves the
+        plan writes its cards, so the ones already there are read rather than held off by
+        a unique index."""
+        existing = set(
+            await session.scalars(
+                select(DirectorAsset.asset_id).where(
+                    DirectorAsset.plan_id == plan_id, DirectorAsset.origin == "storyboard"
+                )
+            )
+        )
+        wanted = [
+            card
+            for card in dict.fromkeys(storyboard_id(shot) for shot in plan.shots)
+            if card not in existing
+        ]
+        wanted = wanted[: await _room_today(session, user_id, len(wanted))]
+        if not wanted:
+            return 0
+        await session.execute(
+            insert(DirectorAsset).values(
+                [
+                    {
+                        "org_id": org_id,
+                        "plan_id": plan_id,
+                        "user_id": user_id,
+                        "asset_id": card,
+                        "origin": "storyboard",
+                        "updated_at": func.now(),
+                    }
+                    for card in wanted
+                ]
+            )
+        )
+        return len(wanted)
+
     async def make(self, org_id: UUID, plan_id: UUID, *, final: bool) -> None:
         """Draws every image of the plan still to draw (the `assets` job), one at a time,
         announcing each as it lands. Safe to run again: a drawn image is left as it is."""
@@ -428,7 +482,7 @@ class AssetMaker:
                 select(DirectorAsset)
                 .where(
                     DirectorAsset.plan_id == plan_id,
-                    DirectorAsset.origin.in_(("default", "created")),
+                    DirectorAsset.origin.in_(("default", "created", "storyboard")),
                     DirectorAsset.status.in_(("pending", "generating")),
                 )
                 .order_by(DirectorAsset.id)
@@ -443,10 +497,23 @@ class AssetMaker:
             }
         if plan is None or plan.status != "ready" or plan.plan is None:
             return []
-        assets = {asset.id: asset for asset in ShotPlan.model_validate(plan.plan).assets}
+        shot_plan = ShotPlan.model_validate(plan.plan)
+        assets = {asset.id: asset for asset in shot_plan.assets}
+        cards = {storyboard_id(shot): shot for shot in shot_plan.shots}
         jobs: list[_Job] = []
         for row in pending:
-            asset = assets.get(row.asset_id)
+            card = cards.get(row.asset_id) if row.origin == "storyboard" else None
+            if card is not None:
+                jobs.append(
+                    _Job(
+                        row.id,
+                        row.user_id,
+                        storyboard_asset(card),
+                        storyboard=storyboard_prompt(card),
+                    )
+                )
+                continue
+            asset = assets.get(row.asset_id) if row.origin != "storyboard" else None
             base = bases.get(row.base_id) if row.base_id is not None else None
             lost_base = row.base_id is not None and (base is None or base.object_key is None)
             if asset is None or lost_base:
@@ -473,7 +540,9 @@ class AssetMaker:
         """Draws the job's image, proofreads its text and draws it once more when it's
         misspelt (a misspelt result is regenerated once before it's shown); the drawing
         kept, where it's stored, and the tokens both drawings used."""
-        if job.prompt is None:
+        if job.storyboard is not None:
+            prompt, expected, pictures = job.storyboard, [], ()
+        elif job.prompt is None:
             prompt, expected, pictures = image_prompt(job.asset), expected_text(job.asset), ()
         else:
             prompt, expected, pictures = await self._own_drawing(job)

@@ -121,6 +121,51 @@ export const zBox = z.object({
     y: z.number().gte(0).lte(1)
 });
 
+/**
+ * BrainstormReply
+ */
+export const zBrainstormReply = z.object({
+    questionsLeft: z.int().gte(0).lte(3),
+    ready: z.boolean(),
+    reply: z.string().min(1).max(300)
+});
+
+/**
+ * BriefPhoto
+ */
+export const zBriefPhoto = z.object({
+    fileId: z.uuid(),
+    url: z.string().max(4000).regex(/^https?:\/\//)
+});
+
+/**
+ * BriefTurn
+ */
+export const zBriefTurn = z.object({
+    role: z.enum(['member', 'director']),
+    text: z.string().min(1).max(500)
+});
+
+/**
+ * BrainstormRequest
+ */
+export const zBrainstormRequest = z.object({
+    messages: z.array(zBriefTurn).max(8),
+    photos: z.array(zBriefPhoto).max(4),
+    text: z.string().min(1).max(1000)
+});
+
+/**
+ * Brief
+ *
+ * What a created plan was written from, as stored on it: the photos by their file id.
+ */
+export const zBrief = z.object({
+    messages: z.array(zBriefTurn).max(8),
+    photos: z.array(z.uuid()).max(4),
+    text: z.string().min(1).max(1000)
+});
+
 export const zCameraMove = z.enum([
     'static',
     'up',
@@ -163,6 +208,15 @@ export const zClipRequest = z.object({
     pauses: z.array(zClipPause).max(200),
     slices: z.array(zClipSlice).min(1).max(150),
     startMs: z.int().gte(0).lte(1260000)
+});
+
+/**
+ * CreatePlanRequest
+ */
+export const zCreatePlanRequest = z.object({
+    messages: z.array(zBriefTurn).max(8),
+    photos: z.array(zBriefPhoto).max(4),
+    text: z.string().min(1).max(1000)
 });
 
 /**
@@ -317,6 +371,8 @@ export const zErrorCode = z.enum([
     'DIRECTOR_INDEX_LIMIT',
     'DIRECTOR_IMAGE_LIMIT',
     'DIRECTOR_ASSET_NOT_FOUND',
+    'DIRECTOR_CREATE_LIMIT',
+    'DIRECTOR_PLAN_NOT_EDITABLE',
     'DIRECTOR_VIDEO_UNAVAILABLE',
     'DIRECTOR_TOO_LONG',
     'DIRECTOR_PLAN_NOT_FOUND',
@@ -344,6 +400,7 @@ export const zErrorCode = z.enum([
     'RECORDING_SLICE_INVALID',
     'DIRECTOR_VIDEO_UNREADABLE',
     'DIRECTOR_ANALYSIS_FAILED',
+    'DIRECTOR_CREATE_FAILED',
     'DIRECTOR_REVIEW_FAILED',
     'RECORDING_CLIP_FAILED'
 ]);
@@ -773,7 +830,8 @@ export const zAssetCandidateOut = z.object({
         'default',
         'created',
         'upload',
-        'stock'
+        'stock',
+        'storyboard'
     ]),
     prompt: z.string().nullable(),
     status: z.enum([
@@ -804,6 +862,22 @@ export const zAssetSlotsOut = z.object({
     imagesToday: z.int().gte(0),
     imagesUsed: z.int().gte(0),
     slots: z.array(zAssetSlotOut)
+});
+
+/**
+ * StoryboardOut
+ *
+ * A created plan's storyboard card for one shot (app/create.py).
+ */
+export const zStoryboardOut = z.object({
+    objectKey: z.string().max(200).nullable(),
+    shotIndex: z.int().gte(0).lt(12),
+    status: z.enum([
+        'pending',
+        'generating',
+        'ready',
+        'failed'
+    ])
 });
 
 /**
@@ -930,12 +1004,17 @@ export const zDirectorPlanOut = z.object({
         'failed',
         'none'
     ]),
+    brief: zBrief.nullish(),
     createdAt: z.iso.datetime(),
     error: z.string().nullable(),
     id: z.uuid(),
     model: z.string().nullable(),
     plan: zShotPlan.nullable(),
-    source: z.enum(['seed', 'user']),
+    source: z.enum([
+        'seed',
+        'user',
+        'created'
+    ]),
     stage: z.enum([
         'queued',
         'watching',
@@ -949,6 +1028,7 @@ export const zDirectorPlanOut = z.object({
         'ready',
         'failed'
     ]),
+    storyboards: z.array(zStoryboardOut).max(12).optional(),
     updatedAt: z.iso.datetime(),
     videoId: z.string()
 });
@@ -959,6 +1039,14 @@ export const zDirectorPlanOut = z.object({
 export const zDirectorLibraryOut = z.object({
     indexUsed: z.boolean(),
     templates: z.array(zDirectorPlanOut)
+});
+
+/**
+ * PlanEditRequest
+ */
+export const zPlanEditRequest = z.object({
+    plan: zShotPlan,
+    videoId: z.string().regex(/^[A-Za-z0-9_-]{11}$/)
 });
 
 /**
@@ -976,6 +1064,18 @@ export const zLiveResponse = zHealthResponse;
  */
 export const zReadyResponse = zHealthResponse;
 
+export const zBrainstormDirectorTemplateBody = zBrainstormRequest;
+
+export const zBrainstormDirectorTemplateHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+/**
+ * Successful Response
+ */
+export const zBrainstormDirectorTemplateResponse = zBrainstormReply;
+
 export const zClipDirectorAttemptBody = zClipRequest;
 
 export const zClipDirectorAttemptHeaders = z.object({
@@ -987,6 +1087,30 @@ export const zClipDirectorAttemptHeaders = z.object({
  * The attempt's take, an MP4; where it was cut in the part's clock in the x-clip-start-ms and x-clip-end-ms headers.
  */
 export const zClipDirectorAttemptResponse = z.string();
+
+export const zCreateDirectorTemplateBody = zCreatePlanRequest;
+
+export const zCreateDirectorTemplateHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+/**
+ * Successful Response
+ */
+export const zCreateDirectorTemplateResponse = zDirectorPlanOut;
+
+export const zEditDirectorTemplateBody = zPlanEditRequest;
+
+export const zEditDirectorTemplateHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+/**
+ * Successful Response
+ */
+export const zEditDirectorTemplateResponse = zDirectorPlanOut;
 
 export const zListDirectorMediaHeaders = z.object({
     authorization: z.string().nullish(),

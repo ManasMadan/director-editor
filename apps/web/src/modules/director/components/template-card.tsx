@@ -3,7 +3,7 @@
 import type { DirectorPlan } from "@repo/contracts/api";
 import { GeminiShimmer } from "@repo/ui/components/gemini-loader";
 import { cn } from "@repo/ui/lib/utils";
-import { CircleAlert, Clock, Film } from "lucide-react";
+import { CircleAlert, Clock, Film, PenLine } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
@@ -66,15 +66,25 @@ export function TemplateCard({ plan }: { plan: DirectorPlan }) {
       className="group flex flex-col gap-2 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-studio-foreground focus-visible:ring-offset-4 focus-visible:ring-offset-studio"
     >
       <span className="relative block aspect-9/16 overflow-hidden rounded-2xl bg-studio-foreground/5">
-        {/* YouTube's own picture, already sized: nothing for Next's optimizer to do. */}
-        <Image
-          src={thumbnailUrl(plan.videoId)}
-          alt=""
-          fill
-          unoptimized
-          sizes="(max-width: 640px) 50vw, 240px"
-          className="object-cover transition-transform duration-500 group-hover:scale-[1.03] motion-reduce:transition-none"
-        />
+        {plan.source === "created" ? (
+          // A template the member described has no YouTube video to show a picture of.
+          <span
+            aria-hidden
+            className="absolute inset-0 flex items-center justify-center bg-linear-to-br from-aurora-1/40 via-aurora-2/30 to-aurora-3/40"
+          >
+            <PenLine className="size-8 text-studio-foreground/70" />
+          </span>
+        ) : (
+          // YouTube's own picture, already sized: nothing for Next's optimizer to do.
+          <Image
+            src={thumbnailUrl(plan.videoId)}
+            alt=""
+            fill
+            unoptimized
+            sizes="(max-width: 640px) 50vw, 240px"
+            className="object-cover transition-transform duration-500 group-hover:scale-[1.03] motion-reduce:transition-none"
+          />
+        )}
         <span
           aria-hidden
           className="absolute inset-x-0 bottom-0 h-1/3 bg-linear-to-t from-studio/90 to-transparent"

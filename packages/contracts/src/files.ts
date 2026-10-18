@@ -31,6 +31,15 @@ export const uploadPurposes = {
     maxBytes: 8_000_000,
   },
   /**
+   * A photo for a template a member describes (their space, a prop, a look they like),
+   * shown to Gemini while it writes the plan: re-encoded to JPEG, metadata stripped, like
+   * a photo take.
+   */
+  "director-brief-photo": {
+    types: ["image/jpeg", "image/png", "image/webp"],
+    maxBytes: 8_000_000,
+  },
+  /**
    * A Director cut: the picked takes rendered into one video in the browser, to keep and
    * publish to YouTube. Kept as rendered. The editor renders about 720x1280 at about
    * 4 Mbit/s, so a three-minute Short (the longest there is) fits. The cap is also what

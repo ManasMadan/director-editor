@@ -27,6 +27,7 @@ from bullmq.types import (  # pyright: ignore[reportMissingTypeStubs]
 from pydantic import TypeAdapter
 
 from app.contracts.ai_director_assets_job import AiDirectorAssetsJob
+from app.contracts.ai_director_create_plan_job import AiDirectorCreatePlanJob
 from app.contracts.ai_director_job_name import AiDirectorJobName
 from app.contracts.ai_director_plan_job import AiDirectorPlanJob
 from app.contracts.ai_director_review_take_job import AiDirectorReviewTakeJob
@@ -87,6 +88,26 @@ class DirectorQueue:
             }
         )
         await self._add("assets", data.model_dump(mode="json", exclude_none=True), job_id)
+
+    async def add_create(
+        self,
+        plan_id: UUID,
+        org_id: UUID,
+        photo_urls: list[str],
+        *,
+        request_id: str | None,
+        user_id: UUID | None,
+    ) -> None:
+        data = AiDirectorCreatePlanJob.model_validate(
+            {
+                "meta": _meta(org_id, request_id, user_id),
+                "payload": {"planId": plan_id, "orgId": org_id, "photoUrls": photo_urls},
+            }
+        )
+        # One writing per created plan.
+        await self._add(
+            "create-plan", data.model_dump(mode="json", exclude_none=True), str(plan_id)
+        )
 
     async def add_review(
         self,

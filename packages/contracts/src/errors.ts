@@ -71,6 +71,13 @@ export const ERROR_CODES = {
   DIRECTOR_IMAGE_LIMIT: 429,
   /** An asset slot the plan doesn't have, or an image that isn't one of the slot's. */
   DIRECTOR_ASSET_NOT_FOUND: 404,
+  /**
+   * A member describes a few templates of their own a day, counted apart from the one
+   * short they index (params: limit).
+   */
+  DIRECTOR_CREATE_LIMIT: 429,
+  /** Only the member who described a template can change its shots. */
+  DIRECTOR_PLAN_NOT_EDITABLE: 403,
   /** The link isn't a YouTube video, or YouTube won't show it (private, removed). */
   DIRECTOR_VIDEO_UNAVAILABLE: 422,
   /** Director films Shorts, not long videos (params: maxSeconds). */
@@ -130,10 +137,12 @@ export const ERROR_CODES = {
   RECORDING_MARK_OUT_OF_ORDER: 409,
   /** A part's first slice isn't the kind of recording its part said it would be. */
   RECORDING_SLICE_INVALID: 422,
-  // The next three are only ever a plan's or take's error, never an HTTP answer.
+  // The next four are only ever a plan's or take's error, never an HTTP answer.
   /** Gemini couldn't watch the video (private, age-restricted, removed). */
   DIRECTOR_VIDEO_UNREADABLE: 422,
   DIRECTOR_ANALYSIS_FAILED: 422,
+  /** Gemini couldn't write the shots of a template a member described. */
+  DIRECTOR_CREATE_FAILED: 422,
   DIRECTOR_REVIEW_FAILED: 422,
   /** Only ever an attempt's error: it couldn't be cut out of the footage into a take. */
   RECORDING_CLIP_FAILED: 422,
@@ -153,6 +162,7 @@ export const ERROR_PARAMS = {
   FILE_TOO_LARGE: z.object({ maxBytes: z.number().int() }),
   DIRECTOR_TOO_LONG: z.object({ maxSeconds: z.number().int() }),
   RECORDING_LIMIT_REACHED: z.object({ maxMinutes: z.number().int() }),
+  DIRECTOR_CREATE_LIMIT: z.object({ limit: z.number().int() }),
 } as const satisfies Partial<Record<ErrorCode, z.ZodObject>>;
 
 type ParamsFree = Record<string, string | number>;

@@ -145,7 +145,7 @@ export type AssetCandidateOut = {
     /**
      * Origin
      */
-    origin: 'default' | 'created' | 'upload' | 'stock';
+    origin: 'default' | 'created' | 'upload' | 'stock' | 'storyboard';
     /**
      * Prompt
      *
@@ -370,6 +370,98 @@ export type Box = {
     y: number;
 };
 
+/**
+ * BrainstormReply
+ */
+export type BrainstormReply = {
+    /**
+     * Questionsleft
+     *
+     * How many more Director may ask.
+     */
+    questionsLeft: number;
+    /**
+     * Ready
+     *
+     * Enough is known to write the shots; reply then says so, with no question.
+     */
+    ready: boolean;
+    /**
+     * Reply
+     *
+     * One or two short sentences: a reaction and at most one question.
+     */
+    reply: string;
+};
+
+/**
+ * BrainstormRequest
+ */
+export type BrainstormRequest = {
+    /**
+     * Messages
+     */
+    messages: Array<BriefTurn>;
+    /**
+     * Photos
+     */
+    photos: Array<BriefPhoto>;
+    /**
+     * Text
+     */
+    text: string;
+};
+
+/**
+ * Brief
+ *
+ * What a created plan was written from, as stored on it: the photos by their file id.
+ */
+export type Brief = {
+    /**
+     * Messages
+     */
+    messages: Array<BriefTurn>;
+    /**
+     * Photos
+     */
+    photos: Array<string>;
+    /**
+     * Text
+     */
+    text: string;
+};
+
+/**
+ * BriefPhoto
+ */
+export type BriefPhoto = {
+    /**
+     * Fileid
+     */
+    fileId: string;
+    /**
+     * Url
+     *
+     * A presigned read of the photo (a ready director-brief-photo upload).
+     */
+    url: string;
+};
+
+/**
+ * BriefTurn
+ */
+export type BriefTurn = {
+    /**
+     * Role
+     */
+    role: 'member' | 'director';
+    /**
+     * Text
+     */
+    text: string;
+};
+
 export type CameraMove = 'static' | 'up' | 'down' | 'left' | 'right' | 'forward' | 'back' | 'orbit' | 'tilt-up' | 'tilt-down';
 
 /**
@@ -446,6 +538,24 @@ export type ClipSlice = {
      * A presigned read of the slice.
      */
     url: string;
+};
+
+/**
+ * CreatePlanRequest
+ */
+export type CreatePlanRequest = {
+    /**
+     * Messages
+     */
+    messages: Array<BriefTurn>;
+    /**
+     * Photos
+     */
+    photos: Array<BriefPhoto>;
+    /**
+     * Text
+     */
+    text: string;
 };
 
 /**
@@ -593,6 +703,10 @@ export type DirectorPlanOut = {
      */
     audioStatus: 'ready' | 'failed' | 'none';
     /**
+     * What the member asked for, on a created plan.
+     */
+    brief?: Brief | null;
+    /**
      * Createdat
      */
     createdAt: string;
@@ -612,7 +726,7 @@ export type DirectorPlanOut = {
     /**
      * Source
      */
-    source: 'seed' | 'user';
+    source: 'seed' | 'user' | 'created';
     /**
      * Stage
      */
@@ -621,6 +735,12 @@ export type DirectorPlanOut = {
      * Status
      */
     status: 'pending' | 'analyzing' | 'ready' | 'failed';
+    /**
+     * Storyboards
+     *
+     * A created plan's storyboard card for each shot that has one, on a plan read on its own (getDirectorPlan); empty otherwise.
+     */
+    storyboards?: Array<StoryboardOut>;
     /**
      * Updatedat
      */
@@ -760,7 +880,7 @@ export type EndCardEdit = {
 /**
  * ErrorCode
  */
-export type ErrorCode = 'BAD_REQUEST' | 'VALIDATION_FAILED' | 'UNAUTHENTICATED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT' | 'RATE_LIMITED' | 'INTERNAL' | 'SERVICE_UNAVAILABLE' | 'METHOD_NOT_SUPPORTED' | 'TIMEOUT' | 'PAYLOAD_TOO_LARGE' | 'UNSUPPORTED_MEDIA_TYPE' | 'IDEMPOTENCY_IN_PROGRESS' | 'FEATURE_DISABLED' | 'CLIENT_OUTDATED' | 'DESTINATION_NOT_ALLOWED' | 'RESPONSE_TOO_LARGE' | 'TOO_MANY_REDIRECTS' | 'UPSTREAM_UNAVAILABLE' | 'NO_ACTIVE_ORGANIZATION' | 'DEMO_ACCOUNT_LOCKED' | 'FILE_NOT_FOUND' | 'FILE_TYPE_NOT_ALLOWED' | 'FILE_TOO_LARGE' | 'FILE_SIZE_MISMATCH' | 'FILE_INFECTED' | 'FILE_UNREADABLE' | 'FILE_NOT_UPLOADED' | 'FILE_NOT_READY' | 'INVALID_SIGNATURE' | 'AI_BUDGET_EXCEEDED' | 'DIRECTOR_INDEX_LIMIT' | 'DIRECTOR_IMAGE_LIMIT' | 'DIRECTOR_ASSET_NOT_FOUND' | 'DIRECTOR_VIDEO_UNAVAILABLE' | 'DIRECTOR_TOO_LONG' | 'DIRECTOR_PLAN_NOT_FOUND' | 'DIRECTOR_PLAN_NOT_READY' | 'DIRECTOR_SHOT_NOT_FOUND' | 'DIRECTOR_TAKE_NOT_FOUND' | 'DIRECTOR_TAKE_KIND_MISMATCH' | 'DIRECTOR_CALL_TOO_FAST' | 'DIRECTOR_CUT_NOT_FOUND' | 'PUBLISH_DEMO_DISABLED' | 'PUBLISH_NEEDS_YOUTUBE' | 'PUBLISH_CUT_NOT_READY' | 'PUBLISH_NO_CHANNEL' | 'PUBLISH_QUOTA_EXHAUSTED' | 'RECORDING_NOT_FOUND' | 'RECORDING_FINISHED' | 'RECORDING_LIMIT_REACHED' | 'RECORDING_STORAGE_FULL' | 'RECORDING_PAUSED' | 'RECORDING_PART_NOT_FOUND' | 'RECORDING_PART_CLOSED' | 'RECORDING_SLICE_NOT_UPLOADED' | 'RECORDING_ATTEMPT_NOT_OPEN' | 'RECORDING_MARK_OUT_OF_ORDER' | 'RECORDING_SLICE_INVALID' | 'DIRECTOR_VIDEO_UNREADABLE' | 'DIRECTOR_ANALYSIS_FAILED' | 'DIRECTOR_REVIEW_FAILED' | 'RECORDING_CLIP_FAILED';
+export type ErrorCode = 'BAD_REQUEST' | 'VALIDATION_FAILED' | 'UNAUTHENTICATED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT' | 'RATE_LIMITED' | 'INTERNAL' | 'SERVICE_UNAVAILABLE' | 'METHOD_NOT_SUPPORTED' | 'TIMEOUT' | 'PAYLOAD_TOO_LARGE' | 'UNSUPPORTED_MEDIA_TYPE' | 'IDEMPOTENCY_IN_PROGRESS' | 'FEATURE_DISABLED' | 'CLIENT_OUTDATED' | 'DESTINATION_NOT_ALLOWED' | 'RESPONSE_TOO_LARGE' | 'TOO_MANY_REDIRECTS' | 'UPSTREAM_UNAVAILABLE' | 'NO_ACTIVE_ORGANIZATION' | 'DEMO_ACCOUNT_LOCKED' | 'FILE_NOT_FOUND' | 'FILE_TYPE_NOT_ALLOWED' | 'FILE_TOO_LARGE' | 'FILE_SIZE_MISMATCH' | 'FILE_INFECTED' | 'FILE_UNREADABLE' | 'FILE_NOT_UPLOADED' | 'FILE_NOT_READY' | 'INVALID_SIGNATURE' | 'AI_BUDGET_EXCEEDED' | 'DIRECTOR_INDEX_LIMIT' | 'DIRECTOR_IMAGE_LIMIT' | 'DIRECTOR_ASSET_NOT_FOUND' | 'DIRECTOR_CREATE_LIMIT' | 'DIRECTOR_PLAN_NOT_EDITABLE' | 'DIRECTOR_VIDEO_UNAVAILABLE' | 'DIRECTOR_TOO_LONG' | 'DIRECTOR_PLAN_NOT_FOUND' | 'DIRECTOR_PLAN_NOT_READY' | 'DIRECTOR_SHOT_NOT_FOUND' | 'DIRECTOR_TAKE_NOT_FOUND' | 'DIRECTOR_TAKE_KIND_MISMATCH' | 'DIRECTOR_CALL_TOO_FAST' | 'DIRECTOR_CUT_NOT_FOUND' | 'PUBLISH_DEMO_DISABLED' | 'PUBLISH_NEEDS_YOUTUBE' | 'PUBLISH_CUT_NOT_READY' | 'PUBLISH_NO_CHANNEL' | 'PUBLISH_QUOTA_EXHAUSTED' | 'RECORDING_NOT_FOUND' | 'RECORDING_FINISHED' | 'RECORDING_LIMIT_REACHED' | 'RECORDING_STORAGE_FULL' | 'RECORDING_PAUSED' | 'RECORDING_PART_NOT_FOUND' | 'RECORDING_PART_CLOSED' | 'RECORDING_SLICE_NOT_UPLOADED' | 'RECORDING_ATTEMPT_NOT_OPEN' | 'RECORDING_MARK_OUT_OF_ORDER' | 'RECORDING_SLICE_INVALID' | 'DIRECTOR_VIDEO_UNREADABLE' | 'DIRECTOR_ANALYSIS_FAILED' | 'DIRECTOR_CREATE_FAILED' | 'DIRECTOR_REVIEW_FAILED' | 'RECORDING_CLIP_FAILED';
 
 /**
  * ErrorData
@@ -1195,6 +1315,17 @@ export type PhoneAngle = {
 };
 
 /**
+ * PlanEditRequest
+ */
+export type PlanEditRequest = {
+    plan: ShotPlan;
+    /**
+     * Videoid
+     */
+    videoId: string;
+};
+
+/**
  * PublishCopy
  */
 export type PublishCopy = {
@@ -1534,6 +1665,26 @@ export type StockCredit = {
 };
 
 /**
+ * StoryboardOut
+ *
+ * A created plan's storyboard card for one shot (app/create.py).
+ */
+export type StoryboardOut = {
+    /**
+     * Objectkey
+     */
+    objectKey: string | null;
+    /**
+     * Shotindex
+     */
+    shotIndex: number;
+    /**
+     * Status
+     */
+    status: 'pending' | 'generating' | 'ready' | 'failed';
+};
+
+/**
  * TargetPose
  */
 export type TargetPose = {
@@ -1698,6 +1849,41 @@ export type ReadyResponses = {
 
 export type ReadyResponse = ReadyResponses[keyof ReadyResponses];
 
+export type BrainstormDirectorTemplateData = {
+    body: BrainstormRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/director/brainstorm';
+};
+
+export type BrainstormDirectorTemplateErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type BrainstormDirectorTemplateError = BrainstormDirectorTemplateErrors[keyof BrainstormDirectorTemplateErrors];
+
+export type BrainstormDirectorTemplateResponses = {
+    /**
+     * Successful Response
+     */
+    200: BrainstormReply;
+};
+
+export type BrainstormDirectorTemplateResponse = BrainstormDirectorTemplateResponses[keyof BrainstormDirectorTemplateResponses];
+
 export type ClipDirectorAttemptData = {
     body: ClipRequest;
     headers?: {
@@ -1732,6 +1918,76 @@ export type ClipDirectorAttemptResponses = {
 };
 
 export type ClipDirectorAttemptResponse = ClipDirectorAttemptResponses[keyof ClipDirectorAttemptResponses];
+
+export type CreateDirectorTemplateData = {
+    body: CreatePlanRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/director/created';
+};
+
+export type CreateDirectorTemplateErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type CreateDirectorTemplateError = CreateDirectorTemplateErrors[keyof CreateDirectorTemplateErrors];
+
+export type CreateDirectorTemplateResponses = {
+    /**
+     * Successful Response
+     */
+    201: DirectorPlanOut;
+};
+
+export type CreateDirectorTemplateResponse = CreateDirectorTemplateResponses[keyof CreateDirectorTemplateResponses];
+
+export type EditDirectorTemplateData = {
+    body: PlanEditRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/director/created';
+};
+
+export type EditDirectorTemplateErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type EditDirectorTemplateError = EditDirectorTemplateErrors[keyof EditDirectorTemplateErrors];
+
+export type EditDirectorTemplateResponses = {
+    /**
+     * Successful Response
+     */
+    200: DirectorPlanOut;
+};
+
+export type EditDirectorTemplateResponse = EditDirectorTemplateResponses[keyof EditDirectorTemplateResponses];
 
 export type ListDirectorMediaData = {
     body?: never;

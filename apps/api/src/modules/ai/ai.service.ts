@@ -19,6 +19,10 @@ const PASSED_ON = new Set<ErrorCode>([
   "FEATURE_DISABLED",
   "VALIDATION_FAILED",
   "DIRECTOR_INDEX_LIMIT",
+  "DIRECTOR_CREATE_LIMIT",
+  "DIRECTOR_PLAN_NOT_EDITABLE",
+  // A brief's photo the service couldn't read (gone from storage since it was checked).
+  "FILE_NOT_FOUND",
   "UPSTREAM_UNAVAILABLE",
   "DIRECTOR_PLAN_NOT_FOUND",
   "DIRECTOR_PLAN_NOT_READY",

@@ -9,6 +9,7 @@ import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import { DirectorGate } from "@/modules/shorts";
 import { CreditDialog } from "../components/credit-dialog";
+import { DescribeCard } from "../components/describe-card";
 import { IndexCard } from "../components/index-card";
 import { QuickStart } from "../components/quick-start";
 import { TemplateCard } from "../components/template-card";
@@ -88,6 +89,7 @@ function Library() {
           onLimit={() => setCreditOpen(true)}
           inputRef={linkField}
         />
+        <DescribeCard />
       </div>
       {library.isPending ? <Loading /> : null}
       {library.isError ? (

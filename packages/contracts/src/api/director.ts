@@ -26,6 +26,8 @@ const errors = errorsOf(
   "UPSTREAM_UNAVAILABLE",
   "AI_BUDGET_EXCEEDED",
   "DIRECTOR_INDEX_LIMIT",
+  "DIRECTOR_CREATE_LIMIT",
+  "DIRECTOR_PLAN_NOT_EDITABLE",
   "DIRECTOR_VIDEO_UNAVAILABLE",
   "DIRECTOR_TOO_LONG",
   "DIRECTOR_PLAN_NOT_FOUND",
@@ -343,11 +345,52 @@ const servedShotPlanSchema = shotPlanSchema.extend({
 });
 export type ServedShotPlan = z.infer<typeof servedShotPlanSchema>;
 
+// A template a member describes (`director.create`): what they typed, their talk with
+// Director (who asks at most DIRECTOR_MAX_QUESTIONS questions) and up to
+// DIRECTOR_MAX_BRIEF_PHOTOS photos of theirs (ready `director-brief-photo` uploads).
+export const DIRECTOR_BRIEF_MAX_LENGTH = 1_000;
+const DIRECTOR_BRIEF_TURN_MAX_LENGTH = 500;
+export const DIRECTOR_MAX_BRIEF_TURNS = 8;
+export const DIRECTOR_MAX_BRIEF_PHOTOS = 4;
+const DIRECTOR_MAX_QUESTIONS = 3;
+const briefTurnSchema = z.object({
+  role: z.enum(["member", "director"]),
+  text: z.string().trim().min(1).max(DIRECTOR_BRIEF_TURN_MAX_LENGTH),
+});
+export type BriefTurn = z.infer<typeof briefTurnSchema>;
+const briefSchema = z.object({
+  text: z.string().trim().min(1).max(DIRECTOR_BRIEF_MAX_LENGTH),
+  messages: z.array(briefTurnSchema).max(DIRECTOR_MAX_BRIEF_TURNS),
+});
+const briefInput = briefSchema.extend({
+  photos: z.array(fileIdSchema).max(DIRECTOR_MAX_BRIEF_PHOTOS),
+});
+export type BriefInput = z.infer<typeof briefInput>;
+
+/** Director's next turn while a member describes a template. */
+const brainstormReplySchema = z.object({
+  /** One or two sentences: a reaction and at most one question. */
+  reply: z.string(),
+  /** Enough is known to write the shots. */
+  ready: z.boolean(),
+  questionsLeft: z.number().int().min(0).max(DIRECTOR_MAX_QUESTIONS),
+});
+export type BrainstormReply = z.infer<typeof brainstormReplySchema>;
+
 export const directorPlanSchema = z.object({
   id: directorPlanIdSchema,
+  /**
+   * The YouTube video's id; a created template's is a random id of the same shape, so
+   * every route keyed by it works the same, and `source` says it's no YouTube video.
+   */
   videoId: videoIdSchema,
-  /** A seeded template every workspace starts with, or a short a member indexed. */
-  source: z.enum(["seed", "user"]),
+  /**
+   * A seeded template every workspace starts with, a short a member indexed, or one a
+   * member described (`director.create`).
+   */
+  source: z.enum(["seed", "user", "created"]),
+  /** What a created template was written from; absent on any other. */
+  brief: briefSchema.nullable().optional(),
   /** pending → analyzing → ready (or failed, with an error code). */
   status: z.enum(["pending", "analyzing", "ready", "failed"]),
   /** How far indexing got, finer than `status`, for showing its progress. */
@@ -645,4 +688,36 @@ export const directorContract = {
     .output(matchCutAlignmentSchema),
   /** Every cut of the caller's, newest first (the client groups them by template). */
   media: route("GET", "/media", "Your cuts").output(z.array(directorCutSchema)),
+  /**
+   * Director's next turn while the member describes a template of their own: a reaction
+   * and at most one question (at most DIRECTOR_MAX_QUESTIONS in all), or ready to write.
+   * Photos are ready `director-brief-photo` uploads of the caller's (FILE_NOT_FOUND,
+   * FILE_NOT_READY). A model call each time.
+   */
+  brainstorm: route("POST", "/director/created/turns", "Talk your idea through with Director")
+    .meta({
+      rateLimit: { name: "director-brainstorm", points: 40, windowSeconds: HOUR_S, per: "user" },
+    })
+    .input(briefInput)
+    .output(brainstormReplySchema),
+  /**
+   * A template of the member's own from their brief, queued to be written like an
+   * indexed short (watch `stage`): its own id, counted apart from their one indexed short,
+   * a few a day (DIRECTOR_CREATE_LIMIT).
+   */
+  create: route("POST", "/director/created", "Describe your own")
+    .meta({
+      rateLimit: { name: "director-create", points: 10, windowSeconds: HOUR_S, per: "user" },
+    })
+    .input(briefInput)
+    .output(directorPlanSchema),
+  /**
+   * Saves the member's changes to the shots of a template they described: edited,
+   * reordered, added or deleted (DIRECTOR_PLAN_NOT_EDITABLE for anyone else's, or an
+   * indexed one; DIRECTOR_PLAN_NOT_READY before it's written). Shots are put back to back.
+   */
+  editPlan: route("POST", "/director/{videoId}/plan", "Change your template's shots")
+    .meta({ rateLimit: EVERYDAY_WRITES })
+    .input(z.object({ videoId: videoIdSchema, plan: shotPlanSchema }))
+    .output(directorPlanSchema),
 };

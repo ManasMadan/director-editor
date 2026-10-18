@@ -52,6 +52,9 @@ function recognizerClass(): RecognizerClass | null {
   return window.SpeechRecognition ?? window.webkitSpeechRecognition ?? null;
 }
 
+/** Whether the browser can dictate at all (a recogniser to start). */
+export const canDictate = () => recognizerClass() !== null;
+
 /**
  * Starts dictation: `onSaid` gets each finished phrase, `onDeaf` once when it can't
  * listen at all (no recogniser, or refused). Null when it can't start.

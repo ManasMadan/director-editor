@@ -17,12 +17,15 @@ import { createClient } from "./generated/client";
 import {
   addDirectorAsset,
   alignDirectorMatchCut,
+  brainstormDirectorTemplate,
   checkDirectorScene,
   chooseDirectorAsset,
   clipDirectorAttempt,
   createDirectorCut,
   createDirectorTake,
+  createDirectorTemplate,
   drawDirectorAsset,
+  editDirectorTemplate,
   getDirectorCut,
   getDirectorLibrary,
   getDirectorPlan,
@@ -39,13 +42,16 @@ import type {
   AssetCandidateCreate,
   AssetChoiceCreate,
   AssetDrawingCreate,
+  BrainstormRequest,
   ClipRequest,
+  CreatePlanRequest,
   DirectorCutCreate,
   DirectorTakeCreate,
   ErrorCode,
   ErrorIssue,
   LocateRequest,
   MatchCutRequest,
+  PlanEditRequest,
   PublishCopyRequest,
   SceneCheckRequest,
   SpeechRequest,
@@ -166,6 +172,24 @@ function assetCalls(forCall: ClientFor) {
   };
 }
 
+/** Describing a template of the member's own (apps/ai/app/create.py). */
+function templateCalls(forCall: ClientFor) {
+  return {
+    /** Director's next turn while a member describes a template of their own. */
+    async brainstorm(caller: AiCaller, body: BrainstormRequest) {
+      return unwrap(brainstormDirectorTemplate({ client: await forCall(caller), body }));
+    },
+    /** A template of the member's own, queued to be written from their brief. */
+    async createTemplate(caller: AiCaller, body: CreatePlanRequest) {
+      return unwrap(createDirectorTemplate({ client: await forCall(caller), body }));
+    },
+    /** The member's changes to the shots of a template they described. */
+    async editTemplate(caller: AiCaller, body: PlanEditRequest) {
+      return unwrap(editDirectorTemplate({ client: await forCall(caller), body }));
+    },
+  };
+}
+
 /** Director's calls (apps/ai/app/director.py), each on a client made for that call. */
 function directorCalls(forCall: ClientFor) {
   return {
@@ -265,5 +289,7 @@ export function createAiClient(options: { baseUrl: string; secret: string; timeo
   }
 
   /** Director's calls, as `ai.director.index(...)`. */
-  return { director: Object.assign(directorCalls(forCall), assetCalls(forCall)) };
+  return {
+    director: Object.assign(directorCalls(forCall), assetCalls(forCall), templateCalls(forCall)),
+  };
 }
