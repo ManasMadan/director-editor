@@ -77,6 +77,19 @@ alloy:
     requests: { cpu: 20m, memory: 96Mi }
     limits: { cpu: 500m, memory: 384Mi }
 
+# Only what discovering pods and reading their logs needs. The chart's defaults let it
+# read every Secret and ConfigMap in the cluster, for components not used here. (The
+# chart concatenates the two lists into one ClusterRole, and neither may be empty.)
+rbac:
+  rules:
+    - apiGroups: [""]
+      resources: [pods, pods/log]
+      verbs: [get, list, watch]
+  clusterRules:
+    - apiGroups: [""]
+      resources: [namespaces]
+      verbs: [get, list, watch]
+
 controller:
   type: daemonset
   volumes:
