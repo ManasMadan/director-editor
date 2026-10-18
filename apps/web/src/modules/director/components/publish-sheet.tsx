@@ -401,7 +401,9 @@ export function PublishButton({
   const t = useTranslations("director.publish");
   const router = useRouter();
   // The demo reads the post Director wrote, and can't send it (the API refuses it too).
-  const readOnly = authClient.useSession().data?.user.demo === true;
+  // Nothing opens the sheet until the session says which, so the demo never sees Publish.
+  const session = authClient.useSession();
+  const readOnly = session.data?.user.demo === true;
   const returning = useSearchParams().get("publish") === cut.id;
   const [resumed, setResumed] = useState(() => (returning ? unstash(cut) : null));
   const [open, setOpen] = useState(returning);
@@ -418,7 +420,9 @@ export function PublishButton({
   return (
     <>
       <span ref={trigger} className="contents">
-        <Trigger cut={cut} readOnly={readOnly} onOpen={() => setOpen(true)} />
+        {session.isPending ? null : (
+          <Trigger cut={cut} readOnly={readOnly} onOpen={() => setOpen(true)} />
+        )}
       </span>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent

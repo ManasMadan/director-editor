@@ -9,8 +9,10 @@ import { getTranslations } from "next-intl/server";
  * frame stands for whoever is watching, and no creator's face plays them.
  *
  * Every line is real text in reading order, so a screen reader reads the exchange once,
- * as a list; the card it changes from is hidden from it, being the past. With reduced
- * motion, the frame rests on the end of the exchange.
+ * as a list, and then the shot card as it ends up (the card sits after the exchange in
+ * the page, though it's drawn at the top of the frame; the card it changes from is
+ * hidden from it, being the past). With reduced motion, the frame rests on the end of the
+ * exchange.
  */
 
 const bubble = "max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-snug shadow-lg";
@@ -26,6 +28,20 @@ export async function HeroChat() {
           <div className="absolute top-[24%] left-1/2 size-[34%] -translate-x-1/2 rounded-full bg-studio-foreground/20" />
           <div className="absolute top-[52%] left-1/2 h-1/2 w-[78%] -translate-x-1/2 rounded-t-[45%] bg-studio-foreground/15" />
         </div>
+        <ol className="absolute inset-x-3 bottom-4 flex flex-col gap-2">
+          <li className={cn(bubble, "hero-say-1 self-start bg-studio/85")}>
+            <span className="sr-only">{t("director")} </span>
+            {t("ask")}
+          </li>
+          <li className={cn(bubble, "hero-say-2 self-end bg-studio-foreground text-studio")}>
+            <span className="sr-only">{t("you")} </span>
+            {t("answer")}
+          </li>
+          <li className={cn(bubble, "hero-say-3 self-start bg-studio/85")}>
+            <span className="sr-only">{t("director")} </span>
+            {t("adapt")}
+          </li>
+        </ol>
         <div className="absolute inset-x-3 top-3 flex items-start justify-between gap-2">
           <p className="grid text-xs font-medium">
             <span
@@ -49,20 +65,6 @@ export async function HeroChat() {
             {t("rec")}
           </p>
         </div>
-        <ol className="absolute inset-x-3 bottom-4 flex flex-col gap-2">
-          <li className={cn(bubble, "hero-say-1 self-start bg-studio/85")}>
-            <span className="sr-only">{t("director")} </span>
-            {t("ask")}
-          </li>
-          <li className={cn(bubble, "hero-say-2 self-end bg-studio-foreground text-studio")}>
-            <span className="sr-only">{t("you")} </span>
-            {t("answer")}
-          </li>
-          <li className={cn(bubble, "hero-say-3 self-start bg-studio/85")}>
-            <span className="sr-only">{t("director")} </span>
-            {t("adapt")}
-          </li>
-        </ol>
       </div>
       <figcaption className="text-center text-sm text-pretty text-muted-foreground">
         {t("caption")}

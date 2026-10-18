@@ -75,7 +75,10 @@ const startTest: BrowserCommand<[]> = async ({ page, context }) => {
   }
   navigations.set(page, []);
   if (!finished.has(page)) {
-    page.on("request", (request) => started.get(page)?.add(request));
+    page.on("request", (request) => {
+      started.get(page)?.add(request);
+      sent.get(page)?.push({ url: request.url(), headers: request.headers() });
+    });
     // Only this test's own: a request the last test left in flight is answered during
     // this one, and would satisfy a wait before this test's page did anything.
     page.on("requestfinished", (request) => {
@@ -85,6 +88,7 @@ const startTest: BrowserCommand<[]> = async ({ page, context }) => {
     });
   }
   started.set(page, new WeakSet());
+  sent.set(page, []);
   finished.set(page, []);
 };
 
@@ -125,6 +129,16 @@ const finished = new WeakMap<Page, string[]>();
 /** How many of the page's requests to URLs containing `part` have been answered. */
 const answeredRequests: BrowserCommand<[part: string]> = ({ page }, part) =>
   finished.get(page)?.filter((url) => url.includes(part)).length ?? 0;
+
+/** The headers of each request the page sent since its test started, by URL. */
+const sent = new WeakMap<Page, { url: string; headers: Record<string, string> }[]>();
+
+/** The headers of the page's requests to URLs containing `part`, in the order they went. */
+const sentHeaders: BrowserCommand<[part: string]> = ({ page }, part) =>
+  sent
+    .get(page)
+    ?.filter(({ url }) => url.includes(part))
+    .map(({ headers }) => headers) ?? [];
 
 /** Each page's client IP for its current test, and the requests it makes fail. */
 const clientIps = new WeakMap<Page, string>();
@@ -626,6 +640,7 @@ export const commands = {
   liveTurns,
   liveSessionCount,
   answeredRequests,
+  sentHeaders,
   resetPublishAllowance,
   fakeCut,
   linkYouTube,
@@ -662,6 +677,7 @@ declare module "vitest/browser" {
     >;
     liveSessionCount(): Promise<number>;
     answeredRequests(part: string): Promise<number>;
+    sentHeaders(part: string): Promise<Record<string, string>[]>;
     checkUpload(fileId: string, rejectReason?: string): Promise<void>;
     fakeCut(cutId: string, state: { cut: object; copy?: object }): Promise<void>;
     resetPublishAllowance(): Promise<void>;

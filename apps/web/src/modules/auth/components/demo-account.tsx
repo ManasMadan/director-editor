@@ -7,6 +7,7 @@ import { GeminiLoader } from "@repo/ui/components/gemini-loader";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { useCaptcha } from "@/components/captcha";
 import { authClient } from "@/lib/auth-client";
 import { useAuthErrorMessage } from "../hooks/use-auth-error";
 
@@ -55,33 +56,71 @@ function GuestOffer({
   onUse,
   onSignedIn,
 }: DemoProps & { shared: DemoAccount | null; wanted: boolean }) {
-  const t = useTranslations();
   const errorMessage = useAuthErrorMessage();
+  // Turnstile, while the API has captcha on: out of sight unless Cloudflare wants a tap,
+  // so the demo is still one tap for a person, and none for a bot.
+  const captcha = useCaptcha({ interactionOnly: true });
   const [guest, setGuest] = useState<GuestState>({ state: wanted ? "starting" : "idle" });
   const start = async () => {
     setGuest({ state: "starting" });
     const { error } = await authClient.$fetch(GUEST_SIGN_IN_PATH, {
       method: "POST",
       body: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+      headers: captcha.headers(),
     });
     if (!error) {
       onSignedIn();
       return;
     }
+    // Its token is spent: a try again needs a fresh one.
+    captcha.reset();
     setGuest({ state: "failed", error });
     if (shared) {
       onUse(shared);
     }
   };
-  // Once: React may run the effect twice, and each run would make a guest.
+  // Once, as soon as the captcha (if any) has its token: React may run the effect twice,
+  // and each run would make a guest.
   const started = useRef(false);
   useEffect(() => {
-    if (wanted && !started.current) {
+    if (wanted && captcha.ready && !started.current) {
       started.current = true;
       void start();
     }
   });
 
+  return (
+    // The widget stays put while the rest changes, so it keeps its token.
+    <div className="flex flex-col gap-3">
+      <GuestCard
+        guest={guest}
+        shared={shared}
+        ready={captcha.ready}
+        error={guest.state === "failed" ? errorMessage(guest.error) : null}
+        onStart={() => void start()}
+        onUse={onUse}
+      />
+      {captcha.widget}
+    </div>
+  );
+}
+
+/** What the guest sign-in shows: a loader while it's under way, else its card. */
+function GuestCard({
+  guest,
+  shared,
+  ready,
+  error,
+  onStart,
+  onUse,
+}: Pick<DemoProps, "onUse"> & {
+  guest: GuestState;
+  shared: DemoAccount | null;
+  ready: boolean;
+  error: string | null;
+  onStart: () => void;
+}) {
+  const t = useTranslations();
   if (guest.state === "starting") {
     return (
       <GeminiLoader label={t("auth.demo.signingIn")} showLabel size="sm" className="mx-auto" />
@@ -89,12 +128,12 @@ function GuestOffer({
   }
   if (guest.state === "failed" && shared) {
     return (
-      <div className="flex flex-col gap-3">
+      <>
         <p role="alert" className="text-sm">
           {t("auth.demo.fallback")}
         </p>
         <DemoAccountCard demo={shared} onUse={() => onUse(shared)} />
-      </div>
+      </>
     );
   }
   return (
@@ -102,11 +141,12 @@ function GuestOffer({
       title={t("auth.demo.guestTitle")}
       description={t("auth.demo.guestDescription")}
       action={t("auth.demo.start")}
-      onAction={() => void start()}
+      disabled={!ready}
+      onAction={onStart}
     >
-      {guest.state === "failed" ? (
+      {error ? (
         <p role="alert" className="text-sm text-destructive">
-          {errorMessage(guest.error)}
+          {error}
         </p>
       ) : null}
     </DemoCard>
@@ -156,12 +196,15 @@ function DemoCard({
   description,
   action,
   onAction,
+  disabled = false,
   children,
 }: {
   title: string;
   description: string;
   action: string;
   onAction: () => void;
+  /** Until the button can do anything (the captcha has no token yet). */
+  disabled?: boolean;
   children?: ReactNode;
 }) {
   const titleId = useId();
@@ -177,7 +220,7 @@ function DemoCard({
         <p className="text-muted-foreground text-sm">{description}</p>
       </div>
       {children}
-      <Button type="button" variant="secondary" onClick={onAction}>
+      <Button type="button" variant="secondary" disabled={disabled} onClick={onAction}>
         {action}
       </Button>
     </section>

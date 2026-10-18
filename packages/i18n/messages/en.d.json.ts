@@ -138,6 +138,7 @@ declare const messages: {
     "signUpTitle": "Create your account",
     "signUpDescription": "We'll email you a code to verify your address.",
     "google": "Continue with Google",
+    "googleToPost": "Continue with Google, to post to your channel",
     "passkey": "Sign in with a passkey",
     "forgotPassword": "Forgot password?",
     "noAccount": "Don't have an account?",

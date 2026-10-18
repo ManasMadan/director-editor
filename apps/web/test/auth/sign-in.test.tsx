@@ -7,9 +7,20 @@ import { auth, currentSession, enableTwoFactor, newUser, signOut, signUp } from 
 
 /** system.info as the full API answers it, changed to an environment it isn't running as. */
 interface SystemInfo {
-  features: { demoGuests: boolean };
+  features: { demoGuests: boolean; captcha: boolean };
   demo: { email: string; password: string } | null;
+  captchaSiteKey: string | null;
 }
+
+/**
+ * system.info as it would be with captcha on too. The full API itself has it off, so it
+ * takes the guest sign-in with or without the token: what's checked is that the page
+ * sends one, and waits for it.
+ */
+const withCaptcha = (info: SystemInfo) => {
+  info.features.captcha = true;
+  info.captchaSiteKey = "1x00000000000000000000AA";
+};
 
 /** Answers the page's system.info with the full API's own answer, after `change`. */
 async function serveSystemInfo(change: (info: SystemInfo) => void) {
@@ -99,7 +110,9 @@ describe("sign in", () => {
 
   it("offers Google when it's on, and goes there with ?next= as the way back", async () => {
     const page = await renderPage(<SignInPage />, { url: "/sign-in?next=/settings" });
-    await userEvent.click(page.getByRole("button", { name: "Continue with Google" }));
+    await userEvent.click(
+      page.getByRole("button", { name: "Continue with Google, to post to your channel" }),
+    );
     await expect
       .poll(async () => (await commands.hardNavigations())[0])
       .toMatch(
@@ -129,6 +142,39 @@ describe("sign in", () => {
     await renderPage(<SignInPage />, { url: "/sign-in?demo=1&next=/director/22k0fZarxh8" });
     await expect.poll(currentUrl).toBe("/director/22k0fZarxh8");
     expect((await currentSession()).user.demo).toBe(true);
+  });
+
+  // First of the captcha tests: Turnstile's script loads once a page, and this one needs
+  // it still on its way.
+  it("waits for Turnstile's token before starting the guest from ?demo=1", async () => {
+    await serveSystemInfo(withCaptcha);
+    await commands.turnstile("held");
+    await renderPage(<SignInPage />, { url: "/sign-in?demo=1" });
+    await expect
+      .poll(() => document.head.querySelector('script[src*="challenges.cloudflare.com"]'))
+      .toBeTruthy();
+    expect(await commands.sentHeaders("/api/auth/sign-in/guest")).toEqual([]);
+    expect(currentUrl()).toBe("/sign-in?demo=1");
+    await commands.turnstile("fake");
+    await expect.poll(currentUrl).toBe("/library");
+    const [sent] = await commands.sentHeaders("/api/auth/sign-in/guest");
+    expect(sent?.["x-captcha-response"]).toBe("XXXX.DUMMY.TOKEN.XXXX");
+  });
+
+  it("sends the guest sign-in Turnstile's token, with the widget out of sight", async () => {
+    await serveSystemInfo(withCaptcha);
+    const page = await renderPage(<SignInPage />, { url: "/sign-in" });
+    const card = page.getByRole("region", { name: "Just looking? Use the demo." });
+    // Out of sight unless Cloudflare wants an interaction: still one tap.
+    await expect
+      .element(page.getByTestId("captcha"))
+      .toHaveAttribute("data-appearance", "interaction-only");
+    const start = card.getByRole("button", { name: "Use the demo" });
+    await expect.element(start).toBeEnabled();
+    await userEvent.click(start);
+    await expect.poll(currentUrl).toBe("/library");
+    const [sent] = await commands.sentHeaders("/api/auth/sign-in/guest");
+    expect(sent?.["x-captcha-response"]).toBe("XXXX.DUMMY.TOKEN.XXXX");
   });
 
   it("falls back to the shared demo account, in the form, when no guest can be made", async () => {

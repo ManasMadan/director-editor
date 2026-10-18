@@ -36,6 +36,8 @@ describe("the landing page", () => {
     }
     // Who says what, for screen readers, in the order it's said.
     expect(html.indexOf("Director:")).toBeLessThan(html.indexOf("You:"));
+    // The shot card it changes comes after the exchange that changes it.
+    expect(html.indexOf("Inside it is!")).toBeLessThan(html.indexOf("Where: by your window"));
     // Nothing of the live call the shoot no longer has.
     expect(html).not.toMatch(/live call|on a call/);
   });

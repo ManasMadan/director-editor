@@ -59,7 +59,12 @@ export interface Captcha {
   reset(): void;
 }
 
-export function useCaptcha(): Captcha {
+/**
+ * `interactionOnly` keeps the widget out of sight unless Cloudflare wants the person to
+ * do something (Turnstile's `appearance: "interaction-only"`): for one-tap flows like the
+ * demo, where a box to tick would be one tap too many.
+ */
+export function useCaptcha({ interactionOnly = false } = {}): Captcha {
   const { data: system } = useSystemInfoQuery();
   const siteKey = system?.captchaSiteKey ?? null;
   const locale = useLocale();
@@ -86,6 +91,7 @@ export function useCaptcha(): Captcha {
         widgetId.current = api.render(element, {
           sitekey: siteKey,
           language: locale,
+          ...(interactionOnly && { appearance: "interaction-only" }),
           callback: (value: string) => setToken(value),
           "expired-callback": () => setToken(null),
           "error-callback": () => setToken(null),
@@ -105,7 +111,7 @@ export function useCaptcha(): Captcha {
       }
       widgetId.current = undefined;
     };
-  }, [siteKey, locale]);
+  }, [siteKey, locale, interactionOnly]);
 
   const reset = useCallback(() => {
     setToken(null);
