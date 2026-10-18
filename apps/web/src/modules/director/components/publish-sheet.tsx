@@ -29,9 +29,9 @@ import { GeminiLoader, GeminiShimmer } from "@repo/ui/components/gemini-loader";
 import { Input } from "@repo/ui/components/input";
 import { Textarea } from "@repo/ui/components/textarea";
 import { CircleAlert, CircleCheck, Upload } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { type FormEvent, useEffect, useId, useRef, useState } from "react";
+import { type FormEvent, type RefObject, useEffect, useId, useRef, useState } from "react";
 import * as z from "zod";
 import { authClient } from "@/lib/auth-client";
 import { hashtagsOf, hashtagsText, youtubeShortUrl } from "../lib/publish";
@@ -287,7 +287,7 @@ function PublishBody({
             void authClient.linkSocial({
               provider: "google",
               scopes: [YOUTUBE_UPLOAD_SCOPE],
-              callbackURL: `${window.location.pathname}?publish=${cut.id}`,
+              callbackURL: `/media?publish=${cut.id}`,
             });
           }
         },
@@ -346,19 +346,43 @@ function Trigger({ cut, onOpen }: { cut: DirectorCut; onOpen: () => void }) {
 /**
  * Publish, for a cut in My media: a sheet with the video and the post Director wrote for
  * it, to edit and send to the member's YouTube channel. A published cut links to YouTube
- * instead. Back from Google with `?publish=<this cut>`, it opens again and carries on.
- * The sheet stays open, saying how it went, while My media catches up with the cut.
+ * instead. Back from Google with `?publish=<this cut>`, it opens again and carries on,
+ * and the parameter goes, so a reload doesn't open it (or ask Gemini) again. The sheet
+ * stays open, saying how it went, while My media catches up with the cut; when it
+ * closes, focus goes to what now stands for it on the card (the button, or the link to
+ * YouTube), or to the card's `heading` when there's neither.
  */
-export function PublishButton({ cut }: { cut: DirectorCut }) {
+export function PublishButton({
+  cut,
+  heading,
+}: {
+  cut: DirectorCut;
+  heading: RefObject<HTMLElement | null>;
+}) {
   const t = useTranslations("director.publish");
+  const router = useRouter();
   const returning = useSearchParams().get("publish") === cut.id;
   const [resumed, setResumed] = useState(() => (returning ? unstash(cut) : null));
   const [open, setOpen] = useState(returning);
+  const trigger = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (returning) {
+      router.replace("/media", { scroll: false });
+    }
+  }, [returning, router]);
+  const focusOnClose = () =>
+    required(trigger.current, "the publish trigger").querySelector<HTMLElement>("a, button") ??
+    heading.current;
   return (
     <>
-      <Trigger cut={cut} onOpen={() => setOpen(true)} />
+      <span ref={trigger} className="contents">
+        <Trigger cut={cut} onOpen={() => setOpen(true)} />
+      </span>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] gap-5 overflow-y-auto sm:max-w-md">
+        <DialogContent
+          finalFocus={focusOnClose}
+          className="max-h-[calc(100dvh-2rem)] gap-5 overflow-y-auto sm:max-w-md"
+        >
           <DialogHeader>
             <DialogTitle className="text-lg font-semibold">{t("title")}</DialogTitle>
             <DialogDescription>{t("description")}</DialogDescription>

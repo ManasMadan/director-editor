@@ -11,11 +11,12 @@ import {
   fileIdSchema,
   videoIdSchema,
 } from "@repo/contracts/ids";
+import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import { MediaPage } from "@/modules/director";
 import { PublishButton } from "@/modules/director/components/publish-sheet";
-import { cleanup, renderPage } from "../render";
+import { cleanup, currentUrl, renderPage } from "../render";
 import { currentSession, signUp } from "../users";
 
 const COPY = {
@@ -85,8 +86,21 @@ async function aCut({ stored = true, copy = true } = {}): Promise<Made> {
   return { cut, user };
 }
 
+/** The button as a card in My media holds it, with the card's heading to fall back on. */
+function Card({ cut }: { cut: DirectorCut }) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  return (
+    <>
+      <h3 ref={heading} tabIndex={-1}>
+        {cut.title}
+      </h3>
+      <PublishButton cut={cut} heading={heading} />
+    </>
+  );
+}
+
 const open = async (cut: DirectorCut, url = "/media") => {
-  const view = await renderPage(<PublishButton cut={cut} />, { url });
+  const view = await renderPage(<Card cut={cut} />, { url });
   if (!url.includes("publish=")) {
     await userEvent.click(view.getByRole("button", { name: "Publish", exact: true }));
   }
@@ -102,24 +116,30 @@ describe("publishing a cut", { tags: ["files"] }, () => {
     vi.restoreAllMocks();
   });
 
-  it("keeps saying how it went while My media catches up with the cut", async () => {
-    const { cut, user } = await aCut();
-    await commands.linkYouTube(user.id, user.email);
+  /** A cut of the member's, allowed on YouTube, in My media, which is open on it. */
+  async function inMyMedia() {
+    const made = await aCut();
+    await commands.linkYouTube(made.user.id, made.user.email);
     // The cut in My media's list too, as the AI service lists the member's cuts.
-    await commands.fakeDirector(cut.videoId, {
+    await commands.fakeDirector(made.cut.videoId, {
       cuts: [
         {
-          ...cut,
+          ...made.cut,
           picks: [],
           publishStatus: "none",
           youtubeVideoId: null,
           visibility: null,
-          createdAt: cut.createdAt.toISOString(),
-          userId: user.id,
+          createdAt: made.cut.createdAt.toISOString(),
+          userId: made.user.id,
         },
       ],
     });
     await renderPage(<MediaPage />, { url: "/media" });
+    return made;
+  }
+
+  it("keeps saying how it went while My media catches up with the cut", async () => {
+    await inMyMedia();
     await userEvent.click(page.getByRole("button", { name: "Publish", exact: true }));
     await expect.element(page.getByLabelText("Title")).toHaveValue(COPY.title);
     await userEvent.click(page.getByRole("button", { name: "Public" }));
@@ -134,6 +154,49 @@ describe("publishing a cut", { tags: ["files"] }, () => {
     await expect
       .element(page.getByText("You asked for public, but YouTube keeps", { exact: false }))
       .toBeVisible();
+    // Closed: focus goes to what stands for the publish on the card now, the link.
+    await userEvent.keyboard("{Escape}");
+    await expect.element(page.getByRole("link", { name: "Watch on YouTube" })).toHaveFocus();
+  });
+
+  it("puts focus on the card's title when the sheet closes on a publish under way", async () => {
+    const { cut } = await inMyMedia();
+    await userEvent.click(page.getByRole("button", { name: "Publish", exact: true }));
+    await expect.element(page.getByLabelText("Title")).toHaveValue(COPY.title);
+    // Another tab started publishing it a moment ago.
+    await commands.sql("UPDATE ai.director_cut SET publish_status = 'uploading' WHERE id = $1", [
+      cut.id,
+    ]);
+    const listed = await commands.answeredRequests("director/media");
+    await userEvent.click(publishButton());
+    await expect
+      .element(page.getByText("This video is already on its way to YouTube.", { exact: false }))
+      .toBeVisible();
+    await expect.poll(() => commands.answeredRequests("director/media")).toBeGreaterThan(listed);
+    await userEvent.keyboard("{Escape}");
+    await expect.element(page.getByRole("heading", { name: cut.title })).toHaveFocus();
+  });
+
+  it("drops ?publish once it has opened, so a reload neither opens it nor asks Gemini again", async () => {
+    const { cut } = await aCut();
+    await open(cut, `/media?publish=${cut.id}`);
+    await expect.element(page.getByLabelText("Title")).toHaveValue(COPY.title);
+    await expect.poll(currentUrl).toBe("/media");
+    const asked = await commands.answeredRequests("publish/copy");
+    // Reloaded: the address has no ?publish any more.
+    cleanup();
+    await renderPage(<Card cut={cut} />, { url: currentUrl() });
+    await expect.element(page.getByRole("button", { name: "Publish", exact: true })).toBeVisible();
+    expect(page.getByLabelText("Title").query()).toBeNull();
+    expect(await commands.answeredRequests("publish/copy")).toBe(asked);
+  });
+
+  it("goes back to the Publish button when the sheet closes unpublished", async () => {
+    const { cut } = await aCut();
+    await open(cut);
+    await expect.element(page.getByLabelText("Title")).toHaveValue(COPY.title);
+    await userEvent.keyboard("{Escape}");
+    await expect.element(page.getByRole("button", { name: "Publish", exact: true })).toHaveFocus();
   });
 
   it("publishes Gemini's post as the member edited it, and says YouTube kept it private", async () => {
@@ -284,7 +347,7 @@ describe("publishing a cut", { tags: ["files"] }, () => {
       { status: "published" as const, youtubeVideoId: null, visibility: null },
     ]) {
       cleanup();
-      const view = await renderPage(<PublishButton cut={{ ...cut, publish }} />);
+      const view = await renderPage(<Card cut={{ ...cut, publish }} />);
       expect(view.getByRole("button").query(), publish.status).toBeNull();
       expect(view.getByRole("link").query(), publish.status).toBeNull();
     }
@@ -293,7 +356,7 @@ describe("publishing a cut", { tags: ["files"] }, () => {
   it("links a published cut to YouTube instead", async () => {
     const { cut } = await aCut({ stored: false });
     await renderPage(
-      <PublishButton
+      <Card
         cut={{
           ...cut,
           publish: { status: "published", youtubeVideoId: "AbCdEfGhIjK", visibility: "unlisted" },

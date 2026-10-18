@@ -17,6 +17,7 @@ import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import pg from "pg";
+import * as z from "zod";
 
 async function body(request: IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = [];
@@ -62,26 +63,43 @@ function callerOf(request: IncomingMessage): string {
   return claims.sub ?? "";
 }
 
-/** A cut with where its publishing got, from the database, when it has a row there. */
-async function withPublishing(database: pg.Pool, cuts: unknown): Promise<unknown> {
-  if (!Array.isArray(cuts)) {
-    const [one] = (await withPublishing(database, [cuts])) as unknown[];
-    return one;
-  }
-  const listed = cuts as Record<string, unknown>[];
-  const { rows } = await database.query<{
-    id: string;
-    publishStatus: string;
-    youtubeVideoId: string | null;
-    visibility: string | null;
-  }>(
+/** A cut as this stand-in answers it: any fields, and its id. */
+const cutBody = z.looseObject({ id: z.string() });
+type CutBody = z.infer<typeof cutBody>;
+
+const publishingRow = z.object({
+  id: z.string(),
+  publishStatus: z.string(),
+  youtubeVideoId: z.string().nullable(),
+  visibility: z.string().nullable(),
+});
+
+/** Where each of these cuts' publishing got, by id, for those with a row in the database. */
+async function publishingOf(database: pg.Pool, ids: string[]) {
+  const { rows } = await database.query(
     `SELECT id::text, publish_status AS "publishStatus", youtube_video_id AS "youtubeVideoId",
             visibility
        FROM ai.director_cut WHERE id::text = ANY($1)`,
-    [listed.map((cut) => String(cut.id))],
+    [ids],
   );
-  const stored = new Map(rows.map(({ id, ...publishing }) => [id, publishing]));
-  return listed.map((cut) => ({ ...cut, ...stored.get(String(cut.id)) }));
+  return new Map(
+    z
+      .array(publishingRow)
+      .parse(rows)
+      .map(({ id, ...publishing }) => [id, publishing]),
+  );
+}
+
+/** A cut, or a list of them, with where publishing got, from the database. */
+async function withPublishing(database: pg.Pool, body: unknown): Promise<unknown> {
+  const many = z.array(cutBody).safeParse(body);
+  const cuts: CutBody[] = many.success ? many.data : [cutBody.parse(body)];
+  const stored = await publishingOf(
+    database,
+    cuts.map((cut) => cut.id),
+  );
+  const overlaid = cuts.map((cut) => ({ ...cut, ...stored.get(cut.id) }));
+  return many.success ? overlaid : overlaid[0];
 }
 
 export async function startFakeAi(databaseUrl: string) {
@@ -123,9 +141,13 @@ export async function startFakeAi(databaseUrl: string) {
       publishRoute(route, input, publishable);
     if (director) {
       const read = director.status === 200 && /^GET \/v1\/director\/cuts/.test(route);
-      return reply(
-        director.status,
-        read ? await withPublishing(database, director.body) : director.body,
+      if (!read) {
+        return reply(director.status, director.body);
+      }
+      // A query that fails answers as the real service would, not with a request that hangs.
+      return withPublishing(database, director.body).then(
+        (cuts) => reply(director.status, cuts),
+        () => fail(500, "INTERNAL"),
       );
     }
     fail(404, "NOT_FOUND");
