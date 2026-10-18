@@ -190,6 +190,14 @@ export class FilesService {
     return this.storage.delete(key);
   }
 
+  /**
+   * Stores an object the services make themselves (a stock photo copied for the asset
+   * picker), at a key the caller chose. FEATURE_DISABLED while storage is off.
+   */
+  async writeObject(key: string, body: Buffer, contentType: string) {
+    await this.storage.write(key, body, contentType);
+  }
+
   /** Deletes the row; the database queues its stored objects for removal. */
   async remove(userId: UserId, fileId: FileId) {
     await this.files.remove(userId, fileId);

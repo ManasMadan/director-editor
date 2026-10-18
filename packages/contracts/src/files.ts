@@ -41,6 +41,15 @@ export const uploadPurposes = {
     types: ["video/mp4", "video/webm"],
     maxBytes: 100_000_000,
   },
+  /**
+   * A picture of the member's for one of a Director plan's asset slots (the asset
+   * picker's Upload): re-encoded at most 2160 pixels on its long side, to PNG when it has
+   * transparency (a cutout) and JPEG otherwise, metadata stripped.
+   */
+  "director-asset-image": {
+    types: ["image/jpeg", "image/png", "image/webp"],
+    maxBytes: 15_000_000,
+  },
 } as const satisfies Record<string, { types: readonly string[]; maxBytes: number }>;
 
 export type UploadPurpose = keyof typeof uploadPurposes;

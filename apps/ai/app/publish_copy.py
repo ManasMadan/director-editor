@@ -8,6 +8,7 @@ credits and the original Short's link itself, so the draft carries none of those
 
 import re
 import unicodedata
+from collections.abc import Sequence
 
 from app.errors import AppError
 from app.schemas import (
@@ -111,13 +112,27 @@ def _first_title(*titles: str) -> str:
     raise AppError("UPSTREAM_UNAVAILABLE", {"service": "gemini"})
 
 
-def tidy(draft: PublishCopyDraft, *fallback_titles: str) -> PublishCopy:
+# Gemini's line crediting the original, and each stock picture's line: together within
+# MAX_PUBLISH_CREDITS for the 12 assets a plan may have.
+ORIGINAL_CREDIT_MAX = 300
+STOCK_CREDIT_MAX = 140
+
+
+def tidy(
+    draft: PublishCopyDraft, *fallback_titles: str, stock_credits: Sequence[str] = ()
+) -> PublishCopy:
     """The draft within PublishCopy's limits, and the description within YouTube's in
     bytes. When nothing of the draft's title is left, the first of `fallback_titles`
     (the cut's own, then the original's) that has something left, cleaned the same way;
-    a member can save a cut titled only `<>` or `#Shorts`."""
+    a member can save a cut titled only `<>` or `#Shorts`. The credits end with a line
+    for each stock picture the video uses (`stock_credits`), which the providers ask
+    for."""
     hashtags = _hashtags(draft.hashtags)
-    credits = _shorten(_without_brackets(draft.credits).strip(), MAX_PUBLISH_CREDITS)
+    lines = [
+        _shorten(_without_brackets(draft.credits).strip(), ORIGINAL_CREDIT_MAX),
+        *(_shorten(_without_brackets(line).strip(), STOCK_CREDIT_MAX) for line in stock_credits),
+    ]
+    credits = _shorten("\n".join(line for line in lines if line), MAX_PUBLISH_CREDITS)
     return PublishCopy(
         title=_shorten(_first_title(draft.title, *fallback_titles), MAX_PUBLISH_TITLE),
         description=_description(draft.description, hashtags, credits),

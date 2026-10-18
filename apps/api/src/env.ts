@@ -107,6 +107,13 @@ export const envSchema = {
   YOUTUBE_API_KEY: z.string().min(1).optional(),
   // Test hook: where YouTube's API lives (the tests' stand-in).
   YOUTUBE_API_URL: z.url().default("https://www.googleapis.com/youtube/v3"),
+  // Optional: stock photos for Director's asset picker (src/modules/assets/stock). Each
+  // provider is on when its key is set; the picker's Stock tab shows while either is.
+  PEXELS_API_KEY: z.string().min(1).optional(),
+  PIXABAY_API_KEY: z.string().min(1).optional(),
+  // Test hooks: where each provider's API lives (the tests' stand-in).
+  PEXELS_API_URL: z.url().default("https://api.pexels.com"),
+  PIXABAY_API_URL: z.url().default("https://pixabay.com"),
   // Optional: Director live on the shoot screen (Gemini Live on Vertex AI, /api/live). On
   // when the Google Cloud project is set; the machine's service account pays for it.
   GOOGLE_CLOUD_PROJECT: z
@@ -154,6 +161,16 @@ if (env.NODE_ENV === "production" && !env.YOUTUBE_API_URL.startsWith("https://")
 // The mock Google's Live API is plain WebSocket: production never reads it.
 if (env.NODE_ENV === "production" && env.LIVE_API_URL && !env.LIVE_API_URL.startsWith("wss://")) {
   throw new Error("LIVE_API_URL must be wss:// in production");
+}
+
+// The stock providers' stand-ins in tests are plain HTTP: production never reads them.
+for (const [name, url] of [
+  ["PEXELS_API_URL", env.PEXELS_API_URL],
+  ["PIXABAY_API_URL", env.PIXABAY_API_URL],
+] as const) {
+  if (env.NODE_ENV === "production" && !url.startsWith("https://")) {
+    throw new Error(`${name} must be HTTPS in production`);
+  }
 }
 
 // A pasted token expires within the hour; production uses the machine's service account.

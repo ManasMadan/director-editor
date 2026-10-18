@@ -18,6 +18,7 @@ Off without MEDIA_BUCKET: there would be nowhere to keep them.
 """
 
 import asyncio
+import re
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -28,7 +29,10 @@ from google.genai.types import (
     GenerateContentResponse,
     HttpOptions,
     ImageConfig,
+    Part,
 )
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent, BinaryContent
 from pydantic_ai.models.google import GoogleModel
 from redis.asyncio import Redis
 from sqlalchemy import Integer, func, select, type_coerce, update
@@ -77,10 +81,10 @@ def default_assets(plan: ShotPlan) -> list[Asset]:
     return [asset for asset in plan.assets if asset.kind in STILL_KINDS][:MAX_DEFAULT_ASSETS]
 
 
-def image_prompt(asset: Asset) -> str:
-    """What Nano Banana is asked for: the asset's own prompt, held to its reference's look
-    and its text, and never anyone's likeness or the original's branding (app/branding.py:
-    a placeholder stands there instead)."""
+def picker_prompt(asset: Asset) -> str:
+    """The asset's prompt held to its reference's look and its text, without the
+    original's branding (app/branding.py: a placeholder stands there instead): what the
+    asset picker's Create tab starts from, for the member to change."""
     reference = asset.reference
     unbranded = unbranding(reference.brands)
     lines = [
@@ -91,7 +95,40 @@ def image_prompt(asset: Asset) -> str:
     if reference.blackAndWhite:
         lines.append("Black and white only, no colour.")
     lines += [f'The text "{unbranded(text)}", spelt exactly like that.' for text in reference.text]
-    return "\n".join([*lines, _GENERIC_PERSON, _NO_MARKS])
+    return "\n".join(lines)
+
+
+def image_prompt(asset: Asset) -> str:
+    """What Nano Banana is asked for a default: the picker's prompt, and never anyone's
+    likeness or any branding."""
+    return guarded(picker_prompt(asset))
+
+
+def guarded(prompt: str) -> str:
+    """`prompt` with the lines every drawing carries: no likeness, no logos."""
+    return "\n".join([prompt, _GENERIC_PERSON, _NO_MARKS])
+
+
+_CURLY_QUOTES = re.compile("[\u201c\u201d]")
+
+
+def quoted_text(*prompts: str | None) -> list[str]:
+    """The words a prompt puts in quotes: what the image's text must read (text the
+    member wants on the image is quoted in the prompt). Every other piece between
+    straight or curly double quotes."""
+    pieces = [
+        piece.strip()
+        for prompt in prompts
+        if prompt
+        for piece in _CURLY_QUOTES.sub('"', prompt).split('"')[1::2]
+    ]
+    return [piece for piece in pieces if piece]
+
+
+def expected_text(asset: Asset) -> list[str]:
+    """What a default image's text must read: its reference's, without the branding."""
+    unbranded = unbranding(asset.reference.brands)
+    return [unbranded(text) for text in asset.reference.text]
 
 
 def images_lock_key(user_id: UUID) -> str:
@@ -109,6 +146,12 @@ def asset_key(plan_id: UUID, asset_id: str, media_type: str) -> str:
     """Where an asset's default image is kept (an id the plan's pattern allows, so the
     key stays inside the plan's folder)."""
     return f"{KEY_PREFIX}/{plan_id}/{asset_id}.{_EXTENSIONS[media_type]}"
+
+
+def candidate_key(plan_id: UUID, asset_id: str, row_id: UUID, media_type: str) -> str:
+    """Where one of a member's own images for a slot is kept: beside the slot's default,
+    in a folder of the slot's own, named by its row."""
+    return f"{KEY_PREFIX}/{plan_id}/{asset_id}/{row_id}.{_EXTENSIONS[media_type]}"
 
 
 class NoImage(ValueError):
@@ -139,25 +182,96 @@ def _drawing(response: GenerateContentResponse) -> Drawing:
     raise NoImage("no image in the answer")
 
 
-class Artist:
-    """Nano Banana (ASSET_MODEL), drawing one asset at a time."""
+class SpellCheck(BaseModel):
+    """Gemini's reading of the text in a drawn image: the model's output type."""
 
-    def __init__(self, model: GoogleModel, model_name: str) -> None:
+    readsRight: bool = Field(
+        description="Every line of the expected text is in the image, spelt exactly."
+    )
+    misspelt: list[str] = Field(description="Words in the image that are spelt wrong.")
+
+
+SPELLING_INSTRUCTIONS = """\
+You proofread the text in an image. You get the image and the text it should show. \
+readsRight is true only when every expected line is there, spelt exactly (case and \
+punctuation may differ). List any misspelt or garbled words you see in misspelt."""
+# A proofreading answer comes in seconds; past this the image is shown unchecked.
+SPELLING_TIMEOUT_SECONDS = 30
+
+
+@dataclass(frozen=True)
+class Picture:
+    """An image sent with a prompt: the member's reference photo, or the one to edit."""
+
+    data: bytes
+    media_type: str
+
+
+class Artist:
+    """Nano Banana (ASSET_MODEL), drawing one asset at a time; and, given a checker,
+    Gemini proofreading the text it drew."""
+
+    def __init__(
+        self,
+        model: GoogleModel,
+        model_name: str,
+        checker: Agent[None, SpellCheck] | None = None,
+    ) -> None:
         # The short name for the usage ledger; `model.model_name` is the address sent to
         # Gemini, which on Vertex is the full resource name.
         self._model = model
         self.model_name = model_name
+        self._checker = checker
 
     async def draw(self, asset: Asset) -> Drawing:
+        return await self.draw_prompt(image_prompt(asset), drawn_aspect_ratio(asset))
+
+    async def draw_prompt(
+        self, prompt: str, aspect_ratio: str, pictures: tuple[Picture, ...] = ()
+    ) -> Drawing:
+        """An image of `prompt` in `aspect_ratio`, drawn from `pictures` when given."""
         config = GenerateContentConfig(
             response_modalities=["IMAGE"],
-            image_config=ImageConfig(aspect_ratio=drawn_aspect_ratio(asset), image_size="1K"),
+            image_config=ImageConfig(aspect_ratio=aspect_ratio, image_size="1K"),
             http_options=HttpOptions(timeout=DRAW_TIMEOUT_MS),
         )
+        contents: list[Part] = [
+            Part.from_bytes(data=picture.data, mime_type=picture.media_type) for picture in pictures
+        ]
+        contents.append(Part.from_text(text=prompt))
         response = await self._model.client.aio.models.generate_content(  # pyright: ignore[reportUnknownMemberType]  # its contents type names Pillow's Image, not installed
-            model=self._model.model_name, contents=image_prompt(asset), config=config
+            model=self._model.model_name, contents=contents, config=config
         )
         return _drawing(response)
+
+    async def reads_right(self, drawing: Drawing, expected: list[str]) -> bool:
+        """Whether the drawing's text reads `expected`, spelt right. True with nothing to
+        check, no checker, or a checker that fails: proofreading improves an image, it
+        never stops one being shown."""
+        if not expected or self._checker is None:
+            return True
+        try:
+            result = await self._checker.run(
+                [
+                    BinaryContent(data=drawing.data, media_type=drawing.media_type),
+                    "The text it should show:\n" + "\n".join(expected),
+                ]
+            )
+        except Exception:
+            log.exception("proofreading an image failed")
+            return True
+        return result.output.readsRight
+
+
+def create_checker(model: GoogleModel) -> Agent[None, SpellCheck]:
+    """Gemini (DIRECTOR_MODEL), proofreading a drawn image's text."""
+    return Agent(
+        model,
+        output_type=SpellCheck,
+        instructions=SPELLING_INSTRUCTIONS,
+        model_settings={"timeout": SPELLING_TIMEOUT_SECONDS},
+        defer_model_check=True,
+    )
 
 
 async def upload_bytes(bucket: str, key: str, data: bytes, content_type: str) -> None:
@@ -171,6 +285,39 @@ def _put(bucket: str, key: str, data: bytes, content_type: str) -> None:
     client.bucket(bucket).blob(key).upload_from_string(  # pyright: ignore[reportUnknownMemberType]  # untyped client
         data, content_type=content_type
     )
+
+
+# The largest picture read back to draw from: an upload's limit (packages/contracts
+# files.ts, director-asset-image).
+MAX_PICTURE_BYTES = 15_000_000
+_PICTURE_TYPES = frozenset({"image/png", "image/jpeg", "image/webp"})
+
+
+class _PictureFacts(BaseModel):
+    """What Cloud Storage says of a stored object (its client is untyped)."""
+
+    size: int | None
+    contentType: str | None
+
+
+async def download_picture(bucket: str, key: str) -> Picture:
+    """The image at `gs://{bucket}/{key}` (an upload, or another of a slot's images), to
+    draw from. NoImage when it isn't there, isn't an image or is larger than an upload."""
+    return await asyncio.to_thread(_get, bucket, key)
+
+
+def _get(bucket: str, key: str) -> Picture:
+    blob = storage.Client().bucket(bucket).get_blob(key)  # pyright: ignore[reportUnknownMemberType]  # untyped client
+    if blob is None:
+        raise NoImage(f"no picture at {key}")
+    size = _PictureFacts.model_validate(
+        {"size": blob.size, "contentType": blob.content_type},  # pyright: ignore[reportAny]  # untyped client
+    )
+    media_type = size.contentType or ""
+    if (size.size or 0) > MAX_PICTURE_BYTES or media_type not in _PICTURE_TYPES:
+        raise NoImage(f"not a picture to draw from: {key}")
+    data: bytes = blob.download_as_bytes()  # pyright: ignore[reportUnknownMemberType]  # untyped client
+    return Picture(data, media_type)
 
 
 def worth_retrying(error: Exception) -> bool:
@@ -195,6 +342,12 @@ class _Job:
     row_id: UUID
     user_id: UUID | None
     asset: Asset
+    # A member's own drawing (origin created): its prompt, the photo it's drawn from, and
+    # the image it edits (the prompt then says what to change). None for a default.
+    prompt: str | None = None
+    reference_key: str | None = None
+    base_key: str | None = None
+    base_prompt: str | None = None
 
 
 class AssetMaker:
@@ -275,25 +428,88 @@ class AssetMaker:
                 select(DirectorAsset)
                 .where(
                     DirectorAsset.plan_id == plan_id,
-                    DirectorAsset.origin == "default",
+                    DirectorAsset.origin.in_(("default", "created")),
                     DirectorAsset.status.in_(("pending", "generating")),
                 )
                 .order_by(DirectorAsset.id)
             )
             pending = list(rows)
+            wanted = [row.base_id for row in pending if row.base_id is not None]
+            bases = {
+                base.id: base
+                for base in await session.scalars(
+                    select(DirectorAsset).where(DirectorAsset.id.in_(wanted))
+                )
+            }
         if plan is None or plan.status != "ready" or plan.plan is None:
             return []
         assets = {asset.id: asset for asset in ShotPlan.model_validate(plan.plan).assets}
         jobs: list[_Job] = []
         for row in pending:
             asset = assets.get(row.asset_id)
-            if asset is None:
+            base = bases.get(row.base_id) if row.base_id is not None else None
+            lost_base = row.base_id is not None and (base is None or base.object_key is None)
+            if asset is None or lost_base:
                 await self._fail(
                     org_id, plan_id, row.id, row.asset_id, row.user_id, "VALIDATION_FAILED"
                 )
-            else:
+            elif row.origin == "default":
                 jobs.append(_Job(row.id, row.user_id, asset))
+            else:
+                jobs.append(
+                    _Job(
+                        row.id,
+                        row.user_id,
+                        asset,
+                        prompt=row.prompt or picker_prompt(asset),
+                        reference_key=row.reference_key,
+                        base_key=base.object_key if base else None,
+                        base_prompt=base.prompt if base else None,
+                    )
+                )
         return jobs
+
+    async def _drawing(self, plan_id: UUID, job: _Job) -> tuple[Drawing, str, tuple[int, int]]:
+        """Draws the job's image, proofreads its text and draws it once more when it's
+        misspelt (a misspelt result is regenerated once before it's shown); the drawing
+        kept, where it's stored, and the tokens both drawings used."""
+        if job.prompt is None:
+            prompt, expected, pictures = image_prompt(job.asset), expected_text(job.asset), ()
+        else:
+            prompt, expected, pictures = await self._own_drawing(job)
+        aspect = drawn_aspect_ratio(job.asset)
+        drawing = await self._artist.draw_prompt(prompt, aspect, pictures)
+        used = (drawing.input_tokens, drawing.output_tokens)
+        if not await self._artist.reads_right(drawing, expected):
+            quoted = "; ".join(f'"{text}"' for text in expected)
+            respelt = f"{prompt}\nSpell every word of the text exactly as quoted: {quoted}"
+            drawing = await self._artist.draw_prompt(respelt, aspect, pictures)
+            used = (used[0] + drawing.input_tokens, used[1] + drawing.output_tokens)
+        key = (
+            asset_key(plan_id, job.asset.id, drawing.media_type)
+            if job.prompt is None
+            else candidate_key(plan_id, job.asset.id, job.row_id, drawing.media_type)
+        )
+        return drawing, key, used
+
+    async def _own_drawing(self, job: _Job) -> tuple[str, list[str], tuple[Picture, ...]]:
+        """A member's drawing: the prompt sent, the text it must read, and the pictures
+        it's drawn from."""
+        prompt = job.prompt or ""
+        if job.base_key is not None:
+            base = await download_picture(self._bucket, job.base_key)
+            expected = quoted_text(prompt) or quoted_text(job.base_prompt)
+            sent = guarded(f"Edit this image: {prompt}\nKeep everything else as it is.")
+            return sent, expected, (base,)
+        pictures: tuple[Picture, ...] = ()
+        lines = [prompt]
+        if job.reference_key is not None:
+            pictures = (await download_picture(self._bucket, job.reference_key),)
+            lines.append(
+                "Draw it from the attached photo: keep what the photo shows, and give it "
+                "the look described above."
+            )
+        return guarded("\n".join(lines)), quoted_text(prompt), pictures
 
     async def _draw(self, org_id: UUID, plan_id: UUID, job: _Job, *, final: bool) -> None:
         await self._set(org_id, job.row_id, status="generating")
@@ -316,9 +532,7 @@ class AssetMaker:
             return
         used = (0, 0)
         try:
-            drawing = await self._artist.draw(job.asset)
-            used = (drawing.input_tokens, drawing.output_tokens)
-            key = asset_key(plan_id, job.asset.id, drawing.media_type)
+            drawing, key, used = await self._drawing(plan_id, job)
             await upload_bytes(self._bucket, key, drawing.data, drawing.media_type)
         except Exception as error:
             log.exception("drawing an asset failed", plan_id=str(plan_id), asset=job.asset.id)

@@ -91,6 +91,18 @@ def test_long_descriptions_and_credits_are_shortened() -> None:
     assert len(copy.credits) <= 300
 
 
+def test_the_credits_end_with_a_line_for_each_stock_picture() -> None:
+    lines = ["The chart: Jane Doe on Pexels (https://www.pexels.com/photo/1/)", "<x> " * 100]
+    copy = tidy(draft(credits="Original by @creator"), "Cut title", stock_credits=lines)
+    original, chart, long = copy.credits.split("\n")
+    assert (original, chart) == ("Original by @creator", lines[0])
+    assert len(long) <= 140
+    assert "<" not in long
+    # Twelve long lines still fit.
+    many = tidy(draft(credits="x " * 200), "Cut title", stock_credits=["y " * 100] * 12)
+    assert len(many.credits) <= 2_000
+
+
 def test_the_cut_s_own_title_is_cleaned_the_same_way() -> None:
     assert tidy(draft(title=" <> "), "My <best> look #Shorts").title == "My best look"
 

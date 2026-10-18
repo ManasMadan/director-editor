@@ -18,6 +18,7 @@ const info = {
     files: true,
     google: false,
     live: false,
+    stock: false,
   },
   minimumClientVersion: "1.0.0",
   captchaSiteKey: null,

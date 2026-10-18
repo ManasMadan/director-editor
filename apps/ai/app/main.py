@@ -31,8 +31,15 @@ from app.errors import AppError, install_error_handlers
 from app.log import configure_logging
 from app.queues import DirectorQueue
 from app.schemas import (
+    ASSET_ID_PATTERN,
+    MAX_ASSET_ID,
     VIDEO_ID_PATTERN,
+    AssetCandidateCreate,
+    AssetCandidateOut,
+    AssetChoiceCreate,
+    AssetDrawingCreate,
     AssetImageOut,
+    AssetSlotsOut,
     ClipRequest,
     CutPick,
     DirectorCutCreate,
@@ -368,3 +375,67 @@ async def clip_director_attempt(body: ClipRequest, _caller: CallerDep) -> Respon
     snapped to the first and last words, never across a pause (RECORDING_CLIP_FAILED when
     there's nothing to cut; UPSTREAM_UNAVAILABLE while the footage can't be reached)."""
     return await clip_response(services().clipper, body)
+
+
+# ------------------------------------------------------------------------ asset picker
+VideoIdPath = Annotated[str, Path(pattern=VIDEO_ID_PATTERN)]
+AssetIdPath = Annotated[str, Path(pattern=ASSET_ID_PATTERN, max_length=MAX_ASSET_ID)]
+
+
+@app.get("/v1/director/plans/{video_id}/assets", operation_id="listDirectorAssets")
+async def list_director_assets(
+    video_id: VideoIdPath, caller: CallerDep, director: DirectorDep
+) -> AssetSlotsOut:
+    """Every asset slot of the plan, with its default and the caller's own images, the one
+    each uses, and the caller's images left."""
+    return await director.picker.slots(caller.org_id, caller.user_id, video_id)
+
+
+@app.post(
+    "/v1/director/plans/{video_id}/assets/{asset_id}/drawings",
+    operation_id="drawDirectorAsset",
+    status_code=201,
+)
+async def draw_director_asset(
+    video_id: VideoIdPath,
+    asset_id: AssetIdPath,
+    body: AssetDrawingCreate,
+    caller: CallerDep,
+    director: DirectorDep,
+) -> AssetCandidateOut:
+    """Queues an image for the slot drawn from the caller's prompt, or an edit of another
+    of its images (DIRECTOR_IMAGE_LIMIT past the caller's images)."""
+    return await director.picker.draw(caller.org_id, caller.user_id, video_id, asset_id, body)
+
+
+@app.post(
+    "/v1/director/plans/{video_id}/assets/{asset_id}/images",
+    operation_id="addDirectorAsset",
+    status_code=201,
+)
+async def add_director_asset(
+    video_id: VideoIdPath,
+    asset_id: AssetIdPath,
+    body: AssetCandidateCreate,
+    caller: CallerDep,
+    director: DirectorDep,
+) -> AssetCandidateOut:
+    """Records an upload of the caller's, or a stock picture, for the slot."""
+    return await director.picker.add(caller.org_id, caller.user_id, video_id, asset_id, body)
+
+
+@app.post(
+    "/v1/director/plans/{video_id}/assets/{asset_id}/choice",
+    operation_id="chooseDirectorAsset",
+    status_code=204,
+)
+async def choose_director_asset(
+    video_id: VideoIdPath,
+    asset_id: AssetIdPath,
+    body: AssetChoiceCreate,
+    caller: CallerDep,
+    director: DirectorDep,
+) -> Response:
+    """The image the caller's video uses in the slot (none: its default)."""
+    await director.picker.choose(caller.org_id, caller.user_id, video_id, asset_id, body)
+    return Response(status_code=204)

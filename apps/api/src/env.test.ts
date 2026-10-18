@@ -53,6 +53,24 @@ describe("the environment", () => {
       "YOUTUBE_API_URL must be HTTPS in production",
     ],
     [
+      "a stand-in for Pexels",
+      {
+        WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "",
+        YOUTUBE_API_URL: "https://www.googleapis.com/youtube/v3",
+        PEXELS_API_URL: "http://127.0.0.1:9000",
+      },
+      "PEXELS_API_URL must be HTTPS in production",
+    ],
+    [
+      "a stand-in for Pixabay",
+      {
+        WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "",
+        YOUTUBE_API_URL: "https://www.googleapis.com/youtube/v3",
+        PIXABAY_API_URL: "http://127.0.0.1:9000",
+      },
+      "PIXABAY_API_URL must be HTTPS in production",
+    ],
+    [
       "a pasted Google access token",
       {
         WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "",

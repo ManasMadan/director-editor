@@ -28,6 +28,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DirectorGate, type EmbedOptions, sendCommand, YouTubeEmbed } from "@/modules/shorts";
 import { IndexProgress } from "../components/index-progress";
 import { type MediaLinks, ShotList, Storyboard, useMediaLink } from "../components/shot-list";
+import { WhatYouNeed } from "../components/what-you-need";
 import { type AudioMode, defaultAudio, offersVoice } from "../lib/audio";
 import { indexStep, nextShot } from "../lib/library";
 import { timecode } from "../lib/track";
@@ -398,6 +399,7 @@ function Ready({
       />
       <div className="flex flex-col gap-6 px-4 pt-2 pb-36">
         <p className="text-sm text-studio-foreground/70">{plan.plan.summary}</p>
+        <WhatYouNeed videoId={plan.videoId} plan={plan.plan} />
         <Soundtrack url={plan.plan.musicUrl} media={media} />
         <section className="flex flex-col gap-2">
           <p className="font-semibold">

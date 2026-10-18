@@ -13,6 +13,7 @@ const info = {
     files: false,
     google: false,
     live: false,
+    stock: false,
   },
   minimumClientVersion: "1.0.0",
   captchaSiteKey: null,

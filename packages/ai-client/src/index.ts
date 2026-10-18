@@ -15,14 +15,18 @@ import { SignJWT } from "jose";
 import * as z from "zod";
 import { createClient } from "./generated/client";
 import {
+  addDirectorAsset,
   checkDirectorScene,
+  chooseDirectorAsset,
   clipDirectorAttempt,
   createDirectorCut,
   createDirectorTake,
+  drawDirectorAsset,
   getDirectorCut,
   getDirectorLibrary,
   getDirectorPlan,
   indexDirectorPlan,
+  listDirectorAssets,
   listDirectorCuts,
   listDirectorMedia,
   listDirectorTakes,
@@ -31,6 +35,9 @@ import {
   writeDirectorPublishCopy,
 } from "./generated/sdk.gen";
 import type {
+  AssetCandidateCreate,
+  AssetChoiceCreate,
+  AssetDrawingCreate,
   ClipRequest,
   DirectorCutCreate,
   DirectorTakeCreate,
@@ -118,8 +125,47 @@ async function unwrap<T>(call: Promise<{ data?: T; error?: unknown; response?: R
   return data;
 }
 
+/** One asset slot of a plan: the short's video id and the asset's id in its plan. */
+interface AssetSlotPath {
+  videoId: string;
+  assetId: string;
+}
+
+const slotPath = ({ videoId, assetId }: AssetSlotPath) => ({
+  video_id: videoId,
+  asset_id: assetId,
+});
+
+type ClientFor = (caller: AiCaller) => Promise<ReturnType<typeof createClient>>;
+
+/** The asset picker's calls (apps/ai/app/picker.py), each on a client made for that call. */
+function assetCalls(forCall: ClientFor) {
+  return {
+    async listAssets(caller: AiCaller, videoId: string) {
+      return unwrap(
+        listDirectorAssets({ client: await forCall(caller), path: { video_id: videoId } }),
+      );
+    },
+    async drawAsset(caller: AiCaller, slot: AssetSlotPath, body: AssetDrawingCreate) {
+      return unwrap(
+        drawDirectorAsset({ client: await forCall(caller), path: slotPath(slot), body }),
+      );
+    },
+    async addAsset(caller: AiCaller, slot: AssetSlotPath, body: AssetCandidateCreate) {
+      return unwrap(
+        addDirectorAsset({ client: await forCall(caller), path: slotPath(slot), body }),
+      );
+    },
+    async chooseAsset(caller: AiCaller, slot: AssetSlotPath, body: AssetChoiceCreate) {
+      await settle(
+        chooseDirectorAsset({ client: await forCall(caller), path: slotPath(slot), body }),
+      );
+    },
+  };
+}
+
 /** Director's calls (apps/ai/app/director.py), each on a client made for that call. */
-function directorCalls(forCall: (caller: AiCaller) => Promise<ReturnType<typeof createClient>>) {
+function directorCalls(forCall: ClientFor) {
   return {
     async index(caller: AiCaller, videoId: string) {
       return unwrap(indexDirectorPlan({ client: await forCall(caller), body: { videoId } }));
@@ -214,5 +260,5 @@ export function createAiClient(options: { baseUrl: string; secret: string; timeo
   }
 
   /** Director's calls, as `ai.director.index(...)`. */
-  return { director: directorCalls(forCall) };
+  return { director: Object.assign(directorCalls(forCall), assetCalls(forCall)) };
 }

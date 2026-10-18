@@ -40,6 +40,8 @@ type ErrorCode = Annotated[
         "INVALID_SIGNATURE",
         "AI_BUDGET_EXCEEDED",
         "DIRECTOR_INDEX_LIMIT",
+        "DIRECTOR_IMAGE_LIMIT",
+        "DIRECTOR_ASSET_NOT_FOUND",
         "DIRECTOR_VIDEO_UNAVAILABLE",
         "DIRECTOR_TOO_LONG",
         "DIRECTOR_PLAN_NOT_FOUND",
