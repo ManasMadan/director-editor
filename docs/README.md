@@ -1,14 +1,17 @@
 # Docs
 
-New here: the [README](../README.md) gets it running, [CONTRIBUTING.md](../CONTRIBUTING.md)
-has the conventions, and [troubleshooting.md](troubleshooting.md) the fixes for what
-usually goes wrong. Starting a new app from this repository:
-[new-project.md](new-project.md), the checklist from the first clone to the first
-production release. `CLAUDE.md` is the same material condensed for Claude Code.
+New here: the [README](../README.md) says what Director is, how to try it and how to run
+it, [how-it-works.md](how-it-works.md) what happens underneath,
+[CONTRIBUTING.md](../CONTRIBUTING.md) has the conventions and everyday commands, and
+[troubleshooting.md](troubleshooting.md) the fixes for what usually goes wrong. Starting a
+new app from this repository: [new-project.md](new-project.md), the checklist from the
+first clone to the first production release. `CLAUDE.md` is the same material condensed
+for Claude Code.
 
 | Doc | What's in it |
 |---|---|
-| [architecture.md](architecture.md) | the deployables, how a request flows, where each concern lives, the seams, a glossary |
+| [how-it-works.md](how-it-works.md) | Director underneath: indexing a Short (prompt, schema, retries and fallback, repair, stages, the evaluation), the live call (relay, audio formats, tools), take reviews and the best take, the editor, publishing, analytics |
+| [architecture.md](architecture.md) | the deployables, production on Google Cloud, how a request flows, where each concern lives, the seams, a glossary |
 | [troubleshooting.md](troubleshooting.md) | what the doctor's messages mean, ports, Docker memory, ClamAV, tests that refuse to start |
 | [environment.md](environment.md) | every environment variable, which service reads it and what it switches on |
 | [database.md](database.md) | schemas and owners, roles, row-level security, migrations, test databases, the restore drill |
@@ -28,6 +31,14 @@ production release. `CLAUDE.md` is the same material condensed for Claude Code.
 
 Elsewhere: [deploy/README.md](../deploy/README.md) (charts and GitOps),
 [infra/tofu/README.md](../infra/tofu/README.md) (k3s on your machines, Cloudflare).
+
+## Working with Claude Code
+
+The repo is set up for Claude Code: `CLAUDE.md` and path-scoped rules, skills for every
+lifecycle task (setup, dev, add a feature, change the database, deploy, release, roll
+back, swap a seam), review agents, and hooks that format on edit, guard generated files
+and secrets, and run the affected tests before a turn ends. The skills are plain
+step-by-step runbooks, readable without Claude too (below).
 
 ## Runbooks
 

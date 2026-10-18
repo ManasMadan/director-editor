@@ -20,7 +20,9 @@ flowchart LR
     valkey[(Valkey)]
   end
 
-  s3[(Object storage)]
+  s3[(Object storage<br/>Cloud Storage in production)]
+  indexer[director-indexer<br/>Cloud Run]
+  google["Vertex AI: Gemini, Gemini Live, TTS<br/>YouTube Data API, BigQuery"]
 
   gw -- "/" --> web
   gw -- "/rpc, /api, /docs" --> api
@@ -29,22 +31,38 @@ flowchart LR
   api & worker & notifications & webhooks & ai & aiworker --> pg
   api & worker & notifications & webhooks & ai & aiworker --> valkey
   browser -. "presigned PUT/GET" .-> s3
-  worker --> s3
+  worker & aiworker & indexer --> s3
+  aiworker -- "ID token" --> indexer
+  api & ai & aiworker & indexer --> google
 ```
 
 | Service | Does | Talks to |
 |---|---|---|
 | `apps/web` | renders the UI; no backend code | the API, on the same origin |
-| `apps/api` | auth (better-auth), the oRPC API (`/rpc`, `/api/v1`), Director's live call relay (`/api/live`) | Postgres, Valkey, the AI service, YouTube, Gemini Live on Vertex AI, object storage (presigning) |
+| `apps/api` | auth (better-auth), the oRPC API (`/rpc`, `/api/v1`), Director's live call relay (`/api/live`) | Postgres, Valkey, the AI service, the YouTube Data API, Gemini Live on Vertex AI, object storage (presigning), BigQuery, Google sign-in |
 | `apps/worker` | the outbox relay, audit log, upload checks, realtime nudges, scheduled housekeeping | Postgres, Valkey, object storage, ClamAV |
 | `apps/notifications` | every email (sign-in codes, security alerts) | Postgres, Valkey, the mail server |
 | `apps/webhooks` | inbound provider webhooks (the mail server's bounces) | Postgres, Valkey |
-| `apps/ai` + `ai-worker` | Director: shot plans, scene checks and take reviews with Gemini | Postgres, Valkey, Gemini, object storage |
+| `apps/ai` + `ai-worker` | Director: indexing (shot plans), scene checks, take reviews and spoken lines with Gemini | Postgres, Valkey, Gemini on Vertex AI, the Cloud Run indexer, Cloud Storage (the original's audio), BigQuery |
+| `apps/ai` as `director-indexer` | indexes one Short per request on Cloud Run, off the cluster (`app/indexer.py`); no database | Gemini on Vertex AI, Cloud Storage |
 
 Services never import each other (`lint:boundaries`, rule `no-app-imports-app`). They
 share `packages/*` and talk through the API contract, queues and events. The only direct
-service-to-service call is the API calling the AI service, with a typed client and a
-token it signs per call.
+service-to-service calls are the API calling the AI service, with a typed client and a
+token it signs per call, and the AI worker calling the Cloud Run indexer with an ID
+token Google signs for the VM's service account
+([how-it-works.md](how-it-works.md#where-it-runs)).
+
+In production the whole cluster is one Compute Engine VM running k3s, with Cloudflare in
+front and Argo CD deploying it from this repository: the data chart (Postgres on
+CloudNativePG, Valkey, RustFS for Postgres's backups, copied every hour to a Cloud
+Storage bucket offsite), the stack chart (the services above) and the platform add-ons
+(Envoy Gateway, cert-manager, KEDA, Kyverno, which admits only images CI signed, and the
+Stalwart mail server, which sends through Resend because Compute Engine blocks outgoing
+port 25). Media lives in Cloud Storage, and the services that call Google take their
+credentials from the VM's metadata server, as its service account, with no key file.
+Indexing runs on Cloud Run, outside the cluster. [deploy.md](deploy.md) has the details.
+<!-- verify after deploy: INDEXER_URL set in production -->
 
 Locally the gateway's job is done by `next.config.ts` rewrites (`/rpc`, `/api`, `/docs`),
 so the browser sees one origin in both setups. The local mail server's webhook goes
@@ -163,7 +181,7 @@ and the skill that swaps it, is the "Scaling path" table in the [README](../READ
 | Domain event | a versioned fact (`auth.signed_up.v1`) published through the outbox; the audit log and notifications consume them |
 | Seam | an interface every caller goes through for something that changes at scale (email, storage, event transport, …), so growing means a new implementation, not new callers. The README's "Scaling path" lists them, each with a `swap-*` runbook |
 | Feature switch | an optional feature is on only when its variables are set (`apps/api/src/features.ts`); off, its procedures answer `FEATURE_DISABLED` and clients hide it |
-| Stand-in | a local replacement for a third party that speaks its real protocol: Mailpit for email, `packages/fake-google` for Gemini and YouTube. Production refuses them at boot |
+| Stand-in | a local replacement for a third party that speaks its real protocol: Mailpit for email, and `packages/fake-google` for Gemini and YouTube, which only the test suites start (the running app always calls Google). Production refuses them at boot |
 | Profile | a set of local Docker services: core (`bun run db:up`), `mail`, `full` ([troubleshooting.md](troubleshooting.md#local-services)) |
 | Staging bump | the commit deploy.yml pushes to `master` after a merge, setting staging's image tag; it's how staging deploys |
 | Promotion pull request | the pull request `bun run promote v<version>` opens to point production at a release's images; merging it is the production deploy ([deploy.md](deploy.md)) |

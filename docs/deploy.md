@@ -5,11 +5,13 @@ layout are in [deploy/README.md](../deploy/README.md), the clusters (k3s on your
 machines) and their DNS in [infra/tofu/README.md](../infra/tofu/README.md), and the
 GitHub settings the workflows need in [repository-settings.md](repository-settings.md).
 
-Nothing is a managed service: the application, its Postgres (CloudNativePG, with
-continuous backups), Valkey, object storage (RustFS), the mail server (Stalwart) and,
-where a cluster opts in, Jaeger and Prometheus all run in the cluster. Cloudflare stays
-in front, and third-party APIs (Gemini and YouTube, Google sign-in, Turnstile) stay
-external.
+The application, its Postgres (CloudNativePG, with continuous backups), Valkey, object
+storage (RustFS), the mail server (Stalwart) and, where a cluster opts in, Jaeger and
+Prometheus all run in the cluster. Cloudflare stays in front, and third-party APIs
+(Gemini and YouTube, Google sign-in, Turnstile) stay external. Production, on one
+Compute Engine VM, also uses Google Cloud's own services where they do the job better:
+media in Cloud Storage instead of RustFS, product events in BigQuery, and indexing on a
+private Cloud Run service ([below](#the-cloud-run-indexer)).
 
 ## Images
 
