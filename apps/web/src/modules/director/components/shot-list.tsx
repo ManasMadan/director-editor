@@ -5,7 +5,7 @@ import type { DirectorShot, ServedShotPlan, Shot } from "@repo/contracts/api";
 import { cn } from "@repo/ui/lib/utils";
 import { Camera, CircleCheck, Pause, Play, RotateCcw, Video } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { angleOf } from "../lib/library";
 
 /** A shot as a template's page gets it: a seed's also links its storyboard and preview. */
@@ -23,9 +23,10 @@ export interface MediaLinks {
 /**
  * A link to one of a seed's media, for the element showing it (one card's storyboard or
  * preview, the soundtrack): the first link it was given, for as long as that one works.
- * Once it fails to load, the page reads the plan again for fresh links (`refresh`) and the
- * element is left out meanwhile, so no broken image shows; the plan as read next brings
- * the link tried in its place (the same one, if it was signed again within the second).
+ * Once it fails to load, the newest link the plan has brought since takes its place. With
+ * none newer, the page reads the plan again for fresh links (`refresh`) and the element
+ * is left out meanwhile, so no broken image shows; the plan as read next brings the link
+ * tried in its place (the same one, if it was signed again within the second).
  */
 export function useMediaLink(url: string | undefined, links: MediaLinks) {
   // Every read of the plan signs every link afresh (on focus, on a nudge), so the link in
@@ -40,11 +41,49 @@ export function useMediaLink(url: string | undefined, links: MediaLinks) {
   }
   return {
     url: failedAt === undefined ? held : undefined,
+    /**
+     * The link in use failed (expired, most likely, on a page left open). A read since
+     * has a fresher one: it takes over at once, and true says so. Otherwise the plan is
+     * read again for one, and the element is left out until it comes.
+     */
     failed: () => {
+      if (url !== held) {
+        setHeld(url);
+        return true;
+      }
       setFailedAt(links.read);
       links.refresh();
+      return false;
     },
   };
+}
+
+/**
+ * Scrolls the strip (and only the strip: the page is on its way up to the player) so the
+ * shot being watched is in it, when that changes; nothing moves as the page opens.
+ */
+function useShownInStrip(watching: number | null) {
+  const strip = useRef<HTMLOListElement>(null);
+  const shown = useRef(watching);
+  useEffect(() => {
+    if (watching === shown.current) {
+      return;
+    }
+    shown.current = watching;
+    const item = watching === null ? null : strip.current?.children.item(watching);
+    const list = item?.parentElement;
+    if (!(item && list)) {
+      return;
+    }
+    const box = item.getBoundingClientRect();
+    const view = list.getBoundingClientRect();
+    if (box.left < view.left) {
+      list.scrollLeft -= view.left - box.left;
+    } else if (box.right > view.right) {
+      list.scrollLeft += box.right - view.right;
+    }
+  }, [watching]);
+  return strip;
 }
 
 /**
@@ -61,10 +100,12 @@ export function Storyboard({
   onWatch: (index: number) => void;
 }) {
   const t = useTranslations("director");
+  const strip = useShownInStrip(watching);
   return (
     // A long short's shots don't all fit a phone's width: the strip scrolls on its own,
     // each shot staying big enough to tap.
     <ol
+      ref={strip}
       aria-label={t("template.storyboard")}
       className="flex h-14 snap-x gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none]"
     >
@@ -82,7 +123,8 @@ export function Storyboard({
               aria-pressed={watching === index}
               aria-label={t("template.watchShot", { index: index + 1, title: shot.title })}
               className={cn(
-                "flex size-full flex-col items-center justify-center gap-0.5 rounded-lg text-xs font-semibold transition-colors",
+                // The strip clips what's drawn outside it: the focus ring is drawn inside.
+                "flex size-full flex-col items-center justify-center gap-0.5 rounded-lg text-xs font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-studio-foreground focus-visible:ring-inset",
                 watching === index
                   ? "bg-record text-record-foreground"
                   : "bg-studio-foreground/10 hover:bg-studio-foreground/15",
@@ -218,7 +260,7 @@ function StoryboardCard({
 }: {
   shot: Shot;
   index: number;
-  storyboard: { url: string; failed: () => void };
+  storyboard: { url: string; failed: () => boolean };
   preview: MediaLink;
   playing: boolean;
   onPlaying: (playing: boolean) => void;
@@ -237,8 +279,10 @@ function StoryboardCard({
             loop
             playsInline
             onError={() => {
-              onPlaying(false);
-              preview.failed();
+              // A fresher link plays on in its place; without one, the clip stops.
+              if (!preview.failed()) {
+                onPlaying(false);
+              }
             }}
             className="size-full object-cover"
           />

@@ -5,7 +5,7 @@
 import { directorSeeds } from "@repo/contracts/director-seeds";
 import { fileIdSchema } from "@repo/contracts/ids";
 import { SECOND_MS } from "@repo/contracts/time";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page as browser, commands, userEvent } from "vitest/browser";
 import { DirectorPage } from "@/modules/director";
 import { LiveUpdates } from "@/modules/shell";
@@ -158,19 +158,35 @@ describe("Director's page for a ready plan", () => {
       await readyPlan(videoId, shotPlan({ shots }));
       const page = await showPlan(videoId);
       const strip = page.getByRole("list", { name: "Storyboard" });
-      const last = strip.getByRole("button", { name: "Watch shot 11: Shot 11" });
+      const inStrip = (index: number) =>
+        strip.getByRole("button", { name: `Watch shot ${index}: Shot ${index}` });
+      const within = (index: number) => {
+        const button = inStrip(index).element().getBoundingClientRect();
+        const list = strip.element().getBoundingClientRect();
+        return button.left >= list.left - 0.5 && button.right <= list.right + 0.5;
+      };
+      const last = inStrip(11);
       await expect.element(last).toBeInTheDocument();
-      // The strip scrolls on its own; the page itself doesn't scroll sideways.
+      // The strip scrolls on its own; the page itself doesn't scroll sideways. Opening
+      // the page scrolls nothing.
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
-      last.element().scrollIntoView({ block: "nearest", inline: "end" });
-      const button = last.element().getBoundingClientRect();
-      const list = strip.element().getBoundingClientRect();
-      expect(button.right).toBeLessThanOrEqual(list.right + 0.5);
-      expect(button.left).toBeGreaterThanOrEqual(list.left - 0.5);
-      // Still big enough to tap.
-      expect(button.width).toBeGreaterThanOrEqual(36);
-      await userEvent.click(last);
+      expect(strip.element().scrollLeft).toBe(0);
+      expect(within(11)).toBe(false);
+
+      // Watching a shot from its card brings it into view in the strip, and back again.
+      await userEvent.click(page.getByRole("button", { name: "Watch shot 11: Shot 11" }).last());
       await expect.element(last).toHaveAttribute("aria-pressed", "true");
+      await expect.poll(() => within(11)).toBe(true);
+      // Still big enough to tap.
+      expect(last.element().getBoundingClientRect().width).toBeGreaterThanOrEqual(36);
+      await userEvent.click(page.getByRole("button", { name: "Watch shot 1: Shot 1" }).last());
+      await expect.element(inStrip(1)).toHaveAttribute("aria-pressed", "true");
+      await expect.poll(() => within(1)).toBe(true);
+      // One already in view stays where it is.
+      const scrolled = strip.element().scrollLeft;
+      await userEvent.click(inStrip(2));
+      await expect.element(inStrip(2)).toHaveAttribute("aria-pressed", "true");
+      expect(strip.element().scrollLeft).toBe(scrolled);
     } finally {
       await browser.viewport(414, 896);
     }
@@ -388,13 +404,21 @@ describe("a seeded template's media", () => {
   function clipsShown() {
     const shown: string[] = [];
     const watch = new MutationObserver((changes) => {
-      for (const node of changes.flatMap((change) => [...change.addedNodes])) {
-        if (node instanceof HTMLVideoElement) {
+      // A <video> put on the page, or one given another link.
+      const touched = changes.flatMap((change) => [change.target, ...change.addedNodes]);
+      for (const node of new Set(touched)) {
+        if (node instanceof HTMLVideoElement && node.src !== shown.at(-1)) {
           shown.push(node.src);
         }
       }
     });
-    watch.observe(document.body, { childList: true, subtree: true });
+    watch.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["src"],
+    });
+    onTestFinished(() => watch.disconnect());
     return shown;
   }
   const sketches = (page: Awaited<ReturnType<typeof showPlan>>) =>
@@ -499,6 +523,47 @@ describe("a seeded template's media", () => {
     await expect.element(music).toHaveAttribute("aria-pressed", "true");
     expect(videos().map((video) => [video.src, video.paused])).toEqual([[clip, false]]);
     expect(pictures()).toEqual(shown);
+  });
+
+  it("plays from the plan's freshest link when the one it was first given has run out", async () => {
+    await serveSeedMedia();
+    await seeded();
+    await signUp();
+    const page = await renderPage(
+      <>
+        <LiveUpdates />
+        <DirectorPage videoId={seed.videoId} />
+      </>,
+      { url: `/director/${seed.videoId}` },
+    );
+    const opened = Date.now();
+    await expect.element(page.getByAltText(altOf())).toBeVisible();
+    // Every link of the first read is signed at the same moment, which the storyboard's tells.
+    const signedAt = (link: string | undefined) =>
+      new URL(link ?? "http://none").searchParams.get("X-Amz-Date");
+    const firstRead = signedAt(card()?.src);
+    expect(firstRead).not.toBeNull();
+    // The plan is read again a second on (a nudge), with every link signed anew...
+    await expect.poll(() => Date.now() - opened).toBeGreaterThan(SECOND_MS);
+    const { session } = await currentSession();
+    await expect
+      .poll(async () => {
+        await commands.publishRealtime(`org:${session.activeOrganizationId}`, {
+          type: "director.changed",
+        });
+        return planReads();
+      })
+      .toBeGreaterThan(1);
+    const reads = await planReads();
+    // ...and then the first read's links run out.
+    await commands.failRequests(`X-Amz-Date=${firstRead}`, { status: 403 });
+    const clips = clipsShown();
+    await userEvent.click(page.getByRole("button", { name: "Play the Veo preview of shot 2" }));
+    // The run-out link gives way to the fresher one the page already has: no read needed.
+    await expect.poll(() => videos()[0]?.paused).toBe(false);
+    expect(signedAt(videos()[0]?.src)).not.toBe(firstRead);
+    expect(clips.map(signedAt)).toEqual([firstRead, signedAt(videos()[0]?.src)]);
+    expect(await planReads()).toBe(reads);
   });
 
   it("shows no media on a member's own plan, even of the same Short", async () => {
