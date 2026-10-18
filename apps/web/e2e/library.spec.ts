@@ -100,6 +100,9 @@ test("a second short of your own is refused, with the starters offered instead [
 
   await page.goto("/library");
   await expect(page.getByText("You've added your own Short.", { exact: false })).toBeVisible();
+  // The six seed templates the workspace started with, and the two written above.
+  const count = page.getByText(/^\d+ Shorts$/);
+  const before = await count.textContent();
   await page
     .getByLabel("YouTube Shorts link")
     .fill(`https://www.youtube.com/shorts/${PUBLIC_SHORT}`);
@@ -111,12 +114,13 @@ test("a second short of your own is refused, with the starters offered instead [
   await expectAccessible(page);
   await dialog.getByRole("button", { name: "Got it" }).click();
   await expect(dialog).toBeHidden();
+  await expect(page.getByLabel("YouTube Shorts link")).toBeFocused();
   // The refusal used up nothing more and added nothing.
   expect(await ownShorts(orgId, userId)).toBe(1);
-  await expect(page.getByText("2 Shorts")).toBeVisible();
+  await expect(count).toHaveText(before ?? "");
 
   // The starter it offered opens.
   await page.getByRole("link", { name: new RegExp(starter) }).click();
   await expect(page).toHaveURL(/\/director\/t[\w-]{10}$/);
-  await expect(page.getByRole("heading", { name: starter })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: starter })).toBeVisible();
 });
