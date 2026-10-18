@@ -9,7 +9,6 @@ import { fileIdSchema } from "@repo/contracts/ids";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { commands, userEvent } from "vitest/browser";
 import { EditPage, MediaPage } from "@/modules/director";
-import { FRESH } from "@/modules/director/lib/memory";
 import { stitch } from "@/modules/director/lib/stitch";
 import { cleanup, currentUrl, renderPage } from "../render";
 import { api, signUp, type User } from "../users";
@@ -86,7 +85,7 @@ describe("the editor before it can open", () => {
       .toHaveAttribute("href", `/director/${videoId}`);
   });
 
-  it("calls the wrap on arriving from the last shot, aloud, until it's tapped away", async () => {
+  it("shows the wrap on arriving from the last shot, until it's tapped away, saying nothing canned", async () => {
     const speak = vi.spyOn(window.speechSynthesis, "speak").mockImplementation(() => undefined);
     await signUp();
     const videoId = newVideoId();
@@ -94,24 +93,9 @@ describe("the editor before it can open", () => {
     const page = await openEditor(videoId, "voice", true);
     const wrap = page.getByRole("button", { name: /That's a wrap!/ });
     await expect.element(wrap).toBeVisible();
-    await expect
-      .poll(() => speak.mock.calls.map(([utterance]) => utterance.text))
-      .toContain("That's a wrap! You did it. Let's watch what you made!");
     await userEvent.click(wrap);
     await expect.element(wrap).not.toBeInTheDocument();
-  });
-
-  it("calls the wrap silently for a member who turned Director's voice off", async () => {
-    const speak = vi.spyOn(window.speechSynthesis, "speak").mockImplementation(() => undefined);
-    const user = await signUp();
-    window.localStorage.setItem(
-      `director.memory.${user.id}`,
-      JSON.stringify({ ...FRESH, speak: false }),
-    );
-    const videoId = newVideoId();
-    await readyPlan(videoId, shotPlan());
-    const page = await openEditor(videoId, "voice", true);
-    await expect.element(page.getByRole("button", { name: /That's a wrap!/ })).toBeVisible();
+    // Every word Director says is Gemini's: the editor has no lines of its own to read out.
     expect(speak).not.toHaveBeenCalled();
   });
 

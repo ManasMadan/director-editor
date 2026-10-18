@@ -1,23 +1,29 @@
 /**
  * A local stand-in for the Google APIs Director uses, so integration, e2e and fuzz
  * suites run the whole flow with no real keys: the Gemini API
- * (`/v1beta/models/<model>:generateContent`, ./gemini.ts), YouTube Data API v3's reads
+ * (`/v1beta/models/<model>:generateContent`, ./gemini.ts), Gemini's Live API on Vertex AI
+ * (a WebSocket at `LIVE_API_PATH`, ./live.ts), YouTube Data API v3's reads
  * (`/youtube/v3/...`, ./youtube.ts) and its resumable upload
  * (`/upload/youtube/v3/videos`, ./youtube-upload.ts), and Google sign-in, whose access
  * tokens the upload takes (./oauth.ts). Like the real ones it checks the key (Gemini's
  * `x-goog-api-key` header, YouTube's `key` parameter) or the access token, and answers
  * anything else with a 404. What it answers is mock data; everything that asks it (the
- * AI service's agents, the API's YouTube client and publisher, better-auth's Google
- * provider) runs as it would against Google. The running app and `bun dev`/`bun dev:full`
- * never start it: they use the real services, off until a real key is set.
+ * AI service's agents, the API's YouTube client, publisher and Live relay, better-auth's
+ * Google provider) runs as it would against Google. The running app and
+ * `bun dev`/`bun dev:full` never start it: they use the real services, off until a real
+ * key is set.
  *
  * Tests point the AI service at it with GOOGLE_BASE_URL and the API with YOUTUBE_API_URL
- * (both refused in production, which needs HTTPS).
+ * and LIVE_API_URL (all refused in production, which needs HTTPS and WSS).
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { buffer, text } from "node:stream/consumers";
 import * as z from "zod";
 import { answer, generateRequest, generateResponse, promptTokens, type SceneSteps } from "./gemini";
+import { createLive } from "./live";
+
+export { LIVE_API_PATH } from "./live";
+
 import { type Answer, createOAuth, type OAuth } from "./oauth";
 import { youtube } from "./youtube";
 import { createYouTubeUploads } from "./youtube-upload";
@@ -30,6 +36,8 @@ export interface FakeGoogleOptions {
    * YouTube keeps every upload private, whatever privacy was asked for.
    */
   youtubeAudited?: boolean;
+  /** The bearer token the Live API takes (the API's GOOGLE_ACCESS_TOKEN); the key by default. */
+  liveToken?: string;
 }
 
 const GEMINI = /^\/v1beta\/models\/([^/:]+):generateContent$/;
@@ -129,6 +137,7 @@ export async function startFakeGoogle({
   apiKey,
   port = 0,
   youtubeAudited = false,
+  liveToken = apiKey,
 }: FakeGoogleOptions) {
   const seen: SceneSteps = new Map();
   const oauth = createOAuth();
@@ -169,6 +178,13 @@ export async function startFakeGoogle({
       () => refuse(response, 400, "badRequest"),
     );
   });
+  const live = createLive({ accessToken: liveToken });
+  server.on("upgrade", (request, socket, head) => {
+    const path = new URL(String(request.url), "http://fake-google.local").pathname;
+    if (!live.upgrade(request, socket, head, path)) {
+      socket.end("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
+    }
+  });
   await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
   const { port: bound } = z.object({ port: z.number() }).parse(server.address());
   address.url = `http://127.0.0.1:${bound}`;
@@ -184,6 +200,12 @@ export async function startFakeGoogle({
     breakUploads: (broken: boolean) => {
       trouble.uploadsBroken = broken;
     },
-    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    /** Director live: each connection made to the Live API, and its warning that one closes soon. */
+    live: { sessions: live.sessions, goAway: live.goAway },
+    close: () =>
+      new Promise<void>((resolve) => {
+        live.close();
+        server.close(() => resolve());
+      }),
   };
 }

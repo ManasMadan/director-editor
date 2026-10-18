@@ -61,6 +61,15 @@ describe("the environment", () => {
       },
       "GOOGLE_ACCESS_TOKEN is for local development only",
     ],
+    [
+      "the mock Google's Live API",
+      {
+        WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "",
+        YOUTUBE_API_URL: "https://www.googleapis.com/youtube/v3",
+        LIVE_API_URL: "ws://localhost:12112/ws/live",
+      },
+      "LIVE_API_URL must be wss:// in production",
+    ],
   ])("refuses %s in production", async (_, variables, message) => {
     await expect(load({ NODE_ENV: "production", ...variables })).rejects.toThrow(message);
   });
@@ -75,6 +84,18 @@ describe("optional features", () => {
   it("are on with all of it", async () => {
     const { features } = await load({ GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "secret" });
     expect(features).toMatchObject({ google: true });
+  });
+
+  it("turn Director live on with a Google Cloud project, and only a WebSocket URL for it", async () => {
+    expect((await load({ GOOGLE_CLOUD_PROJECT: "" })).features.live).toBe(false);
+    vi.resetModules();
+    vi.unstubAllEnvs();
+    expect((await load({ GOOGLE_CLOUD_PROJECT: "director-test" })).features.live).toBe(true);
+    vi.resetModules();
+    vi.unstubAllEnvs();
+    await expect(load({ LIVE_API_URL: "https://example.com/live" })).rejects.toThrow(
+      "Invalid environment variables",
+    );
   });
 
   it("turn files on with the chosen storage provider's bucket, whichever provider it is", async () => {

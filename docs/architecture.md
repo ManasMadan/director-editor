@@ -39,7 +39,7 @@ flowchart LR
 | Service | Does | Talks to |
 |---|---|---|
 | `apps/web` | renders the UI; no backend code | the API, on the same origin |
-| `apps/api` | auth (better-auth), the oRPC API (`/rpc`, `/api/v1`), Director's live call relay (`/api/live`) | Postgres, Valkey, the AI service, the YouTube Data API, Gemini Live on Vertex AI, object storage (presigning), BigQuery, Google sign-in |
+| `apps/api` | auth (better-auth), the oRPC API (`/rpc`, `/api/v1`), Director live's relay (`/api/live`) | Postgres, Valkey, the AI service, the YouTube Data API, Gemini Live on Vertex AI, object storage (presigning), BigQuery, Google sign-in |
 | `apps/worker` | the outbox relay, audit log, upload checks, realtime nudges, scheduled housekeeping | Postgres, Valkey, object storage, ClamAV |
 | `apps/notifications` | every email (sign-in codes, security alerts) | Postgres, Valkey, the mail server |
 | `apps/webhooks` | inbound provider webhooks (the mail server's bounces) | Postgres, Valkey |

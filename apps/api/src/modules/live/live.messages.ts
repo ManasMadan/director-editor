@@ -1,10 +1,9 @@
 /**
- * The messages of a live call. Between the browser and this API: the shared schemas in
+ * The messages of Director live. Between the browser and this API: the shared schemas in
  * @repo/contracts/live. Between this API and Vertex AI: the Live API's own JSON, of which
  * only the fields the relay uses are parsed here; the rest is ignored.
  */
 import { DIRECTOR_FRAME_MAX_LENGTH } from "@repo/contracts/api";
-import { LIVE_TOOL_REASON_MAX_LENGTH } from "@repo/contracts/live";
 import * as z from "zod";
 
 /** The largest frame the browser may send: a frame, with room for its JSON around it. */
@@ -30,6 +29,7 @@ export const upstreamMessageSchema = z.object({
         })
         .optional(),
       interrupted: z.boolean().optional(),
+      turnComplete: z.boolean().optional(),
       inputTranscription: transcription,
       outputTranscription: transcription,
     })
@@ -47,16 +47,20 @@ export const upstreamMessageSchema = z.object({
         .optional(),
     })
     .optional(),
+  /** This connection is about to close: time to move to a new one. */
+  goAway: z.object({ timeLeft: z.string().optional() }).optional(),
+  /** A handle a new connection can resume the conversation from, when it's resumable. */
+  sessionResumptionUpdate: z
+    .object({ newHandle: z.string().optional(), resumable: z.boolean().optional() })
+    .optional(),
 });
 export type UpstreamMessage = z.infer<typeof upstreamMessageSchema>;
 
 /**
- * A tool's arguments from Gemini, as the browser gets them: the optional reason, nothing
- * else. A long reason is cut short; the call itself is still the one the director asked for.
+ * A tool's arguments from Gemini, by tool. A shot is numbered from 1, as Gemini reads
+ * the plan; the relay checks it against the plan before the browser sees it.
  */
-export const toolArgsSchema = z.object({
-  reason: z
-    .string()
-    .transform((reason) => reason.slice(0, LIVE_TOOL_REASON_MAX_LENGTH))
-    .optional(),
-});
+export const toolArgsSchemas = {
+  go_to_shot: z.object({ shot: z.number().int() }),
+  switch_camera: z.object({ to: z.enum(["front", "back"]) }),
+};

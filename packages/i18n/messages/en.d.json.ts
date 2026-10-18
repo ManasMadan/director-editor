@@ -55,7 +55,7 @@ declare const messages: {
       },
       "shoot": {
         "title": "Shoot with Gemini",
-        "body": "Film each shot on a live call with Gemini. It sees your camera and tells you where to stand, how to hold the phone and what to say."
+        "body": "Film each shot with Gemini Live beside you. It sees your camera, hears you, and talks you through where to stand and what to say."
       },
       "publish": {
         "title": "Publish",
@@ -110,7 +110,7 @@ declare const messages: {
       },
       "bigquery": {
         "name": "BigQuery",
-        "use": "Logs each Short Director indexes, each live call it starts and every take review's score."
+        "use": "Logs each Short Director indexes, each shoot Director joins and every take review's score."
       },
       "youtube": {
         "name": "YouTube Data API",
@@ -398,7 +398,7 @@ declare const messages: {
     "DIRECTOR_SHOT_NOT_FOUND": "That shot isn't part of this plan.",
     "DIRECTOR_TAKE_NOT_FOUND": "That take isn't one of yours for this shot. Pick another.",
     "DIRECTOR_TAKE_KIND_MISMATCH": "This shot needs a different kind of take: a video for a video shot, a photo for a photo shot.",
-    "DIRECTOR_CALL_TOO_FAST": "The call was sending more than Director can take in, so it ended. Call again.",
+    "DIRECTOR_CALL_TOO_FAST": "Director was sent more than it can take in, so it stopped. Try again.",
     "DIRECTOR_CUT_NOT_FOUND": "That video isn't in My media.",
     "PUBLISH_DEMO_DISABLED": "The demo account can't publish to YouTube. Sign in with your own Google account to publish your video.",
     "PUBLISH_NEEDS_YOUTUBE": "Director needs your permission to upload to your YouTube channel.",
@@ -550,23 +550,61 @@ declare const messages: {
       "music": "This short is set to music: you'll film along to the original audio.",
       "silent": "This short has no sound to match."
     },
-    "record": "Record",
     "watch": "Watch this part",
     "shoot": {
       "shotOf": "Shot {index, number} of {count, number}",
       "cameraBlocked": "Director needs your camera. Allow it in your browser's settings, then try again.",
       "cameraMissing": "There's no camera Director can use on this device.",
-      "start": "Start the camera",
-      "useTilt": "Use the phone's tilt",
-      "level": {
-        "label": "Phone angle",
-        "ok": "Angle locked",
-        "tipUp": "Tip the top back",
-        "tipDown": "Tip the top forward",
-        "leanLeft": "Lean it left",
-        "leanRight": "Lean it right",
-        "unavailable": "The angle guide works on a phone."
+      "cameraTitle": "Let's get the camera on",
+      "intro": {
+        "title": "Let's shoot this together",
+        "first": "Director sees your camera and hears you while you get set, and talks you through each shot. A take records only when you tap the shutter. Your browser asks for the camera and microphone next.",
+        "again": "Director sees and hears you while you get set. A take records only when you tap the shutter."
       },
+      "start": "Start shooting",
+      "starting": "Opening the camera…",
+      "rec": "REC",
+      "leave": "Leave the shoot",
+      "leaving": {
+        "title": "Leave?",
+        "body": "This take isn't kept yet.",
+        "leave": "Leave",
+        "stay": "Stay"
+      },
+      "flip": "Flip the camera",
+      "countdown": "{seconds, number}",
+      "shutter": {
+        "record": "Record a take",
+        "photo": "Take the photo",
+        "stop": "Stop recording",
+        "cancel": "Cancel the countdown"
+      },
+      "card": {
+        "label": "Shot {index, number}",
+        "title": "Shot {index, number} · {title}",
+        "where": "Where",
+        "do": "Do",
+        "say": "Say",
+        "line": "“{line}”"
+      },
+      "tell": {
+        "label": "Tell Director",
+        "placeholder": "Tell Director…",
+        "away": "Director isn't here right now",
+        "send": "Send"
+      },
+      "quiet": "Director's quiet while you film",
+      "review": {
+        "title": "Your take",
+        "looping": "Your take, on loop",
+        "photo": "Your photo",
+        "again": "Go again",
+        "keep": "Keep it",
+        "sending": "Sending your take to Director…"
+      },
+      "original": "The original's audio plays while you film.",
+      "prompter": "Teleprompter",
+      "recordFailed": "Director couldn't start the camera's recording here. Try again, or another browser.",
       "height": {
         "floor": "Hold the phone near the floor",
         "waist": "Hold the phone at waist height",
@@ -575,63 +613,16 @@ declare const messages: {
         "eye": "Hold the phone at eye level",
         "overhead": "Hold the phone up high"
       },
-      "framing": {
-        "in-frame": "You're in the picture!",
-        "not-seen": "Step into the picture!",
-        "come-closer": "Come a little closer",
-        "step-back": "Take a little step back",
-        "step-left": "Scoot a little to your left",
-        "step-right": "Scoot a little to your right",
-        "aim-left": "Turn the phone a little left",
-        "aim-right": "Turn the phone a little right"
-      },
-      "pose": {
-        "matched": "Just like your buddy!",
-        "match": "Copy your buddy's pose",
-        "loading": "Loading the pose guide…",
-        "failed": "The pose guide couldn't load. You can still film."
-      },
-      "scene": {
-        "checking": "Finding your spot…",
-        "inPlace": "Perfect spot!",
-        "lighting": {
-          "good": "Nice light",
-          "too-dark": "A little dark here",
-          "too-bright": "Very bright here",
-          "backlit": "The light is behind you"
-        }
-      },
-      "countdown": "{seconds, number}",
-      "action": "Action!",
-      "getReady": "Next: {title}. {scene}.",
-      "recording": "Recording",
-      "stop": "Stop",
-      "photo": "Take the photo",
-      "retake": "Retake",
-      "use": "Use this take",
-      "sending": "Sending your take to Director…",
-      "next": "Next shot",
-      "done": "See your takes",
-      "original": "The original's audio plays while you film.",
-      "prompter": "Teleprompter",
-      "step": "Step {index, number}",
-      "speak": "Read directions aloud",
-      "preview": "Your take",
-      "recordFailed": "Director couldn't start the camera's recording here. Try again, or another browser.",
-      "doodle": {
-        "standHere": "Stand here",
-        "meters": "{meters, number, ::.#} m",
-        "move": {
-          "up": "Raise the phone",
-          "down": "Lower the phone",
-          "left": "Move the phone left",
-          "right": "Move the phone right",
-          "forward": "Push in",
-          "back": "Pull back",
-          "orbit": "Circle round",
-          "tilt-up": "Tilt up",
-          "tilt-down": "Tilt down"
-        }
+      "move": {
+        "up": "Raise the phone",
+        "down": "Lower the phone",
+        "left": "Move the phone left",
+        "right": "Move the phone right",
+        "forward": "Push in",
+        "back": "Pull back",
+        "orbit": "Circle round",
+        "tilt-up": "Tilt up",
+        "tilt-down": "Tilt down"
       }
     },
     "review": {
@@ -645,7 +636,7 @@ declare const messages: {
       "silent": "It's silent on purpose: add the original sound when you post it on YouTube (Use this sound)."
     },
     "template": {
-      "use": "Start shooting",
+      "use": "Let's shoot",
       "storyboard": "Storyboard",
       "watchShot": "Watch shot {index, number}: {title}",
       "shots": "{count, plural, one {# shot} other {# shots}}",
@@ -718,181 +709,38 @@ declare const messages: {
       "tooLong": "This video is too long to save: videos can be up to {minutes, number} minutes. Pick shorter takes, or film shorter shots.",
       "tooBig": "This video came out bigger than {megabytes, number} MB, too big to save. Try shorter takes.",
       "saved": "Saved to My media",
-      "openMedia": "Open My media"
-    },
-    "live": {
-      "live": "Live",
-      "paused": "Paused",
-      "onDevice": "On-device",
-      "onDeviceHint": "Gemini is out of reach: Director is guiding you from what the camera shows.",
-      "status": "Take {take, number} • {size}",
-      "size": {
-        "close-up": "Close-up",
-        "medium": "Medium shot",
-        "full-body": "Full shot",
-        "wide": "Wide shot"
-      },
-      "ready": {
-        "label": "Ready check",
-        "spot": "Spot",
-        "frame": "Frame",
-        "angle": "Angle",
-        "light": "Light",
-        "done": "{done, number} of {total, number} ready"
-      },
-      "dock": {
-        "label": "Camera controls",
-        "share": "Show Director your screen",
-        "stopShare": "Back to the camera",
-        "listen": "Talk to Director",
-        "stopListen": "Stop listening",
-        "pause": "Pause Director",
-        "resume": "Resume Director",
-        "end": "End the session",
-        "flip": "Flip the camera",
-        "speak": "Director's voice",
-        "timer": "Countdown: {seconds, number} seconds",
-        "timerAutoHint": "Director picks it from how your takes start",
-        "sharingNoRecord": "Switch back to the camera to record.",
-        "timerAutoValue": "Auto {seconds, number}s",
-        "timerValue": "{seconds, number}s"
-      },
-      "listening": "Listening…",
-      "voice": {
-        "unsupported": "This browser can't hear you. Try Chrome or Safari.",
-        "blocked": "Director can't hear you. Allow the microphone in your browser's settings.",
-        "words": {
-          "action": "action|record|roll|rolling|let's go|go|ready|start",
-          "cut": "cut|stop|that's it|done",
-          "again": "again|retake|one more|go again|back to one|redo",
-          "keep": "keep|keep it|use it|perfect|next|moving on|that's the one",
-          "flip": "flip|switch camera|flip the camera|turn the camera",
-          "repeat": "repeat|say again|what|pardon|sorry what|what did you say",
-          "help": "help|where|where do i go|what now|what do i do",
-          "quiet": "quiet|shh|mute|be quiet|stop talking",
-          "talk": "talk|speak|unmute|talk to me"
-        }
-      },
-      "say": {
-        "first": "Hi! I'm your director, and this is going to be fun. First up: {title}. {scene}.",
-        "back": "Welcome back, superstar! {title}. {scene}.",
-        "backLight": "Welcome back! Last time it was {problem, select, dark {a little dark} bright {a bit too bright} other {bright behind you}}, so let's find a spot with nice light. {title}.",
-        "backThing": "Welcome back! Got your {thing}? It looked great last time. {title}.",
-        "next": "Yay, next one! {title}. {scene}.",
-        "offline": "I can't reach Gemini right now, so I'll help using the camera. No problem!",
-        "ready": "You look great! When you're ready, say action, put a hand up high, or tap the red button.",
-        "inPlace": "Perfect spot! Stay right there.",
-        "matched": "Yes! Just like that!",
-        "match": "Now copy my little buddy's pose.",
-        "rolling": "Get ready! Here we go in {seconds, number}.",
-        "count": "{seconds, number}",
-        "action": "Action!",
-        "cut": "Cut!",
-        "backToOne": "No worries! Let's try that one more time.",
-        "wrap": "That's a wrap! You did it. Let's watch what you made!",
-        "heard": "Got it!",
-        "light": {
-          "too-dark": "It's a little dark. Can you face a window, or turn on a lamp?",
-          "too-bright": "Ooh, that's bright! Turn a little away from the sun.",
-          "backlit": "The light is behind you. Turn around so it shines on your face."
-        },
-        "thing": "{role, select, pet {Aww, a {thing}! Want them in the video?} prop {Ooh, a {thing}! That could be fun to hold.} glare {That {thing} might shine too bright. Maybe turn it off?} other {That {thing} looks nice behind you.}}"
-      },
-      "thing": {
-        "plant": "plant",
-        "chair": "chair",
-        "couch": "couch",
-        "bed": "bed",
-        "bench": "bench",
-        "table": "table",
-        "screen": "screen",
-        "book": "book",
-        "cup": "cup",
-        "bottle": "bottle",
-        "vase": "vase",
-        "clock": "clock",
-        "bag": "bag",
-        "umbrella": "umbrella",
-        "teddy": "teddy bear",
-        "phone": "phone",
-        "ball": "ball",
-        "skateboard": "skateboard",
-        "bike": "bike",
-        "car": "car",
-        "dog": "dog",
-        "cat": "cat",
-        "bird": "bird"
-      },
-      "sticker": {
-        "nailed": "Nailed it!",
-        "take": "Take {take, number}",
-        "cut": "Cut!",
-        "rolling": "Rolling"
-      },
-      "cut": {
-        "title": "Director's cut",
-        "score": "Director's score: {score, number} out of 100",
-        "looping": "Best moment, on loop",
-        "later": "Gemini reviews the whole take once you keep it.",
-        "again": "Go again",
-        "keep": "Keep it",
-        "ship": "Nothing to fix. Perfect!",
-        "praise": {
-          "framing": "Framing was spot-on!",
-          "steady": "Rock-steady camera. Beautiful.",
-          "light": "Lovely light on you!",
-          "energy": "Great energy!",
-          "pose": "You nailed the pose!",
-          "effort": "Love the commitment!"
-        },
-        "tip": {
-          "longer": "Hold the last moment a little longer next time.",
-          "too-dark": "A bit more light next time, and you'll shine!",
-          "too-bright": "Step out of the bright sun a little.",
-          "backlit": "Turn toward the light so we can see your face.",
-          "steady": "Prop the phone up, or hold it with both hands, for a steadier shot.",
-          "framing": "Try to stand where your little buddy stands.",
-          "energy": "Give it a big smile and a little more energy!",
-          "angle": "Keep the phone straight, like a picture on the wall.",
-          "pose": "Copy your buddy's pose a little closer."
-        }
-      },
-      "screen": {
-        "failed": "Screen sharing isn't available here.",
-        "sharing": "Director is looking at your screen"
-      },
-      "camera": {
-        "title": "Let's get the camera on",
-        "retry": "Try again"
-      },
+      "openMedia": "Open My media",
       "wrap": {
         "title": "That's a wrap!",
         "body": "I cut your takes together, best moments first. Make any last changes, then tap Next."
       }
     },
-    "call": {
-      "start": "Call Director",
-      "connecting": "Calling Director…",
-      "live": "On a call",
-      "controls": "Call controls",
-      "mute": "Mute your microphone",
-      "unmute": "Unmute your microphone",
-      "end": "End the call",
-      "you": "You said",
-      "director": "Director says",
+    "live": {
+      "director": "Director says {text}",
+      "you": "You said {text}",
+      "joining": "Director's joining…",
+      "here": "Director",
+      "deaf": "Director can't hear you. Allow the microphone in your browser's settings, or type to it below.",
+      "stillFilm": "You can still film: tap the shutter for each take.",
+      "retry": "Try again",
       "failed": {
-        "microphone": "Director can't hear you. Allow the microphone in your browser's settings, then call again.",
-        "dropped": "The call dropped.",
-        "RATE_LIMITED": "You've made all the calls you can for this hour.",
-        "CONFLICT": "You're already on a call with Director in another tab.",
-        "FEATURE_DISABLED": "Calls with Director aren't available here.",
-        "UPSTREAM_UNAVAILABLE": "Gemini can't take the call right now.",
+        "dropped": "Director lost the connection.",
+        "INTERNAL": "Director can't join right now.",
+        "UPSTREAM_UNAVAILABLE": "Director can't reach Gemini right now.",
+        "RATE_LIMITED": "Director has joined you a lot this hour. Give it a little while.",
+        "CONFLICT": "Director is already with you in another tab.",
+        "TIMEOUT": "That's half an hour with Director, the most in one go.",
+        "FEATURE_DISABLED": "Director isn't available right now.",
         "DIRECTOR_PLAN_NOT_FOUND": "Director hasn't finished planning this short yet.",
-        "DIRECTOR_SHOT_NOT_FOUND": "That shot isn't part of this plan.",
-        "UNAUTHENTICATED": "Sign in again to call Director."
+        "DIRECTOR_SHOT_NOT_FOUND": "That shot isn't part of this short.",
+        "UNAUTHENTICATED": "Sign in again to bring Director back."
       },
-      "fallback": "Director Live is guiding you on this shot, and your takes are safe.",
-      "timeUp": "Calls last up to ten minutes. Call Director again to keep going."
+      "size": {
+        "close-up": "Close-up",
+        "medium": "Medium shot",
+        "full-body": "Full shot",
+        "wide": "Wide shot"
+      }
     },
     "off": "Director isn't set up yet.",
     "leave": "Go to settings",

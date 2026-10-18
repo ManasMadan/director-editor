@@ -91,6 +91,7 @@ export function liveCallOptions(deps: {
       project: env.GOOGLE_CLOUD_PROJECT,
       location: env.LIVE_LOCATION,
       model: env.LIVE_MODEL,
+      url: env.LIVE_API_URL,
       auth: createGoogleAuth(env.GOOGLE_ACCESS_TOKEN),
     }),
     log: (level, details, message) => deps.logger[level](details, message),
@@ -102,7 +103,7 @@ export function liveCallOptions(deps: {
   };
 }
 
-/** Director's live video call (/api/live), on when GOOGLE_CLOUD_PROJECT is set. */
+/** Director live on the shoot screen (/api/live), on when GOOGLE_CLOUD_PROJECT is set. */
 function mountDirectorCall(
   fastify: FastifyInstance,
   deps: {
@@ -114,7 +115,8 @@ function mountDirectorCall(
     activity: RecordActivity;
   },
 ) {
-  // Each call is minutes of Gemini audio and video: a few an hour is plenty to film a short.
+  // Each connection is minutes of Gemini audio and video: a few an hour is plenty to film
+  // a short (the relay's own reconnections to Gemini don't count).
   const calls = createRateLimiter(deps.redis, {
     name: "director-calls",
     points: 20,

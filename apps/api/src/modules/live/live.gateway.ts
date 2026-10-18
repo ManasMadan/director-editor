@@ -1,11 +1,12 @@
 /**
- * GET /api/live?videoId=…&shot=n, upgraded to a WebSocket: a voice and video call with
- * Director (Gemini Live on Vertex AI) through a short's plan, starting on shot n and
- * following the browser from shot to shot. The browser
- * signs in with its session cookie and calls as its active workspace, exactly as an
- * `inOrg` procedure would; the call is refused (an `error` message, then the socket
- * closes) when the feature is off, the caller isn't signed in, the plan or shot doesn't
- * exist yet, or the caller already has a call open.
+ * GET /api/live?videoId=…&shot=n, upgraded to a WebSocket: Director live (Gemini Live on
+ * Vertex AI) for a shoot of a short's plan, starting on shot n and following the browser
+ * from shot to shot; `&resume=1` when the browser lost Director a moment ago and came
+ * straight back, so Director doesn't say hello twice. The browser signs in with its
+ * session cookie and connects as its active workspace, exactly as an `inOrg` procedure
+ * would; it's refused (an `error` message, then the socket closes) when the feature is
+ * off, the caller isn't signed in, the plan or shot doesn't exist yet, or the caller
+ * already has Director live open elsewhere.
  *
  * Fastify's routing never sees an upgrade, so this listens on the Node server itself and
  * does its own auth and validation, like the other routes outside oRPC.
@@ -42,13 +43,20 @@ import { type CallEnd, closeWithError, type LiveLog, LiveRelay } from "./live.re
 import { type LiveModel, liveUrl, setupMessage } from "./live.setup";
 
 /**
- * A call's longest. Cost grows with every second of audio and video, and ten minutes is
- * time enough to film a whole short; the member calls again to carry on.
+ * A shoot's longest with Director live. Cost grows with every second of audio and video,
+ * and half an hour is time enough to film a whole short; past it the member brings
+ * Director back with a tap (another of the hour's allowance).
  */
-export const MAX_CALL_MS = 10 * MINUTE_MS;
+export const MAX_LIVE_MS = 30 * MINUTE_MS;
+/**
+ * How long one connection to Gemini is used. The Live API closes a connection after about
+ * ten minutes (warning first with goAway): the relay moves to a fresh one a little
+ * before, carrying the conversation over, so the member never notices.
+ */
+export const ROTATE_AFTER_MS = 9 * MINUTE_MS;
 const FRAME_INTERVAL_MS = SECOND_MS;
 
-/** Where calls go, or null when the feature is off (GOOGLE_CLOUD_PROJECT unset). */
+/** Where Director live goes, or null when the feature is off (GOOGLE_CLOUD_PROJECT unset). */
 export interface LiveUpstream {
   model: LiveModel;
   url: string;
@@ -61,13 +69,13 @@ export interface LiveOptions {
   /** Who is calling, as `inOrg` resolves it; throws an AppError when no one may. */
   caller(headers: Headers): Promise<OrgCaller>;
   plan(caller: OrgCaller, videoId: VideoId): Promise<DirectorPlan>;
-  /** Spends one of the caller's calls for the hour; throws RATE_LIMITED past it. */
+  /** Spends one of the caller's connections for the hour; throws RATE_LIMITED past it. */
   spendCallLimit(userId: UserId): Promise<void>;
   upstream: LiveUpstream | null;
   log: LiveLog;
   /** The clock camera frames are paced by (Date.now). */
   now: () => number;
-  /** Records that a call reached Gemini and started (fire-and-forget analytics). */
+  /** Records that Director live reached Gemini and started (fire-and-forget analytics). */
   recordCallStarted(userId: UserId, videoId: VideoId): void;
   /** The upgrade's request context: its id, address and user agent (http-context.ts). */
   context(request: IncomingMessage): RequestContext;
@@ -75,11 +83,15 @@ export interface LiveOptions {
   activity: RecordActivity;
 }
 
-/** The upstream for the environment's settings; null turns the feature off. */
+/**
+ * The upstream for the environment's settings; null turns the feature off. `url` is the
+ * tests' stand-in (LIVE_API_URL); unset, it's the region's own endpoint.
+ */
 export function liveUpstream(settings: {
   project: string | undefined;
   location: string;
   model: string;
+  url?: string | undefined;
   auth: GoogleAuth;
 }): LiveUpstream | null {
   if (!settings.project) {
@@ -87,7 +99,7 @@ export function liveUpstream(settings: {
   }
   return {
     model: { project: settings.project, location: settings.location, model: settings.model },
-    url: liveUrl(settings.location),
+    url: settings.url ?? liveUrl(settings.location),
     auth: settings.auth,
   };
 }
@@ -99,6 +111,7 @@ const querySchema = z.object({
     .int()
     .min(0)
     .max(DIRECTOR_MAX_SHOTS - 1),
+  resume: z.literal("1").optional(),
 });
 
 /** The plan, once it's ready and has the shot. */
@@ -138,16 +151,18 @@ function refuseCall(log: LiveLog, client: WebSocket, error: unknown) {
 function relayFor(
   client: WebSocket,
   upstream: LiveUpstream,
-  call: { plan: ShotPlan; shot: number; userId: UserId; videoId: VideoId },
+  call: { plan: ShotPlan; shot: number; resumed: boolean; userId: UserId; videoId: VideoId },
   options: LiveOptions,
 ) {
   return new LiveRelay(client, {
     url: upstream.url,
     auth: upstream.auth,
-    setup: setupMessage(upstream.model, call.plan, call.shot),
+    setup: (shot, handle) => setupMessage(upstream.model, call.plan, shot, handle),
     plan: call.plan,
     shot: call.shot,
-    maxDurationMs: MAX_CALL_MS,
+    resumed: call.resumed,
+    maxDurationMs: MAX_LIVE_MS,
+    rotateAfterMs: ROTATE_AFTER_MS,
     frameIntervalMs: FRAME_INTERVAL_MS,
     now: options.now,
     log: options.log,
@@ -223,8 +238,8 @@ function registerUpgrade(
 export function mountLive(fastify: FastifyInstance, options: LiveOptions) {
   const sockets = new WebSocketServer({ noServer: true, maxPayload: CLIENT_MAX_PAYLOAD_BYTES });
   const allowedOrigins = new Set(options.allowedOrigins.map((url) => new URL(url).origin));
-  // Users with a call open, in this process. Each replica keeps its own: with several,
-  // a user could hold one call per replica, still each capped at MAX_CALL_MS.
+  // Users with Director live open, in this process. Each replica keeps its own: with
+  // several, a user could hold one per replica, still each capped at MAX_LIVE_MS.
   const calling = new Set<UserId>();
 
   async function call(client: WebSocket, headers: Headers, url: URL) {
@@ -262,7 +277,13 @@ export function mountLive(fastify: FastifyInstance, options: LiveOptions) {
       const ended = await relayFor(
         client,
         upstream,
-        { plan, shot: query.data.shot, userId: caller.userId, videoId: query.data.videoId },
+        {
+          plan,
+          shot: query.data.shot,
+          resumed: query.data.resume === "1",
+          userId: caller.userId,
+          videoId: query.data.videoId,
+        },
         options,
       ).run();
       options.activity(callEnded(ended, target, options.now()));
@@ -278,7 +299,7 @@ export function mountLive(fastify: FastifyInstance, options: LiveOptions) {
 
   registerUpgrade(fastify, sockets, allowedOrigins, options, call);
 
-  // Open calls would hold the server's close until they end; end them first.
+  // Open sockets would hold the server's close until they end; end them first.
   fastify.addHook("preClose", async () => {
     for (const client of sockets.clients) {
       client.terminate();

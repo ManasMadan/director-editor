@@ -1,7 +1,9 @@
 /**
  * Runs the mock Google by hand (`bun run google:fake`); test suites start it themselves
  * instead, in-process (apps/web/test/global-setup.ts and similar). Its key is whatever
- * GOOGLE_API_KEY and YOUTUBE_API_KEY say in .env; both must match.
+ * GOOGLE_API_KEY and YOUTUBE_API_KEY say in .env; both must match. Its Live API takes the
+ * same key as its bearer token (point the API at it with LIVE_API_URL, and set
+ * GOOGLE_ACCESS_TOKEN to the key).
  */
 import { startFakeGoogle } from "./index";
 
@@ -18,4 +20,4 @@ if (required("YOUTUBE_API_KEY") !== apiKey) {
   throw new Error("The mock Google takes one key: set GOOGLE_API_KEY and YOUTUBE_API_KEY alike");
 }
 export const fake = await startFakeGoogle({ apiKey, port: Number(required("GOOGLE_FAKE_PORT")) });
-process.stdout.write(`mock Google (Gemini and YouTube) on ${fake.url}\n`);
+process.stdout.write(`mock Google (Gemini, its Live API and YouTube) on ${fake.url}\n`);

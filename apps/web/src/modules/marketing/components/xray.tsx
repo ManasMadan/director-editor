@@ -301,7 +301,7 @@ async function ShotStrip({ shots }: { shots: Shot[] }) {
           >
             <span className="sr-only">
               {t("xray.shot", { index: index + 1, title: shot.title })}{" "}
-              {move === "static" ? t("xray.static") : director(`shoot.doodle.move.${move}`)}
+              {move === "static" ? t("xray.static") : director(`shoot.move.${move}`)}
             </span>
             <span aria-hidden className="relative aspect-9/16 rounded-md bg-studio-foreground/8">
               <svg aria-hidden viewBox={VIEW_BOX} className="absolute inset-0 size-full">

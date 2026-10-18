@@ -2,7 +2,7 @@
   "name": "@repo/fake-google",
   "private": true,
   "type": "module",
-  "description": "A local stand-in for the Gemini API and YouTube Data API v3 that Director uses, a test fixture for integration, e2e and fuzz suites.",
+  "description": "A local stand-in for the Gemini API, its Live API and YouTube Data API v3 that Director uses, a test fixture for integration, e2e and fuzz suites.",
   "exports": {
     ".": "./src/index.ts"
   },
@@ -13,6 +13,7 @@
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "ws": "^8.21.3",
     "zod": "catalog:"
   },
   "devDependencies": {
@@ -20,6 +21,7 @@
     "@repo/typescript-config": "workspace:*",
     "@repo/vitest-config": "workspace:*",
     "@types/node": "catalog:",
+    "@types/ws": "^8.18.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

@@ -92,8 +92,8 @@ export const envSchema = {
   YOUTUBE_API_KEY: z.string().min(1).optional(),
   // Test hook: where YouTube's API lives (the tests' stand-in).
   YOUTUBE_API_URL: z.url().default("https://www.googleapis.com/youtube/v3"),
-  // Optional: Director's live video call (Gemini Live on Vertex AI, /api/live). On when
-  // the Google Cloud project is set; the machine's service account pays for the calls.
+  // Optional: Director live on the shoot screen (Gemini Live on Vertex AI, /api/live). On
+  // when the Google Cloud project is set; the machine's service account pays for it.
   GOOGLE_CLOUD_PROJECT: z
     .string()
     .regex(/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/, "a Google Cloud project id")
@@ -108,6 +108,9 @@ export const envSchema = {
     .string()
     .regex(/^[a-z0-9][a-z0-9.-]*$/, "a model name")
     .default("gemini-live-2.5-flash-native-audio"),
+  // Test hook: where the Live API lives (the tests' stand-in in the mock Google). Unset:
+  // the region's own endpoint, from LIVE_LOCATION.
+  LIVE_API_URL: z.url({ protocol: /^wss?$/ }).optional(),
   // Local development only: a Google access token (`gcloud auth print-access-token`) in
   // place of the GCE metadata server's. Production refuses it.
   GOOGLE_ACCESS_TOKEN: z.string().min(1).optional(),
@@ -131,6 +134,11 @@ export type Env = typeof env;
 // The local mock Google (packages/fake-google) is plain HTTP: production never reads it.
 if (env.NODE_ENV === "production" && !env.YOUTUBE_API_URL.startsWith("https://")) {
   throw new Error("YOUTUBE_API_URL must be HTTPS in production");
+}
+
+// The mock Google's Live API is plain WebSocket: production never reads it.
+if (env.NODE_ENV === "production" && env.LIVE_API_URL && !env.LIVE_API_URL.startsWith("wss://")) {
+  throw new Error("LIVE_API_URL must be wss:// in production");
 }
 
 // A pasted token expires within the hour; production uses the machine's service account.

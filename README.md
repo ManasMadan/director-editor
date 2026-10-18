@@ -19,8 +19,7 @@ demo account" button fills the form), so they aren't repeated here.
 The demo account starts with the 6 starter templates and can index one Short of its own,
 shared by everyone who uses it. It can't publish to YouTube or change its own account; sign
 in with Google, or sign up, to publish to your own channel. A phone gives the fullest
-experience: the camera screen also uses its tilt sensor for the angle guide. Allow the
-camera and the microphone when the browser asks.
+experience. Allow the camera and the microphone when the browser asks.
 
 <!-- screenshots added after deploy -->
 | Landing | Library | Template | Call |
@@ -43,15 +42,12 @@ camera and the microphone when the browser asks.
    storyboard: each shot's purpose in the story, where to be, the framing, the phone's
    angle and height, the pose, the steps and the lines to say, and, for a Short with
    speech, a choice between recording your own voice and filming to the original's sound.
-3. **Shoot on a call with Director.** "Call Director" starts a voice-and-video call with
-   Gemini Live. It sees a frame a second from the camera, hears you, speaks its
-   directions in a natural voice, and you can talk back or interrupt. It acts for you:
-   it starts and stops recording, throws a take away for another go, and moves to the
-   next shot. Live captions show both sides. Director Live's guides stay on screen under
-   the call: a teleprompter, a stick figure to copy the pose from, footprints for where
-   to stand, a horizon for the phone's tilt. Without a call, or when one can't start,
-   Director Live guides the shot on its own, with Gemini's scene checks of the camera
-   and spoken cues in a Gemini text-to-speech voice.
+3. **Shoot with Director.** "Start shooting" opens the selfie camera and brings in
+   Director, Gemini Live, for the whole shoot. It sees a frame a second from the camera,
+   hears you, talks like a friend who's good with a camera, and you can talk back,
+   interrupt or type. It can show you another shot or flip the camera, but only your tap
+   on the shutter starts a take (with a 3-2-1 you can call off). Captions show both
+   sides, and the shot card says where to be, what to do and what to say.
 4. **Takes and reviews.** Every take of every shot is kept. Gemini reviews each one as
    it arrives: the stretch worth keeping, a score out of 100, and one thing to try next.
    The best-scored take of each shot is picked, and a shot whose best take scored below
@@ -78,8 +74,8 @@ camera and the microphone when the browser asks.
 | Vertex AI: Gemini 4 Argon (`gemini-4-argon`) | Watches a Short from its YouTube URL and writes the shot plan | `apps/ai/app/indexing.py` (`index_short`), `apps/ai/app/director.py` (the prompt, `create_local_indexer`) |
 | Vertex AI: Gemini 3.1 Pro (`gemini-3.1-pro-preview`) | The indexing fallback, once Gemini 4 Argon's retries are spent | `apps/ai/app/indexing.py`, `INDEX_FALLBACK_MODEL` in `apps/ai/app/settings.py` |
 | Vertex AI: Gemini 3.8 Flash (`gemini-3.8-flash`) | Scene checks from a camera frame, and take reviews (best part, score, feedback); Director's YouTube post <!-- verify after publish merges --> | `apps/ai/app/director.py` (`check_scene`, `review`) |
-| Vertex AI: Gemini Live (`gemini-live-2.5-flash-native-audio`) | The voice-to-voice video call that directs each shot and drives the recorder through tool calls | `apps/api/src/modules/live/` (the relay), `apps/web/src/modules/director/lib/call-session.ts` (the browser's side) |
-| Vertex AI: Gemini 3.8 Flash TTS (`gemini-3.8-flash-tts`) | Director's spoken cues on the shoot screen when no call is running | `apps/ai/app/speech.py`, `apps/api/src/modules/director/director.service.ts` (`speak`, which keeps each line in storage) |
+| Vertex AI: Gemini Live (`gemini-live-2.5-flash-native-audio`) | Director live: the voice-to-voice conversation that directs the whole shoot, showing shots and flipping the camera through tool calls | `apps/api/src/modules/live/` (the relay), `apps/web/src/modules/director/lib/live-session.ts` (the browser's side) |
+| Vertex AI: Gemini 3.8 Flash TTS (`gemini-3.8-flash-tts`) | A line in Director's voice (`director.speak`), for when Gemini Live can't run | `apps/ai/app/speech.py`, `apps/api/src/modules/director/director.service.ts` (`speak`, which keeps each line in storage) |
 | Vertex AI: Veo 3.1 Lite (`veo-3.1-lite-generate-001`) | A few seconds' "how this shot looks" preview clip for each shot of the 6 starter templates | `apps/ai/scripts/seed_media.py`; linked by `apps/api/src/modules/director/seed-media.ts` |
 | Vertex AI: Nano Banana 2.1 (`gemini-nano-banana-2.1`) | A storyboard card for each shot of the starter templates | the same |
 | Vertex AI: Lyria 3 Clip (`lyria-3-clip-preview`) | A royalty-free soundtrack for each starter template, matched to its mood and pace | the same |
@@ -157,19 +153,19 @@ An evaluation set of 12 real Shorts (the 6 starters and 6 hard cases) checks tha
 one indexes into a shootable plan: `bun run --filter @repo/ai evals:index`.
 [How it works: indexing](docs/how-it-works.md#indexing-a-short) has the details.
 
-## How the live call works
+## How Director live works
 
 The browser opens a WebSocket to the API's `/api/live` with its session cookie. The API
 checks the caller and the plan, then opens Gemini Live on Vertex AI as the VM's service
 account and relays both ways. Up go 16 kHz 16-bit mono PCM from the microphone, in
 100 ms chunks, and a 640-pixel JPEG of the camera about once a second; down come Gemini's
-24 kHz voice, both sides' transcripts, and its tool calls. Gemini has five tools,
-`start_recording`, `stop_recording`, `retake`, `next_shot` and `previous_shot`, which the
-browser carries out exactly as it would the creator's own spoken request. One call lasts
-the whole Short: moving to another shot sends Gemini that shot's brief in the same
-conversation. Calls last up to 10 minutes, and when one can't start or drops, the shot
-carries on with Director Live's on-device guides and its takes untouched.
-[How it works: the live call](docs/how-it-works.md#the-live-call) has the details.
+24 kHz voice, both sides' transcripts, and its tool calls. Gemini has two tools,
+`go_to_shot` and `switch_camera`; neither can start a take, and Gemini hears what really
+came of each once the browser has acted. One conversation lasts the whole shoot: moving
+to another shot sends Gemini that shot's brief, and the relay moves to a fresh Gemini
+connection before each one's ten-minute limit, resuming the conversation, so nothing
+drops. When Director can't join, the screen says why and the shutter still works.
+[How it works: Director live](docs/how-it-works.md#director-live) has the details.
 
 ## Run it locally
 
@@ -197,7 +193,7 @@ need a key: they start a local stand-in for Google's APIs themselves.
 | `apps/worker` | Outbox relay, audit log, upload checks (type and ClamAV), scheduled jobs |
 | `apps/notifications` | Email: sign-in codes and security alerts |
 | `apps/webhooks` | Inbound webhooks (the mail server's bounces) |
-| `packages/contracts` | The API contract, limits and error codes, the live call's messages, the 6 starter templates (`src/director-seeds.json`) |
+| `packages/contracts` | The API contract, limits and error codes, Director live's messages, the 6 starter templates (`src/director-seeds.json`) |
 | `packages/*` | Also the API client and hooks, database (Prisma, migrations, row-level security), queues, i18n, email templates, UI kit with the Gemini loaders, shared Nest plumbing |
 | `deploy/` | Container images, Helm charts, Argo CD, the cluster's add-ons (Kyverno, cert-manager, the mail server) |
 | `infra/tofu` | OpenTofu: k3s on the machines, Cloudflare in front, the Argo CD bootstrap |

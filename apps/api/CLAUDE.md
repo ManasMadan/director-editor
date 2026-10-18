@@ -2,8 +2,8 @@
 
 NestJS on Fastify, port 3001. Serves better-auth (`src/auth/`), the oRPC API at `/rpc`
 (the web app), the same router as REST at `/api/v1` with `/api/v1/openapi.json`,
-Director's live video call at `/api/live` (`src/modules/live/`), and `/docs` outside
-production.
+Director live (Gemini Live, talking with the member on the shoot screen) at
+`/api/live` (`src/modules/live/`), and `/docs` outside production.
 
 ## Commands (from the repo root)
 
@@ -31,7 +31,7 @@ production.
 - better-auth tables are Prisma models; `bun run --filter @repo/api auth:schema` writes
   what better-auth expects to `node_modules/.cache/auth-schema.prisma`, to compare with
   `packages/db/prisma/schema/auth.prisma` after a plugin upgrade.
-- Routes outside oRPC (`files.routes.ts`, the live call in `modules/live`) are plain
+- Routes outside oRPC (`files.routes.ts`, Director live in `modules/live`) are plain
   Fastify handlers and do their own auth and validation.
 - The procedure pipeline has no rate limiter: each service adds `createRateLimiter`
   where it is needed.
