@@ -14,7 +14,7 @@ import {
 } from "@repo/contracts/api";
 import { orgIdSchema, userIdSchema } from "@repo/contracts/ids";
 import { LIVE_PATH, LIVE_TOOLS } from "@repo/contracts/live";
-import { PROVIDER_TIMEOUT_MS } from "@repo/contracts/time";
+import { PROVIDER_TIMEOUT_MS, SECOND_MS } from "@repo/contracts/time";
 import { AppError, currentContext } from "@repo/nest-common";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -32,7 +32,32 @@ import {
   ROTATE_AFTER_MS,
 } from "./live.gateway";
 import { CLIENT_MAX_PAYLOAD_BYTES } from "./live.messages";
+import { QUIET_MS } from "./live.pacer";
+import { PERSONA_VERSION } from "./live.persona";
 import { systemInstruction } from "./live.setup";
+
+/**
+ * What the persona must keep saying, whatever else changes in it: these are what the
+ * shoot depends on (live.persona.ts). Version 2 is the friend helping shoot a reel.
+ */
+const PERSONA_RULES = [
+  "a friend helping someone shoot a short video",
+  'Answer everything they say, even "ok"',
+  "One or two sentences, one ask at a time",
+  "You never start or stop a take",
+  "From the 3, 2, 1 to the end of a take, stay completely silent",
+  "When the app says a take ended, speak first",
+  "If they ask for their line, say it",
+  "never correct a line said differently",
+  "go with theirs unless they ask for the original",
+  "Use adapt_shot to put their version on the card",
+  "never suggest something again once they've said no",
+  "give one light nudge",
+  "suggest typing in the box or earphones, once",
+  'Never say "plan", "template", "tool", "session", "model" or "error"',
+  "Examples of how you sound",
+  "Then it's yours.",
+];
 
 const shot: Shot = {
   kind: "video",
@@ -272,7 +297,7 @@ async function liveCall(overrides: Partial<LiveOptions> = {}) {
 }
 
 describe("a live call", () => {
-  it("opens Gemini on the caller's token with the shot's script and the two tools", async () => {
+  it("opens Gemini on the caller's token with the persona, the shot's script and the three tools", async () => {
     const { fake } = await liveCall();
     expect(fake.headers.authorization).toBe("Bearer test-token");
     const { setup } = (await fake.message(0)) as { setup: Record<string, unknown> };
@@ -281,7 +306,15 @@ describe("a live call", () => {
       generationConfig: { responseModalities: ["AUDIO"] },
       inputAudioTranscription: {},
       outputAudioTranscription: {},
-      realtimeInputConfig: { automaticActivityDetection: { disabled: false } },
+      // Hard to cut off by room noise or a short "mm", quick to answer once they stop.
+      realtimeInputConfig: {
+        automaticActivityDetection: {
+          disabled: false,
+          startOfSpeechSensitivity: "START_SENSITIVITY_LOW",
+          silenceDurationMs: 700,
+        },
+        activityHandling: "START_OF_ACTIVITY_INTERRUPTS",
+      },
       // Handles to carry the conversation onto the next connection.
       sessionResumption: {},
     });
@@ -289,9 +322,12 @@ describe("a live call", () => {
     expect(text).toContain("Good morning, coffee first!");
     expect(text).toContain("At a kitchen counter, near a window");
     expect(text).toContain("Shot 1 of 2: The pour");
-    // Only the member's tap starts a take, and Director keeps quiet while it records.
-    expect(text).toContain("You never start or stop a take");
-    expect(text).toContain("While a take records, stay completely silent");
+    // The persona: the rules the shoot depends on, and examples of the friend's voice.
+    for (const rule of PERSONA_RULES) {
+      // The instruction arrives as JSON, its quotes escaped.
+      expect(text).toContain(JSON.stringify(rule).slice(1, -1));
+    }
+    expect(PERSONA_VERSION).toBe(2);
     const tools = setup.tools as { functionDeclarations: { name: string }[] }[];
     expect(tools[0]?.functionDeclarations.map((tool) => tool.name)).toEqual([...LIVE_TOOLS]);
     // Director speaks first: hello, and one question.
@@ -815,6 +851,281 @@ describe("Director's tool calls", () => {
   });
 });
 
+/** The text of a turn Gemini got, and whether it should answer it now. */
+const turnOf = (message: Record<string, unknown> | undefined) => {
+  const turn = message as {
+    clientContent: { turns: { parts: { text: string }[] }[]; turnComplete: boolean };
+  };
+  return {
+    text: turn.clientContent.turns[0]?.parts[0]?.text ?? "",
+    answer: turn.clientContent.turnComplete,
+  };
+};
+
+/** The turns Gemini got whose text includes `part`. */
+const turnsWith = (fake: FakeLiveApi, part: string) =>
+  fake.received.filter(
+    (message) => "clientContent" in message && turnOf(message).text.includes(part),
+  );
+
+describe("the member's version of a shot", () => {
+  it("hands Director's change to the browser, and keeps it once the card shows it", async () => {
+    const { fake, browser } = await liveCall();
+    fake.send({
+      toolCall: {
+        functionCalls: [
+          {
+            id: "g1",
+            name: "adapt_shot",
+            args: {
+              shot: 2,
+              action: "  Grandma does the nod, you react  ",
+              line: "Nan approves.",
+              why: "her idea",
+            },
+          },
+        ],
+      },
+    });
+    expect(await browser.message(0)).toEqual({
+      type: "tool",
+      id: "tool-1",
+      call: {
+        name: "adapt_shot",
+        shot: 1,
+        action: "Grandma does the nod, you react",
+        line: "Nan approves.",
+      },
+    });
+    browser.send({ type: "tool_result", id: "tool-1", result: "done" });
+    expect(await fake.message(2)).toEqual(toolResponse("g1", "adapt_shot", { result: "done" }));
+    // On that shot, Director hears the member's version beside the original.
+    browser.send({ type: "shot", shot: 1 });
+    const brief = turnOf(await fake.message(3)).text;
+    expect(brief).toContain("Their version of this shot");
+    expect(brief).toContain('- What they do: "Grandma does the nod, you react"');
+    expect(brief).toContain('- Their line: "Nan approves."');
+    expect(brief).not.toContain("- Where:");
+  });
+
+  it("keeps nothing the browser couldn't show", async () => {
+    const { fake, browser } = await liveCall();
+    fake.send({
+      toolCall: {
+        functionCalls: [{ id: "g1", name: "adapt_shot", args: { shot: 1, line: "Hi!" } }],
+      },
+    });
+    await browser.message(0);
+    browser.send({ type: "tool_result", id: "tool-1", result: "busy" });
+    await fake.message(2);
+    browser.send({ type: "shot", shot: 1 });
+    browser.send({ type: "shot", shot: 0 });
+    expect(turnOf(await fake.message(4)).text).not.toContain("Their version");
+  });
+
+  it("refuses a change with nothing in it, too long, or for a shot the plan hasn't", async () => {
+    const { fake, browser } = await liveCall();
+    fake.send({
+      toolCall: {
+        functionCalls: [
+          { id: "1", name: "adapt_shot", args: { shot: 1 } },
+          { id: "2", name: "adapt_shot", args: { shot: 1, where: "x".repeat(301) } },
+          { id: "3", name: "adapt_shot", args: { shot: 9, where: "Inside" } },
+          { id: "4", name: "adapt_shot", args: { shot: "one" } },
+          { id: "5", name: "adapt_shot" },
+        ],
+      },
+    });
+    expect(await fake.message(2)).toEqual(
+      toolResponse("1", "adapt_shot", { error: "say what changed: where, action or line" }),
+    );
+    expect(await fake.message(3)).toEqual(
+      toolResponse("2", "adapt_shot", {
+        error: "each of where, action and line is one to 300 characters",
+      }),
+    );
+    expect(await fake.message(4)).toMatchObject(
+      toolResponse("3", "adapt_shot", { result: "not_found", why: expect.anything() }),
+    );
+    expect(await fake.message(5)).toEqual(
+      toolResponse("4", "adapt_shot", { error: "shot must be a whole number, the rest text" }),
+    );
+    expect(await fake.message(6)).toEqual(
+      toolResponse("5", "adapt_shot", { error: "shot must be a whole number, the rest text" }),
+    );
+    expect(browser.received).toEqual([]);
+  });
+
+  it("tells Director the member's version that comes as the browser joins, before it speaks", async () => {
+    const fake = new FakeLiveApi();
+    fake.answerSetup = false;
+    const api = await startApi({}, fake);
+    const browser = api.call();
+    await fake.message(0);
+    await browser.opened;
+    // Shot 2 has nothing changed: it stays the original.
+    browser.send({
+      type: "context",
+      adaptations: [{ shot: 1 }, { shot: 0, where: "On the balcony" }],
+    });
+    // The relay reads it a few turns of the event loop later.
+    for (let turn = 0; turn < 50; turn += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    fake.send({ setupComplete: {} });
+    expect(turnOf(await fake.message(1))).toEqual({
+      text: '[Their version of this shot (it replaces the original where it differs):\n- Where: "On the balcony"]',
+      answer: false,
+    });
+    expect(turnOf(await fake.message(2)).text).toContain("Say hi");
+    browser.send({ type: "shot", shot: 1 });
+    expect(turnOf(await fake.message(3)).text).not.toContain("Their version");
+  });
+
+  it("takes the shoot's changes back from the browser, for a fresh connection to know", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { fake, browser } = await liveCall();
+    browser.send({
+      type: "context",
+      adaptations: [
+        { shot: 0, where: "By the window" },
+        { shot: 1, line: "Yes!" },
+      ],
+    });
+    // The next connection's setup describes this shot as the member has it.
+    vi.advanceTimersByTime(ROTATE_AFTER_MS);
+    const setup = (await fake.on(1, 0)) as { setup: { systemInstruction: object } };
+    expect(JSON.stringify(setup.setup.systemInstruction)).toContain('- Where: \\"By the window\\"');
+  });
+});
+
+/**
+ * Waits for `check` to pass without moving fake timers (vi.waitFor moves them on each
+ * try, which would bring a quiet nudge early): the sockets' I/O runs between tries.
+ */
+async function settled(check: () => void) {
+  for (let tries = 0; ; tries += 1) {
+    try {
+      check();
+      return;
+    } catch (error) {
+      if (tries > 2000) {
+        throw error;
+      }
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  }
+}
+
+describe("quiet stretches and a noisy room", () => {
+  it("nudges after fifteen quiet seconds, twice a shot at most, and never during a take", async () => {
+    const { fake, browser, tick } = await liveCall();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let frames = 0;
+    /** Everything sent upstream so far has arrived: a camera frame sent last has. */
+    const caughtUp = async () => {
+      frames += 1;
+      tick(1000);
+      const jpeg = btoa(`frame-${frames}`);
+      browser.send({ type: "frame", jpeg });
+      await settled(() =>
+        expect(fake.received).toContainEqual({
+          realtimeInput: { video: { mimeType: "image/jpeg", data: jpeg } },
+        }),
+      );
+    };
+    const nudges = () => turnsWith(fake, "been quiet");
+    // Something said: the quiet starts from here.
+    fake.send({ serverContent: { inputTranscription: { text: "hmm" } } });
+    await settled(() => expect(browser.received).toHaveLength(1));
+    vi.advanceTimersByTime(QUIET_MS - 1);
+    await caughtUp();
+    expect(nudges()).toHaveLength(0);
+    vi.advanceTimersByTime(1);
+    await settled(() => expect(nudges()).toHaveLength(1));
+    expect(turnOf(nudges()[0])).toEqual({
+      text: expect.stringContaining("One light nudge"),
+      answer: true,
+    });
+    vi.advanceTimersByTime(QUIET_MS);
+    await settled(() => expect(nudges()).toHaveLength(2));
+    expect(turnOf(nudges()[1]).text).toContain("Say you'll wait");
+    // Never a third on this shot.
+    vi.advanceTimersByTime(5 * QUIET_MS);
+    await caughtUp();
+    expect(nudges()).toHaveLength(2);
+    // A new shot has its own two, but not while a take counts in or records.
+    browser.send({ type: "shot", shot: 1 });
+    browser.send({ type: "take", state: "countdown" });
+    await settled(() => expect(turnsWith(fake, "counting in")).toHaveLength(1));
+    vi.advanceTimersByTime(5 * QUIET_MS);
+    await caughtUp();
+    expect(nudges()).toHaveLength(2);
+    browser.send({ type: "take", state: "recorded" });
+    await settled(() => expect(turnsWith(fake, "take just ended")).toHaveLength(1));
+    vi.advanceTimersByTime(QUIET_MS);
+    await settled(() => expect(nudges()).toHaveLength(3));
+  });
+
+  it("lets a nudge go when no connection is ready to hear it", async () => {
+    const { fake, browser, tick } = await liveCall();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    fake.send({ serverContent: { inputTranscription: { text: "hmm" } } });
+    await settled(() => expect(browser.received).toHaveLength(1));
+    // The connection moves, and the old one goes before the fresh one is ready.
+    vi.advanceTimersByTime(6 * SECOND_MS);
+    fake.answerSetup = false;
+    fake.send({ goAway: { timeLeft: "1s" } });
+    await settled(() => expect(fake.connections[1]?.received).toHaveLength(1));
+    fake.connections[0]?.socket.close();
+    await settled(() => expect(fake.connections[0]?.socket.readyState).toBe(WebSocket.CLOSED));
+    // The relay hears the close a few turns of the event loop after Gemini's side does.
+    for (let turn = 0; turn < 50; turn += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    vi.advanceTimersByTime(QUIET_MS - 6 * SECOND_MS);
+    fake.send({ setupComplete: {} }, fake.connections[1]?.socket);
+    await settled(() => expect(fake.connections[1]?.received).toHaveLength(2));
+    tick(1000);
+    browser.send({ type: "text", text: "back?" });
+    await settled(() => expect(fake.connections[1]?.received).toHaveLength(3));
+    expect(turnsWith(fake, "been quiet")).toHaveLength(0);
+  });
+
+  it("tells Director once when the member keeps getting cut off", async () => {
+    const { fake, browser, tick } = await liveCall();
+    for (let cut = 0; cut < 2; cut += 1) {
+      fake.send({ serverContent: { interrupted: true } });
+    }
+    await browser.message(1);
+    tick(30_000);
+    // Two then, two now: only the last thirty seconds count.
+    for (let cut = 0; cut < 2; cut += 1) {
+      fake.send({ serverContent: { interrupted: true } });
+    }
+    await browser.message(3);
+    expect(turnsWith(fake, "keep getting cut off")).toHaveLength(0);
+    for (let cut = 0; cut < 3; cut += 1) {
+      fake.send({ serverContent: { interrupted: true } });
+    }
+    await browser.message(6);
+    await vi.waitFor(() => expect(turnsWith(fake, "keep getting cut off")).toHaveLength(1));
+    expect(turnOf(turnsWith(fake, "keep getting cut off")[0])).toEqual({
+      text: expect.stringContaining("suggest typing in the box or earphones, once"),
+      answer: false,
+    });
+  });
+
+  it("lets the quiet go when the shoot ends", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { fake, browser } = await liveCall();
+    browser.socket.close();
+    await vi.waitFor(() => expect(fake.server.clients.size).toBe(0));
+    vi.advanceTimersByTime(2 * QUIET_MS);
+    expect(turnsWith(fake, "been quiet")).toHaveLength(0);
+  });
+});
+
 describe("what the member does on screen", () => {
   /** The note Gemini got, and whether it should answer it now. */
   const noteOf = async (fake: FakeLiveApi, index: number) => {
@@ -852,8 +1163,8 @@ describe("what the member does on screen", () => {
       answer: false,
     });
     expect(await noteOf(fake, 3)).toEqual({
-      text: "[They called the countdown off: no take this time.]",
-      answer: false,
+      text: expect.stringContaining("[They called the countdown off: no take this time."),
+      answer: true,
     });
     expect(await noteOf(fake, 5)).toEqual({
       text: expect.stringContaining("Stay completely silent until it ends"),
@@ -915,7 +1226,11 @@ describe("moving to a fresh connection to Gemini", () => {
     const [first, second] = fake.connections;
     // Until the new connection is ready, the old one still hears the member.
     browser.send({ type: "audio", pcm16: "AAAAAA==" });
-    expect(await fake.on(0, 2)).toMatchObject({ realtimeInput: { audio: { data: "AAAAAA==" } } });
+    await vi.waitFor(() =>
+      expect(first?.received).toContainEqual({
+        realtimeInput: { audio: { mimeType: "audio/pcm;rate=16000", data: "AAAAAA==" } },
+      }),
+    );
     const oldClosed = new Promise((resolve) => first?.socket.on("close", resolve));
     // What the new connection says before it's ready isn't Director's yet.
     fake.send({ serverContent: { outputTranscription: { text: "Too early." } } }, second?.socket);
