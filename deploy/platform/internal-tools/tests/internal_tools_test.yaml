@@ -33,7 +33,7 @@ tests:
     asserts:
       - equal:
           path: "spec.rules[0].matches"
-          value: [{ path: { type: PathPrefix, value: /jmap } }]
+          value: [{ path: { type: PathPrefix, value: /jmap } }, { path: { type: PathPrefix, value: /api } }]
         documentSelector: { path: "spec.hostnames[0]", value: mail-admin.example.com }
       - equal:
           path: "spec.rules[1]"
