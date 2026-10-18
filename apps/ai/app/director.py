@@ -1325,6 +1325,6 @@ def create_asset_maker(settings: Settings, redis: Redis) -> AssetMaker | None:
         Artist(create_google_model(settings, settings.asset_model), settings.asset_model),
         settings.media_bucket,
         redis,
-        monthly=settings.monthly_tokens_per_org,
+        monthly=Allowance(settings.monthly_tokens_per_org, settings.monthly_tokens_per_demo_guest),
         per_image=settings.director_tokens_per_asset,
     )

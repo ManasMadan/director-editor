@@ -452,6 +452,25 @@ export const zLayoutEdit = z.object({
 });
 
 /**
+ * LocateRequest
+ */
+export const zLocateRequest = z.object({
+    image: z.string().min(100).max(400000),
+    target: z.string().min(1).max(120)
+});
+
+/**
+ * Located
+ *
+ * Where a target is in the frame it was looked for in, or that it isn't there.
+ */
+export const zLocated = z.object({
+    box: zBox.nullable(),
+    found: z.boolean(),
+    label: z.string().min(1).max(40)
+});
+
+/**
  * OverlayEdit
  *
  * Something drawn over the frame: an asset, or a mark (a circle, an underline).
@@ -486,25 +505,6 @@ export const zOverlayEdit = z.object({
     ]).nullable(),
     startSeconds: z.number().gte(0).lte(180),
     type: z.literal('overlay')
-});
-
-/**
- * LocateRequest
- */
-export const zLocateRequest = z.object({
-    image: z.string().min(100).max(400000),
-    target: z.string().min(1).max(120)
-});
-
-/**
- * Located
- *
- * Where a target is in the frame it was looked for in, or that it isn't there.
- */
-export const zLocated = z.object({
-    box: zBox.nullable(),
-    found: z.boolean(),
-    label: z.string().min(1).max(40)
 });
 
 /**

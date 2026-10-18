@@ -1,6 +1,262 @@
 {
   "components": {
     "schemas": {
+      "AspectRatio": {
+        "enum": [
+          "9:16",
+          "3:4",
+          "4:5",
+          "1:1",
+          "9:8",
+          "5:4",
+          "4:3",
+          "16:9"
+        ],
+        "type": "string"
+      },
+      "Asset": {
+        "properties": {
+          "ask": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What to ask the member for when it is theirs: \"a photo of your dog\".",
+            "title": "Ask"
+          },
+          "defaultSource": {
+            "$ref": "#/components/schemas/AssetSource"
+          },
+          "description": {
+            "description": "The original's piece, in a sentence or two.",
+            "maxLength": 600,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 40,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AssetKind"
+          },
+          "personalisable": {
+            "description": "The member could make it about their own topic.",
+            "title": "Personalisable",
+            "type": "boolean"
+          },
+          "prompt": {
+            "description": "What to ask an image model for to make a fresh one in the original's style, in English, with any text on it in quotes.",
+            "maxLength": 1500,
+            "minLength": 1,
+            "title": "Prompt",
+            "type": "string"
+          },
+          "reference": {
+            "$ref": "#/components/schemas/AssetReference"
+          },
+          "role": {
+            "description": "What it does in the Short, and where it sits.",
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Role",
+            "type": "string"
+          },
+          "secondScreen": {
+            "description": "The original shows it on another screen in shot.",
+            "title": "Secondscreen",
+            "type": "boolean"
+          },
+          "sourceEndSeconds": {
+            "maximum": 180.0,
+            "minimum": 0.1,
+            "title": "Sourceendseconds",
+            "type": "number"
+          },
+          "sourceStartSeconds": {
+            "description": "When it first shows in the original.",
+            "maximum": 180.0,
+            "minimum": 0.0,
+            "title": "Sourcestartseconds",
+            "type": "number"
+          },
+          "title": {
+            "description": "A short name for it: \"The archetypes chart\".",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "role",
+          "description",
+          "prompt",
+          "sourceStartSeconds",
+          "sourceEndSeconds",
+          "defaultSource",
+          "personalisable",
+          "ask",
+          "secondScreen",
+          "reference"
+        ],
+        "title": "Asset",
+        "type": "object"
+      },
+      "AssetImageOut": {
+        "description": "The default image made for one of a plan's assets (app/assets.py).",
+        "properties": {
+          "assetId": {
+            "maxLength": 40,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+            "title": "Assetid",
+            "type": "string"
+          },
+          "objectKey": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its key in MEDIA_BUCKET once it's ready; apps/api turns it into a short-lived link.",
+            "title": "Objectkey"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "generating",
+              "ready",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assetId",
+          "status",
+          "objectKey"
+        ],
+        "title": "AssetImageOut",
+        "type": "object"
+      },
+      "AssetKind": {
+        "enum": [
+          "image",
+          "cutout",
+          "text-card",
+          "background",
+          "broll",
+          "music",
+          "sfx",
+          "end-card"
+        ],
+        "type": "string"
+      },
+      "AssetReference": {
+        "description": "The original's piece, described precisely enough to recreate its look.",
+        "properties": {
+          "aspectRatio": {
+            "$ref": "#/components/schemas/AspectRatio"
+          },
+          "blackAndWhite": {
+            "title": "Blackandwhite",
+            "type": "boolean"
+          },
+          "brands": {
+            "items": {
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Brands",
+            "type": "array"
+          },
+          "composition": {
+            "description": "Its layout and framing: what sits where.",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Composition",
+            "type": "string"
+          },
+          "mood": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Mood",
+            "type": "string"
+          },
+          "palette": {
+            "description": "Its colours, or \"black and white\".",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Palette",
+            "type": "string"
+          },
+          "style": {
+            "description": "How it is made: \"flat vector infographic\", \"photo\", \"hand-drawn\".",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Style",
+            "type": "string"
+          },
+          "subject": {
+            "description": "What it shows.",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Subject",
+            "type": "string"
+          },
+          "text": {
+            "description": "Every line of text on it, word for word; empty when there is none.",
+            "items": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Text",
+            "type": "array"
+          }
+        },
+        "required": [
+          "subject",
+          "composition",
+          "style",
+          "palette",
+          "blackAndWhite",
+          "aspectRatio",
+          "text",
+          "mood"
+        ],
+        "title": "AssetReference",
+        "type": "object"
+      },
+      "AssetSource": {
+        "enum": [
+          "create",
+          "stock",
+          "upload"
+        ],
+        "type": "string"
+      },
       "Box": {
         "properties": {
           "height": {
@@ -400,6 +656,15 @@
       },
       "DirectorPlanOut": {
         "properties": {
+          "assetImages": {
+            "description": "The default images made for the plan's assets, on a plan read on its own (getDirectorPlan); empty in the library and for a seeded template, whose are committed with it.",
+            "items": {
+              "$ref": "#/components/schemas/AssetImageOut"
+            },
+            "maxItems": 12,
+            "title": "Assetimages",
+            "type": "array"
+          },
           "audioKey": {
             "anyOf": [
               {
@@ -685,6 +950,102 @@
         "title": "DirectorTakeOut",
         "type": "object"
       },
+      "Edit": {
+        "discriminator": {
+          "mapping": {
+            "end-card": "#/components/schemas/EndCardEdit",
+            "gap": "#/components/schemas/GapEdit",
+            "grade": "#/components/schemas/GradeEdit",
+            "layout": "#/components/schemas/LayoutEdit",
+            "overlay": "#/components/schemas/OverlayEdit",
+            "speed": "#/components/schemas/SpeedEdit",
+            "text": "#/components/schemas/TextEdit",
+            "transition": "#/components/schemas/TransitionEdit"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/LayoutEdit"
+          },
+          {
+            "$ref": "#/components/schemas/OverlayEdit"
+          },
+          {
+            "$ref": "#/components/schemas/GradeEdit"
+          },
+          {
+            "$ref": "#/components/schemas/TextEdit"
+          },
+          {
+            "$ref": "#/components/schemas/TransitionEdit"
+          },
+          {
+            "$ref": "#/components/schemas/SpeedEdit"
+          },
+          {
+            "$ref": "#/components/schemas/EndCardEdit"
+          },
+          {
+            "$ref": "#/components/schemas/GapEdit"
+          }
+        ]
+      },
+      "EndCardEdit": {
+        "properties": {
+          "assetId": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assetid"
+          },
+          "endSeconds": {
+            "maximum": 180.0,
+            "minimum": 0.1,
+            "title": "Endseconds",
+            "type": "number"
+          },
+          "startSeconds": {
+            "maximum": 180.0,
+            "minimum": 0.0,
+            "title": "Startseconds",
+            "type": "number"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "type": {
+            "const": "end-card",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "startSeconds",
+          "endSeconds",
+          "assetId",
+          "text"
+        ],
+        "title": "EndCardEdit",
+        "type": "object"
+      },
       "ErrorCode": {
         "enum": [
           "BAD_REQUEST",
@@ -895,6 +1256,93 @@
         "title": "Framing",
         "type": "object"
       },
+      "GapEdit": {
+        "description": "A moment to fill with B-roll or a cutaway: what it shows, for as long as it lasts.",
+        "properties": {
+          "description": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "endSeconds": {
+            "maximum": 180.0,
+            "minimum": 0.1,
+            "title": "Endseconds",
+            "type": "number"
+          },
+          "startSeconds": {
+            "maximum": 180.0,
+            "minimum": 0.0,
+            "title": "Startseconds",
+            "type": "number"
+          },
+          "type": {
+            "const": "gap",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "startSeconds",
+          "endSeconds",
+          "description"
+        ],
+        "title": "GapEdit",
+        "type": "object"
+      },
+      "GradeEdit": {
+        "properties": {
+          "endSeconds": {
+            "maximum": 180.0,
+            "minimum": 0.1,
+            "title": "Endseconds",
+            "type": "number"
+          },
+          "grade": {
+            "enum": [
+              "black-and-white",
+              "warm",
+              "cool",
+              "high-contrast",
+              "vintage",
+              "vivid"
+            ],
+            "title": "Grade",
+            "type": "string"
+          },
+          "startSeconds": {
+            "maximum": 180.0,
+            "minimum": 0.0,
+            "title": "Startseconds",
+            "type": "number"
+          },
+          "target": {
+            "enum": [
+              "all",
+              "camera",
+              "assets"
+            ],
+            "title": "Target",
+            "type": "string"
+          },
+          "type": {
+            "const": "grade",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "startSeconds",
+          "endSeconds",
+          "grade",
+          "target"
+        ],
+        "title": "GradeEdit",
+        "type": "object"
+      },
       "HealthResponse": {
         "properties": {
           "status": {
@@ -953,6 +1401,115 @@
         ],
         "type": "string"
       },
+      "LayoutEdit": {
+        "description": "How the frame is shared: the camera full frame (or an asset, for a voice-over), a\nsplit with the camera on top or at the bottom taking `cameraShare` of the height and\nthe asset in the rest, or picture-in-picture with the `inset` in `box`.",
+        "properties": {
+          "assetId": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assetid"
+          },
+          "box": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Box"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cameraOn": {
+            "anyOf": [
+              {
+                "enum": [
+                  "top",
+                  "bottom"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cameraon"
+          },
+          "cameraShare": {
+            "anyOf": [
+              {
+                "maximum": 0.8,
+                "minimum": 0.2,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camerashare"
+          },
+          "endSeconds": {
+            "maximum": 180.0,
+            "minimum": 0.1,
+            "title": "Endseconds",
+            "type": "number"
+          },
+          "inset": {
+            "anyOf": [
+              {
+                "enum": [
+                  "camera",
+                  "asset"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inset"
+          },
+          "layout": {
+            "enum": [
+              "full",
+              "split",
+              "picture-in-picture"
+            ],
+            "title": "Layout",
+            "type": "string"
+          },
+          "startSeconds": {
+            "maximum": 180.0,
+            "minimum": 0.0,
+            "title": "Startseconds",
+            "type": "number"
+          },
+          "type": {
+            "const": "layout",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "startSeconds",
+          "endSeconds",
+          "layout",
+          "assetId",
+          "cameraOn",
+          "cameraShare",
+          "box",
+          "inset"
+        ],
+        "title": "LayoutEdit",
+        "type": "object"
+      },
       "LocateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1009,6 +1566,110 @@
           "box"
         ],
         "title": "Located",
+        "type": "object"
+      },
+      "OverlayEdit": {
+        "description": "Something drawn over the frame: an asset, or a mark (a circle, an underline).",
+        "properties": {
+          "assetId": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assetid"
+          },
+          "box": {
+            "$ref": "#/components/schemas/Box"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "pattern": "^#[0-9A-Fa-f]{6}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "endSeconds": {
+            "maximum": 180.0,
+            "minimum": 0.1,
+            "title": "Endseconds",
+            "type": "number"
+          },
+          "entry": {
+            "enum": [
+              "cut",
+              "fade",
+              "slide",
+              "pop",
+              "draw"
+            ],
+            "title": "Entry",
+            "type": "string"
+          },
+          "exit": {
+            "enum": [
+              "cut",
+              "fade",
+              "slide",
+              "pop",
+              "draw"
+            ],
+            "title": "Exit",
+            "type": "string"
+          },
+          "mark": {
+            "anyOf": [
+              {
+                "enum": [
+                  "circle",
+                  "underline",
+                  "arrow",
+                  "box",
+                  "highlight",
+                  "tick",
+                  "cross"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mark"
+          },
+          "startSeconds": {
+            "maximum": 180.0,
+            "minimum": 0.0,
+            "title": "Startseconds",
+            "type": "number"
+          },
+          "type": {
+            "const": "overlay",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "startSeconds",
+          "endSeconds",
+          "assetId",
+          "mark",
+          "color",
+          "box",
+          "entry",
+          "exit"
+        ],
+        "title": "OverlayEdit",
         "type": "object"
       },
       "PhoneAngle": {
@@ -1310,12 +1971,12 @@
             "$ref": "#/components/schemas/Framing"
           },
           "kind": {
-            "enum": [
-              "video",
-              "photo"
-            ],
-            "title": "Kind",
-            "type": "string"
+            "$ref": "#/components/schemas/ShotKind"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ShotMode",
+            "default": "on-camera",
+            "description": "on-camera: the viewer films it; voice-over: only their voice is used; asset: nothing is filmed, an asset takes its place."
           },
           "phoneAngle": {
             "$ref": "#/components/schemas/PhoneAngle"
@@ -1406,8 +2067,31 @@
         "title": "Shot",
         "type": "object"
       },
+      "ShotKind": {
+        "enum": [
+          "video",
+          "photo"
+        ],
+        "type": "string"
+      },
+      "ShotMode": {
+        "enum": [
+          "on-camera",
+          "voice-over",
+          "asset"
+        ],
+        "type": "string"
+      },
       "ShotPlan": {
         "properties": {
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/Asset"
+            },
+            "maxItems": 12,
+            "title": "Assets",
+            "type": "array"
+          },
           "audio": {
             "enum": [
               "speech",
@@ -1433,6 +2117,14 @@
             "minimum": 0.5,
             "title": "Durationseconds",
             "type": "number"
+          },
+          "edits": {
+            "items": {
+              "$ref": "#/components/schemas/Edit"
+            },
+            "maxItems": 40,
+            "title": "Edits",
+            "type": "array"
           },
           "format": {
             "description": "The trend, e.g. \"GRWM\".",
@@ -1533,6 +2225,59 @@
         ],
         "type": "string"
       },
+      "SpeedEdit": {
+        "properties": {
+          "easing": {
+            "enum": [
+              "linear",
+              "ease-in",
+              "ease-out",
+              "ease-in-out"
+            ],
+            "title": "Easing",
+            "type": "string"
+          },
+          "endSeconds": {
+            "maximum": 180.0,
+            "minimum": 0.1,
+            "title": "Endseconds",
+            "type": "number"
+          },
+          "fromRate": {
+            "maximum": 8.0,
+            "minimum": 0.1,
+            "title": "Fromrate",
+            "type": "number"
+          },
+          "startSeconds": {
+            "maximum": 180.0,
+            "minimum": 0.0,
+            "title": "Startseconds",
+            "type": "number"
+          },
+          "toRate": {
+            "maximum": 8.0,
+            "minimum": 0.1,
+            "title": "Torate",
+            "type": "number"
+          },
+          "type": {
+            "const": "speed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "startSeconds",
+          "endSeconds",
+          "fromRate",
+          "toRate",
+          "easing"
+        ],
+        "title": "SpeedEdit",
+        "type": "object"
+      },
       "TargetPose": {
         "properties": {
           "description": {
@@ -1556,6 +2301,173 @@
           "keypoints"
         ],
         "title": "TargetPose",
+        "type": "object"
+      },
+      "TextEdit": {
+        "description": "Words on screen. Captions carry no text of their own: they're the member's words.",
+        "properties": {
+          "captionStyle": {
+            "anyOf": [
+              {
+                "enum": [
+                  "word-by-word",
+                  "line",
+                  "boxed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captionstyle"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "pattern": "^#[0-9A-Fa-f]{6}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "endSeconds": {
+            "maximum": 180.0,
+            "minimum": 0.1,
+            "title": "Endseconds",
+            "type": "number"
+          },
+          "highlightColor": {
+            "anyOf": [
+              {
+                "pattern": "^#[0-9A-Fa-f]{6}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Highlightcolor"
+          },
+          "position": {
+            "enum": [
+              "top",
+              "middle",
+              "bottom",
+              "between-halves"
+            ],
+            "title": "Position",
+            "type": "string"
+          },
+          "startSeconds": {
+            "maximum": 180.0,
+            "minimum": 0.0,
+            "title": "Startseconds",
+            "type": "number"
+          },
+          "style": {
+            "enum": [
+              "title",
+              "lower-third",
+              "captions",
+              "label",
+              "callout"
+            ],
+            "title": "Style",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "type": {
+            "const": "text",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "startSeconds",
+          "endSeconds",
+          "style",
+          "text",
+          "position",
+          "captionStyle",
+          "color",
+          "highlightColor"
+        ],
+        "title": "TextEdit",
+        "type": "object"
+      },
+      "TransitionEdit": {
+        "description": "Into whatever starts at `startSeconds`, lasting until `endSeconds`.",
+        "properties": {
+          "anchor": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A match cut's anchor: what lines up.",
+            "title": "Anchor"
+          },
+          "endSeconds": {
+            "maximum": 180.0,
+            "minimum": 0.1,
+            "title": "Endseconds",
+            "type": "number"
+          },
+          "startSeconds": {
+            "maximum": 180.0,
+            "minimum": 0.0,
+            "title": "Startseconds",
+            "type": "number"
+          },
+          "transition": {
+            "enum": [
+              "cut",
+              "match-cut",
+              "whip",
+              "fade",
+              "zoom",
+              "spin",
+              "glitch"
+            ],
+            "title": "Transition",
+            "type": "string"
+          },
+          "type": {
+            "const": "transition",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "startSeconds",
+          "endSeconds",
+          "transition",
+          "anchor"
+        ],
+        "title": "TransitionEdit",
         "type": "object"
       }
     }

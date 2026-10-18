@@ -44,7 +44,7 @@ from app.db.session import tenant
 from app.log import log
 from app.realtime import publish_to_org
 from app.schemas import AspectRatio, Asset, AssetKind, ShotPlan
-from app.usage import reserve, settle
+from app.usage import Allowance, reserve, settle
 
 # Spec'd limits on generated images (Vertex AI prices to be checked before they're
 # final): 12 a video, 30 a day per member, 5 per demo guest. A plan's defaults stop at 5,
@@ -204,7 +204,7 @@ class AssetMaker:
         bucket: str,
         redis: Redis,
         *,
-        monthly: int,
+        monthly: Allowance,
         per_image: int,
     ) -> None:
         self._artist = artist
@@ -303,7 +303,7 @@ class AssetMaker:
             "director-asset",
             self._artist.model_name,
             most=self._per_image,
-            monthly=self._monthly,
+            allowance=self._monthly,
         )
         # The output can't be capped at what's left, so an image waits for a budget that
         # holds a whole one; settling gives the reservation back.

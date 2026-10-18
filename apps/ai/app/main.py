@@ -32,8 +32,8 @@ from app.log import configure_logging
 from app.queues import DirectorQueue
 from app.schemas import (
     VIDEO_ID_PATTERN,
-    ClipRequest,
     AssetImageOut,
+    ClipRequest,
     CutPick,
     DirectorCutCreate,
     DirectorCutOut,
