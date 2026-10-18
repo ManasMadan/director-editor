@@ -56,9 +56,7 @@ def test_every_route_needs_the_api_s_token(client: TestClient) -> None:
 
 def test_invalid_input_is_a_validation_error(client: TestClient) -> None:
     org, user = new_org()
-    response = client.post(
-        "/v1/director/locate", json={"target": ""}, headers=headers(org, user)
-    )
+    response = client.post("/v1/director/locate", json={"target": ""}, headers=headers(org, user))
     assert response.status_code == 422
     error = error_of(response)
     assert error.code == "VALIDATION_FAILED"

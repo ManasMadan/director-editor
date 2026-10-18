@@ -66,7 +66,7 @@ export interface LiveUpstream {
 }
 
 /** One of Director's turns, with who it was for: a short (and its format) and its shot. */
-export interface CallTurn extends LiveTurn {
+interface CallTurn extends LiveTurn {
   userId: UserId;
   videoId: VideoId;
   template: string;
