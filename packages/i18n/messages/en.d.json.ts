@@ -6,6 +6,7 @@ declare const messages: {
     "signUp": "Create account",
     "signOut": "Sign out",
     "library": "Library",
+    "media": "My media",
     "settings": "Settings",
     "email": "Email",
     "password": "Password",

@@ -13,7 +13,10 @@ import { ThemeToggle } from "./theme-toggle";
 import { UserMenu } from "./user-menu";
 
 /** Where a member goes from the header. */
-const NAV: { href: Route; label: "library" }[] = [{ href: "/library", label: "library" }];
+const NAV: { href: Route; label: "library" | "media" }[] = [
+  { href: "/library", label: "library" },
+  { href: "/media", label: "media" },
+];
 
 /** On the dark bar, a control's hover and open states stay on the bar's own colours. */
 const ON_BAR =

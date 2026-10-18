@@ -55,6 +55,18 @@ describe("the site header", () => {
       .toHaveAttribute("aria-current", "page");
   });
 
+  it("leads to My media too, marked when a member is there", async () => {
+    await signUp();
+    const page = await renderPage(<SiteHeader />, { url: "/media" });
+    const nav = page.getByRole("navigation", { name: "Main" });
+    await expect
+      .element(nav.getByRole("link", { name: "My media" }))
+      .toHaveAttribute("aria-current", "page");
+    await expect
+      .element(nav.getByRole("link", { name: "My media" }))
+      .toHaveAttribute("href", "/media");
+  });
+
   it("goes to settings from the account's menu", async () => {
     const user = await signUp();
     const page = await renderPage(<SiteHeader />, { url: "/library" });
