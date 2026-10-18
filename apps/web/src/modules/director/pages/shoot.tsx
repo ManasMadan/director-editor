@@ -370,7 +370,7 @@ function RollUpload({ roll }: { roll: RollShoot }) {
   return (
     <UploadNotice
       lost={upload.lost === null ? null : errorMessage(upload.lost)}
-      waiting={upload.error !== null}
+      waiting={upload.error !== null || upload.full}
       nearLimit={roll.nearLimit}
     />
   );
