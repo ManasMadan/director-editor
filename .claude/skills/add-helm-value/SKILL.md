@@ -27,8 +27,10 @@ Nothing here touches a real cluster: Argo CD applies what's on `master`.
 1. A file in `deploy/platform/addons/<addon>.yaml`: `addon`, `namespace`, and either
    `repoURL` + `chart` + `version` (pinned exactly; the `platform` ApplicationSet in
    `deploy/argocd/appsets/platform.yaml` reads the fields), or `path` for a chart in this
-   repo, or `secretsPath` for SOPS manifests. `wave` orders it against the others
-   (operators before what uses their resources).
+   repo, or `secretsPath` for SOPS manifests. There's no ordering: an add-on that
+   needs another's CRDs fails until they exist and its sync is retried until it
+   succeeds. A source from a new Helm repository goes in the `platform` project's
+   `sourceRepos` (`deploy/argocd/projects.yaml`).
 2. Our values for it in `deploy/platform/values/<addon>.yaml`, with memory limits.
 3. Renovate follows the chart through the add-on managers in `renovate.json5`; a file
    pattern they don't match needs a custom manager.

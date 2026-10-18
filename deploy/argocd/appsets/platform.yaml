@@ -45,39 +45,14 @@ spec:
               pathParamPrefix: file
               files:
                 - path: deploy/platform/addons/*.yaml
-  # Add-ons roll out in the order of their waves, each once the one before is healthy
-  # (the CRDs an add-on needs are installed by one of an earlier wave). A sync-wave
-  # annotation on generated Applications orders nothing; progressive syncs do (OpenTofu's
-  # bootstrap turns them on). A new wave needs a step here.
-  strategy:
-    type: RollingSync
-    rollingSync:
-      steps:
-        - matchExpressions:
-            - key: wave
-              operator: In
-              values: ["wave-30"]
-        - matchExpressions:
-            - key: wave
-              operator: In
-              values: ["wave-20"]
-        - matchExpressions:
-            - key: wave
-              operator: In
-              values: ["wave-10"]
-        - matchExpressions:
-            - key: wave
-              operator: In
-              values: ["wave0"]
-        - matchExpressions:
-            - key: wave
-              operator: In
-              values: ["wave10"]
+  # No progressive sync (RollingSync): it turns off every generated Application's
+  # automated sync and self-heal, and one Application that never reports Synced holds
+  # back every step after it. Each Application syncs and heals on its own instead, and
+  # what needs a CRD or a namespace another add-on brings fails until that one is up,
+  # then succeeds on a retry (retry.limit -1: retried with backoff until it does).
   template:
     metadata:
       name: "{{ .name }}-{{ .addon }}"
-      labels:
-        wave: "wave{{ .wave }}"
       finalizers:
         - resources-finalizer.argocd.argoproj.io
     spec:
@@ -94,7 +69,7 @@ spec:
           # CRDs larger than the client-side apply annotation limit (cert-manager, KEDA).
           - ServerSideApply=true
         retry:
-          limit: 10
+          limit: -1
           backoff:
             duration: 10s
             factor: 2

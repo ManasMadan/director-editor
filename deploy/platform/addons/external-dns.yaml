@@ -4,7 +4,6 @@ namespace: external-dns
 repoURL: https://kubernetes-sigs.github.io/external-dns/
 chart: external-dns
 version: 1.22.0
-wave: "-10"
 # Per cluster: its records are marked as its own, and it only touches its domain.
 clusterParameters:
   txtOwnerId: name

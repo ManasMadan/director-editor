@@ -3,7 +3,6 @@
 addon: alerts
 namespace: observability
 path: deploy/platform/alerts
-wave: "10"
 clusterParameters:
   environment: label:environment
   domain: domain

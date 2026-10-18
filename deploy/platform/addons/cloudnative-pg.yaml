@@ -4,4 +4,3 @@ namespace: cnpg-system
 repoURL: https://cloudnative-pg.github.io/charts
 chart: cloudnative-pg
 version: 0.29.1
-wave: "-20"
