@@ -251,23 +251,41 @@ those, or after half an hour, Director goes and the browser hears why.
 
 ### Tools
 
-Gemini has three tools, none of which can start or stop a take:
+Gemini has four tools, none of which can start or stop a take:
 
 | Tool | What the shoot screen does |
 |---|---|
 | `go_to_shot` (`shot`, from 1) | shows that shot; the camera and Director carry on |
 | `switch_camera` (`to`: front or back) | flips the camera |
 | `adapt_shot` (`shot`, from 1; `where`, `action`, `line`, each a sentence or two) | puts the member's version of that shot on the card: the changed rows glow once and say "changed for you"; what's left out stays as it was |
+| `point_at` (`target`: what to find; `label`: two or three words) | finds it in the current frame and pins a labelled box on it ("Director's marks" below), or answers `not_found` and draws nothing |
 
 The relay checks the arguments (a shot the plan has; for `adapt_shot`, at least one
 change, each at most 300 characters) and hands each call to the browser
 with an id. The browser answers with what really happened: `done`, or refused because a
 take is under way (counting down, recording, being watched back or sent) or the camera
-is off. Only then does Gemini hear the result; an answer that doesn't come within five
-seconds is reported as unknown. A change the browser showed is kept for the shoot: the
+is off, or (a mark) that the thing isn't in view. Only then does Gemini hear the result;
+an answer that doesn't come within five seconds (twelve for a mark, which looks at the
+picture first) is reported as unknown. A change the browser showed is kept for the shoot: the
 next connection's setup, and each move to that shot, describe the member's version. A
 browser that connects again (its silent retry, or Try again) hands its changes back
 first, in a `context` message.
+
+### Director's marks
+
+A mark is a box Gemini located on a real thing in the camera, never a guess
+(`apps/web/src/modules/director/lib/marks.ts`, `hooks/use-marks.ts`). On `point_at` the
+browser captures the viewfinder's 9:16 crop, unmirrored, and calls `director.locate`
+(Gemini on Vertex AI, through the AI service), which answers a box in fractions of that
+frame, or not found when Gemini isn't sure. The box is mapped through the `<video>`'s
+`object-cover` crop and mirrored for the front camera's mirrored preview; over half off
+the picture, it isn't drawn. Between locates it moves with the camera: four times a
+second the browser compares two tiny greyscale samples of the picture (block matching)
+and shifts every mark by the motion, including the motion while a locate was out. After
+a quarter of a frame of motion or four seconds it locates again (at most every two
+seconds, ten times a shot), and fades if the thing is gone. A mark shows for eight
+seconds from the last time it was found, two at most, and every mark goes on a new
+shot, a flip of the camera or the start of a take.
 
 ### One conversation, the whole shoot
 

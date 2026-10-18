@@ -101,7 +101,8 @@ on a laptop), with a top band (the shots, Director, the way out) and a bottom ba
   everything, reads the line back when asked, goes with the member's own wording, and
   nudges once (twice at most) after fifteen quiet seconds. Director
   can show another shot (`go_to_shot`), flip the camera (`switch_camera`) or change a
-  shot to the member's own idea (`adapt_shot`: "what if I do it with my grandma"), never
+  shot to the member's own idea (`adapt_shot`: "what if I do it with my grandma"), or put
+  a labelled box on something it can see (`point_at`: "your window"), never
   start or stop a take; the screen answers each request with what really happened
   (done, or refused because a take is under way or the camera is off). A changed shot
   shows the member's version on the card (`lib/your-version.ts`), its changed rows
