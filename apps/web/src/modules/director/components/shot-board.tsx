@@ -234,17 +234,17 @@ function NotFilmed({ href }: { href: ShotPage }) {
 function ShotColumn({
   column,
   ...props
-}: ColumnProps & { column: (element: HTMLDivElement | null) => void }) {
+}: ColumnProps & { column: (element: HTMLFieldSetElement | null) => void }) {
   const t = useTranslations("director");
   const { clip, shot, media, picks, retakeHref, onPick } = props;
   const playing = clip.take?.id;
   const directorsPick = shot.takes.find((take) => take.id === shot.pickedTakeId);
   return (
-    <div
+    // A fieldset: the shot's takes are a choice, and the column names what it's for.
+    <fieldset
       ref={column}
-      role="group"
       aria-label={t("editor.clip", { index: clip.index + 1, title: clip.shot.title })}
-      className="flex h-full shrink-0 snap-start flex-col gap-2 overflow-y-auto overscroll-y-contain px-1 [scrollbar-width:none]"
+      className="flex h-full min-w-0 shrink-0 snap-start flex-col gap-2 overflow-y-auto overscroll-y-contain px-1 [scrollbar-width:none]"
       style={{ width: columnWidth(clip.seconds) }}
     >
       <ShotHeader clip={clip} progress={props.progress} onSeek={props.onSeek} />
@@ -284,7 +284,7 @@ function ShotColumn({
           {t("review.retake")}
         </Link>
       ) : null}
-    </div>
+    </fieldset>
   );
 }
 
@@ -316,7 +316,7 @@ export function ShotBoard({
   onSeek: (clip: Clip) => void;
 }) {
   const t = useTranslations("director.editor");
-  const columns = useRef(new Map<number, HTMLDivElement>());
+  const columns = useRef(new Map<number, HTMLFieldSetElement>());
   const active = clips.find((clip) => time < clip.at + clip.seconds)?.index ?? clips.length - 1;
 
   // While it plays, the shot playing comes into view (not while the member looks around).

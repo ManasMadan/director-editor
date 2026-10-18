@@ -2,16 +2,22 @@
 
 import { useApiErrorMessage } from "@repo/client";
 import { useDirectorMediaQuery } from "@repo/client/api/director/media";
+import { useDirectorPlanQuery } from "@repo/client/api/director/plan";
+import { useDirectorShotsQuery } from "@repo/client/api/director/shots";
 import { useFileDownloadUrl } from "@repo/client/api/files/download-url";
 import type { DirectorCut } from "@repo/contracts/api";
 import { GeminiLoader, GeminiShimmer } from "@repo/ui/components/gemini-loader";
 import { cn } from "@repo/ui/lib/utils";
 import { ChevronLeft, Play } from "lucide-react";
 import Link from "next/link";
-import { useFormatter, useTranslations } from "next-intl";
-import { useState } from "react";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
+import { useMemo, useState } from "react";
 import { DirectorGate } from "@/modules/shorts";
+import { useObjectUrl } from "../hooks/use-object-url";
+import { webVtt } from "../lib/captions";
 import { cutsByTemplate, templateThumbnail } from "../lib/cuts";
+import { clipsOf, editLines } from "../lib/edit";
+import { pickedTakes } from "../lib/picks";
 import { timecode } from "../lib/track";
 
 /** Where the cut's publishing stands on YouTube (publishing itself is its own step). */
@@ -42,22 +48,50 @@ function PublishChip({ publish }: { publish: DirectorCut["publish"] }) {
 
 type Playback = { state: "idle" | "loading" | "failed" } | { state: "playing"; url: string };
 
+/**
+ * The cut's captions as a text track, worked out again from its plan and the takes it
+ * picked, as the editor burned them in: for screen readers' players. None while they
+ * load, or when the template has gone.
+ */
+function useCutCaptions(cut: DirectorCut) {
+  const plan = useDirectorPlanQuery(cut.videoId);
+  const ready = plan.data?.status === "ready" ? plan.data.plan : null;
+  const shots = useDirectorShotsQuery(cut.videoId, ready !== null);
+  const vtt = useMemo(() => {
+    if (!ready || !shots.data) {
+      return null;
+    }
+    const clips = clipsOf(ready.shots, pickedTakes(shots.data, cut.picks));
+    return new Blob([webVtt(editLines(clips))], { type: "text/vtt" });
+  }, [ready, shots.data, cut.picks]);
+  return useObjectUrl(vtt);
+}
+
+function CutVideo({ cut, url }: { cut: DirectorCut; url: string }) {
+  const locale = useLocale();
+  const captions = useCutCaptions(cut);
+  return (
+    // The captions are in the picture; the track is there for screen readers' players.
+    <video
+      src={url}
+      controls
+      autoPlay
+      playsInline
+      aria-label={cut.title}
+      className="size-full bg-black object-contain"
+    >
+      <track kind="captions" src={captions ?? undefined} srcLang={locale} label={cut.title} />
+    </video>
+  );
+}
+
 /** The cut's frame: the template's picture until it's tapped, then the cut itself. */
 function CutPlayer({ cut }: { cut: DirectorCut }) {
   const t = useTranslations("director.media");
   const downloadUrl = useFileDownloadUrl();
   const [playback, setPlayback] = useState<Playback>({ state: "idle" });
   if (playback.state === "playing") {
-    return (
-      <video
-        src={playback.url}
-        controls
-        autoPlay
-        playsInline
-        aria-label={cut.title}
-        className="size-full bg-black object-contain"
-      />
-    );
+    return <CutVideo cut={cut} url={playback.url} />;
   }
   const play = () => {
     setPlayback({ state: "loading" });

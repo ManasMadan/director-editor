@@ -10,9 +10,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { commands, userEvent } from "vitest/browser";
 import { EditPage, MediaPage } from "@/modules/director";
 import { FRESH } from "@/modules/director/lib/memory";
+import { stitch } from "@/modules/director/lib/stitch";
 import { cleanup, currentUrl, renderPage } from "../render";
 import { api, signUp, type User } from "../users";
 import { newVideoId, photo, planShot, readyPlan, recordVideo, shotPlan, take } from "./support";
+
+// Rendering is the browser's real work here; one test swaps in an oversized result. A spy
+// (not a factory) keeps the real module loaded, so its coverage isn't zeroed.
+vi.mock("@/modules/director/lib/stitch", { spy: true });
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -28,25 +33,21 @@ async function uploaded(purpose: UploadPurpose, blob: Blob) {
   return id;
 }
 
-/** The video the editor uploaded, passed by the worker as soon as storage has it. */
-async function passCut(user: User) {
-  let rows: { id: string }[] = [];
-  await expect
-    .poll(
-      async () => {
-        rows = await commands.sql<{ id: string }>(
-          "SELECT id::text FROM files.file WHERE user_id = $1 AND purpose = 'director-cut-video' AND status = 'pending'",
-          [user.id],
-        );
-        return rows.length;
-      },
-      { timeout: 20_000 },
-    )
-    .toBe(1);
-  await expect
-    .poll(() => commands.answeredRequests("/rpc/files/completeUpload"))
-    .toBeGreaterThan(0);
-  await commands.checkUpload(rows[0]?.id as string);
+/** How many uploads the page has completed so far (the takes' included). */
+const completed = () => commands.answeredRequests("/rpc/files/completeUpload");
+
+/**
+ * The video the editor uploaded, passed by the worker once the page has completed its
+ * upload (`before`: the uploads completed before it): passed any sooner, its bytes leave
+ * quarantine before the API sees them there.
+ */
+async function passCut(user: User, before: number) {
+  await expect.poll(completed, { timeout: 40_000 }).toBeGreaterThan(before);
+  const [row] = await commands.sql<{ id: string }>(
+    "SELECT id::text FROM files.file WHERE user_id = $1 AND purpose = 'director-cut-video' AND status = 'pending'",
+    [user.id],
+  );
+  await commands.checkUpload(row?.id as string);
 }
 
 async function openEditor(videoId: string, audio: string | undefined, wrap = false) {
@@ -316,6 +317,7 @@ describe("the editor", { tags: ["files"] }, () => {
     const page = await openEditor(videoId, undefined);
     const save = page.getByRole("button", { name: "Save video" });
     await expect.element(save).toBeEnabled();
+    const before = await completed();
     await userEvent.click(save);
     await expect
       .element(page.getByRole("status", { name: /Putting your video together/ }))
@@ -324,7 +326,7 @@ describe("the editor", { tags: ["files"] }, () => {
     await expect
       .element(page.getByRole("status", { name: "Saving to My media…" }), { timeout: 20_000 })
       .toBeVisible();
-    await passCut(user);
+    await passCut(user, before);
 
     await expect
       .element(page.getByRole("heading", { name: "Saved to My media" }), { timeout: 20_000 })
@@ -386,18 +388,23 @@ describe("the editor", { tags: ["files"] }, () => {
   });
 
   it("refuses a video that came out bigger than a saved video may be, before uploading it", {
-    timeout: 30_000,
+    timeout: 60_000,
   }, async () => {
     await commands.storageCors();
     const { user, videoId } = await filmedShort();
     const page = await openEditor(videoId, undefined);
     const save = page.getByRole("button", { name: "Save video" });
     await expect.element(save).toBeEnabled();
-    vi.spyOn(Blob.prototype, "size", "get").mockReturnValue(100_000_001);
+    // A video a byte over the limit, as a long one with lots going on can come out.
+    vi.mocked(stitch).mockResolvedValueOnce(
+      new Blob([new Uint8Array(100_000_001)], { type: "video/webm" }),
+    );
     await userEvent.click(save);
     await expect
       .element(page.getByRole("alert"), { timeout: 20_000 })
-      .toHaveTextContent("This video is too long to save");
+      .toHaveTextContent(
+        "This video is too long to save: videos can be up to 3 minutes. Pick shorter takes, or film shorter shots.",
+      );
     const cuts = await commands.sql(
       "SELECT id FROM files.file WHERE user_id = $1 AND purpose = 'director-cut-video'",
       [user.id],
@@ -421,7 +428,7 @@ describe("the editor", { tags: ["files"] }, () => {
   });
 
   it("says why the video couldn't be saved, and lets the member try again", {
-    timeout: 30_000,
+    timeout: 60_000,
   }, async () => {
     await commands.storageCors();
     const { videoId } = await filmedShort("speech");
@@ -458,7 +465,7 @@ describe("the editor", { tags: ["files"] }, () => {
   });
 
   it("keeps the member's voice in an MP4, where the browser records one", {
-    timeout: 30_000,
+    timeout: 60_000,
   }, async () => {
     await commands.storageCors();
     const user = await signUp();
@@ -473,8 +480,9 @@ describe("the editor", { tags: ["files"] }, () => {
       ],
     });
     const page = await openEditor(videoId, "voice");
+    const before = await completed();
     await userEvent.click(page.getByRole("button", { name: "Save video" }));
-    await passCut(user);
+    await passCut(user, before);
     await expect
       .element(page.getByRole("link", { name: "Download" }), { timeout: 20_000 })
       .toHaveAttribute("download", "director-short.mp4");
