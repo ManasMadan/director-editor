@@ -47,6 +47,14 @@ export const envSchema = {
   // clamd for virus scanning; "none" skips scanning (development only).
   FILE_SCANNER: z.enum(["clamav", "none"]).default("clamav"),
   CLAMAV_URL: z.url({ protocol: /^tcp$/ }).default("tcp://localhost:53310"),
+
+  // Director's continuous recording: each ended attempt is cut into a take through the AI
+  // service (its clipper, on Cloud Run when it has CLIPPER_URL), which also records the
+  // take. Both or neither, like the API's: without them recorded attempts wait.
+  AI_URL: z.url().optional(),
+  AI_SERVICE_SECRET: z.string().min(32).optional(),
+  // Attempts cut at once per process: each holds a take (up to 15 MB) in memory.
+  RECORDING_CONCURRENCY: positive.default(2),
 };
 
 export const env = createEnv({

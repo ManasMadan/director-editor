@@ -675,6 +675,7 @@ describe("maintenance", () => {
       "demo-retention",
       "files-cleanup",
       "outbox-retention",
+      "recording-retention",
       "session-retention",
     ]);
     await queue.close();
