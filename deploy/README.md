@@ -409,6 +409,10 @@ submission account, with that account's password in the `alertmanager-smtp` Secr
 Production refuses to render without an address, and OpenTofu without `alert_email`.
 Mail bounces aren't alerted on yet: Stalwart's metrics aren't scraped.
 
+The dashboards add-on (`platform/dashboards`) puts Grafana dashboards over the services'
+activity logs in Loki: who signed in, one person's timeline, and Director's work
+([docs/observability.md](../docs/observability.md)).
+
 None of that can report the cluster itself dying, or its mail server: the alerts would
 have to leave through them. So the dead man's switch is outside every cluster, in
 GitHub Actions: every half hour `.github/workflows/uptime.yml` runs

@@ -1,0 +1,25 @@
+{{- /*
+One ConfigMap per dashboard in files/, labelled for Grafana's sidecar (kube-prometheus-stack's
+grafana.sidecar.dashboards, label grafana_dashboard="1"). The JSON is the dashboard as
+Grafana exports it, with two placeholders filled in here: the namespace it opens on and
+the Jaeger data source's uid.
+*/}}
+{{- range $path, $_ := .Files.Glob "files/*.json" }}
+{{- $name := base $path | trimSuffix ".json" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-{{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    grafana_dashboard: "1"
+    app.kubernetes.io/name: dashboards
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+  annotations:
+    grafana_folder: {{ $.Values.folder | quote }}
+data:
+  {{ $name }}.json: |-
+    {{- $.Files.Get $path | replace "__NAMESPACE__" $.Values.namespace | replace "__JAEGER_UID__" $.Values.jaegerUid | nindent 4 }}
+{{- end }}

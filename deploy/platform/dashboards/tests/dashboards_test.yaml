@@ -1,0 +1,29 @@
+suite: dashboards
+templates: [dashboards.yaml]
+release: { name: dashboards, namespace: observability }
+tests:
+  - it: makes one ConfigMap per dashboard, labelled for Grafana's sidecar
+    asserts:
+      - hasDocuments: { count: 3 }
+      - isKind: { of: ConfigMap }
+      - equal: { path: 'metadata.labels["grafana_dashboard"]', value: "1" }
+      - equal: { path: metadata.namespace, value: observability }
+      - equal: { path: 'metadata.annotations["grafana_folder"]', value: Director }
+
+  - it: opens each on the application's namespace and links traces to Jaeger
+    documentSelector: { path: metadata.name, value: dashboard-people }
+    asserts:
+      - matchRegex: { path: 'data["people.json"]', pattern: '"value": "director-editor"' }
+      - matchRegex: { path: 'data["people.json"]', pattern: '"datasourceUid": "jaeger"' }
+      - notMatchRegex: { path: 'data["people.json"]', pattern: "__NAMESPACE__|__JAEGER_UID__" }
+
+  - it: opens on another namespace when a cluster asks
+    set: { namespace: pr-7 }
+    documentSelector: { path: metadata.name, value: dashboard-who-did-what }
+    asserts:
+      - matchRegex: { path: 'data["who-did-what.json"]', pattern: '"value": "pr-7"' }
+
+  - it: reads the activity lines' JSON fields
+    documentSelector: { path: metadata.name, value: dashboard-director }
+    asserts:
+      - matchRegex: { path: 'data["director.json"]', pattern: '\| json \| activity=\\"director\.indexed\\"' }

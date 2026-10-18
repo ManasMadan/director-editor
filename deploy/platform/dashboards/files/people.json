@@ -1,0 +1,301 @@
+{
+  "title": "People",
+  "uid": "director-people",
+  "description": "Who signed in and how, from the activity logs (docs/observability.md).",
+  "tags": ["director", "activity"],
+  "timezone": "browser",
+  "editable": true,
+  "schemaVersion": 39,
+  "refresh": "1m",
+  "time": { "from": "now-7d", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Logs",
+        "type": "datasource",
+        "query": "loki",
+        "hide": 0
+      },
+      {
+        "name": "namespace",
+        "label": "Namespace",
+        "type": "query",
+        "datasource": { "type": "loki", "uid": "${datasource}" },
+        "query": "label_values(namespace)",
+        "definition": "label_values(namespace)",
+        "refresh": 2,
+        "current": { "text": "__NAMESPACE__", "value": "__NAMESPACE__" },
+        "hide": 0
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "Who did what",
+      "type": "link",
+      "url": "/d/director-who-did-what?var-namespace=${namespace}&${__url_time_range}"
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Sign-ins",
+      "description": "Successful sign-ins in the time range, every method.",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "instant",
+          "expr": "sum(count_over_time({namespace=\"$namespace\"} |= \"auth.signed_in\" | json | activity=\"auth.signed_in\" | outcome=\"ok\" [$__range]))"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Active people",
+      "description": "Different people who did anything in the time range.",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "instant",
+          "expr": "count(sum by (actor_userId) (count_over_time({namespace=\"$namespace\"} |= \"activity\" | json | activity!=\"\" | actor_userId!=\"\" [$__range])))"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "New accounts",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "instant",
+          "expr": "sum(count_over_time({namespace=\"$namespace\"} |= \"auth.signed_up\" | json | activity=\"auth.signed_up\" | outcome=\"ok\" [$__range]))"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Failed sign-ins",
+      "description": "Wrong passwords or codes, unverified addresses, Google errors, too many tries.",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "instant",
+          "expr": "sum(count_over_time({namespace=\"$namespace\"} |= \"auth.signed_in\" | json | activity=\"auth.signed_in\" | outcome!=\"ok\" [$__range]))"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Sign-ins by method",
+      "description": "password, email-code, google, passkey, two-factor, demo.",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "custom": { "drawStyle": "bars", "stacking": { "mode": "normal" } } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{target_method}}",
+          "expr": "sum by (target_method) (count_over_time({namespace=\"$namespace\"} |= \"auth.signed_in\" | json | activity=\"auth.signed_in\" | outcome=\"ok\" [$__interval]))"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Failed sign-ins by reason",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "custom": { "drawStyle": "bars", "stacking": { "mode": "normal" } } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{target_method}}: {{reason}}",
+          "expr": "sum by (target_method, reason) (count_over_time({namespace=\"$namespace\"} |= \"auth.signed_in\" | json | activity=\"auth.signed_in\" | outcome!=\"ok\" [$__interval]))"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Latest sign-ins",
+      "description": "Who signed in, how, from which address and browser. Click a trace id to open it.",
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 10 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "range",
+          "maxLines": 200,
+          "expr": "{namespace=\"$namespace\"} |= \"auth.signed_in\" | json | activity=\"auth.signed_in\" | outcome=\"ok\""
+        }
+      ],
+      "transformations": [
+        { "id": "extractFields", "options": { "source": "labels", "format": "auto" } },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "Time",
+                "actor_email",
+                "actor_name",
+                "target_method",
+                "actor_demo",
+                "ip",
+                "userAgent",
+                "actor_userId",
+                "traceId"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "actor_email": "Email",
+              "actor_name": "Name",
+              "target_method": "Method",
+              "actor_demo": "Demo account",
+              "ip": "IP",
+              "userAgent": "Browser",
+              "actor_userId": "User id",
+              "traceId": "Trace"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Trace" },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open the trace",
+                    "url": "",
+                    "internal": {
+                      "datasourceUid": "__JAEGER_UID__",
+                      "datasourceName": "Jaeger",
+                      "query": { "query": "${__value.raw}" }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Email" },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Everything they did",
+                    "url": "/d/director-who-did-what?var-namespace=${namespace}&var-person=${__value.raw}&${__url_time_range}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "Failed sign-ins",
+      "description": "The address tried (never the password or code), why it failed, and from where.",
+      "gridPos": { "x": 0, "y": 22, "w": 24, "h": 9 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "range",
+          "maxLines": 200,
+          "expr": "{namespace=\"$namespace\"} |= \"auth.signed_in\" | json | activity=\"auth.signed_in\" | outcome!=\"ok\""
+        }
+      ],
+      "transformations": [
+        { "id": "extractFields", "options": { "source": "labels", "format": "auto" } },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "Time",
+                "actor_email",
+                "target_method",
+                "outcome",
+                "reason",
+                "ip",
+                "userAgent"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "actor_email": "Email tried",
+              "target_method": "Method",
+              "outcome": "Outcome",
+              "reason": "Reason",
+              "ip": "IP",
+              "userAgent": "Browser"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "logs",
+      "title": "The demo account",
+      "description": "Sign-ins to the shared demo account, and what it was refused.",
+      "gridPos": { "x": 0, "y": 31, "w": 24, "h": 9 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{namespace=\"$namespace\"} |= \"activity\" | json | activity=\"auth.demo_refused\" or reason=\"PUBLISH_DEMO_DISABLED\" or target_method=\"demo\" | line_format \"{{.activity}} {{.outcome}} {{.reason}} {{.target_path}}{{.target_procedure}} from {{.ip}}\""
+        }
+      ]
+    }
+  ]
+}

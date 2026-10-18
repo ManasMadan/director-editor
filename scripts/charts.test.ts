@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { charts, kubernetesVersion } from "./charts";
+import { charts, kubernetesVersion, platformRenders } from "./charts";
 import type { Ran } from "./lib";
 import { captureOutput, fakeRun } from "./stand-ins";
 
@@ -202,9 +202,10 @@ describe("the charts check", () => {
       "deploy/environments/staging/secrets/api.yaml: only *.sops.yaml files belong here",
     );
     expect(output).toContain("deploy/platform/secrets/staging/nested: not a file");
-    // Only the environments whose charts both rendered are validated: not production.
+    // Only what rendered is validated: the environments whose charts both did (not
+    // production), the platform's own charts but the mail one, and the optional feature.
     const validated = calls.filter((line) => line.startsWith("kubeconform -strict")).length;
-    expect(validated).toBe(3 + 3 + 1);
+    expect(validated).toBe(3 + (platformRenders(root).length - 1) + 1);
   });
 
   it("fails when Argo CD's chart doesn't render, with helm's error", () => {

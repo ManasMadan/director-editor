@@ -1,0 +1,7 @@
+# Grafana dashboards over the services' activity logs in Loki (deploy/platform/dashboards):
+# People, Who did what and Director. ConfigMaps only, which Grafana's sidecar picks up;
+# after kube-prometheus-stack, whose Grafana they're for.
+addon: dashboards
+namespace: observability
+path: deploy/platform/dashboards
+wave: "10"
