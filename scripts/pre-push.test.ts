@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { testEnvironment } from "../packages/testing/src/environment";
 import type { Area } from "./changes";
 import { PLACEHOLDER, type Ran, ROOT } from "./lib";
 import {
@@ -405,6 +406,11 @@ describe("the infra check", () => {
 
 describe("the database steps", () => {
   const database = `prepush_${process.pid}`;
+  // This machine's ports: .env.example's, or its stack's (.env.stack) in a checkout with
+  // a stack of its own.
+  const local = testEnvironment(join(ROOT, ".env.example"));
+  const postgres = new URL(local.MIGRATOR_DATABASE_URL ?? "").host;
+  const valkey = new URL(local.REDIS_URL ?? "").host;
 
   it("migrate a database of their own, check drift on it and drop it", async () => {
     const { ctx, calls, options } = context();
@@ -417,9 +423,9 @@ describe("the database steps", () => {
     expect(calls[4]).toContain(`DROP DATABASE IF EXISTS ${database}_drift WITH (FORCE)`);
     const env = options[2]?.env ?? {};
     expect(env.MIGRATOR_DATABASE_URL).toBe(
-      `postgresql://migrator:migrator@localhost:55432/${database}_drift`,
+      `postgresql://migrator:migrator@${postgres}/${database}_drift`,
     );
-    expect(env.AI_DATABASE_URL).toEndWith(`@localhost:55432/${database}_drift`);
+    expect(env.AI_DATABASE_URL).toEndWith(`@${postgres}/${database}_drift`);
     expect(env.SHADOW_DATABASE_URL).toEndWith("/app_shadow");
   });
 
@@ -442,10 +448,8 @@ describe("the database steps", () => {
       `bun run db:restore-drill ${database}_e2e`,
     ]);
     const env = options[4]?.env ?? {};
-    expect(env.API_DATABASE_URL).toBe(
-      `postgresql://app_api:app_api@localhost:55432/${database}_e2e`,
-    );
-    expect(env.REDIS_URL).toBe("redis://localhost:56379/21");
+    expect(env.API_DATABASE_URL).toBe(`postgresql://app_api:app_api@${postgres}/${database}_e2e`);
+    expect(env.REDIS_URL).toBe(`redis://${valkey}/21`);
     expect(env.S3_BUCKET).toBe("uploads");
     expect(env.GOOGLE_CLIENT_ID).toBe("");
     expect(env.CLAMAV_URL).toBe("tcp://127.0.0.1:9");

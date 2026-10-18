@@ -112,7 +112,11 @@ describe("image smoke", () => {
   );
 
   it("gives the AI service every setting it has no default for", async () => {
-    const settings = await Bun.file(`${import.meta.dir}/../apps/ai/app/settings.py`).text();
+    const file = await Bun.file(`${import.meta.dir}/../apps/ai/app/settings.py`).text();
+    // The service's own settings (Settings and the Gemini ones it extends), up to the next
+    // class: the indexer, clipper and aligner settings below are other deployments'.
+    const service = file.indexOf("\nclass Settings(");
+    const settings = file.slice(0, file.indexOf("\nclass ", service + 1));
     const required = [...settings.matchAll(/Field\((?:min_length=\d+, )?alias="(\w+)"\)/g)].map(
       (match) => match[1] ?? "",
     );
