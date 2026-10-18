@@ -26,10 +26,15 @@ TypeScript client is `packages/ai-client`.
   billed, which the 40-clip cap counts). `<bucket>` must be the bucket the API serves
   files from (production's GCS bucket): locally the API reads RustFS, where those keys
   404. `--dry-run` needs no bucket and lists every prompt and the cost
-  (`scripts/seed_media.py`)
+  (`scripts/seed_media.py`); it also draws the default image of each still among a
+  seed's assets
+- To give the seeds the assets and edits a newer planner finds without making their
+  media again: `bun run --filter @repo/ai seeds:assets [-- --only <videoId>]` indexes
+  each seed again on Vertex AI and keeps only its assets and edits, fitted to the seed's
+  own shots (`scripts/seed_assets.py`); then `seeds:media` for their images
 - After changing indexing (the planner prompt, `repair_plan`, `INDEX_MODEL`):
-  `bun run --filter @repo/ai evals:index` indexes the 12 Shorts in `evals/shorts.json`
-  on Vertex AI and fails unless every one gives a filmable plan
+  `bun run --filter @repo/ai evals:index` indexes the 16 Shorts in `evals/shorts.json`
+  on Vertex AI and fails unless every one gives a filmable plan with what its row expects
 
 ## Where things are
 
@@ -44,7 +49,9 @@ TypeScript client is `packages/ai-client`.
   tests use it instead of Starlette's untyped `app.state`).
 - `app/director.py`: plans, scene checks and take reviews; `app/plan_repair.py` fixes
   inconsistent shot plans; `app/audio.py` captures a short's original audio;
-  `app/speech.py` speaks a guide line with Gemini's text-to-speech (`TTS_MODEL`).
+  `app/speech.py` speaks a guide line with Gemini's text-to-speech (`TTS_MODEL`);
+  `app/assets.py` draws the default images of a plan's assets with Nano Banana
+  (`ASSET_MODEL`, the `assets` job) into `MEDIA_BUCKET`.
 - `app/indexing.py`: indexing a short (`index_short`, `LocalIndexer`), or sending it to
   the Cloud Run indexer (`RemoteIndexer`, when `INDEXER_URL` is set). `app/indexer.py`
   is that indexer (`uvicorn app.indexer:app`, its own `IndexerSettings`, no database);

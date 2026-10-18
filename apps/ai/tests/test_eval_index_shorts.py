@@ -21,6 +21,7 @@ from app.settings import Settings, get_settings
 from evals.index_shorts import (
     APP_ROOT,
     EvalShort,
+    Expectation,
     Indexed,
     ShortResult,
     describe,
@@ -122,11 +123,11 @@ def result(**fields: object) -> ShortResult:
 # ---------------------------------------------------------------------------- shorts.json
 
 
-def test_shorts_json_has_the_6_seeds_and_6_hard_cases() -> None:
+def test_shorts_json_has_the_6_seeds_6_hard_cases_and_4_that_need_more() -> None:
     shorts = load_shorts()
     seeds = load_seeds()
 
-    assert len({short.videoId for short in shorts}) == 12
+    assert len({short.videoId for short in shorts}) == 16
     assert [short.videoId for short in shorts[:6]] == [seed.videoId for seed in seeds]
     assert [short.kind for short in shorts[6:]] == [
         "no-person",
@@ -135,7 +136,19 @@ def test_shorts_json_has_the_6_seeds_and_6_hard_cases() -> None:
         "fast-cuts",
         "photo-slideshow",
         "long",
+        "split-screen-chart",
+        "split-screen-card",
+        "voiceover-infographic",
+        "interview-broll",
     ]
+    # The owner's three, and the multi-angle one, each expect what makes them what they
+    # are; the rest expect only filmable shots.
+    expected = {short.videoId: short.expect for short in shorts[12:]}
+    assert expected["OvRozQobeuI"] == Expectation(
+        layout="split", stills=1, captions=True, endCard=True
+    )
+    assert expected["IFBBmwsGpUw"].shotKinds == ["voiceover"]
+    assert all(short.expect == Expectation() for short in shorts[:12])
 
 
 def test_load_shorts_refuses_a_malformed_video_id(tmp_path: Path) -> None:
@@ -171,6 +184,91 @@ def test_judge_names_each_shot_missing_a_scene_framing_or_step() -> None:
         "shot 2: no scene",
         "shot 2: no framing",
         "shot 2: no step",
+    ]
+
+
+ASSET: dict[str, object] = {
+    "id": "chart",
+    "kind": "image",
+    "title": "The chart",
+    "role": "Under the speaker",
+    "description": "A chart of twelve archetypes.",
+    "reference": {
+        "subject": "Twelve archetypes",
+        "composition": "Title on top, rows below",
+        "style": "Flat infographic",
+        "palette": "Black and white",
+        "blackAndWhite": True,
+        "aspectRatio": "9:8",
+        "text": [],
+        "mood": "Bold",
+    },
+    "prompt": "A flat black-and-white chart.",
+    "sourceStartSeconds": 0,
+    "sourceEndSeconds": 4,
+    "defaultSource": "create",
+    "personalisable": True,
+    "ask": None,
+    "secondScreen": False,
+}
+TIMED: dict[str, object] = {"startSeconds": 0, "endSeconds": 4}
+SPLIT: dict[str, object] = {
+    "type": "layout",
+    **TIMED,
+    "layout": "split",
+    "assetId": "chart",
+    "cameraOn": "top",
+    "cameraShare": 0.5,
+    "box": None,
+    "inset": None,
+}
+CAPTIONS: dict[str, object] = {
+    "type": "text",
+    **TIMED,
+    "style": "captions",
+    "text": None,
+    "position": "between-halves",
+    "captionStyle": "word-by-word",
+    "color": None,
+    "highlightColor": None,
+}
+EVERYTHING = Expectation(
+    layout="split", stills=1, shotKinds=["voiceover"], captions=True, gaps=True, endCard=True
+)
+
+
+def test_judge_names_what_a_short_expects_that_its_plan_hasn_t() -> None:
+    assert judge(ShotPlan.model_validate(PLAN), EVERYTHING) == [
+        "no split layout",
+        "0 of 1 stills to make",
+        "no voiceover shot",
+        "no captions",
+        "no B-roll gap",
+        "no end card",
+    ]
+
+
+def test_judge_passes_a_plan_with_everything_its_short_expects() -> None:
+    plan = plan_with(
+        {"kind": "voiceover"},
+        assets=[ASSET],
+        edits=[
+            SPLIT,
+            CAPTIONS,
+            {"type": "gap", **TIMED, "description": "B-roll of a hall"},
+            {"type": "end-card", **TIMED, "assetId": None, "text": "Apply now"},
+        ],
+    )
+    assert judge(ShotPlan.model_validate(plan), EVERYTHING) == []
+    # An end card can be an asset rather than an edit.
+    card = {**ASSET, "id": "card", "kind": "end-card"}
+    assert judge(ShotPlan.model_validate(plan_with(assets=[card])), Expectation(endCard=True)) == []
+
+
+def test_judge_names_an_asset_there_s_nothing_to_make_from() -> None:
+    blank = {**ASSET, "prompt": " "}
+    assert judge(ShotPlan.model_validate(plan_with(assets=[blank]))) == [
+        "asset chart: nothing to make it from"
     ]
 
 
@@ -300,7 +398,7 @@ def test_describe_a_passing_short() -> None:
 
     assert line == (
         "PASS 22k0fZarxh8 talking-head shots=1 script=yes pose=yes model=gemini-4-argon "
-        "12.3s repaired=durationSeconds, shots[].steps (count)"
+        "12.3s assets=0 edits=0 repaired=durationSeconds, shots[].steps (count)"
     )
 
 
@@ -309,7 +407,7 @@ def test_describe_a_short_that_failed_the_judgement() -> None:
 
     assert line == (
         "FAIL 22k0fZarxh8 talking-head shots=1 script=no pose=no model=gemini-4-argon "
-        "12.3s repaired=none problems=shot 1: no scene; shot 2: no step"
+        "12.3s assets=0 edits=0 repaired=none problems=shot 1: no scene; shot 2: no step"
     )
 
 

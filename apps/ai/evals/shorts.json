@@ -82,5 +82,37 @@
     "channel": "Mishti Pandey",
     "kind": "long",
     "why": "A 2 min 36 s Short in Hindi: near the 3-minute limit, so the most tokens per plan and the most shots to fit into twelve."
+  },
+  {
+    "videoId": "OvRozQobeuI",
+    "title": "Discover Your Unique Thinking Archetype",
+    "channel": "Test Library",
+    "kind": "split-screen-chart",
+    "why": "The speaker on top and a static archetypes chart underneath for the whole talk, word-by-word captions between the halves, then an end card: the chart is an asset to recreate, not to film.",
+    "expect": { "layout": "split", "stills": 1, "captions": true, "endCard": true }
+  },
+  {
+    "videoId": "kM_NHn_MT3Q",
+    "title": "WVCI V2",
+    "channel": "be10X",
+    "kind": "split-screen-card",
+    "why": "A split screen the whole way: the speaker on top, a headline card underneath, boxed captions between them.",
+    "expect": { "layout": "split", "stills": 1, "captions": true }
+  },
+  {
+    "videoId": "IFBBmwsGpUw",
+    "title": "Mastering Claude in 2026",
+    "channel": "be10X",
+    "kind": "voiceover-infographic",
+    "why": "A full-frame infographic drawn on as a voice-over talks: nothing for the viewer to film but their voice, and the image to recreate.",
+    "expect": { "stills": 1, "shotKinds": ["voiceover"], "captions": true }
+  },
+  {
+    "videoId": "b5G8cbgh7K0",
+    "title": "Build your startup. Straight out of college",
+    "channel": "Mesa School",
+    "kind": "interview-broll",
+    "why": "An interview from two angles cut with B-roll under lower thirds, highlighted captions and an end card: the B-roll moments are gaps to fill.",
+    "expect": { "gaps": true, "captions": true, "endCard": true }
   }
 ]

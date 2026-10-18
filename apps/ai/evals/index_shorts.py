@@ -1,5 +1,6 @@
-"""The indexing evaluation: indexes the 12 Shorts in evals/shorts.json (the 6 seeds and 6
-hard cases) for real, with Gemini on Vertex AI, the same way the plan job indexes a
+"""The indexing evaluation: indexes the 16 Shorts in evals/shorts.json (the 6 seeds, 6
+hard cases and 4 that need more than the viewer filming: assets, voice-overs and edits)
+for real, with Gemini on Vertex AI, the same way the plan job indexes a
 member's own Short (`app.indexing.index_short`, its retries and fallback included), and
 says for each one whether the plan is usable. Run from the repo root:
 
@@ -13,12 +14,15 @@ spends real tokens on every Short, so it never starts by accident. `--only <vide
 gets the app's own budget, DIRECTOR_TOKENS_PER_PLAN, so one that is too long for the app
 fails here too.
 
-The bar: every Short indexes, and every shot of its plan has a scene, a framing, a
-phone angle and at least one step. The command prints a line per Short (its shots,
-whether it has a script and a pose, which fields `repair_plan` had to change, the model
-that answered and how long it took) and a summary, and exits non-zero unless every
-Short passed. The Shorts run one at a time: Vertex AI's quotas are per minute, and
-gemini-4-argon sometimes answers a video with a 500 that `index_short` retries anyway.
+The bar: every Short indexes, every shot of its plan has a scene, a framing, a phone
+angle and at least one step, every asset has a prompt and a reference to make it from,
+and a Short whose row says what it `expect`s (a split screen, a still to make, voice-over
+shots, captions, B-roll gaps, an end card) gets a plan that has it. The command prints a
+line per Short (its shots, whether it has a script and a pose, how many assets and edits,
+which fields `repair_plan` had to change, the model that answered and how long it took)
+and a summary, and exits non-zero unless every Short passed. The Shorts run one at a
+time: Vertex AI's quotas are per minute, and gemini-4-argon sometimes answers a video
+with a 500 that `index_short` retries anyway.
 """
 
 import argparse
@@ -32,10 +36,19 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter
 from pydantic_ai.usage import RunUsage, UsageLimits
 
+from app.assets import STILL_KINDS
 from app.director import create_index_model, create_planner_agent
 from app.indexing import index_short
 from app.log import configure_logging, log
-from app.schemas import VIDEO_ID_PATTERN, ShotPlan, ShotPlanDraft
+from app.schemas import (
+    VIDEO_ID_PATTERN,
+    LayoutEdit,
+    LayoutKind,
+    ShotKind,
+    ShotPlan,
+    ShotPlanDraft,
+    TextEdit,
+)
 from app.settings import Settings, get_settings
 
 APP_ROOT = Path(__file__).resolve().parents[1]
@@ -44,8 +57,24 @@ SHORTS_PATH = APP_ROOT / "evals" / "shorts.json"
 USAGE_ERROR = 2
 
 
+class Expectation(BaseModel):
+    """What a Short's plan must have beyond filmable shots, from looking at the Short:
+    a layout edit of this kind, at least this many stills to make (an image, a card, an end
+    card), a shot of each of these kinds, captions, a B-roll gap, an end card."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    layout: LayoutKind | None = None
+    stills: int = Field(default=0, ge=0)
+    shotKinds: list[ShotKind] = Field(default_factory=list[ShotKind])
+    captions: bool = False
+    gaps: bool = False
+    endCard: bool = False
+
+
 class EvalShort(BaseModel):
-    """One row of shorts.json: the Short, and why it's in the evaluation."""
+    """One row of shorts.json: the Short, why it's in the evaluation, and what its plan
+    is expected to have."""
 
     model_config = ConfigDict(strict=True, extra="forbid")
 
@@ -54,6 +83,7 @@ class EvalShort(BaseModel):
     channel: str = Field(min_length=1)
     kind: str = Field(min_length=1)
     why: str = Field(min_length=1)
+    expect: Expectation = Field(default_factory=Expectation)
 
 
 class Indexed(BaseModel):
@@ -107,11 +137,13 @@ def load_shorts(path: Path = SHORTS_PATH) -> list[EvalShort]:
     return _SHORTS.validate_json(path.read_text())
 
 
-def judge(plan: ShotPlan) -> list[str]:
+def judge(plan: ShotPlan, expect: Expectation | None = None) -> list[str]:
     """What keeps `plan` from being filmable, shot by shot: a scene, a framing and a step
-    a filmer can actually read. Blank text gets past the schema (a space is a character);
-    a shot with no framing or phone angle at all doesn't (ShotPlan refuses it, and
-    indexing fails instead), so those are always there by the time a plan is judged."""
+    a filmer can actually read; then what keeps its assets from being made (a prompt and
+    a subject to make each from), and what `expect`ed it doesn't have. Blank text gets
+    past the schema (a space is a character); a shot with no framing or phone angle at
+    all doesn't (ShotPlan refuses it, and indexing fails instead), so those are always
+    there by the time a plan is judged."""
     problems: list[str] = []
     for number, shot in enumerate(plan.shots, start=1):
         if not shot.scene.strip():
@@ -120,7 +152,31 @@ def judge(plan: ShotPlan) -> list[str]:
             problems.append(f"shot {number}: no framing")
         if not any(step.instruction.strip() for step in shot.steps):
             problems.append(f"shot {number}: no step")
-    return problems
+    for asset in plan.assets:
+        if not asset.prompt.strip() or not asset.reference.subject.strip():
+            problems.append(f"asset {asset.id}: nothing to make it from")
+    return problems + _missing(plan, expect or Expectation())
+
+
+def _missing(plan: ShotPlan, expect: Expectation) -> list[str]:
+    """What `expect` asks of the plan that it hasn't."""
+    edits = {edit.type for edit in plan.edits}
+    layouts = {edit.layout for edit in plan.edits if isinstance(edit, LayoutEdit)}
+    captions = any(isinstance(edit, TextEdit) and edit.style == "captions" for edit in plan.edits)
+    stills = [asset for asset in plan.assets if asset.kind in STILL_KINDS]
+    end_card = "end-card" in edits or any(asset.kind == "end-card" for asset in plan.assets)
+    checks = [
+        (expect.layout is None or expect.layout in layouts, f"no {expect.layout} layout"),
+        (len(stills) >= expect.stills, f"{len(stills)} of {expect.stills} stills to make"),
+        *[
+            (any(shot.kind == kind for shot in plan.shots), f"no {kind} shot")
+            for kind in expect.shotKinds
+        ],
+        (captions or not expect.captions, "no captions"),
+        ("gap" in edits or not expect.gaps, "no B-roll gap"),
+        (end_card or not expect.endCard, "no end card"),
+    ]
+    return [problem for met, problem in checks if not met]
 
 
 def repaired_fields(draft: ShotPlanDraft, plan: ShotPlan) -> list[str]:
@@ -176,7 +232,7 @@ async def evaluate_short(short: EvalShort, index: Indexer, clock: Clock) -> Shor
         model=entry.model,
         plan=entry.plan,
         repaired=repaired_fields(entry.draft, entry.plan),
-        problems=judge(entry.plan),
+        problems=judge(entry.plan, short.expect),
         error=None,
     )
 
@@ -204,6 +260,8 @@ def describe(result: ShortResult) -> str:
     )
     if result.error is not None:
         return f"{line} error={result.error}"
+    if result.plan is not None:
+        line += f" assets={len(result.plan.assets)} edits={len(result.plan.edits)}"
     line += f" repaired={', '.join(result.repaired) or 'none'}"
     if result.problems:
         line += f" problems={'; '.join(result.problems)}"
