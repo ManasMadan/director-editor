@@ -22,6 +22,21 @@ profile (`bun dev:full`, `bun run test:coverage`); the start refuses when they d
 repository created in Docker. [docs/troubleshooting.md](docs/troubleshooting.md) has the
 fixes for what usually goes wrong.
 
+## Everyday commands
+
+| Task | Command |
+|---|---|
+| Lint, formatting, boundaries, unused code | `bun run lint` (`bun run format` fixes) |
+| Types | `bun run check-types` |
+| Unit tests | `bun run test` |
+| Integration tests (real Postgres, Valkey, Mailpit) | `bun run test:integration` |
+| End-to-end (web, and the API's fuzzing); stop `bun dev` first, it refuses busy ports | `bun run test:e2e` |
+| Regenerate code after a schema or contract change | `bun run gen` |
+| New migration | `bun run db:migrate` |
+| Set a secret in `.env` | `bun run env:set KEY=value` |
+
+[docs/testing.md](docs/testing.md) covers every test layer and what CI runs.
+
 ## Making a change
 
 1. Branch from `master`: `<type>/<what>`, with a Conventional Commits type (`feat/`,

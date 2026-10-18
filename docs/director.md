@@ -6,6 +6,9 @@ own they paste a link to), Gemini watches it and writes the shot plan (how many 
 which are videos and which photos, in what order, where to stand, how to hold the phone,
 what to say), and the camera screen guides each take live. Gemini then reviews each take
 and picks its best part, and the browser stitches the takes into the finished short.
+This page covers the screens, Director Live's guides, the data and the demo account;
+[how-it-works.md](how-it-works.md) follows each step underneath (indexing, the live call,
+reviews, the editor, publishing).
 
 ```
 apps/web (library, camera)    ──@repo/client──▶  apps/api  ──ai-client (JWT)──▶  apps/ai  ──▶  Gemini
@@ -27,7 +30,8 @@ Director stays off until you set real keys:
 bun run setup                              # once: .env from .env.example
 bun run env:set S3_BUCKET=uploads          # takes are uploads
 bun run env:set YOUTUBE_API_KEY=...        # a YouTube Data API v3 key
-bun run env:set GOOGLE_API_KEY=...         # a Gemini API key, or a Vertex key (below)
+bun run env:set GOOGLE_API_KEY=...         # a Vertex key, or a Gemini API key (below)
+bun run env:set GOOGLE_CLOUD_PROJECT=...   # the Vertex project; also turns on the live call
 bun run env:set DIRECTOR_MODEL=gemini-3.8-flash
 bun dev:full                               # the AI service, RustFS and ClamAV too
 ```
@@ -148,13 +152,16 @@ The seams, each documented in its file:
 | Concern | Now | Later | Where |
 |---|---|---|---|
 | What Director remembers | this browser's storage | an API procedure, a row per member | `MemoryStore` in `apps/web/src/modules/director/lib/memory.ts` |
-| Director's voice | the browser's speech synthesis | a streamed voice (Gemini Live's native audio) | `say`, `hush`, `saying` in `lib/speech.ts` |
-| Hearing the member | the browser's speech recogniser | a streamed transcript from the same live session | `useListening` in `hooks/use-listening.ts` |
-| Looking at the scene | a Gemini call per frame (`checkScene`) | a live session streaming frames | `useSceneGuide` in `hooks/use-scene-guide.ts` |
+| Director's voice | Gemini's text-to-speech (`director.speak`), the browser's speech synthesis when it fails; on a call, Gemini Live | Gemini Live's voice off a call too | `say`, `hush`, `saying` in `lib/speech.ts` |
+| Hearing the member | the browser's speech recogniser; on a call, Gemini Live hears them itself | a streamed transcript from a live session off a call too | `useListening` in `hooks/use-listening.ts` |
+| Looking at the scene | a Gemini call per frame (`checkScene`); on a call, Gemini Live sees a frame a second | a live session streaming frames off a call too | `useSceneGuide` in `hooks/use-scene-guide.ts` |
 
 With "use the original audio", the take records no sound and the original plays while
-filming; the finished short is silent, for the original sound to be added when posting
-on YouTube ("Use this sound"). Director never downloads a YouTube video.
+filming, in YouTube's own embedded player; the finished short is silent, for the original
+sound to be added when posting on YouTube ("Use this sound"). Director never downloads a
+YouTube video's picture: indexing captures only its audio track
+([how-it-works.md](how-it-works.md#the-originals-audio)), which a plan links as
+`audio.url`.
 
 ## Phones
 
@@ -226,7 +233,7 @@ the seeds.
 Everyone shares the account, so (`apps/api/src/auth/demo.ts`):
 
 - it can't publish: publishing refuses a session whose `session.user.demo` is true with
-  `DEMO_ACCOUNT_LOCKED`;
+  `PUBLISH_DEMO_DISABLED` <!-- verify after publish merges -->;
 - it can't change, lock or empty the account or its workspace: changing the password,
   deleting the account, turning on two-step verification, linking a Google account, ending
   sessions, renaming itself or changing its picture, and making, renaming, leaving or
