@@ -15,6 +15,9 @@ export const directorRouter = ({ inOrg }: Procedures, director: DirectorService)
   checkScene: inOrg.director.checkScene.handler(({ context, input }) =>
     director.checkScene(context.userId, context.orgId, input),
   ),
+  speak: inOrg.director.speak.handler(({ context, input }) =>
+    director.speak(context.userId, context.orgId, input),
+  ),
   takes: inOrg.director.takes.handler(({ context, input }) =>
     director.takes(context.userId, context.orgId, input.videoId),
   ),

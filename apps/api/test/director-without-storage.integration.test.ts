@@ -11,6 +11,7 @@ import { createSession, type Harness, newEmail, newPassword, startApi, takeOtp }
 
 let harness: Harness;
 let ai: Server;
+let aiRequests = 0;
 
 const plan = {
   id: randomUUID(),
@@ -30,6 +31,7 @@ const plan = {
 beforeAll(async () => {
   // The library is all this file asks the AI service for.
   ai = createServer((_request, response) => {
+    aiRequests += 1;
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({ templates: [plan], indexUsed: false }));
   });
@@ -56,5 +58,23 @@ describe("Director without uploads", () => {
     await session.auth("/email-otp/verify-email", { email, otp });
     const { templates } = await session.rpc.director.library();
     expect(templates.map((template) => template.audio)).toEqual([{ status: "ready", url: null }]);
+  });
+
+  it("has no voice of its own: there's nowhere to keep a spoken line", async () => {
+    const session = createSession(harness);
+    const email = newEmail();
+    await session.auth("/sign-up/email", { email, password: newPassword(), name: "No voice" });
+    const { otp } = await takeOtp(harness, email);
+    await session.auth("/email-otp/verify-email", { email, otp });
+    const asked = aiRequests;
+    const error = await session.rpc.director
+      .speak({ text: "Step back.", voice: "Puck" })
+      .catch((e: unknown) => e);
+    expect(error).toMatchObject({
+      code: "FEATURE_DISABLED",
+      data: { params: { feature: "files" } },
+    });
+    // The model is never asked for a line the browser would then have no link to.
+    expect(aiRequests).toBe(asked);
   });
 });

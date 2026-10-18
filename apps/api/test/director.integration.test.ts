@@ -30,6 +30,14 @@ const GONE = "GoneVideo01";
 const SOMEONE_ELSES_TAKE = randomUUID();
 /** A plan the AI service fails to read. */
 const BROKEN = "BrokenPlan1";
+/** A line the AI service has no budget left to say. */
+const OVER_BUDGET = "Over budget.";
+/** What the AI service says a line as: a WAV file's header, then the line and voice. */
+const spoken = (text: string, voice: string) =>
+  Buffer.concat([
+    Buffer.from("RIFF\x00\x00\x00\x00WAVE", "latin1"),
+    Buffer.from(`${voice}:${text}`),
+  ]);
 
 let harness: Harness;
 let youtube: Server;
@@ -288,6 +296,13 @@ async function aiRoute(request: IncomingMessage, response: ServerResponse) {
     };
     takes.push(take);
     return send(response, 201, takeOut(take));
+  }
+  if (route === "POST /v1/director/speak") {
+    if (body.text === OVER_BUDGET) {
+      return fail(429, "AI_BUDGET_EXCEEDED");
+    }
+    response.writeHead(200, { "content-type": "audio/wav" });
+    return response.end(spoken(String(body.text), String(body.voice)));
   }
   const takesMatch = /^GET \/v1\/director\/plans\/([\w-]{11})\/takes$/.exec(route);
   if (takesMatch) {
@@ -782,6 +797,64 @@ describe("Director", () => {
     expect(expiresAt).toBeInstanceOf(Date);
     const other = await signedIn();
     await expectError(other.session.rpc.files.downloadUrl({ fileId: file.id }), "FILE_NOT_FOUND");
+  });
+});
+
+describe("Director's voice", { tags: ["files"] }, () => {
+  const speeches = () => aiCalls.filter((call) => call.route === "POST /v1/director/speak");
+
+  it("speaks a line once and keeps it, handing back a short-lived link to the WAV file", async () => {
+    const { session, me } = await signedIn();
+    // Stored lines outlive a run: a line of this run's own.
+    const text = `Take a small step to your left. ${randomUUID()}`;
+    const before = speeches().length;
+    const first = await session.rpc.director.speak({ text: `  ${text} `, voice: "Puck" });
+    expect(first.expiresAt).toBeInstanceOf(Date);
+    const audio = await fetch(first.url);
+    expect(audio.headers.get("content-type")).toBe("audio/wav");
+    expect(Buffer.from(await audio.arrayBuffer())).toEqual(spoken(text, "Puck"));
+    expect(speeches().slice(before)).toEqual([
+      expect.objectContaining({ user: me.id, body: { text, voice: "Puck" } }),
+    ]);
+
+    // The same line again, from anyone, is the one already spoken: no second model call.
+    const other = await signedIn();
+    const again = await other.session.rpc.director.speak({ text, voice: "Puck" });
+    expect(Buffer.from(await (await fetch(again.url)).arrayBuffer())).toEqual(spoken(text, "Puck"));
+    expect(speeches().length).toBe(before + 1);
+
+    // Another voice is another recording.
+    await session.rpc.director.speak({ text, voice: "Kore" });
+    expect(speeches().length).toBe(before + 2);
+  });
+
+  it("passes on the AI service's refusal, keeping nothing", async () => {
+    const { session } = await signedIn();
+    const before = speeches().length;
+    await expectError(
+      session.rpc.director.speak({ text: OVER_BUDGET, voice: "Puck" }),
+      "AI_BUDGET_EXCEEDED",
+    );
+    await expectError(
+      session.rpc.director.speak({ text: OVER_BUDGET, voice: "Puck" }),
+      "AI_BUDGET_EXCEEDED",
+    );
+    // Asked again each time: a refusal is never stored as the line.
+    expect(speeches().length).toBe(before + 2);
+  });
+
+  it("refuses a line that isn't one, before the AI service hears of it", async () => {
+    const { session } = await signedIn();
+    const before = aiCalls.length;
+    await expectError(
+      session.rpc.director.speak({ text: "x".repeat(501), voice: "Puck" }),
+      "VALIDATION_FAILED",
+    );
+    await expectError(
+      session.rpc.director.speak({ text: "   ", voice: "Puck" }),
+      "VALIDATION_FAILED",
+    );
+    expect(aiCalls.length).toBe(before);
   });
 });
 

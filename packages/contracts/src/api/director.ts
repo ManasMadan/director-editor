@@ -17,7 +17,7 @@ import {
   fileIdSchema,
   videoIdSchema,
 } from "../ids";
-import { HOUR_S } from "../time";
+import { HOUR_S, MINUTE_S } from "../time";
 import { base, EVERYDAY_WRITES, errorsOf, WORKSPACE_ERRORS } from "./base";
 import { SHORT_URL_MAX_LENGTH } from "./shorts";
 
@@ -48,6 +48,11 @@ const DIRECTOR_MAX_SHOT_SECONDS = 60;
 /** A scene check's camera frame, base64 (a 640-pixel JPEG is 40-120 kB). */
 export const DIRECTOR_FRAME_MAX_LENGTH = 400_000;
 export const DIRECTOR_FRAME_MIN_LENGTH = 100;
+/** A line Director says aloud: a guide, a cue or a script line, never a speech. */
+const DIRECTOR_SPEECH_MAX_LENGTH = 500;
+/** The voices Director may speak in (Gemini's prebuilt text-to-speech voices). */
+const directorVoices = ["Puck", "Kore", "Aoede", "Charon", "Sulafat"] as const;
+export type DirectorVoice = (typeof directorVoices)[number];
 
 const fraction = z.number().min(0).max(1);
 const boxSchema = z.object({
@@ -258,6 +263,10 @@ export const directorCutSchema = z.object({
 });
 export type DirectorCut = z.infer<typeof directorCutSchema>;
 
+/** A spoken line, stored as a WAV file: a short-lived link to play it from. */
+const directorSpeechSchema = z.object({ url: z.url(), expiresAt: z.date() });
+export type DirectorSpeech = z.infer<typeof directorSpeechSchema>;
+
 const route = (method: "GET" | "POST", path: `/${string}`, summary: string) =>
   base.errors(errors).route({ method, path, tags: ["Director"], summary });
 
@@ -292,6 +301,22 @@ export const directorContract = {
       }),
     )
     .output(sceneCheckSchema),
+  /**
+   * A line in Director's own voice (Gemini's text-to-speech), for the shoot screen to play
+   * when the member isn't on a live call. The same line in the same voice is spoken once
+   * and kept, so asking again costs no model call. Needs uploads on (FEATURE_DISABLED).
+   */
+  speak: route("POST", "/director/speech", "Hear a line in Director's voice")
+    .meta({
+      rateLimit: { name: "director-speech", points: 60, windowSeconds: MINUTE_S, per: "user" },
+    })
+    .input(
+      z.object({
+        text: z.string().trim().min(1).max(DIRECTOR_SPEECH_MAX_LENGTH),
+        voice: z.enum(directorVoices),
+      }),
+    )
+    .output(directorSpeechSchema),
   /** The caller's takes for the short, newest first. */
   takes: route("GET", "/director/{videoId}/takes", "Your takes for a short")
     .input(z.object({ videoId: videoIdSchema }))
