@@ -30,9 +30,22 @@ describe("a failed upload", () => {
     );
   });
 
+  it("is today's allowance used up when YouTube says the quota or its rate is spent", () => {
+    for (const reason of [
+      "quotaExceeded",
+      "dailyLimitExceeded",
+      "uploadLimitExceeded",
+      "rateLimitExceeded",
+    ]) {
+      expect(codeOf(publishErrorOf(new YouTubeUploadError(403, reason))), reason).toBe(
+        "PUBLISH_QUOTA_EXHAUSTED",
+      );
+    }
+  });
+
   it("is YouTube being unavailable otherwise, and anything else stays as it is", () => {
-    const quota = publishErrorOf(new YouTubeUploadError(403, "quotaExceeded"));
-    expect(quota).toMatchObject({ code: "UPSTREAM_UNAVAILABLE", params: { service: "youtube" } });
+    const outage = publishErrorOf(new YouTubeUploadError(503, "backendError"));
+    expect(outage).toMatchObject({ code: "UPSTREAM_UNAVAILABLE", params: { service: "youtube" } });
     const bug = new Error("a bug");
     expect(publishErrorOf(bug)).toBe(bug);
   });

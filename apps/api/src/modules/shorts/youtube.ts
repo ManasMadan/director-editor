@@ -1,6 +1,7 @@
 /**
- * YouTube Data API v3, as Director reads it: whether a video is there and how long it is,
- * before a short is indexed, and its title and channel, which a published cut credits. The only place that knows YouTube's wire format; every
+ * YouTube Data API v3, as Director reads it: whether a video is there and how long it
+ * is, before a short is indexed, and its title and channel, which a published cut
+ * credits. The only place that knows YouTube's wire format; every
  * response is parsed with a schema here, so a change on YouTube's side fails loudly
  * instead of passing bad data on.
  *

@@ -12,12 +12,13 @@ import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { ORPCError } from "@orpc/client";
+import { PUBLISH_DAILY_LIMIT } from "@repo/contracts/api";
 import { directorSeeds } from "@repo/contracts/director-seeds";
 import { startFakeGoogle } from "@repo/fake-google";
 import { S3Storage } from "@repo/nest-common";
 import { jwtVerify } from "jose";
 import pg from "pg";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createSession,
   type Harness,
@@ -287,6 +288,40 @@ async function aCut(me: { id: string; activeOrganizationId?: string | null }, in
 
 const publishInput = (cutId: string) => ({ cutId, ...COPY, visibility: "public" as const });
 
+/** The day's count of videos Director sent to YouTube, as the API keeps it in Redis. */
+const todaysKey = () => `publish:uploads:${new Date().toISOString().slice(0, 10)}`;
+const uploadsToday = async () => Number((await harness.redis.get(todaysKey())) ?? 0);
+
+/**
+ * A cut of the member's of a Short of their own (one of their seeds, moved to `videoId`),
+ * with no video in storage: for the copy, which reads the Short as YouTube shows it.
+ */
+async function cutOfShort(
+  me: { id: string; activeOrganizationId?: string | null },
+  videoId: string,
+) {
+  await sql("UPDATE ai.director_plan SET video_id = $3 WHERE org_id = $1 AND video_id = $2", [
+    me.activeOrganizationId,
+    ORIGINAL,
+    videoId,
+  ]);
+  const [plan] = await sql<{ id: string }>(
+    "SELECT id FROM ai.director_plan WHERE org_id = $1 AND video_id = $2",
+    [me.activeOrganizationId, videoId],
+  );
+  const [file] = await sql<{ id: string }>(
+    `INSERT INTO files.file (user_id, purpose, status, filename, declared_type, declared_size, updated_at)
+     VALUES ($1, 'director-cut-video', 'ready', 'cut.mp4', 'video/mp4', 10, now()) RETURNING id`,
+    [me.id],
+  );
+  const [cut] = await sql<{ id: string }>(
+    `INSERT INTO ai.director_cut (org_id, plan_id, user_id, title, picks, file_id, duration_ms, updated_at)
+     VALUES ($1, $2, $3, 'Mine', '[]', $4, 1000, now()) RETURNING id`,
+    [me.activeOrganizationId, plan?.id, me.id, file?.id],
+  );
+  return String(cut?.id);
+}
+
 async function expectError(promise: Promise<unknown>, code: string) {
   const error = await promise.then(
     () => undefined,
@@ -317,6 +352,9 @@ describe("Google sign-in", () => {
 });
 
 describe("publishing a cut", { tags: ["files"] }, () => {
+  // Every test here publishes, past the day's cap together: each starts the day afresh.
+  beforeEach(() => harness.redis.del(todaysKey()));
+
   it("refuses the demo account, and nothing reaches YouTube", async () => {
     const { email, password, me } = await signedUpWithPassword();
     const { cutId } = await aCut(me);
@@ -452,6 +490,8 @@ describe("publishing a cut", { tags: ["files"] }, () => {
     const underWay = await session.rpc.publish.upload(publishInput(cutId));
     expect(underWay.publish.status).toBe("uploading");
     expect(google.uploads.length).toBe(uploads);
+    // Nothing went to YouTube, so the day's place it took is given back.
+    expect(await uploadsToday()).toBe(0);
     // The API restarted mid-upload: nothing will finish it.
     await sql("UPDATE ai.director_cut SET updated_at = now() - interval '1 hour' WHERE id = $1", [
       cutId,
@@ -490,6 +530,60 @@ describe("publishing a cut", { tags: ["files"] }, () => {
     );
   });
 
+  it("uploads an older cut once when it's published twice at once", async () => {
+    const { session, email, me } = await signInWithGoogle();
+    await allowYouTube(session, email);
+    const { cutId } = await aCut(me);
+    // Saved an hour ago: as old as a publish cut off long ago would be.
+    await sql("UPDATE ai.director_cut SET updated_at = now() - interval '1 hour' WHERE id = $1", [
+      cutId,
+    ]);
+    const uploads = google.uploads.length;
+    await Promise.all([
+      session.rpc.publish.upload(publishInput(cutId)),
+      session.rpc.publish.upload(publishInput(cutId)),
+    ]);
+    expect(google.uploads.length).toBe(uploads + 1);
+    expect(await uploadsToday()).toBe(1);
+  });
+
+  it("stops at the day's cap before YouTube, counting only what YouTube took", async () => {
+    const { session, email, me } = await signInWithGoogle();
+    await allowYouTube(session, email);
+    const { cutId } = await aCut(me);
+    const uploads = google.uploads.length;
+    await harness.redis.set(todaysKey(), PUBLISH_DAILY_LIMIT);
+    await expectError(session.rpc.publish.upload(publishInput(cutId)), "PUBLISH_QUOTA_EXHAUSTED");
+    expect(google.uploads.length).toBe(uploads);
+    expect(await uploadsToday()).toBe(PUBLISH_DAILY_LIMIT);
+    const who = { org: String(me.activeOrganizationId), user: me.id };
+    expect((await cutOf(who, cutId))?.publishStatus).toBe("none");
+    // The last of the day's places, and it's gone at midnight UTC.
+    await harness.redis.set(todaysKey(), PUBLISH_DAILY_LIMIT - 1);
+    await expect(session.rpc.publish.upload(publishInput(cutId))).resolves.toMatchObject({
+      publish: { status: "published" },
+    });
+    expect(await uploadsToday()).toBe(PUBLISH_DAILY_LIMIT);
+    const ttl = await harness.redis.ttl(todaysKey());
+    expect(ttl).toBeGreaterThan(0);
+    expect(ttl).toBeLessThanOrEqual(24 * 60 * 60);
+  });
+
+  it("says when YouTube's quota is spent, and gives the day's place back", async () => {
+    const { session, email, me } = await signInWithGoogle();
+    await allowYouTube(session, email);
+    const { cutId } = await aCut(me);
+    google.exhaustQuota(true);
+    try {
+      await expectError(session.rpc.publish.upload(publishInput(cutId)), "PUBLISH_QUOTA_EXHAUSTED");
+    } finally {
+      google.exhaustQuota(false);
+    }
+    expect(await uploadsToday()).toBe(0);
+    const who = { org: String(me.activeOrganizationId), user: me.id };
+    expect((await cutOf(who, cutId))?.publishStatus).toBe("failed");
+  });
+
   it("publishes only the member's own cut", async () => {
     const owner = await signInWithGoogle();
     const { cutId } = await aCut(owner.me);
@@ -518,25 +612,20 @@ describe("the copy for a cut", () => {
 
   it("is written without the original once YouTube no longer shows it", async () => {
     const { session, me } = await signInWithGoogle();
-    await sql(
-      "UPDATE ai.director_plan SET video_id = 'GoneShort01' WHERE org_id = $1 AND video_id = $2",
-      [me.activeOrganizationId, ORIGINAL],
-    );
-    const [plan] = await sql<{ id: string }>(
-      "SELECT id FROM ai.director_plan WHERE org_id = $1 AND video_id = 'GoneShort01'",
-      [me.activeOrganizationId],
-    );
-    const [file] = await sql<{ id: string }>(
-      `INSERT INTO files.file (user_id, purpose, status, filename, declared_type, declared_size, updated_at)
-       VALUES ($1, 'director-cut-video', 'ready', 'cut.mp4', 'video/mp4', 10, now()) RETURNING id`,
-      [me.id],
-    );
-    const [cut] = await sql<{ id: string }>(
-      `INSERT INTO ai.director_cut (org_id, plan_id, user_id, title, picks, file_id, duration_ms, updated_at)
-       VALUES ($1, $2, $3, 'Mine', '[]', $4, 1000, now()) RETURNING id`,
-      [me.activeOrganizationId, plan?.id, me.id, file?.id],
-    );
-    await expect(session.rpc.publish.copy({ cutId: String(cut?.id) })).resolves.toEqual(COPY);
-    expect(copyAsks.at(-1)).toEqual({ cutId: cut?.id, original: null });
+    const cutId = await cutOfShort(me, "GoneShort01");
+    await expect(session.rpc.publish.copy({ cutId })).resolves.toEqual(COPY);
+    expect(copyAsks.at(-1)).toEqual({ cutId, original: null });
+  });
+
+  it("is written without the original while YouTube can't be read", async () => {
+    const { session, me } = await signInWithGoogle();
+    const cutId = await cutOfShort(me, "QuotaShort1");
+    google.exhaustQuota(true);
+    try {
+      await expect(session.rpc.publish.copy({ cutId })).resolves.toEqual(COPY);
+    } finally {
+      google.exhaustQuota(false);
+    }
+    expect(copyAsks.at(-1)).toEqual({ cutId, original: null });
   });
 });

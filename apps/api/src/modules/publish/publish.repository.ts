@@ -50,7 +50,8 @@ export class PublishRepository {
           },
         ],
       },
-      data: { publishStatus: "uploading" },
+      // updated_at said outright: it's how a publish cut off is told from one under way.
+      data: { publishStatus: "uploading", updatedAt: new Date() },
     });
     return count === 1;
   }

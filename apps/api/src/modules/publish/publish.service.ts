@@ -33,6 +33,7 @@ import { AnalyticsService } from "../analytics";
 import { DirectorService } from "../director";
 import { FilesService } from "../files";
 import { ShortsService } from "../shorts";
+import { DailyAllowance } from "./daily-allowance";
 import { PublishRepository } from "./publish.repository";
 import { uploadUrlOf, YouTubeUploadError, YouTubeUploader } from "./youtube-upload";
 
@@ -54,6 +55,14 @@ const videoLength = z.coerce.number().int().positive();
 export const allowsUploads = (scope: string | null) =>
   (scope ?? "").split(/[\s,]+/).includes(YOUTUBE_UPLOAD_SCOPE);
 
+/** YouTube's reasons for refusing an upload over the project's quota or its rate. */
+const QUOTA_REASONS = new Set([
+  "quotaExceeded",
+  "dailyLimitExceeded",
+  "uploadLimitExceeded",
+  "rateLimitExceeded",
+]);
+
 /** What a failed upload means to the member: YouTube's refusal as a code, or the error. */
 export function publishErrorOf(error: unknown): unknown {
   if (!(error instanceof YouTubeUploadError)) {
@@ -61,6 +70,9 @@ export function publishErrorOf(error: unknown): unknown {
   }
   if (error.reason === "youtubeSignupRequired") {
     return new AppError("PUBLISH_NO_CHANNEL", { cause: error });
+  }
+  if (QUOTA_REASONS.has(error.reason)) {
+    return new AppError("PUBLISH_QUOTA_EXHAUSTED", { cause: error });
   }
   // The token was revoked, or the upload permission taken back since it was granted.
   if (error.status === 401 || error.reason === "insufficientPermissions") {
@@ -80,44 +92,44 @@ export class PublishService {
     private readonly files: FilesService,
     private readonly shorts: ShortsService,
     private readonly analytics: AnalyticsService,
+    private readonly allowance: DailyAllowance,
   ) {}
 
   /** Gemini's draft of the post, knowing the original Short as YouTube shows it. */
   async copy(userId: UserId, orgId: OrgId, cutId: DirectorCutId): Promise<PublishCopy> {
     const cut = await this.director.cut(userId, orgId, cutId);
-    const original = await this.shorts.credit(cut.videoId);
+    const original = await this.shorts.credit(cut.videoId).catch((error: unknown) => {
+      // Gemini can write the post without the original's title and channel: YouTube being
+      // out of quota, or down, mustn't stop it.
+      if (isAppError(error) && error.code === "UPSTREAM_UNAVAILABLE") {
+        return null;
+      }
+      throw error;
+    });
     const copy = await callAi((ai) =>
       ai.director.writePublishCopy(aiCaller(userId, orgId), { cutId, original }),
     );
     return publishCopySchema.parse(copy);
   }
 
-  async upload({ orgId, userId, demo }: Publisher, input: Upload): Promise<DirectorCut> {
-    if (demo) {
-      throw new AppError("PUBLISH_DEMO_DISABLED");
-    }
-    if (!features.google) {
-      throw new AppError("FEATURE_DISABLED", { params: { feature: "google" } });
-    }
-    const cut = await this.director.cut(userId, orgId, input.cutId);
+  async upload(publisher: Publisher, input: Upload): Promise<DirectorCut> {
+    const cut = await this.publishable(publisher, input.cutId);
     if (cut.publish.status === "published") {
       return cut;
     }
+    const { orgId, userId } = publisher;
     const video = await this.video(userId, cut);
-    let accessToken: string;
-    try {
-      accessToken = await this.accessToken(userId);
-    } catch (error) {
+    const ready = await this.readyToSend(orgId, userId, cut).catch(async (error: unknown) => {
       await video.body.cancel();
       throw error;
-    }
-    if (!(await this.publishing.claim(orgId, userId, cut.id))) {
+    });
+    if (!ready) {
       await video.body.cancel();
       return this.director.cut(userId, orgId, cut.id);
     }
     const uploaded = await this.youtube
       .upload(
-        accessToken,
+        ready.accessToken,
         {
           title: youtubeTitle(input.title),
           description: youtubeDescription(input, cut.videoId),
@@ -126,13 +138,14 @@ export class PublishService {
         video,
       )
       .catch(async (error: unknown) => {
-        await this.publishing.failed(orgId, cut.id);
+        // YouTube took no video: the day's place goes back with the cut's claim.
+        await Promise.all([
+          this.publishing.failed(orgId, cut.id),
+          this.allowance.giveBack(ready.day),
+        ]);
         throw publishErrorOf(error);
       });
-    const published = {
-      youtubeVideoId: uploaded.id,
-      visibility: uploaded.status.privacyStatus,
-    };
+    const published = { youtubeVideoId: uploaded.id, visibility: uploaded.status.privacyStatus };
     await this.publishing.published(orgId, cut.id, published);
     this.analytics.record("published", {
       userId,
@@ -140,10 +153,40 @@ export class PublishService {
       detail: {
         youtubeVideoId: uploaded.id,
         asked: input.visibility,
-        privacyStatus: uploaded.status.privacyStatus,
+        privacyStatus: published.visibility,
       },
     });
     return { ...cut, publish: { status: "published", ...published } };
+  }
+
+  /** The caller's cut, when the caller may publish at all. */
+  private async publishable({ orgId, userId, demo }: Publisher, cutId: DirectorCutId) {
+    if (demo) {
+      throw new AppError("PUBLISH_DEMO_DISABLED");
+    }
+    if (!features.google) {
+      throw new AppError("FEATURE_DISABLED", { params: { feature: "google" } });
+    }
+    return this.director.cut(userId, orgId, cutId);
+  }
+
+  /**
+   * What sending the cut takes: the member's access token, one of the day's places
+   * (PUBLISH_QUOTA_EXHAUSTED past them), and the cut claimed for this publish. Null when
+   * another publish of it is under way, the place given back.
+   */
+  private async readyToSend(orgId: OrgId, userId: UserId, cut: DirectorCut) {
+    const accessToken = await this.accessToken(userId);
+    const day = await this.allowance.take();
+    // Should this process die after YouTube took the video but before the cut is marked
+    // published, the cut stays "uploading", and a publish after the stale window sends it
+    // again: a second copy on the member's channel. Rare enough to accept; they can
+    // delete one in YouTube Studio.
+    if (!(await this.publishing.claim(orgId, userId, cut.id))) {
+      await this.allowance.giveBack(day);
+      return null;
+    }
+    return { accessToken, day };
   }
 
   /**
