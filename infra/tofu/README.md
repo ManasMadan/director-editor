@@ -44,10 +44,10 @@ cert-manager, Envoy Gateway, KEDA, Kyverno, CloudNativePG, the mail server) for 
 2.5 GB more, observability (Prometheus, Grafana, Alertmanager, Jaeger, Loki and Alloy)
 for about 3 GB, and k3s itself for about 1 GB. So staging fits one machine of 16 GB
 (each preview it hosts can take up to 8 GB more, its quota). Production runs on one
-Compute Engine e2-standard-8 (8 vCPUs, 32 GB) with observability on, its requests
-under half of the machine's CPU and memory, which leaves room for KEDA to scale a
-service out and for a rollout's surge; raise the replicas and spread them over more
-machines once production needs more than one can give. Four vCPUs per machine is a
+Compute Engine e2-standard-8 (8 vCPUs, 32 GB, about $210 a month) with observability
+on, its requests under half of the machine's CPU and memory, which leaves room for KEDA
+to scale a service out and for a rollout's surge; raise the replicas and spread them
+over more machines once production needs more than one can give. Four vCPUs per machine is a
 floor: with observability, one machine of 4 vCPUs ran out of CPU requests.
 Pods that don't fit stay Pending; `kubectl describe pod` says which resource ran out.
 

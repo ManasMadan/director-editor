@@ -1,7 +1,8 @@
 # Deploying
 
 Everything runs on k3s on machines you run (one node or several; `infra/tofu` sets
-them up), and on kind locally, from the same charts. Nothing is a managed service:
+them up; production is one Compute Engine e2-standard-8, 8 vCPUs and 32 GB, about $210
+a month), and on kind locally, from the same charts. Nothing is a managed service:
 Postgres, Valkey, object storage, mail and observability all run in the cluster.
 Cloudflare stays in front (DNS, proxy, WAF), and third-party APIs (Gemini and YouTube,
 Google sign-in, Turnstile) stay external.

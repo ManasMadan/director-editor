@@ -8,10 +8,12 @@ GitHub settings the workflows need in [repository-settings.md](repository-settin
 The application, its Postgres (CloudNativePG, with continuous backups), Valkey, object
 storage (RustFS), the mail server (Stalwart) and, where a cluster opts in, Jaeger and
 Prometheus all run in the cluster. Cloudflare stays in front, and third-party APIs
-(Gemini and YouTube, Google sign-in, Turnstile) stay external. Production, on one
-Compute Engine VM, also uses Google Cloud's own services where they do the job better:
-media in Cloud Storage instead of RustFS, product events in BigQuery, and indexing on a
-private Cloud Run service ([below](#the-cloud-run-indexer)).
+(Gemini and YouTube, Google sign-in, Turnstile) stay external. Production runs on one
+Compute Engine VM, an e2-standard-8 (8 vCPUs, 32 GB, about $210 a month; sizing in
+[infra/tofu/README.md](../infra/tofu/README.md)). It also uses Google Cloud's own
+services where they do the job better: media in Cloud Storage instead of RustFS, product
+events in BigQuery, and indexing on a private Cloud Run service
+([below](#the-cloud-run-indexer)).
 
 ## Images
 
@@ -137,8 +139,9 @@ Only the VM's account may call it: Cloud Run lets in only the service's invokers
 (`--no-allow-unauthenticated`), and the indexer checks the ID token again (audience
 `INDEXER_URL`, email `INDEXER_INVOKER`). It calls Vertex AI and Cloud Storage as its own
 account, `director-indexer@…`, through Application Default Credentials: no express key
-or key file. Until `INDEXER_URL` is set on the ai worker, plans are indexed in the worker
-itself, the same way.
+or key file. Production's ai worker sets `INDEXER_URL` to it
+(`deploy/environments/production/stack.yaml`); without it, plans are indexed in the
+worker itself, the same way.
 
 It isn't deployed by Argo CD; run these by hand (or from a release checklist) with
 `gcloud` signed in as a project owner. The variables, once per shell:
