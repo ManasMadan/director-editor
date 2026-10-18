@@ -90,9 +90,18 @@ describe("an auth answer that went wrong", () => {
   });
 
   it("names no one when the body isn't JSON with an address", () => {
-    for (const body of [Buffer.from("not json"), Buffer.from("{}"), undefined]) {
+    // The last: a password typed into the address field by mistake is never logged.
+    const typo = Buffer.from(JSON.stringify({ email: "hunter22", password: "x" }));
+    for (const body of [Buffer.from("not json"), Buffer.from("{}"), undefined, typo]) {
       expect(failedAuthActivity(answer({ body }))).not.toHaveProperty("actor");
     }
+  });
+
+  it("keeps Google's error only when it's a code, since anyone can write the URL", () => {
+    const location = `/sign-in?error=${encodeURIComponent("<script>alert(1)</script>")}`;
+    expect(
+      failedAuthActivity(answer({ path: "/callback/google", status: 302, location })),
+    ).toMatchObject({ reason: "unreadable_error" });
   });
 
   it("is a failed Google sign-in when its callback comes back with an error", () => {

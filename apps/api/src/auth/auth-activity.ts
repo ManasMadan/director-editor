@@ -60,8 +60,11 @@ const SIGN_IN_PATHS: ReadonlySet<string> = new Set([
 ]);
 const SIGN_UP_PATH = "/sign-up/email";
 
-/** Only the address of what was sent: the rest (a password, a code) is never read. */
-const triedAddress = z.object({ email: z.string().max(320) });
+/**
+ * Only the address of what was sent: the rest (a password, a code) is never read, and
+ * neither is a field that isn't an address (a password typed into it by mistake).
+ */
+const triedAddress = z.object({ email: z.email().max(320) });
 
 function addressIn(body: unknown): string | undefined {
   if (!Buffer.isBuffer(body)) {
@@ -88,9 +91,19 @@ export interface AuthAnswer {
   body: unknown;
 }
 
-/** Why a Google sign-in came back refused: the `error` its callback redirects with. */
+/** An OAuth error code (`access_denied`, `state_mismatch`). */
+const OAUTH_ERROR = /^[\w.-]{1,64}$/;
+
+/**
+ * Why a Google sign-in came back refused: the `error` its callback redirects with. It
+ * arrives in a URL anyone can write, so only a code is logged as it is.
+ */
 function callbackError(location: string | null) {
-  return location ? new URL(location, "http://localhost").searchParams.get("error") : null;
+  const error = location ? new URL(location, "http://localhost").searchParams.get("error") : null;
+  if (error === null) {
+    return null;
+  }
+  return OAUTH_ERROR.test(error) ? error : "unreadable_error";
 }
 
 /**
