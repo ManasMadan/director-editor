@@ -84,7 +84,7 @@ export function forgotten(version: YourVersion, note: string): YourVersion {
 }
 
 // Which shots the member films, as the relay reads it too.
-export { films, nearestFilmed, nextFilmed } from "@repo/contracts/api";
+export { films, nextFilmed } from "@repo/contracts/api";
 
 const CARD_ROWS: readonly ChangedRow[] = ["where", "do", "say", "framing"];
 
