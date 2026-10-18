@@ -663,5 +663,10 @@ def test_a_created_plan_s_storyboard_cards_are_drawn_and_follow_their_shots(
         headers=headers(org, user),
     )
     saved = DirectorPlanOut.model_validate_json(response.content)
-    assert [each.shotIndex for each in saved.storyboards] == [1, 2, 3]
+    assert [(each.shotIndex, each.status) for each in saved.storyboards] == [
+        (0, "pending"),
+        (1, "ready"),
+        (2, "ready"),
+        (3, "ready"),
+    ]
     assert [row[1] for row in images(org, plan.id)] == ["ready", "pending"]
