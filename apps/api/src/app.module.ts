@@ -10,6 +10,7 @@ import { ActivityModule } from "./activity";
 import { AuthModule } from "./auth/auth.module";
 import { env } from "./env";
 import { AnalyticsModule } from "./modules/analytics";
+import { AssetsModule } from "./modules/assets";
 import { DirectorModule } from "./modules/director";
 import { FilesModule } from "./modules/files";
 import { PublishModule } from "./modules/publish";
@@ -42,6 +43,7 @@ import { NotificationsProducerModule } from "./notifications";
     AnalyticsModule,
     RecordingModule,
     DirectorModule,
+    AssetsModule,
     PublishModule,
   ],
 })

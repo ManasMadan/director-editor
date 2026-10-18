@@ -6,6 +6,7 @@
  * changes (removed fields, new required inputs), which also protects older mobile apps.
  */
 import { populateContractRouterPaths } from "@orpc/contract";
+import { assetsContract } from "./assets";
 import { directorContract } from "./director";
 import { filesContract } from "./files";
 import { publishContract } from "./publish";
@@ -20,12 +21,14 @@ export const contract = populateContractRouterPaths({
   realtime: realtimeContract,
   files: filesContract,
   director: directorContract,
+  assets: assetsContract,
   publish: publishContract,
   recording: recordingContract,
 });
 
 export type Contract = typeof contract;
 
+export * from "./assets";
 export * from "./base";
 export * from "./director";
 export * from "./files";

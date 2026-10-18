@@ -11,7 +11,7 @@ from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, unquote
 
 import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -36,10 +36,47 @@ class Fake:
 
 
 @contextmanager
-def serve(handlers: dict[str, Callable[[bytes], Reply]]) -> Generator[Fake]:
+def serve(
+    handlers: dict[str, Callable[[bytes], Reply]],
+    objects: dict[str, tuple[str, bytes]] | None = None,
+) -> Generator[Fake]:
+    """Answers each POSTed path with its handler, and a GET of one of `objects` (by its
+    key: its type and bytes) as Cloud Storage's JSON API does, its metadata or, with
+    `alt=media`, its bytes."""
     fake = Fake(url="")
+    stored = objects if objects is not None else {}
 
     class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            fake.received.append((self.path, b""))
+            fake.authorizations.append(self.headers.get("authorization"))
+            path = unquote(self.path)
+            found = next(((k, v) for k, v in stored.items() if f"/o/{k}" in path), None)
+            if found is None:
+                payload, content_type, status = b'{"error": "not found"}', "application/json", 404
+            elif "alt=media" in path:
+                (content_type, payload), status = found[1], 200
+            else:
+                key, (kind, data) = found
+                resource = {
+                    "bucket": MEDIA_BUCKET,
+                    "name": key,
+                    "size": str(len(data)),
+                    "contentType": kind,
+                    "generation": "1",
+                }
+                payload, content_type, status = (
+                    json.dumps(resource).encode(),
+                    "application/json",
+                    200,
+                )
+            self.send_response(status)
+            self.send_header("content-type", content_type)
+            self.send_header("x-should-retry", "false")
+            self.send_header("content-length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
         def do_POST(self) -> None:
             body = self.rfile.read(int(self.headers.get("content-length") or 0))
             fake.received.append((self.path, body))

@@ -40,4 +40,6 @@ export const features: Record<Feature, boolean> = {
   // Director live on the shoot screen: Gemini Live, billed to the project (src/server.ts).
   live: Boolean(env.GOOGLE_CLOUD_PROJECT),
   demoGuests: env.DEMO_GUESTS === "on",
+  // Stock photos in the asset picker: either provider's key (src/modules/assets/stock).
+  stock: Boolean(env.PEXELS_API_KEY || env.PIXABAY_API_KEY),
 };

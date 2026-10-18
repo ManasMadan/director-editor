@@ -42,7 +42,8 @@ const SHORTS_TAG = "#Shorts";
 const YOUTUBE_TITLE_MAX_LENGTH = 100;
 export const PUBLISH_TITLE_MAX_LENGTH = YOUTUBE_TITLE_MAX_LENGTH - SHORTS_TAG.length - 1;
 export const PUBLISH_DESCRIPTION_MAX_LENGTH = 3_000;
-const PUBLISH_CREDITS_MAX_LENGTH = 300;
+// The original's credit, then a line per stock picture the video uses.
+const PUBLISH_CREDITS_MAX_LENGTH = 2_000;
 const PUBLISH_HASHTAGS_MAX = 15;
 const PUBLISH_HASHTAG_MAX_LENGTH = 40;
 /** YouTube's longest description, in UTF-8 bytes. */

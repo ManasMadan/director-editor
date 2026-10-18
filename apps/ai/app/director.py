@@ -40,7 +40,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.activity import Target, log_activity, outcome_of
 from app.analytics import Analytics, AnalyticsEvent, Recorder, create_analytics
-from app.assets import CHANGED, Artist, AssetMaker
+from app.assets import CHANGED, Artist, AssetMaker, create_checker
 from app.contracts.error_response import ErrorCode
 from app.db.models import DirectorAsset, DirectorCut, DirectorPlan, DirectorTake
 from app.db.session import tenant
@@ -53,6 +53,7 @@ from app.indexing import (
     retryable,
 )
 from app.log import log
+from app.picker import AssetPicker
 from app.publish_copy import PUBLISH_INSTRUCTIONS, tidy
 from app.queues import DirectorQueue
 from app.realtime import publish_to_org
@@ -518,6 +519,9 @@ class Director:
         # usage ledger must keep the short one (task-2.1.1b).
         self._model_name = model_name
         self._assets = assets
+        # The asset picker's images are drawn by the same job as the defaults, so
+        # drawing is on exactly when that job has somewhere to keep them.
+        self.picker = AssetPicker(queue, redis, drawing=assets is not None)
         self._index_model_name = index_model_name
         self._indexer = indexer
         self._budgets = budgets
@@ -1179,7 +1183,8 @@ class Director:
             raise AppError("UPSTREAM_UNAVAILABLE", {"service": "gemini"}) from None
         finally:
             await settle(reservation, usage.input_tokens, usage.output_tokens)
-        return tidy(result.output, cut.title, shots.title)
+        credits = await self.picker.stock_credits(org_id, user_id, plan.id)
+        return tidy(result.output, cut.title, shots.title, stock_credits=credits)
 
     async def _download(self, url: str) -> tuple[bytes, TakeContentType]:
         """The take's bytes and type, read from its presigned URL up to MAX_TAKE_BYTES."""
@@ -1321,8 +1326,13 @@ def create_asset_maker(settings: Settings, redis: Redis) -> AssetMaker | None:
     MEDIA_BUCKET; None without a bucket."""
     if settings.media_bucket is None:
         return None
+    checker = (
+        create_checker(create_google_model(settings, settings.director_model))
+        if settings.director_model is not None
+        else None
+    )
     return AssetMaker(
-        Artist(create_google_model(settings, settings.asset_model), settings.asset_model),
+        Artist(create_google_model(settings, settings.asset_model), settings.asset_model, checker),
         settings.media_bucket,
         redis,
         monthly=Allowance(settings.monthly_tokens_per_org, settings.monthly_tokens_per_demo_guest),

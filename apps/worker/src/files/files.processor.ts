@@ -50,6 +50,9 @@ const uploadPurpose = z.enum(uploadPurposeNames);
 const AVATAR_SIZE = 512;
 // Decoding bombs: refuse images claiming more pixels than a large photo has.
 const MAX_INPUT_PIXELS = 50_000_000;
+// An asset picture's longest side: enough for a 4K-tall frame, small enough to draw
+// in the browser's canvas and to send to Nano Banana as a reference.
+const ASSET_IMAGE_MAX_SIDE = 2160;
 
 class Rejected extends Error {
   constructor(readonly reason: FileRejection) {
@@ -182,11 +185,35 @@ export class FilesProcessor extends JobProcessor {
         } catch {
           throw new Rejected("FILE_UNREADABLE");
         }
+      case "director-asset-image":
+        return normaliseAssetImage(bytes);
       case "director-take-video":
       case "director-cut-video":
         // Kept as recorded (or as the browser rendered the cut): re-encoding video is
         // minutes of CPU, and the browser writes no location or device metadata into it.
         return { body: bytes, contentType: sniffed.mime };
     }
+  }
+}
+
+/**
+ * An asset picture as the editor and Nano Banana take it: upright, at most
+ * ASSET_IMAGE_MAX_SIDE on its long side, PNG when it has transparency (a cutout keeps
+ * it) and JPEG otherwise, with its metadata (EXIF, GPS) dropped.
+ */
+async function normaliseAssetImage(bytes: Buffer) {
+  try {
+    const image = sharp(bytes, { limitInputPixels: MAX_INPUT_PIXELS, failOn: "error" })
+      .rotate() // apply the EXIF orientation before it's dropped
+      .resize(ASSET_IMAGE_MAX_SIDE, ASSET_IMAGE_MAX_SIDE, {
+        fit: "inside",
+        withoutEnlargement: true,
+      });
+    const { hasAlpha } = await image.metadata();
+    return hasAlpha
+      ? { body: await image.png().toBuffer(), contentType: "image/png" }
+      : { body: await image.jpeg({ quality: 90 }).toBuffer(), contentType: "image/jpeg" };
+  } catch {
+    throw new Rejected("FILE_UNREADABLE");
   }
 }

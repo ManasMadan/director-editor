@@ -115,6 +115,255 @@
         "title": "Asset",
         "type": "object"
       },
+      "AssetCandidateCreate": {
+        "additionalProperties": false,
+        "description": "An image apps/api has already checked and stored for a slot: an upload of the\ncaller's, or a stock picture it copied.",
+        "properties": {
+          "credit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StockCredit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fileId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fileid"
+          },
+          "objectKey": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Objectkey",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "upload",
+              "stock"
+            ],
+            "title": "Origin",
+            "type": "string"
+          }
+        },
+        "required": [
+          "origin",
+          "objectKey",
+          "fileId",
+          "credit"
+        ],
+        "title": "AssetCandidateCreate",
+        "type": "object"
+      },
+      "AssetCandidateOut": {
+        "description": "One image of a slot: its default, or one of the caller's own.",
+        "properties": {
+          "assetId": {
+            "title": "Assetid",
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "credit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StockCredit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "fileId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An upload's file.",
+            "title": "Fileid"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "objectKey": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its key in storage once ready; apps/api signs it.",
+            "title": "Objectkey"
+          },
+          "origin": {
+            "enum": [
+              "default",
+              "created",
+              "upload",
+              "stock"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What a drawn one was drawn from.",
+            "title": "Prompt"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "generating",
+              "ready",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "assetId",
+          "origin",
+          "status",
+          "objectKey",
+          "fileId",
+          "error",
+          "prompt",
+          "credit",
+          "createdAt"
+        ],
+        "title": "AssetCandidateOut",
+        "type": "object"
+      },
+      "AssetChoiceCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "candidateId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "None goes back to the default.",
+            "title": "Candidateid"
+          }
+        },
+        "required": [
+          "candidateId"
+        ],
+        "title": "AssetChoiceCreate",
+        "type": "object"
+      },
+      "AssetDrawingCreate": {
+        "additionalProperties": false,
+        "description": "A new image for a slot, drawn from `prompt`; with `baseId`, an edit of another of\nthe slot's images by `instruction`.",
+        "properties": {
+          "baseId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseid"
+          },
+          "demo": {
+            "description": "The caller is a demo guest, with fewer images a video.",
+            "title": "Demo",
+            "type": "boolean"
+          },
+          "instruction": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instruction"
+          },
+          "prompt": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Prompt",
+            "type": "string"
+          },
+          "referenceKey": {
+            "anyOf": [
+              {
+                "pattern": "^files/[0-9a-f-]{36}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A ready director-asset-image upload of the caller's (apps/api checked it), drawn from as the reference picture.",
+            "title": "Referencekey"
+          }
+        },
+        "required": [
+          "prompt",
+          "instruction",
+          "baseId",
+          "referenceKey",
+          "demo"
+        ],
+        "title": "AssetDrawingCreate",
+        "type": "object"
+      },
       "AssetImageOut": {
         "description": "The default image made for one of a plan's assets (app/assets.py).",
         "properties": {
@@ -247,6 +496,107 @@
           "mood"
         ],
         "title": "AssetReference",
+        "type": "object"
+      },
+      "AssetSlotOut": {
+        "properties": {
+          "assetId": {
+            "title": "Assetid",
+            "type": "string"
+          },
+          "candidates": {
+            "description": "Oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/AssetCandidateOut"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "chosenId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The image the slot uses; none is its default.",
+            "title": "Chosenid"
+          },
+          "history": {
+            "description": "The slot's earlier choices, newest first (what undo goes back to).",
+            "items": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "History",
+            "type": "array"
+          },
+          "prompt": {
+            "description": "The Create tab's prompt, filled in from the asset's reference: its subject, composition, style, palette and text, in English.",
+            "title": "Prompt",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assetId",
+          "prompt",
+          "candidates",
+          "chosenId",
+          "history"
+        ],
+        "title": "AssetSlotOut",
+        "type": "object"
+      },
+      "AssetSlotsOut": {
+        "properties": {
+          "imagesPerDay": {
+            "minimum": 0.0,
+            "title": "Imagesperday",
+            "type": "integer"
+          },
+          "imagesPerVideo": {
+            "minimum": 0.0,
+            "title": "Imagespervideo",
+            "type": "integer"
+          },
+          "imagesToday": {
+            "description": "Images drawn for the caller in the last day.",
+            "minimum": 0.0,
+            "title": "Imagestoday",
+            "type": "integer"
+          },
+          "imagesUsed": {
+            "description": "Images drawn for the caller in this video.",
+            "minimum": 0.0,
+            "title": "Imagesused",
+            "type": "integer"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/AssetSlotOut"
+            },
+            "title": "Slots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "slots",
+          "imagesUsed",
+          "imagesPerVideo",
+          "imagesToday",
+          "imagesPerDay"
+        ],
+        "title": "AssetSlotsOut",
         "type": "object"
       },
       "AssetSource": {
@@ -1081,6 +1431,8 @@
           "INVALID_SIGNATURE",
           "AI_BUDGET_EXCEEDED",
           "DIRECTOR_INDEX_LIMIT",
+          "DIRECTOR_IMAGE_LIMIT",
+          "DIRECTOR_ASSET_NOT_FOUND",
           "DIRECTOR_VIDEO_UNAVAILABLE",
           "DIRECTOR_TOO_LONG",
           "DIRECTOR_PLAN_NOT_FOUND",
@@ -1720,7 +2072,7 @@
       "PublishCopy": {
         "properties": {
           "credits": {
-            "maxLength": 300,
+            "maxLength": 2000,
             "title": "Credits",
             "type": "string"
           },
@@ -2276,6 +2628,46 @@
           "easing"
         ],
         "title": "SpeedEdit",
+        "type": "object"
+      },
+      "StockCredit": {
+        "additionalProperties": false,
+        "description": "Who made a stock picture and where it's from: shown in the picker and credited in\nthe YouTube description.",
+        "properties": {
+          "author": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Author",
+            "type": "string"
+          },
+          "authorUrl": {
+            "maxLength": 500,
+            "pattern": "^https://",
+            "title": "Authorurl",
+            "type": "string"
+          },
+          "pageUrl": {
+            "maxLength": 500,
+            "pattern": "^https://",
+            "title": "Pageurl",
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "pexels",
+              "pixabay"
+            ],
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "author",
+          "authorUrl",
+          "pageUrl"
+        ],
+        "title": "StockCredit",
         "type": "object"
       },
       "TargetPose": {
@@ -3129,6 +3521,354 @@
           }
         },
         "summary": "Get Director Plan"
+      }
+    },
+    "/v1/director/plans/{video_id}/assets": {
+      "get": {
+        "description": "Every asset slot of the plan, with its default and the caller's own images, the one\neach uses, and the caller's images left.",
+        "operationId": "listDirectorAssets",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "video_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{11}$",
+              "title": "Video Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetSlotsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "List Director Assets"
+      }
+    },
+    "/v1/director/plans/{video_id}/assets/{asset_id}/choice": {
+      "post": {
+        "description": "The image the caller's video uses in the slot (none: its default).",
+        "operationId": "chooseDirectorAsset",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "video_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{11}$",
+              "title": "Video Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "maxLength": 40,
+              "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetChoiceCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Choose Director Asset"
+      }
+    },
+    "/v1/director/plans/{video_id}/assets/{asset_id}/drawings": {
+      "post": {
+        "description": "Queues an image for the slot drawn from the caller's prompt, or an edit of another\nof its images (DIRECTOR_IMAGE_LIMIT past the caller's images).",
+        "operationId": "drawDirectorAsset",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "video_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{11}$",
+              "title": "Video Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "maxLength": 40,
+              "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetDrawingCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetCandidateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Draw Director Asset"
+      }
+    },
+    "/v1/director/plans/{video_id}/assets/{asset_id}/images": {
+      "post": {
+        "description": "Records an upload of the caller's, or a stock picture, for the slot.",
+        "operationId": "addDirectorAsset",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "video_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{11}$",
+              "title": "Video Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "maxLength": 40,
+              "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetCandidateCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetCandidateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Add Director Asset"
       }
     },
     "/v1/director/plans/{video_id}/cuts": {

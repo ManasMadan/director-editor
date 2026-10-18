@@ -67,6 +67,10 @@ export const ERROR_CODES = {
   // Shorts (YouTube) and Director
   /** A member indexes one short of their own; the seeded templates don't count. */
   DIRECTOR_INDEX_LIMIT: 409,
+  /** A member's images drawn for a video (12, 5 for the demo) or in a day (30) are used up. */
+  DIRECTOR_IMAGE_LIMIT: 429,
+  /** An asset slot the plan doesn't have, or an image that isn't one of the slot's. */
+  DIRECTOR_ASSET_NOT_FOUND: 404,
   /** The link isn't a YouTube video, or YouTube won't show it (private, removed). */
   DIRECTOR_VIDEO_UNAVAILABLE: 422,
   /** Director films Shorts, not long videos (params: maxSeconds). */

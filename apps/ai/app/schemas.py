@@ -864,6 +864,107 @@ class DirectorCutOut(BaseModel):
     createdAt: datetime
 
 
+# ------------------------------------------------------------------------- asset picker
+# Every asset slot of a plan offers the member three sources beside its default (app/
+# picker.py): an image drawn from their own prompt (Nano Banana, optionally from a photo
+# of theirs or editing another of the slot's images), their upload, or a stock picture
+# apps/api copied into storage. Each is a row of ai.director_asset; which one the slot
+# uses is the member's newest choice (ai.director_asset_choice).
+AssetOrigin = Literal["default", "created", "upload", "stock"]
+StockProviderName = Literal["pexels", "pixabay"]
+MAX_ASSET_PROMPT = 2_000
+MAX_ASSET_INSTRUCTION = 500
+# A slot's object in storage: a default, a drawn or stock image, or an upload.
+OBJECT_KEY_MAX = 200
+UPLOAD_KEY_PATTERN = r"^files/[0-9a-f-]{36}$"
+
+
+class StockCredit(BaseModel):
+    """Who made a stock picture and where it's from: shown in the picker and credited in
+    the YouTube description."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    provider: StockProviderName
+    author: str = Field(min_length=1, max_length=200)
+    authorUrl: str = Field(pattern=r"^https://", max_length=500)
+    pageUrl: str = Field(pattern=r"^https://", max_length=500)
+
+
+class AssetCandidateOut(BaseModel):
+    """One image of a slot: its default, or one of the caller's own."""
+
+    id: UUID
+    assetId: str
+    origin: AssetOrigin
+    status: AssetImageStatus
+    objectKey: str | None = Field(
+        max_length=OBJECT_KEY_MAX, description="Its key in storage once ready; apps/api signs it."
+    )
+    fileId: UUID | None = Field(description="An upload's file.")
+    error: str | None
+    prompt: str | None = Field(description="What a drawn one was drawn from.")
+    credit: StockCredit | None
+    createdAt: datetime
+
+
+class AssetSlotOut(BaseModel):
+    assetId: str
+    prompt: str = Field(
+        description="The Create tab's prompt, filled in from the asset's reference: its "
+        "subject, composition, style, palette and text, in English."
+    )
+    candidates: list[AssetCandidateOut] = Field(description="Oldest first.")
+    chosenId: UUID | None = Field(description="The image the slot uses; none is its default.")
+    history: list[UUID | None] = Field(
+        description="The slot's earlier choices, newest first (what undo goes back to)."
+    )
+
+
+class AssetSlotsOut(BaseModel):
+    slots: list[AssetSlotOut]
+    imagesUsed: int = Field(ge=0, description="Images drawn for the caller in this video.")
+    imagesPerVideo: int = Field(ge=0)
+    imagesToday: int = Field(ge=0, description="Images drawn for the caller in the last day.")
+    imagesPerDay: int = Field(ge=0)
+
+
+class AssetDrawingCreate(BaseModel):
+    """A new image for a slot, drawn from `prompt`; with `baseId`, an edit of another of
+    the slot's images by `instruction`."""
+
+    model_config = REQUEST
+
+    prompt: str = Field(min_length=1, max_length=MAX_ASSET_PROMPT)
+    instruction: str | None = Field(min_length=1, max_length=MAX_ASSET_INSTRUCTION)
+    # A JSON string, so not strict (strict wants a UUID object, which JSON can't carry).
+    baseId: UUID | None = Field(strict=False)
+    referenceKey: str | None = Field(
+        pattern=UPLOAD_KEY_PATTERN,
+        description="A ready director-asset-image upload of the caller's (apps/api checked "
+        "it), drawn from as the reference picture.",
+    )
+    demo: bool = Field(description="The caller is a demo guest, with fewer images a video.")
+
+
+class AssetCandidateCreate(BaseModel):
+    """An image apps/api has already checked and stored for a slot: an upload of the
+    caller's, or a stock picture it copied."""
+
+    model_config = REQUEST
+
+    origin: Literal["upload", "stock"]
+    objectKey: str = Field(min_length=1, max_length=OBJECT_KEY_MAX)
+    fileId: UUID | None = Field(strict=False)
+    credit: StockCredit | None
+
+
+class AssetChoiceCreate(BaseModel):
+    model_config = REQUEST
+
+    candidateId: UUID | None = Field(strict=False, description="None goes back to the default.")
+
+
 # ------------------------------------------------------------------------- publishing
 # The YouTube post for a cut: Gemini drafts it (PublishCopyDraft, the model's output
 # type) and app/publish_copy.py tidies the draft into PublishCopy, which is what apps/api's
@@ -872,7 +973,8 @@ class DirectorCutOut(BaseModel):
 # in YouTube's 5,000-byte description for the hashtags, credits and the original's link.
 MAX_PUBLISH_TITLE = 91
 MAX_PUBLISH_DESCRIPTION = 3_000
-MAX_PUBLISH_CREDITS = 300
+# The original's credit, then a line per stock picture used (12 at most).
+MAX_PUBLISH_CREDITS = 2_000
 MAX_PUBLISH_HASHTAGS = 15
 MAX_PUBLISH_HASHTAG = 40
 # YouTube's longest description, in UTF-8 bytes, hashtags, credits and link included.

@@ -39,19 +39,19 @@ model AiDemoUsage {
 /// One per workspace and video, so everyone in the workspace reuses the analysis: the
 /// workspace's library of templates.
 model DirectorPlan {
-  id           String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  orgId        String             @map("org_id") @db.Uuid
+  id           String                @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  orgId        String                @map("org_id") @db.Uuid
   /// Who indexed it. A member indexes one short of their own (source user, not failed):
   /// the partial unique index below holds that, two requests racing included.
-  createdBy    String?            @map("created_by") @db.Uuid
+  createdBy    String?               @map("created_by") @db.Uuid
   /// The YouTube video id (11 characters).
-  videoId      String             @map("video_id")
+  videoId      String                @map("video_id")
   /// seed (copied into every workspace, never anyone's index) | user
-  source       String             @default("user")
+  source       String                @default("user")
   /// pending (queued) | analyzing | ready | failed
-  status       String             @default("pending")
+  status       String                @default("pending")
   /// How far indexing got, for the library: queued | watching | writing | ready | failed
-  stage        String             @default("queued")
+  stage        String                @default("queued")
   /// Why the analysis failed (an error code).
   error        String?
   /// The shot plan (app/schemas.py ShotPlan), once ready.
@@ -59,17 +59,18 @@ model DirectorPlan {
   /// The model that wrote it.
   model        String?
   /// The short's original audio: ready (stored at audio_key) | failed | none (not tried)
-  audioStatus  String             @default("none") @map("audio_status")
+  audioStatus  String                @default("none") @map("audio_status")
   /// Its object key in storage, once ready.
-  audioKey     String?            @map("audio_key")
-  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
-  organization Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  creator      User?              @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  audioKey     String?               @map("audio_key")
+  createdAt    DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization Organization          @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  creator      User?                 @relation(fields: [createdBy], references: [id], onDelete: SetNull)
   takes        DirectorTake[]
   cuts         DirectorCut[]
   recordings   RecordingSession[]
   assets       DirectorAsset[]
+  assetChoices DirectorAssetChoice[]
 
   @@unique([orgId, videoId])
   @@unique([createdBy], map: "director_plan_one_user_index", where: raw("source = 'user' AND status <> 'failed'"))
@@ -158,33 +159,72 @@ model DirectorCut {
 /// indexed, so it's there by the time anyone shoots. Counted per member against the daily
 /// image limit (ai.images_today), and in ai.usage like every model call.
 model DirectorAsset {
-  id           String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  orgId        String       @map("org_id") @db.Uuid
-  planId       String       @map("plan_id") @db.Uuid
+  id           String                @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  orgId        String                @map("org_id") @db.Uuid
+  planId       String                @map("plan_id") @db.Uuid
   /// Whose daily limit it counts against: the member who indexed the plan.
-  userId       String?      @map("user_id") @db.Uuid
+  userId       String?               @map("user_id") @db.Uuid
   /// The asset's id in the plan ("chart").
-  assetId      String       @map("asset_id")
-  /// default (made after indexing); the asset picker adds its own.
-  origin       String       @default("default")
+  assetId      String                @map("asset_id")
+  /// default (made after indexing, shared by the workspace), or one of a member's own from
+  /// the asset picker: created (drawn from their prompt), upload or stock.
+  origin       String                @default("default")
   /// pending (queued) | generating | ready | failed
-  status       String       @default("pending")
-  /// Its object key in storage, once ready: director-assets/<planId>/<assetId>.<ext>.
-  objectKey    String?      @map("object_key")
+  status       String                @default("pending")
+  /// Its object key in storage, once ready: director-assets/<planId>/<assetId>.<ext> for a
+  /// default, director-assets/<planId>/<assetId>/<id>.<ext> for a drawn or stock one, and
+  /// files/<fileId> for an upload.
+  objectKey    String?               @map("object_key")
   /// The model that drew it.
   model        String?
   /// Why it failed (an error code).
   error        String?
-  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  plan         DirectorPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  /// What a created one was drawn from: the member's prompt, or how to change `baseId`.
+  prompt       String?
+  /// A created one's reference picture (an upload of the member's, files/<fileId>).
+  referenceKey String?               @map("reference_key")
+  /// The image a created one edits (another of the slot's images).
+  baseId       String?               @map("base_id") @db.Uuid
+  /// An upload's file (files.file, purpose director-asset-image).
+  fileId       String?               @map("file_id") @db.Uuid
+  /// A stock one's credit: {provider, author, authorUrl, pageUrl}.
+  credit       Json?
+  createdAt    DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization Organization          @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  plan         DirectorPlan          @relation(fields: [planId], references: [id], onDelete: Cascade)
+  user         User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  choices      DirectorAssetChoice[]
 
   @@unique([planId, assetId], map: "director_asset_one_default", where: raw("origin = 'default'"))
   @@index([orgId, id(sort: Desc)])
   @@index([planId])
   @@index([userId, createdAt])
   @@map("director_asset")
+  @@schema("ai")
+}
+
+/// Which image a member uses in one of a plan's asset slots: the newest row of the slot
+/// wins, and the ones before it are the slot's history (undo). No candidate is the
+/// slot's default.
+model DirectorAssetChoice {
+  id           String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  orgId        String         @map("org_id") @db.Uuid
+  planId       String         @map("plan_id") @db.Uuid
+  userId       String         @map("user_id") @db.Uuid
+  /// The asset's id in the plan ("chart").
+  assetId      String         @map("asset_id")
+  candidateId  String?        @map("candidate_id") @db.Uuid
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  organization Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  plan         DirectorPlan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  candidate    DirectorAsset? @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@index([planId, userId, assetId, id(sort: Desc)])
+  @@index([orgId, id(sort: Desc)])
+  @@index([userId])
+  @@index([candidateId])
+  @@map("director_asset_choice")
   @@schema("ai")
 }

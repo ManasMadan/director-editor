@@ -129,7 +129,13 @@ export function useLiveUpdates(activeOrganizationId: string | null | undefined) 
   const queryClient = useQueryClient();
   const refetch = {
     "files.changed": () => queryClient.invalidateQueries({ queryKey: api.files.key() }),
-    "director.changed": () => queryClient.invalidateQueries({ queryKey: api.director.key() }),
+    // A plan, its takes and cuts, and its asset slots' images (the picker's).
+    "director.changed": async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: api.director.key() }),
+        queryClient.invalidateQueries({ queryKey: api.assets.key() }),
+      ]);
+    },
     // A clipped attempt is a new take too: the shots and takes change with the session.
     "recording.changed": async () => {
       await Promise.all([
