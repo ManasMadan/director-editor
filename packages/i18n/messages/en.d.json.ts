@@ -565,6 +565,12 @@ declare const messages: {
       "starting": "Opening the camera…",
       "rec": "REC",
       "leave": "Leave the shoot",
+      "leaving": {
+        "title": "Leave?",
+        "body": "This take isn't kept yet.",
+        "leave": "Leave",
+        "stay": "Stay"
+      },
       "flip": "Flip the camera",
       "countdown": "{seconds, number}",
       "shutter": {
@@ -630,7 +636,7 @@ declare const messages: {
       "silent": "It's silent on purpose: add the original sound when you post it on YouTube (Use this sound)."
     },
     "template": {
-      "use": "Start shooting",
+      "use": "Let's shoot",
       "storyboard": "Storyboard",
       "watchShot": "Watch shot {index, number}: {title}",
       "shots": "{count, plural, one {# shot} other {# shots}}",
@@ -710,8 +716,8 @@ declare const messages: {
       }
     },
     "live": {
-      "director": "Director says",
-      "you": "You said",
+      "director": "Director says {text}",
+      "you": "You said {text}",
       "joining": "Director's joining…",
       "here": "Director",
       "deaf": "Director can't hear you. Allow the microphone in your browser's settings, or type to it below.",
@@ -724,7 +730,7 @@ declare const messages: {
         "RATE_LIMITED": "Director has joined you a lot this hour. Give it a little while.",
         "CONFLICT": "Director is already with you in another tab.",
         "TIMEOUT": "That's half an hour with Director, the most in one go.",
-        "FEATURE_DISABLED": "Director can't join you on this site.",
+        "FEATURE_DISABLED": "Director isn't available right now.",
         "DIRECTOR_PLAN_NOT_FOUND": "Director hasn't finished planning this short yet.",
         "DIRECTOR_SHOT_NOT_FOUND": "That shot isn't part of this short.",
         "UNAUTHENTICATED": "Sign in again to bring Director back."

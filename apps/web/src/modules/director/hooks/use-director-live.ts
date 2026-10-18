@@ -3,7 +3,16 @@
 import type { Facing, LiveTakeState, LiveToolCall, LiveToolResult } from "@repo/contracts/live";
 import { SECOND_MS } from "@repo/contracts/time";
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { type Captions, liveUrl, NO_CAPTIONS, withTranscript } from "../lib/live";
+import {
+  answered,
+  type Captions,
+  liveUrl,
+  NO_CAPTIONS,
+  turnEnded,
+  withoutMember,
+  withTranscript,
+  withTyped,
+} from "../lib/live";
 import { restLiveAudio } from "../lib/live-audio";
 import { type LiveControls, type LiveFailure, startSession } from "../lib/live-session";
 
@@ -17,6 +26,10 @@ export type LiveState = "idle" | "joining" | "live" | "unavailable";
 /** Failures that may pass: one silent retry, a moment later, before the member is told. */
 const PASSING: readonly LiveFailure[] = ["dropped", "UPSTREAM_UNAVAILABLE", "INTERNAL"];
 const RETRY_AFTER_MS = 2 * SECOND_MS;
+/** How long the member's line stays up once Director has answered it. */
+const ANSWERED_FOR_MS = 8 * SECOND_MS;
+/** Where a take is when the member's last line has been overtaken by what they did. */
+const OVERTAKING: readonly LiveTakeState[] = ["countdown", "recorded"];
 
 interface Options {
   videoId: string;
@@ -114,9 +127,14 @@ function useConnect(refs: Refs, setters: Setters) {
             retried.current = false;
             setState("live");
           },
-          onTranscript: (who, text) => setCaptions((now) => withTranscript(now, who, text)),
+          onTranscript: (who, text) => {
+            // Words said while its voice is held were never heard: they aren't shown either.
+            if (!(who === "director" && held.current)) {
+              setCaptions((now) => withTranscript(now, who, text));
+            }
+          },
           // Director's next words are a new line, not more of this one.
-          onTurn: () => setCaptions((now) => ({ ...now, last: null })),
+          onTurn: () => setCaptions(turnEnded),
           onTool: (id, call) => latest.current.onTool(id, call),
           onSpeaking: setSpeaking,
           onDeaf: () => setHearing(false),
@@ -149,6 +167,18 @@ function useConnect(refs: Refs, setters: Setters) {
     ],
   );
   return connect;
+}
+
+/** The member's line goes a while after Director has answered it. */
+function useAnsweredLineFades(captions: Captions, setCaptions: Setters["setCaptions"]) {
+  const done = answered(captions);
+  useEffect(() => {
+    if (!done) {
+      return;
+    }
+    const timer = window.setTimeout(() => setCaptions(withoutMember), ANSWERED_FOR_MS);
+    return () => window.clearTimeout(timer);
+  }, [done, setCaptions]);
 }
 
 /**
@@ -188,6 +218,7 @@ export function useDirectorLive({ videoId, shotIndex, video, onTool }: Options) 
     }
   }, [wanted, live.state, connect]);
   useLifetime(session, shotIndex, { setState, retry });
+  useAnsweredLineFades(live.captions, setCaptions);
 
   return {
     state: live.state,
@@ -211,15 +242,24 @@ export function useDirectorLive({ videoId, shotIndex, video, onTool }: Options) 
     say: (text: string) => {
       const sent = session.current?.say(text) ?? false;
       if (sent) {
-        setCaptions((now) => withTranscript({ ...now, last: null }, "you", text));
+        setCaptions((now) => withTyped(now, text));
       }
       return sent;
     },
     answer: (id: string, result: LiveToolResult) => session.current?.answer(id, result),
     /** The member flipped the camera: Director looks at the new view. */
-    camera: (facing: Facing) => void session.current?.camera(facing),
-    take: (state: LiveTakeState) => session.current?.take(state),
-    /** Holds Director's voice (drops it unplayed) while a take records. */
+    camera: (facing: Facing) => {
+      setCaptions(withoutMember);
+      void session.current?.camera(facing);
+    },
+    /** Where the member's take is; from a countdown on, their last line has had its moment. */
+    take: (state: LiveTakeState) => {
+      if (OVERTAKING.includes(state)) {
+        setCaptions(withoutMember);
+      }
+      session.current?.take(state);
+    },
+    /** Holds Director's voice (drops it unplayed, uncaptioned) from the 3-2-1 to the take's end. */
     hold: useCallback((on: boolean) => {
       held.current = on;
       session.current?.hold(on);

@@ -5,7 +5,7 @@ import { cn } from "@repo/ui/lib/utils";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import type { LiveFailure } from "../hooks/use-director-live";
-import type { Captions } from "../lib/live";
+import type { Caption, Captions } from "../lib/live";
 import { GLASS } from "./shoot-parts";
 
 const prefersStill = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -73,39 +73,56 @@ export function DirectorOrb({ level, className }: { level: () => number; classNa
 }
 
 /**
- * Both sides of the conversation as captions: Director's last line beside its orb, and
- * the member's own words as Director heard them (or as they typed them). Read out as
- * they change, so following the shoot never needs the sound on.
+ * One line of the conversation, for the eye: Director's beside its orb, the member's on
+ * the right. Screen readers hear the lines from the announcement below instead.
+ */
+function Line({ line, older, level }: { line: Caption; older: boolean; level: () => number }) {
+  if (line.who === "director") {
+    return (
+      <div
+        className={cn(
+          "flex animate-[live-rise_300ms_ease-out_both] items-start gap-2.5 rounded-3xl px-3.5 py-3 transition-opacity duration-300",
+          GLASS,
+          older && "opacity-60",
+        )}
+      >
+        <DirectorOrb level={level} className="mt-0.5 size-7" />
+        <p className="text-[15px] leading-snug font-semibold text-balance">{line.text.trim()}</p>
+      </div>
+    );
+  }
+  return (
+    <p
+      className={cn(
+        "ml-auto max-w-[85%] animate-[live-rise_250ms_ease-out_both] rounded-2xl rounded-br-md bg-studio-foreground/90 px-3 py-1.5 text-sm font-medium text-studio transition-opacity duration-300",
+        older && "opacity-60",
+      )}
+    >
+      {line.text.trim()}
+    </p>
+  );
+}
+
+/**
+ * The last exchange as captions, oldest first, so a reply always sits under what it
+ * answers and the newest line is nearest the text box; the older one is dimmed. The
+ * shoot can be followed with the sound off. Screen readers hear each line once, when it's
+ * finished, rather than every few words as the transcript streams in.
  */
 export function DirectorCaptions({ captions, level }: { captions: Captions; level: () => number }) {
   const t = useTranslations("director.live");
-  const { director, you } = captions;
+  const { lines } = captions;
+  const finished = lines.findLast((line) => line.done);
   return (
-    <div className="live-motion flex flex-col gap-1.5" aria-live="polite">
-      {director ? (
-        <div
-          key={director.key}
-          className={cn(
-            "flex animate-[live-rise_300ms_ease-out_both] items-start gap-2.5 rounded-3xl px-3.5 py-3",
-            GLASS,
-          )}
-        >
-          <DirectorOrb level={level} className="mt-0.5 size-7" />
-          <p className="text-[15px] leading-snug font-semibold text-balance">
-            <span className="sr-only">{t("director")} </span>
-            {director.text.trim()}
-          </p>
-        </div>
-      ) : null}
-      {you ? (
-        <p
-          key={you.key}
-          className="ml-auto max-w-[85%] animate-[live-rise_250ms_ease-out_both] rounded-2xl rounded-br-md bg-studio-foreground/90 px-3 py-1.5 text-sm font-medium text-studio"
-        >
-          <span className="sr-only">{t("you")} </span>
-          {you.text.trim()}
-        </p>
-      ) : null}
+    <div className="live-motion flex flex-col gap-1.5">
+      <div aria-hidden className="flex flex-col gap-1.5">
+        {lines.map((line, at) => (
+          <Line key={line.key} line={line} older={at < lines.length - 1} level={level} />
+        ))}
+      </div>
+      <p aria-live="polite" className="sr-only">
+        {finished ? t(finished.who, { text: finished.text.trim() }) : null}
+      </p>
     </div>
   );
 }

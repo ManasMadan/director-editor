@@ -50,6 +50,10 @@ export function nextPage({ videoId, index, count, audio, retake }: Omit<StudioSh
 
 /** What the take tells the rest of the screen as it goes. */
 export interface TakeEvents {
+  /** The 3-2-1 started. */
+  onCountdown: () => void;
+  /** The 3-2-1 was called off: no take. */
+  onCancelled: () => void;
   /** A take started recording (or the photo was taken). */
   onRecording: () => void;
   /** The take is done and on screen to watch back. */
@@ -102,11 +106,17 @@ function useCapture(shot: Shot, camera: Camera, events: TakeEvents) {
 }
 
 /** Calls off the countdown: from the shutter, or Escape while it counts. */
-function useEscapeCancels(counting: boolean, cancel: () => void, setPhase: (phase: Phase) => void) {
+function useEscapeCancels(
+  counting: boolean,
+  cancel: () => void,
+  setPhase: (phase: Phase) => void,
+  latest: RefObject<TakeEvents>,
+) {
   const stopCounting = useCallback(() => {
     cancel();
     setPhase("setup");
-  }, [cancel, setPhase]);
+    latest.current.onCancelled();
+  }, [cancel, setPhase, latest]);
   useEffect(() => {
     if (!counting) {
       return;
@@ -145,7 +155,7 @@ export function useStudio(studio: StudioShot, camera: Camera, events: TakeEvents
     }
   }, [recorder.take, setPhase, latest]);
   const counting = phase === "countdown";
-  const stopCounting = useEscapeCancels(counting, countdown.cancel, setPhase);
+  const stopCounting = useEscapeCancels(counting, countdown.cancel, setPhase, latest);
 
   const take = shot.kind === "photo" ? photo : recorder.take;
   const startOver = () => {
@@ -159,6 +169,7 @@ export function useStudio(studio: StudioShot, camera: Camera, events: TakeEvents
       setFailed(false);
       setPhase("countdown");
       countdown.start();
+      latest.current.onCountdown();
     } else if (counting) {
       stopCounting();
     } else if (phase === "recording") {
@@ -188,6 +199,14 @@ export function useStudio(studio: StudioShot, camera: Camera, events: TakeEvents
     startOver();
     latest.current.onDiscarded();
   };
+  /** Holds the take where it is: the count called off, or the recording stopped to keep. */
+  const halt = () => {
+    if (counting) {
+      stopCounting();
+    } else if (phase === "recording") {
+      recorder.stop();
+    }
+  };
   return {
     phase,
     take,
@@ -195,6 +214,6 @@ export function useStudio(studio: StudioShot, camera: Camera, events: TakeEvents
     countdown: countdown.left,
     seconds: phase === "recording" ? recorder.seconds : 0,
     submit,
-    actions: { shutter, again, use },
+    actions: { shutter, again, use, halt },
   };
 }

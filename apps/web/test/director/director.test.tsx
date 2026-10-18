@@ -142,9 +142,9 @@ describe("Director's page for a ready plan", () => {
       .element(page.getByRole("link", { name: "Back to the library" }))
       .toHaveAttribute("href", "/library");
     await expect
-      .element(page.getByRole("link", { name: "Start shooting" }))
+      .element(page.getByRole("link", { name: "Let's shoot" }))
       .toHaveAttribute("href", `/director/${videoId}/shoot?shot=0&audio=original`);
-    await userEvent.click(page.getByRole("link", { name: "Start shooting" }));
+    await userEvent.click(page.getByRole("link", { name: "Let's shoot" }));
     expect(currentUrl()).toBe(`/director/${videoId}/shoot?shot=0&audio=original`);
   });
 
@@ -203,9 +203,9 @@ describe("Director's page for a ready plan", () => {
     expect(page.getByRole("radio").query()).toBeNull();
     await expect.element(page.getByText("You need 1 shot: 1 video and no photos.")).toBeVisible();
     await expect
-      .element(page.getByRole("link", { name: "Start shooting" }))
+      .element(page.getByRole("link", { name: "Let's shoot" }))
       .toHaveAttribute("href", `/director/${videoId}/shoot?shot=0&audio=original`);
-    await userEvent.click(page.getByRole("link", { name: "Start shooting" }));
+    await userEvent.click(page.getByRole("link", { name: "Let's shoot" }));
     expect(currentUrl()).toBe(`/director/${videoId}/shoot?shot=0&audio=original`);
   });
 
@@ -240,7 +240,7 @@ describe("Director's page for a ready plan", () => {
       .element(page.getByText("The original audio couldn't be fetched, so your mic will be used."))
       .toBeVisible();
     expect(page.getByRole("radio").query()).toBeNull();
-    await userEvent.click(page.getByRole("link", { name: "Start shooting" }));
+    await userEvent.click(page.getByRole("link", { name: "Let's shoot" }));
     expect(currentUrl()).toBe(`/director/${videoId}/shoot?shot=0&audio=voice`);
   });
 
@@ -272,7 +272,7 @@ describe("Director's page for a ready plan", () => {
     const page = await showPlan(videoId);
     await expect.element(page.getByText("Filmed", { exact: true })).toBeVisible();
     // Every shot has a take: starting again from the top.
-    await expect.element(page.getByRole("link", { name: "Start shooting" })).toBeVisible();
+    await expect.element(page.getByRole("link", { name: "Let's shoot" })).toBeVisible();
   });
 });
 

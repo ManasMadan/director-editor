@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { liveUrl, NO_CAPTIONS, parseServerMessage, withTranscript } from "./live";
+import {
+  answered,
+  type Captions,
+  liveUrl,
+  NO_CAPTIONS,
+  parseServerMessage,
+  turnEnded,
+  withoutMember,
+  withTranscript,
+  withTyped,
+} from "./live";
 
 describe("Director live's address", () => {
   it("is the API's live route on the page's own origin, over TLS when the page is", () => {
@@ -57,23 +67,50 @@ describe("what Director live says", () => {
 });
 
 describe("the captions", () => {
-  it("builds each side's line from the pieces transcribed as it's spoken", () => {
+  const texts = (captions: Captions) => captions.lines.map(({ who, text }) => `${who}: ${text}`);
+
+  it("reads in order: each line under the one it answers, the last exchange only", () => {
     let captions = withTranscript(NO_CAPTIONS, "director", "Hi! ");
-    captions = withTranscript(captions, "director", "Step back a little.");
-    expect(captions.director).toEqual({ text: "Hi! Step back a little.", key: 1 });
-    expect(captions.you).toBeNull();
+    captions = withTranscript(captions, "director", "How long have you got?");
+    expect(captions.lines).toEqual([
+      { who: "director", text: "Hi! How long have you got?", key: 1, done: false },
+    ]);
     captions = withTranscript(captions, "you", "Like");
-    captions = withTranscript(captions, "you", " this?");
-    expect(captions.you).toEqual({ text: "Like this?", key: 2 });
-    // The director answering starts a new line, and the member's stays up.
-    captions = withTranscript(captions, "director", "Perfect.");
-    expect(captions.director).toEqual({ text: "Perfect.", key: 3 });
-    expect(captions.you?.text).toBe("Like this?");
+    captions = withTranscript(captions, "you", " ten minutes");
+    // The member's answer goes under Director's question, which is finished now.
+    expect(texts(captions)).toEqual([
+      "director: Hi! How long have you got?",
+      "you: Like ten minutes",
+    ]);
+    expect(captions.lines.map((line) => line.done)).toEqual([true, false]);
+    captions = withTranscript(captions, "director", "Plenty.");
+    // Director's reply sits under the line it answers; the first line has gone.
+    expect(texts(captions)).toEqual(["you: Like ten minutes", "director: Plenty."]);
+    expect(answered(captions)).toBe(false);
+    captions = turnEnded(captions);
+    expect(answered(captions)).toBe(true);
+    // Its next turn is a new line.
+    captions = withTranscript(captions, "director", "Prop the phone up.");
+    expect(texts(captions)).toEqual(["director: Plenty.", "director: Prop the phone up."]);
+    expect(answered(captions)).toBe(false);
+  });
+
+  it("puts a typed line under the rest, finished, and drops the member's line when asked", () => {
+    let captions = withTranscript(NO_CAPTIONS, "director", "Ready?");
+    captions = withTyped(captions, "yes");
+    expect(texts(captions)).toEqual(["director: Ready?", "you: yes"]);
+    expect(captions.lines.at(-1)?.done).toBe(true);
+    // A typed line right after another is its own line too.
+    captions = withTyped(captions, "go");
+    expect(texts(captions)).toEqual(["you: yes", "you: go"]);
+    expect(texts(withoutMember(captions))).toEqual([]);
+    const directorOnly = withTranscript(NO_CAPTIONS, "director", "Hi.");
+    expect(withoutMember(directorOnly)).toBe(directorOnly);
   });
 
   it("keeps a long line to its last words", () => {
     const words = Array.from({ length: 80 }, (_, at) => `word${at}`).join(" ");
-    const { director } = withTranscript(NO_CAPTIONS, "director", words);
+    const director = withTranscript(NO_CAPTIONS, "director", words).lines[0];
     expect(director?.text.length).toBeLessThanOrEqual(160);
     expect(director?.text.startsWith("…")).toBe(true);
     expect(director?.text.endsWith("word79")).toBe(true);

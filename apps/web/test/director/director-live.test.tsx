@@ -164,6 +164,12 @@ function microphoneOf(camera: ReturnType<typeof canvasCamera>): Promise<MediaStr
   return camera.getUserMedia.mock.results[at]?.value;
 }
 
+/** The captions on screen, oldest first. */
+const captionTexts = () =>
+  [...document.querySelectorAll("[aria-hidden] > div > p, [aria-hidden] > p")].map((line) =>
+    (line.textContent ?? "").trim(),
+  );
+
 /** Whether Director's voice is playing: the orb in the captions swells with it. */
 const speakingNow = (page: Page) =>
   page.getByRole("button", { name: "Record a take" }).query() !== null;
@@ -189,18 +195,28 @@ describe("Director live on the shoot screen", () => {
     socket.say({ type: "transcript", who: "director", text: "Hi! " });
     socket.say({ type: "transcript", who: "director", text: "Step back a little." });
     socket.say({ type: "transcript", who: "you", text: "Like this?" });
-    await expect.element(page.getByText(/^Director says Hi! Step back a little\.$/)).toBeVisible();
-    await expect.element(page.getByText(/^You said Like this\?$/)).toBeVisible();
-    // Director's next turn is a line of its own.
-    socket.say({ type: "turn" });
+    await expect.element(page.getByText(/^Hi! Step back a little\.$/)).toBeVisible();
+    await expect.element(page.getByText(/^Like this\?$/)).toBeVisible();
+    // A finished line is read out once, whole: Director's, now the member has spoken.
+    await expect
+      .element(page.getByText(/^Director says Hi! Step back a little\.$/))
+      .toBeInTheDocument();
+    // Director's answer goes under the line it answers, the newest at the bottom.
     socket.say({ type: "transcript", who: "director", text: "Perfect." });
-    await expect.element(page.getByText(/^Director says Perfect\.$/)).toBeVisible();
+    await expect.element(page.getByText(/^Perfect\.$/)).toBeVisible();
+    expect(captionTexts()).toEqual(["Like this?", "Perfect."]);
+    socket.say({ type: "turn" });
+    await expect.element(page.getByText(/^Director says Perfect\.$/)).toBeInTheDocument();
+    // Its next turn is a line of its own.
+    socket.say({ type: "transcript", who: "director", text: "Now walk in." });
+    await expect.poll(captionTexts).toEqual(["Perfect.", "Now walk in."]);
 
     await userEvent.fill(page.getByRole("textbox", { name: "Tell Director" }), "  hello there ");
     await userEvent.click(page.getByRole("button", { name: "Send" }));
     expect(socket.sentOf("text")).toEqual([{ type: "text", text: "hello there" }]);
-    // A typed line is the member's own new line, not tacked on to what was heard.
-    await expect.element(page.getByText(/^You said hello there$/)).toBeVisible();
+    // A typed line is the member's own new line, under the rest.
+    await expect.poll(captionTexts).toEqual(["Now walk in.", "hello there"]);
+    await expect.element(page.getByText(/^You said hello there$/)).toBeInTheDocument();
     await expect.element(page.getByRole("textbox", { name: "Tell Director" })).toHaveValue("");
     // Nothing to send, nothing sent.
     await userEvent.fill(page.getByRole("textbox", { name: "Tell Director" }), "   ");
@@ -261,25 +277,52 @@ describe("Director live on the shoot screen", () => {
     expect(socket.sent[at - 1]?.type).toBe("frame");
   });
 
-  it("keeps Director quiet while a take records, and tells it where the take is", async () => {
+  it("keeps Director quiet from the 3-2-1 to the take's end, and tells it where the take is", async () => {
     canvasCamera();
     const { page, socket } = await shoot();
     socket.say({ type: "audio", pcm16: voice(10) });
-    socket.say({ type: "transcript", who: "director", text: "Go whenever." });
+    socket.say({ type: "transcript", who: "you", text: "Ready." });
+    await expect.element(page.getByText(/^Ready\.$/)).toBeVisible();
     await userEvent.click(page.getByRole("button", { name: "Record a take" }));
+    // Quiet from the first number, and the member's line has had its moment.
+    expect(socket.sentOf("take")).toEqual([{ type: "take", state: "countdown" }]);
+    await expect.poll(captionTexts).toEqual([]);
+    // What Director says while held is neither played nor shown, then or after.
+    socket.say({ type: "transcript", who: "director", text: "Three, two..." });
     await expect.element(page.getByText("REC"), { timeout: 6_000 }).toBeVisible();
-    expect(socket.sentOf("take")).toEqual([{ type: "take", state: "recording" }]);
-    // While it records Director's words aren't shown, and its voice is dropped.
-    expect(page.getByText(/Go whenever\./).query()).toBeNull();
     socket.say({ type: "audio", pcm16: voice(1) });
+    socket.say({ type: "transcript", who: "director", text: "Shh." });
     await userEvent.click(page.getByRole("button", { name: "Stop recording" }));
     await expect.element(page.getByLabelText("Your take, on loop")).toBeVisible();
+    socket.say({ type: "transcript", who: "director", text: "Lovely." });
+    await expect.poll(captionTexts).toEqual(["Lovely."]);
     await userEvent.click(page.getByRole("button", { name: "Go again" }));
+    // A countdown called off is told too.
+    await userEvent.click(page.getByRole("button", { name: "Record a take" }));
+    await userEvent.click(page.getByRole("button", { name: "Cancel the countdown" }));
     expect(socket.sentOf("take")).toEqual([
+      { type: "take", state: "countdown" },
       { type: "take", state: "recording" },
       { type: "take", state: "recorded" },
       { type: "take", state: "discarded" },
+      { type: "take", state: "countdown" },
+      { type: "take", state: "cancelled" },
     ]);
+  });
+
+  it("lets the member's line go after a flip, and a while after Director has answered it", async () => {
+    canvasCamera();
+    const { page, socket } = await shoot();
+    socket.say({ type: "transcript", who: "you", text: "Can you see me?" });
+    await expect.element(page.getByText(/^Can you see me\?$/)).toBeVisible();
+    await userEvent.click(page.getByRole("button", { name: "Flip the camera" }));
+    await expect.poll(captionTexts).toEqual([]);
+    socket.say({ type: "transcript", who: "you", text: "And now?" });
+    socket.say({ type: "transcript", who: "director", text: "Yes!" });
+    await expect.poll(captionTexts).toEqual(["And now?", "Yes!"]);
+    socket.say({ type: "turn" });
+    // Eight seconds after the answer, only the answer stays.
+    await expect.poll(captionTexts, { timeout: 12_000 }).toEqual(["Yes!"]);
   });
 
   it("drops Director's voice the moment the member talks over it, and ignores what it can't read", async () => {

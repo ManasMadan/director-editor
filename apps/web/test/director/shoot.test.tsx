@@ -23,8 +23,8 @@ import {
 
 type Page = Awaited<ReturnType<typeof renderPage>>;
 
-/** A line in the captions, after the words a screen reader hears before it ("Director says"). */
-const line = (text: string) => new RegExp(`${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
+/** A line in the captions, as the eye reads it (screen readers hear "Director says …"). */
+const line = (text: string) => new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
 
 let liveFrom = 0;
 beforeEach(async () => {
@@ -316,17 +316,64 @@ describe("a shoot with Director", () => {
     await expect
       .element(page.getByText(line("Nice one! Maybe hold the last moment a beat longer.")))
       .toBeVisible();
+    // The text box is there on the review too, to answer Director without a microphone.
+    await tell(page, "was the light ok?", "You said: was the light ok?");
     await userEvent.click(page.getByRole("button", { name: "Go again" }));
     await expect.element(page.getByRole("button", { name: "Record a take" })).toBeVisible();
     await expect
       .poll(turns)
       .toEqual(
         expect.arrayContaining([
+          expect.stringContaining("[They're counting in to a take of shot 1. Go quiet now"),
           expect.stringContaining("[A take of shot 1 is recording now."),
           expect.stringContaining("[The take just ended"),
           "[They're going again on shot 1.]",
         ]),
       );
+  });
+});
+
+describe("leaving the shoot", () => {
+  it("leaves at once with nothing at stake", async () => {
+    canvasCamera();
+    const { page, videoId } = await openShoot({ shots: [walkIn, smile] });
+    await startShooting(page);
+    await userEvent.click(page.getByRole("link", { name: "Leave the shoot" }));
+    await expect.poll(currentUrl).toBe(`/director/${videoId}`);
+  });
+
+  it("asks first during a take, keeps the take on Stay, and leaves on Leave", async () => {
+    canvasCamera();
+    const { page, videoId } = await openShoot({ shots: [walkIn, smile] });
+    await startShooting(page);
+    await userEvent.click(page.getByRole("button", { name: "Record a take" }));
+    await expect.element(page.getByText("REC"), { timeout: 6_000 }).toBeVisible();
+    await userEvent.click(page.getByRole("link", { name: "Leave the shoot" }));
+    const dialog = page.getByRole("alertdialog", { name: "Leave?" });
+    await expect.element(dialog).toBeVisible();
+    await expect.element(dialog.getByText("This take isn't kept yet.")).toBeVisible();
+    // The recording stopped at once: the take is safe behind the question.
+    await userEvent.click(dialog.getByRole("button", { name: "Stay" }));
+    await expect.element(page.getByLabelText("Your take, on loop")).toBeVisible();
+    expect(currentUrl()).toBe(`/director/${videoId}/shoot?shot=0&audio=voice`);
+    // The browser's back asks too.
+    window.history.back();
+    await expect.element(page.getByRole("alertdialog", { name: "Leave?" })).toBeVisible();
+    await userEvent.click(page.getByRole("button", { name: "Leave" }));
+    await expect.poll(currentUrl).toBe(`/director/${videoId}`);
+  });
+
+  it("calls off a countdown behind the question, and leaves at once once nothing's at stake", async () => {
+    canvasCamera();
+    const { page, videoId } = await openShoot({ shots: [walkIn, smile] });
+    await startShooting(page);
+    await userEvent.click(page.getByRole("button", { name: "Record a take" }));
+    await userEvent.click(page.getByRole("link", { name: "Leave the shoot" }));
+    await userEvent.click(page.getByRole("button", { name: "Stay" }));
+    await expect.element(page.getByRole("button", { name: "Record a take" })).toBeVisible();
+    expect(page.getByText("REC").query()).toBeNull();
+    await userEvent.click(page.getByRole("link", { name: "Leave the shoot" }));
+    await expect.poll(currentUrl).toBe(`/director/${videoId}`);
   });
 });
 
@@ -340,7 +387,7 @@ describe("when Director can't join", () => {
     await commands.failRequests("/rpc/system/info", { status: 200, body: system });
     const { page } = await openShoot({ shots: [walkIn, smile] });
     await userEvent.click(page.getByRole("button", { name: "Start shooting" }));
-    await expect.element(page.getByText("Director can't join you on this site.")).toBeVisible();
+    await expect.element(page.getByText("Director isn't available right now.")).toBeVisible();
     await expect
       .element(page.getByText("You can still film: tap the shutter for each take."))
       .toBeVisible();

@@ -99,6 +99,8 @@ function useShootStudio(studio: StudioShot, events: TakeEvents) {
 type Studio = ReturnType<typeof useShootStudio>;
 
 const takeEvents = () => ({
+  onCountdown: vi.fn(),
+  onCancelled: vi.fn(),
   onRecording: vi.fn(),
   onRecorded: vi.fn(),
   onDiscarded: vi.fn(),
@@ -346,5 +348,37 @@ describe("useStudio", () => {
     vi.advanceTimersByTime(5000);
     expect(FakeRecorder.last).toBeNull();
     expect(hook.events.onRecording).not.toHaveBeenCalled();
+    // Director heard each count start, and each one called off.
+    expect(hook.events.onCountdown).toHaveBeenCalledTimes(2);
+    expect(hook.events.onCancelled).toHaveBeenCalledTimes(2);
+  });
+
+  it("halts a take where it is: the count called off, the recording stopped and kept on screen", async () => {
+    const { api } = director();
+    const hook = await renderStudio(
+      {
+        videoId: VIDEO_ID,
+        shot: shot({ durationSeconds: 30 }),
+        index: 0,
+        count: 1,
+        audio: "voice",
+      },
+      api,
+    );
+    await until(() => expect(hook.current.camera.state).toBe("live"));
+    // Nothing to halt yet.
+    hook.current.actions.halt();
+    expect(hook.current.phase).toBe("setup");
+    clock();
+    hook.current.actions.shutter();
+    await until(() => expect(hook.current.phase).toBe("countdown"));
+    hook.current.actions.halt();
+    await until(() => expect(hook.current.phase).toBe("setup"));
+    hook.current.actions.shutter();
+    await ticking(() => expect(hook.current.phase).toBe("recording"));
+    vi.useRealTimers();
+    hook.current.actions.halt();
+    await until(() => expect(hook.current.phase).toBe("preview"));
+    expect(hook.current.take).not.toBeNull();
   });
 });

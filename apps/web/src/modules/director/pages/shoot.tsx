@@ -7,7 +7,16 @@ import { useSystemInfoQuery } from "@repo/client/api/system/info";
 import type { Shot, ShotPlan } from "@repo/contracts/api";
 import type { LiveToolCall } from "@repo/contracts/live";
 import { required } from "@repo/contracts/objects";
-import { buttonVariants } from "@repo/ui/components/button";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@repo/ui/components/alert-dialog";
+import { Button, buttonVariants } from "@repo/ui/components/button";
 import { GeminiLoader } from "@repo/ui/components/gemini-loader";
 import { cn } from "@repo/ui/lib/utils";
 import { Camera as CameraIcon, SendHorizontal } from "lucide-react";
@@ -32,6 +41,7 @@ import { TakeReview } from "../components/take-review";
 import { Teleprompter } from "../components/teleprompter";
 import { useCamera } from "../hooks/use-camera";
 import { type DirectorLive, useDirectorLive } from "../hooks/use-director-live";
+import { useLeaveGuard } from "../hooks/use-leave-guard";
 import { useMemory } from "../hooks/use-memory";
 import { useWakeLock } from "../hooks/use-screen";
 import { nextPage, type Phase, type StudioShot, shotPage, useStudio } from "../hooks/use-studio";
@@ -302,10 +312,11 @@ interface Screen {
   live: DirectorLive;
   liveOn: boolean;
   onFlip: () => void;
+  onLeave: (event: { preventDefault: () => void }) => void;
 }
 
 /** Everything over the picture once the shoot has started, in a top and a bottom band. */
-function Overlay({ props, studio, camera, live, liveOn, onFlip }: Screen) {
+function Overlay({ props, studio, camera, live, liveOn, onFlip, onLeave }: Screen) {
   const t = useTranslations("director.shoot");
   const { shot, index, count, videoId, audio } = props;
   const recording = studio.phase === "recording";
@@ -321,7 +332,7 @@ function Overlay({ props, studio, camera, live, liveOn, onFlip }: Screen) {
           )}
           <div className="flex items-center gap-2">
             <DirectorPill live={live} />
-            <LeaveLink videoId={videoId} />
+            <LeaveLink videoId={videoId} onClick={onLeave} />
           </div>
         </div>
         {setup ? <ShotCard shot={shot} index={index} /> : null}
@@ -356,7 +367,10 @@ function Overlay({ props, studio, camera, live, liveOn, onFlip }: Screen) {
  */
 type ToolHandler = (id: string, call: LiveToolCall) => void;
 
-function useTools(tools: { current: ToolHandler }, screen: Omit<Screen, "liveOn" | "onFlip">) {
+function useTools(
+  tools: { current: ToolHandler },
+  screen: Omit<Screen, "liveOn" | "onFlip" | "onLeave">,
+) {
   const router = useRouter();
   useLayoutEffect(() => {
     const { props, studio, camera, live } = screen;
@@ -416,8 +430,9 @@ interface ShootProps {
  * reopens it), Director live, and the take, each telling the others what happened.
  */
 function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
-  const router = useRouter();
   const camera = useCamera(audio === "voice");
+  // Moving on after a kept take goes through the leave guard (made below, from the take).
+  const guard = useRef<Pick<ReturnType<typeof useLeaveGuard>, "go">>({ go: () => undefined });
   const props: StudioShot = {
     videoId,
     shot: required(plan.shots[index], "the shot"),
@@ -434,19 +449,51 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
     onTool: (id, call) => tools.current(id, call),
   });
   const studio = useStudio(props, camera, {
+    onCountdown: () => live.take("countdown"),
+    onCancelled: () => live.take("cancelled"),
     onRecording: () => live.take("recording"),
     onRecorded: () => live.take("recorded"),
     onDiscarded: () => live.take("discarded"),
-    onKept: () => router.push(nextPage(props)),
+    onKept: () => guard.current.go(nextPage(props)),
+  });
+  const leaving = useLeaveGuard({
+    guarded: studio.phase !== "setup",
+    away: `/director/${videoId}`,
+    halt: studio.actions.halt,
+  });
+  useLayoutEffect(() => {
+    guard.current = leaving;
   });
   useTools(tools, { props, studio, camera, live });
   const onFlip = useMemberFlip(camera, live);
   const { hold } = live;
-  const recording = studio.phase === "recording";
-  // Director's voice would end up in the take: it's held (dropped) while one records.
-  useEffect(() => hold(recording), [hold, recording]);
+  const quiet = studio.phase === "countdown" || studio.phase === "recording";
+  // Director's voice would talk over the 3-2-1 and end up in the take: it's held (dropped,
+  // and not captioned) from the first number to the take's end.
+  useEffect(() => hold(quiet), [hold, quiet]);
   useWakeLock();
-  return { props, camera, live, studio, onFlip };
+  return { props, camera, live, studio, onFlip, leaving };
+}
+
+/** "Leave? This take isn't kept yet.", with Leave and Stay. */
+function LeaveDialog({ leaving }: { leaving: ReturnType<typeof useLeaveGuard> }) {
+  const t = useTranslations("director.shoot.leaving");
+  return (
+    <AlertDialog open={leaving.asking} onOpenChange={(open) => (open ? null : leaving.stay())}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("title")}</AlertDialogTitle>
+          <AlertDialogDescription>{t("body")}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t("stay")}</AlertDialogCancel>
+          <Button variant="destructive" onClick={leaving.confirm}>
+            {t("leave")}
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
 }
 
 /** The member's take on screen to watch back, with what Director says about it. */
@@ -465,6 +512,7 @@ function Review({ shoot }: { shoot: ReturnType<typeof useShoot> }) {
       onAgain={studio.actions.again}
       onKeep={studio.actions.use}
       captions={<DirectorCaptions captions={live.captions} level={live.level} />}
+      tell={live.state === "live" ? <TellBox live={live} /> : null}
     />
   );
 }
@@ -520,9 +568,11 @@ function ShootScreen(shootProps: ShootProps) {
             live={live}
             liveOn={liveOn}
             onFlip={shoot.onFlip}
+            onLeave={shoot.leaving.leave}
           />
         ) : null}
         <Review shoot={shoot} />
+        <LeaveDialog leaving={shoot.leaving} />
         {blocked ? <CameraBlocked camera={camera} /> : null}
       </div>
     </div>

@@ -64,6 +64,7 @@ export function TakeReview({
   onAgain,
   onKeep,
   captions,
+  tell,
 }: {
   take: Blob;
   script: Shot["script"];
@@ -73,6 +74,8 @@ export function TakeReview({
   onKeep: () => void;
   /** What Director's saying about it. */
   captions: ReactNode;
+  /** The text box, to answer Director without a microphone. */
+  tell: ReactNode;
 }) {
   const t = useTranslations("director.shoot.review");
   const photo = take.type.startsWith("image/");
@@ -91,6 +94,7 @@ export function TakeReview({
       </p>
       <div className="absolute inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] flex flex-col gap-3">
         {captions}
+        {tell}
         {error ? (
           <p
             role="alert"

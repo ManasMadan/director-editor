@@ -45,24 +45,27 @@ export function liveUrl(
   return `${scheme}://${page.host}${LIVE_PATH}?${query}`;
 }
 
-interface Caption {
+export interface Caption {
+  who: Speaker;
   text: string;
   /** Bumped for each new line, so the caption can animate even when the words repeat. */
   key: number;
+  /** Finished: its speaker's turn is over (Director said so, or the other side spoke). */
+  done: boolean;
 }
 
+/** The last exchange, oldest first: at most two lines, the newest at the bottom. */
 export interface Captions {
-  you: Caption | null;
-  director: Caption | null;
-  /** Who spoke last: their next words carry on the same line. */
-  last: Speaker | null;
+  lines: Caption[];
   key: number;
 }
 
-export const NO_CAPTIONS: Captions = { you: null, director: null, last: null, key: 0 };
+export const NO_CAPTIONS: Captions = { lines: [], key: 0 };
 
 /** A caption is read at a glance: past this, only its last words stay. */
 const CAPTION_MAX_LENGTH = 160;
+/** One exchange: what was said, and the answer to it. */
+const LINES = 2;
 
 function lastWords(text: string): string {
   if (text.length <= CAPTION_MAX_LENGTH) {
@@ -72,16 +75,46 @@ function lastWords(text: string): string {
   return `…${tail.slice(tail.indexOf(" ") + 1)}`;
 }
 
+/** A new line from `who`: the one before it is finished, and only the last exchange stays. */
+function newLine(captions: Captions, who: Speaker, text: string, done: boolean): Captions {
+  const key = captions.key + 1;
+  const earlier = captions.lines.map((line) => ({ ...line, done: true }));
+  const line = { who, text: lastWords(text.trimStart()), key, done };
+  return { lines: [...earlier, line].slice(-LINES), key };
+}
+
 /**
  * The captions once `who` has said `text`. Transcripts arrive a few words at a time, so
- * words from whoever spoke last carry on their line, and a change of speaker starts a
- * new one; the other side's last line stays up until they speak again.
+ * words carry on the last line while its speaker's turn goes on; a change of speaker, or
+ * a finished line, starts a new one, under the one it answers.
  */
 export function withTranscript(captions: Captions, who: Speaker, text: string): Captions {
-  const current = captions[who];
-  if (captions.last === who && current) {
-    return { ...captions, [who]: { ...current, text: lastWords(current.text + text) } };
+  const last = captions.lines.at(-1);
+  if (last && last.who === who && !last.done) {
+    const lines = [...captions.lines.slice(0, -1), { ...last, text: lastWords(last.text + text) }];
+    return { ...captions, lines };
   }
-  const key = captions.key + 1;
-  return { ...captions, [who]: { text: lastWords(text.trimStart()), key }, last: who, key };
+  return newLine(captions, who, text, false);
+}
+
+/** A line the member typed: finished as it's sent. */
+export function withTyped(captions: Captions, text: string): Captions {
+  return newLine(captions, "you", text, true);
+}
+
+/** Director's turn is over: its line is finished, and its next words start a new one. */
+export function turnEnded(captions: Captions): Captions {
+  return { ...captions, lines: captions.lines.map((line) => ({ ...line, done: true })) };
+}
+
+/** Without the member's line: answered a while ago, or overtaken by what they did. */
+export function withoutMember(captions: Captions): Captions {
+  const lines = captions.lines.filter((line) => line.who === "director");
+  return lines.length === captions.lines.length ? captions : { ...captions, lines };
+}
+
+/** Whether the member's line has had its answer: Director's finished reply sits under it. */
+export function answered({ lines }: Captions): boolean {
+  const [first, second] = lines;
+  return first?.who === "you" && second?.who === "director" && second.done;
 }

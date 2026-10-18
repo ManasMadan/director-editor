@@ -11,14 +11,17 @@ import { timecode } from "../lib/track";
 export const GLASS =
   "bg-studio/72 backdrop-blur-xl backdrop-saturate-150 ring-1 ring-studio-foreground/12";
 
-/** Story-style segments for the shots: done, this one, still to come. */
+/**
+ * Story-style segments for the shots: done, this one, still to come. On the glass, so
+ * they keep their contrast over a bright camera picture.
+ */
 export function ShotProgress({ index, count }: { index: number; count: number }) {
   const t = useTranslations("director.shoot");
   return (
     <div
       role="img"
       aria-label={t("shotOf", { index: index + 1, count })}
-      className="flex w-20 gap-1"
+      className={cn("flex w-24 gap-1 rounded-full px-2.5 py-2", GLASS)}
     >
       {Array.from({ length: count }, (_, at) => (
         <span
@@ -53,12 +56,22 @@ export function RecordingPill({ seconds }: { seconds: number }) {
   );
 }
 
-/** Back to the short's page; the camera and Director go with the screen. */
-export function LeaveLink({ videoId }: { videoId: string }) {
+/**
+ * Back to the short's page; the camera and Director go with the screen. `onClick` can
+ * stop it, to ask first while a take isn't kept.
+ */
+export function LeaveLink({
+  videoId,
+  onClick,
+}: {
+  videoId: string;
+  onClick: (event: { preventDefault: () => void }) => void;
+}) {
   const t = useTranslations("director.shoot");
   return (
     <Link
       href={`/director/${videoId}`}
+      onClick={onClick}
       aria-label={t("leave")}
       title={t("leave")}
       className={cn(
