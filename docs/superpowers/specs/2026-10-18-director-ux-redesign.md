@@ -380,9 +380,9 @@ One full-bleed camera; everything floats in the top and bottom bands.
 │     ┌───────────┐              │
 │     │           │ your window  │ Gemini mark, only if
 │     └───────────┘              │ located in this frame
-│ Director  Inside it is! Stand  │
-│ so the window's behind you.    │
-│ You  nah I'm fine inside       │
+│ You  nah I'm fine inside       │ older line, dimmed
+│ Director  Inside it is! Stand  │ newest line, nearest
+│ so the window's behind you.    │ the text box
 │ (Inside ×) (One angle ×)       │ what Director remembers
 │ ┌──────────────────────────┐   │
 │ │ Tell Director…         ➤ │   │
@@ -390,6 +390,21 @@ One full-bleed camera; everything floats in the top and bottom bands.
 │  [⟲ flip]   [Shots]   [Done]   │
 └────────────────────────────────┘
 ```
+
+**Which controls arrive when.** The top band always has ✕ to leave the shoot (navigation,
+not a camera control). Slice 1 adds flip, the shutter and the text box; pause and Done
+arrive with continuous recording (slice 3), and "Shots" with picks (slice 5). Until slice
+3 the shutter sits where Done will be, centred.
+
+**Captions read in order.** The last exchange shows oldest first, newest at the bottom,
+nearest the text box, so a reply always sits under what it answers. The older line is
+dimmed; the member's line goes 8 s after Director has answered it. Transcripts arrive a
+few words at a time; screen readers hear each line once it's complete, not word by word.
+
+**Leaving.** ✕ (and the browser's back) leaves at once in setup. During a countdown,
+recording, or with a take not yet kept, it asks first: "Leave? This take isn't kept
+yet." with Leave and Stay. From slice 3 the question becomes "Wrap up? Your footage so
+far is saved."
 
 **During an attempt**: the card collapses to the line (teleprompter, near the lens),
 captions and the text box hide, a small "Director's listening" chip shows. Nothing
@@ -445,6 +460,10 @@ listen toggles, the call button, both docks, the per-take recorder and its count
 time you're shooting, chat included, so it can find your best moments. Only the clips you
 use go in your video. Pause any time." Button "Start shooting". That tap starts the
 recording and Director. Later sessions skip the explanation but still need the tap.
+Until slice 3 ships, takes still record one at a time, so the card says what's true then:
+"Director sees your camera and hears you while you get set, and talks you through each
+shot. A take records only when you tap the shutter. Your browser asks for the camera and
+microphone next."
 
 **The indicator.** Top left, always: a red dot and the running time ("● REC 03:12").
 Next to it, pause. It never hides, even when the controls fade.
@@ -538,6 +557,7 @@ just run it once, no pressure" and still keep a rehearsal that turns out to be t
 | Setting up | Answers every turn; one instruction or one question; backchannels while the member moves | Talks, types, moves |
 | Member quiet 15 s | One light nudge (from a `quiet` event); two at most per shot, then "I'll wait, just say when" | |
 | Before an attempt | "Whenever you're ready, I'll be quiet" (or a count-in if the member asks for one) | Starts when they want |
+| Slice 1's per-take baseline: the shutter's 3-2-1 | Told the countdown started; its voice is held from the first number, so it never talks over the count; anything it says while held is neither played nor captioned | Counts in, or cancels |
 | During an attempt | Silent; listens; marks the end when the member stops or says "how was that?" | Performs |
 | After an attempt | Speaks first within about 2 s: what worked, one thing to try, and whether it's the new best | |
 | Between shots | One line of celebration, one line about the next shot | |
@@ -608,8 +628,9 @@ Short system notes in the same session, never shown to the member, framed as fac
 ghost", 9.5); `battery low`; `shot opened` with your version's brief; and `context` at
 the start of every Live session (memory, adaptations, skipped shots, picks, progress).
 Live sessions are rotated at about nine minutes, or on Gemini's "going away" notice, with
-the context resent, so the member never notices a reconnect; today's per-hour call
-limit counts shoots, not reconnects. Member-written notes go to Gemini quoted as their
+the context resent, so the member never notices a reconnect. These rotations never
+count against the hourly limit of 20 connections; a new connection from the browser (its
+one silent retry after a drop, or Try again) does, which a normal shoot never comes near. Member-written notes go to Gemini quoted as their
 preferences, never as instructions.
 
 ### 6.8 Memory, constraints and re-planning
@@ -1385,11 +1406,13 @@ continuous recording (slice 3) is built and hardened.
 
 **1. One safe shoot screen.** One screen; Live starts on "Start shooting"; front camera
 with flip; all removals from 6.2; camera and Live stay up across shots; sessions rotate
-silently; `live` added to `system.info` features; the per-take baseline.
+silently; `live` added to `system.info` features; the per-take baseline (tap, a 3-2-1
+cancellable by a second tap or Escape, recording until a tap or the shot's length plus
+1.5 s); ✕ to leave, asking first when a take isn't kept.
 *Needs:* nothing. *Services:* Gemini Live, Compute Engine.
 *Acceptance:* say "okay let me go to the kitchen", "go", "ready", "let's go": nothing
 starts; raise both hands, walk out of frame: nothing starts. The only controls are flip,
-the shutter, the text box. Flip mid-conversation: Director comments on the new view. Ten
+the shutter, the text box, plus ✕ to leave. Flip mid-conversation: Director comments on the new view. Ten
 shots past ten minutes: no "call ended".
 
 **2. A two-way, flexible conversation.** The persona (6.15); events (6.7); Director
@@ -1494,7 +1517,8 @@ rest of 9.6.
 *Services:* Gemini on Vertex, Gemini Live, Nano Banana, Veo, Lyria, Cloud Storage, Cloud
 Run, BigQuery. *Acceptance:* section 10.
 
-**16. Polish.** Your version saved server-side (the memory seam's swap), blooper reels,
+**16. Polish.** Remove the scene-check procedure (`director.checkScene`), its AI agent,
+limits and docs, which nothing calls since slice 1; your version saved server-side (the memory seam's swap), blooper reels,
 the newest Live model with proactive audio and affective dialog, conversation analytics
 in BigQuery.
 
@@ -1631,13 +1655,24 @@ How the owner runs these, and what to send, is in
 in quotes), what should happen, and pass or fail. "Feel" checks are judged from the
 video against the latency and tone checks in section 14.
 
-**Slice 1: one safe shoot screen.** *Setup:* head-nod template, phone in hand, quiet room.
-*Steps:* 1. Tap Start shooting. 2. Say "okay let me go to the kitchen". 3. Say "go",
-"ready", "let's go", "start". 4. Raise both hands for five seconds; walk out of frame and
-back. 5. Tap flip; say "can you see me now?". 6. Move through three shots by asking
-Director. *Pass if:* nothing records in steps 2 to 4; only flip, the shutter and the text
-box are on screen; Director comments on the back camera's view; no black flash between
-shots. *Feel:* Director's first word within about 2.5 s of the tap.
+**Slice 1: one safe shoot screen.** *Setup:* the head-nod template, phone in hand, a
+quiet room; screen recording with the microphone on. *Steps:* 1. Open the template, tap
+Start shooting, read the card, tap Start shooting, allow camera and microphone. 2. Wait
+for Director to speak; answer its question. 3. Say "okay let me go to the kitchen", then
+"go", "ready", "let's go", "start", "action", "record". 4. Raise both hands for five
+seconds; walk out of frame and back. 5. Type "can you hear me?" and send. 6. Tap flip;
+say "can you see me now?". 7. Tap the shutter, then tap it again during the 3-2-1; then
+start a take, let it run out by itself, watch it back, tap Go again; record one more and
+tap Keep it. 8. Ask Director "can we do shot 3 now?". 9. During a take, tap ✕. 10. Leave
+the shoot running and talking for twelve minutes, moving through shots. *Pass if:*
+nothing records in steps 3 and 4; the camera opens on the selfie side; the only controls
+are flip, the shutter, the text box and ✕; Director answers the typed line; after the
+flip Director says something about the back camera's view; the cancelled countdown
+records nothing; Director is silent during takes and speaks first after each one; shot 3
+opens with no black flash and Director still talking; ✕ during a take asks before
+leaving; no "Director lost the connection" or "half an hour" notice by minute twelve.
+*Feel:* Director's first word within about 2.5 s of the second tap; answers within about
+a second; no canned-sounding lines.
 
 **Slice 2: conversation.** *Setup:* head-nod, step 1 done. *Steps:* 1. Say "ok I'm going"
 while walking. 2. Type "can you say my line again?". 3. Say the line in different words.
@@ -1814,3 +1849,8 @@ hours (slice 7), and recreating an original's images rather than extracting them
 ## 19. Changelog
 
 - 2026-10-18: first version, from the owner's production test and follow-up direction.
+- 2026-10-18, after slice 1's review: ✕ to leave is in every slice and asks before
+  losing a take (6.1); which controls arrive in which slice (6.1); captions in order,
+  newest at the bottom (6.1); per-take consent copy until slice 3 (6.3); Director held
+  and told during the 3-2-1 (6.5); what counts against the hourly limit (6.7); removing
+  scene checks moved to slice 16.
