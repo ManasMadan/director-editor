@@ -66,7 +66,8 @@ function member(
   comma: boolean,
   maxWidth: number,
 ): JsonToken[][] {
-  const indent: JsonToken[] = depth > 0 ? [{ kind: "space", text: "  ".repeat(depth) }] : [];
+  // Every member sits inside the shot's braces, so `depth` is at least 1.
+  const indent: JsonToken[] = [{ kind: "space", text: "  ".repeat(depth) }];
   const head = [...indent, ...(key === null ? [] : keyTokens(key))];
   const tail = comma ? [punctuation(",")] : [];
   const flat = [...head, ...inline(value), ...tail];
