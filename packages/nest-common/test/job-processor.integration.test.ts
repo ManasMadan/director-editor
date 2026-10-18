@@ -11,6 +11,7 @@ import { NestFactory } from "@nestjs/core";
 import { eventually } from "@repo/testing/eventually";
 import { Queue, UnrecoverableError } from "bullmq";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { AppError } from "../src/errors";
 import { JobProcessor } from "../src/job-processor";
 import { redisDatabase } from "../src/testing";
 
@@ -25,6 +26,9 @@ class FailingProcessor extends JobProcessor {
     }
     if (job.data.kind === "bad") {
       throw new UnrecoverableError("bad payload");
+    }
+    if (job.data.kind === "unavailable") {
+      throw new AppError("SERVICE_UNAVAILABLE");
     }
     throw new Error("outer", { cause: new Error("the real reason") });
   }
@@ -130,6 +134,20 @@ describe("a job's activity line", () => {
       reason: "Error",
       actor: { userId: "u-1" },
       target: { final: true },
+    });
+  });
+
+  it("gives an error code of the catalog as the reason, rather than the error's kind", async () => {
+    const job = await queue.add(
+      "work",
+      { kind: "unavailable", meta },
+      { attempts: 2, backoff: 10 },
+    );
+    const [line] = await activityOf(warnings, job.id as string);
+    expect(line).toMatchObject({
+      outcome: "failed",
+      reason: "SERVICE_UNAVAILABLE",
+      target: { final: false },
     });
   });
 });

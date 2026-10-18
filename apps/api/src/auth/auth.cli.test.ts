@@ -25,4 +25,10 @@ describe("the auth CLI's configuration", () => {
       "The auth CLI never sends notifications",
     );
   });
+
+  it("logs no activity", () => {
+    expect(inert.activity({ activity: "auth.signed_out", target: { userId: "u-1" } })).toBe(
+      undefined,
+    );
+  });
 });

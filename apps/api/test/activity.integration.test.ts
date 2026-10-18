@@ -8,6 +8,7 @@
 import { YOUTUBE_UPLOAD_SCOPE } from "@repo/contracts/api";
 import { startFakeGoogle } from "@repo/fake-google";
 import { PinoLogger } from "@repo/nest-common";
+import pg from "pg";
 import { symbols } from "pino";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import * as z from "zod";
@@ -170,6 +171,43 @@ describe("activity lines", () => {
     expect(activities().filter((entry) => entry.activity === "auth.youtube_granted")).toHaveLength(
       1,
     );
+  });
+
+  it("name the admin as the actor when they make an account or sign in as someone", async () => {
+    const adminEmail = newEmail();
+    const password = newPassword();
+    const signingUp = createSession(harness);
+    await signingUp.auth("/sign-up/email", { email: adminEmail, password, name: "Root" });
+    const { otp } = await takeOtp(harness, adminEmail);
+    await signingUp.auth("/email-otp/verify-email", { email: adminEmail, otp });
+    const db = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
+    await db.connect();
+    await db
+      .query(`UPDATE auth."user" SET role = 'admin' WHERE email = $1`, [adminEmail])
+      .finally(() => db.end());
+    // A new session, so it carries the role.
+    const admin = createSession(harness);
+    expect((await admin.auth("/sign-in/email", { email: adminEmail, password })).status).toBe(200);
+
+    const email = newEmail();
+    const made = await admin.auth<{ user: { id: string } }>("/admin/create-user", {
+      email,
+      password: newPassword(),
+      name: "Lin",
+      role: "user",
+    });
+    expect(made.status).toBe(200);
+    const [signedUp] = await activity("auth.signed_up", {
+      target: expect.objectContaining({ method: "admin", email }),
+    });
+    expect(signedUp).toMatchObject({ actor: { email: adminEmail } });
+
+    const userId = made.body.user.id;
+    expect((await admin.auth("/admin/impersonate-user", { userId })).status).toBe(200);
+    const [signedIn] = await activity("auth.signed_in", {
+      target: expect.objectContaining({ userId, email }),
+    });
+    expect(signedIn).toMatchObject({ actor: { email: adminEmail } });
   });
 
   it("say a call was refused, with its code, when no one is signed in", async () => {
