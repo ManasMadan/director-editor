@@ -28,6 +28,9 @@ _STYLE = (
 )
 
 
+_NEGATIVE = "text, captions, subtitles, logos, watermarks, brand names"
+
+
 class NoClip(ValueError):
     """An operation that ended with no clip (held back by a safety filter, or failed)."""
 
@@ -38,6 +41,16 @@ class Clip:
     media_type: str
 
 
+def veo_address(model_name: str, project: str | None, location: str) -> str:
+    """What Vertex is sent for Veo: its full resource name in `location` (Veo isn't served
+    from the "global" location the Gemini models are, and with an API key only the full
+    name carries the project, which a long-running call needs). Without a project (the
+    Gemini API), the bare name."""
+    if project is None:
+        return model_name
+    return f"projects/{project}/locations/{location}/publishers/google/models/{model_name}"
+
+
 def clip_prompt(prompt: str) -> str:
     return f"{prompt}\n{_STYLE}"
 
@@ -46,21 +59,26 @@ class Filmmaker:
     """Veo (VEO_MODEL), making one clip at a time through the Gemini client underneath
     the model Director builds everything else with."""
 
-    def __init__(self, model: GoogleModel, model_name: str) -> None:
+    def __init__(self, model: GoogleModel, model_name: str, address: str) -> None:
+        # `model_name` is the short name the usage ledger and the rows record; `address`
+        # is what Vertex is sent (`veo_address`).
         self._model = model
         self.model_name = model_name
+        self._address = address
 
     async def film(self, prompt: str) -> Clip:
         client = self._model.client.aio
         operation: GenerateVideosOperation = await client.models.generate_videos(
-            model=self.model_name,
+            model=self._address,
             prompt=clip_prompt(prompt),
             config=GenerateVideosConfig(
                 aspect_ratio="9:16",
                 duration_seconds=CLIP_SECONDS,
+                resolution="720p",
                 number_of_videos=1,
                 person_generation="allow_adult",
                 generate_audio=False,
+                negative_prompt=_NEGATIVE,
             ),
         )
         waited = 0

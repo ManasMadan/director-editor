@@ -155,7 +155,9 @@ class Settings(GeminiSettings):
     # Veo clips for the gaps of a member's video (app/clips.py), by its short name; empty
     # turns clips off (a gap's Create tab then draws stills). Each clip is counted against
     # the workspace's allowance as this many tokens, standing for its price by the second.
-    veo_model: str = Field(default="veo-3.1-lite-generate-preview", alias="VEO_MODEL")
+    veo_model: str = Field(default="veo-3.1-lite-generate-001", alias="VEO_MODEL")
+    # Where Veo is served from on Vertex (not "global", where the Gemini models are).
+    veo_location: str = Field(default="us-central1", min_length=1, alias="VEO_LOCATION")
     director_tokens_per_clip: int = Field(
         default=60_000, ge=2_000, alias="DIRECTOR_TOKENS_PER_CLIP"
     )

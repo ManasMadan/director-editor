@@ -43,7 +43,7 @@ from app.activity import Target, log_activity, outcome_of
 from app.aligning import Aligner, LocalAligner, RemoteAligner, create_locator
 from app.analytics import Analytics, AnalyticsEvent, Recorder, create_analytics
 from app.assets import CHANGED, Artist, AssetMaker, create_checker
-from app.clips import Filmmaker
+from app.clips import Filmmaker, veo_address
 from app.contracts.error_response import ErrorCode
 from app.db.models import DirectorAsset, DirectorCut, DirectorPlan, DirectorTake
 from app.db.session import tenant
@@ -1584,7 +1584,15 @@ def create_asset_maker(settings: Settings, redis: Redis) -> AssetMaker | None:
         monthly=Allowance(settings.monthly_tokens_per_org, settings.monthly_tokens_per_demo_guest),
         per_image=settings.director_tokens_per_asset,
         filmmaker=(
-            Filmmaker(create_google_model(settings, settings.veo_model), settings.veo_model)
+            Filmmaker(
+                create_google_model(settings, settings.veo_model),
+                settings.veo_model,
+                veo_address(
+                    settings.veo_model,
+                    settings.google_cloud_project if settings.google_vertex else None,
+                    settings.veo_location,
+                ),
+            )
             if settings.veo_model
             else None
         ),

@@ -1,6 +1,6 @@
 """The picker's slots beyond a plan's assets: a B-roll slot per gap and per shot."""
 
-from app.clips import clip_prompt
+from app.clips import clip_prompt, veo_address
 from app.schemas import GapEdit, ShotPlan
 from app.slots import gap_assets, is_gap_slot, slot_assets
 from tests.test_seed_media import PLAN
@@ -44,3 +44,14 @@ def test_a_clip_is_asked_for_as_anonymous_vertical_b_roll() -> None:
     assert prompt.startswith("A crowd at a startup event")
     assert "9:16" in prompt
     assert "anonymous" in prompt
+
+
+def test_veo_is_addressed_in_its_own_location_with_the_project() -> None:
+    assert (
+        veo_address("veo-3.1-lite-generate-001", "my-project", "us-central1")
+        == "projects/my-project/locations/us-central1/publishers/google/models/"
+        "veo-3.1-lite-generate-001"
+    )
+    assert veo_address("veo-3.1-lite-generate-001", None, "us-central1") == (
+        "veo-3.1-lite-generate-001"
+    )
