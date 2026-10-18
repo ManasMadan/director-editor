@@ -445,6 +445,27 @@ async def test_main_runs_the_selected_shorts_live(
 
 
 @pytest.mark.integration
+async def test_main_fails_a_run_with_no_shorts_at_all(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]],
+) -> None:
+    """An empty Shorts' file proves nothing about indexing, so it isn't a pass."""
+    shorts = tmp_path / "shorts.json"
+    shorts.write_text("[]")
+    for key, value in gemini_env(gemini[0].url).items():
+        monkeypatch.setenv(key, value)
+    get_settings.cache_clear()
+    try:
+        code = await main(["--live", "--shorts", str(shorts)])
+    finally:
+        get_settings.cache_clear()
+
+    assert code == 1
+    assert gemini[0].received == []
+
+
+@pytest.mark.integration
 def test_the_command_prints_each_short_and_fails_when_one_does(
     gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]],
 ) -> None:
