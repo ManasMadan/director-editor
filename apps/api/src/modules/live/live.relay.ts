@@ -4,13 +4,15 @@
  * Gemini's voice, both sides' transcripts and its tool calls come back down. One socket
  * carries the whole shoot: a move to another shot is a turn telling Gemini about it, and
  * what the member does on screen (a flip of the camera, a take) becomes a note in the
- * app's own words.
+ * app's own words. Any note would stop Director mid-sentence, so notes wait for the turn
+ * under way to end (live.gate.ts).
  *
  * Gemini's connections last about ten minutes; a shoot runs longer. So the relay moves to
  * a fresh connection on its own, after `rotateAfterMs` or as soon as Gemini says the
  * current one is going away, and picks the conversation up there with the Live API's
  * session resumption (or, without a handle, with the last few lines said). The new
- * connection is ready before the old one is let go, so the member never notices.
+ * connection is ready before the old one is let go, and takes over between turns (or by
+ * the old one's deadline), so the member never notices.
  *
  * A tool call reaches the browser with an id; Gemini hears what really happened once the
  * browser answers it (done, or refused and why), not before. The shoot ends when either
@@ -28,6 +30,7 @@ import {
   type LiveClientMessage,
   type LiveServerMessage,
   type LiveTool,
+  type LiveToolCall,
   type LiveToolResult,
   liveClientMessage,
 } from "@repo/contracts/live";
@@ -36,6 +39,7 @@ import { describeError } from "@repo/nest-common";
 import { type RawData, WebSocket } from "ws";
 import type { GoogleAuth } from "./google-auth";
 import { SlidingBudget } from "./live.budget";
+import { NoteGate, type NoteKind } from "./live.gate";
 import { POINT_AT_ANSWER_MS } from "./live.marks";
 import {
   UPSTREAM_MAX_PAYLOAD_BYTES,
@@ -45,6 +49,7 @@ import {
 import { Pacer } from "./live.pacer";
 import { type LivePicks, RATE_TOOL, rate, ShotTally } from "./live.picks";
 import {
+  type AppNote,
   adaptationOf,
   briefOf,
   cameraMessage,
@@ -64,9 +69,13 @@ import {
 import { checkTool, TOOL_RESPONSES, toolNamed } from "./live.tools";
 import { type LiveTurn, TurnMeter } from "./live.turns";
 
-/** How the relay reports what went wrong, for the service's log. */
+/**
+ * How the relay reports what went wrong, for the service's log, and (at info) what the
+ * conversation did: tool calls and their outcomes, notes held for a turn to end,
+ * interruptions and each turn's timing. Never the words said.
+ */
 export type LiveLog = (
-  level: "error" | "warn",
+  level: "error" | "warn" | "info",
   details: Record<string, unknown>,
   message: string,
 ) => void;
@@ -127,15 +136,24 @@ const UPSTREAM_MAX_BUFFERED_BYTES = 1024 * 1024;
 /** How long Gemini waits to hear what came of a tool call before it's told nobody knows. */
 const TOOL_ANSWER_MS = 5 * SECOND_MS;
 /**
- * A re-plan is a model call of its own (director.revise), answered within the AI
- * service's own bound: Gemini waits that long for it, plus the trip there and back.
+ * A re-plan is a model call of its own (director.revise): the AI service gives the model
+ * up to 25 seconds (REVISE_TIMEOUT_SECONDS in apps/ai/app/director.py), and the answer
+ * still has to travel back through the API and the browser. Gemini waits that long with
+ * room to spare, so a slow re-plan isn't reported as unanswered and then applied anyway.
  */
-const REPLAN_ANSWER_MS = 30 * SECOND_MS;
+const REPLAN_ANSWER_MS = 45 * SECOND_MS;
 /** The tools whose answer takes longer than an ordinary one's. */
 const ANSWER_WITHIN: Partial<Record<LiveTool, number>> = {
   point_at: POINT_AT_ANSWER_MS,
   replan: REPLAN_ANSWER_MS,
 };
+/**
+ * Longest a ready fresh connection waits for Director's turn to end before taking over
+ * anyway, on the timer's rotation (a goAway's own time left caps it further). A turn is
+ * seconds long; this only stops a turn that never ends from holding the old connection
+ * until Gemini drops it.
+ */
+const HANDOVER_WAIT_MS = 20 * SECOND_MS;
 /** What's kept of the conversation, to catch a fresh connection up: lines, and each's length. */
 const RECENT_LINES = 8;
 const RECENT_LINE_LENGTH = 300;
@@ -186,6 +204,15 @@ interface Pending {
   geminiId: string | undefined;
   name: LiveTool;
   timer: NodeJS.Timeout;
+  /** When it reached the browser, for the log of how long the answer took. */
+  askedAt: number;
+  /** It takes the member to another shot by itself (live.relay.ts `movesThem`). */
+  moves: boolean;
+}
+
+/** What Gemini was told at once about a call, in a word, for the log. */
+function outcomeOf(response: object): string {
+  return "result" in response && typeof response.result === "string" ? response.result : "invalid";
 }
 
 /** A frame's bytes as text, whichever of ws's shapes it arrived in. */
@@ -236,6 +263,20 @@ export class LiveRelay {
   /** The shoot's attempts and Director's ratings of them, for `rate`. */
   private readonly tally = new ShotTally();
   private readonly turn: TurnMeter;
+  /** Holds the app's notes while a turn is under way, so none cuts Director off. */
+  private readonly gate: NoteGate;
+  /**
+   * Director moved the member itself (go_to_shot, or skip_shot of the shot they're on):
+   * the move the browser reports next is briefed quietly, since Director has just said
+   * what's next.
+   */
+  private ownMove = false;
+  /** When the move to a fresh connection began, and by when it must be done. */
+  private rotatedAt = 0;
+  private handOverBy = 0;
+  private handOverTimer: NodeJS.Timeout | undefined;
+  /** The kind of the last note sent and when, for the log of an interruption. */
+  private lastNote: { kinds: NoteKind[]; at: number } | null = null;
 
   constructor(
     private readonly client: WebSocket,
@@ -250,8 +291,16 @@ export class LiveRelay {
     this.turn = new TurnMeter(options.now);
     this.pacer = new Pacer(
       {
-        onQuiet: (nudge) => this.tell(quietMessage(nudge)),
-        onNoise: () => this.tell(noiseMessage()),
+        onQuiet: (nudge) => this.tell("quiet", quietMessage(nudge)),
+        onNoise: () => this.tell("noise", noiseMessage()),
+      },
+      options.now,
+    );
+    this.gate = new NoteGate(
+      {
+        waiting: () => this.pending.size > 0,
+        idle: () => this.handOver(),
+        deliver: (note, kinds, held) => this.deliver(note, kinds, held),
       },
       options.now,
     );
@@ -312,11 +361,21 @@ export class LiveRelay {
   }
 
   /** Moves to a fresh connection, unless one is on its way already. */
-  private rotate() {
+  /**
+   * Moves to a fresh connection, unless one is on its way already: on the timer, or when
+   * Gemini warns the current one is going away (`timeLeft`, in its duration form, "5s").
+   */
+  private rotate(reason: "timer" | "goAway", timeLeft?: string) {
     if (this.rotating || this.ended) {
       return;
     }
     this.rotating = true;
+    this.rotatedAt = this.options.now();
+    // The old connection must still be open when the new one takes over: a second spare.
+    const seconds = timeLeft ? Number.parseFloat(timeLeft) : Number.NaN;
+    const wait = Number.isFinite(seconds) ? (seconds - 1) * SECOND_MS : HANDOVER_WAIT_MS;
+    this.handOverBy = this.rotatedAt + Math.min(Math.max(wait, 0), HANDOVER_WAIT_MS);
+    this.options.log("info", { reason }, "live connection rotating");
     clearTimeout(this.rotateTimer);
     void this.connect("next");
   }
@@ -326,9 +385,12 @@ export class LiveRelay {
     if (line.retired || this.ended) {
       return;
     }
-    // The old connection went before the new one was ready: Director carries on there.
+    // The old connection went before the new one took over: Director carries on there,
+    // straight away if it's ready.
     if (line === this.current && this.rotating) {
       this.current = null;
+      this.dropCallsOn(line);
+      this.handOver();
       return;
     }
     // Vertex reports a refused setup (bad model, field or permission) only this way.
@@ -352,21 +414,21 @@ export class LiveRelay {
         this.version = message.version;
         return;
       case "forgot":
-        return this.note(forgotMessage(message));
+        return this.note("forgot", forgotMessage(message));
       case "restored":
-        return this.note(restoredMessage(message.shot, message.row));
+        return this.note("restored", restoredMessage(message.shot, message.row));
       case "camera":
         this.pacer.heard();
-        return this.note(cameraMessage(message.facing));
+        return this.note("camera", cameraMessage(message.facing));
       case "take":
         // From the 3-2-1 to the take's end, quiet is the point.
         this.pacer.take(message.state === "countdown" || message.state === "recording");
         this.tally.onTake(message.state, this.shot);
-        return this.note(takeMessage(message.state, this.shot));
+        return this.note("take", takeMessage(message.state, this.shot));
       case "roll":
         // Paused, nobody's there to nudge; and Done is the end of it.
         this.pacer.take(message.state === "paused" || message.state === "done");
-        return this.note(rollMessage(message.state));
+        return this.note("roll", rollMessage(message.state));
       default:
         return this.forward(message);
     }
@@ -393,27 +455,42 @@ export class LiveRelay {
     }
     this.shot = index;
     this.pacer.newShot();
+    // Director's own move: it has just said what's next, so it's only briefed.
+    const answer = !this.ownMove;
+    this.ownMove = false;
     const line = this.ready;
     if (line) {
       line.shot = index;
-      send(line, shotMessage(this.options.plan, index, this.version));
+      // Built when it goes, for the shot the member is on by then.
+      this.gate.send("shot", () => shotMessage(this.options.plan, this.shot, this.version, answer));
     }
   }
 
   /** A note of the app's own pacing (quiet, noise): it isn't the browser's to spend. */
-  private tell(message: object) {
-    const line = this.ready;
-    if (line) {
-      send(line, message);
+  private tell(kind: NoteKind, message: AppNote) {
+    if (this.ready) {
+      this.gate.send(kind, () => message);
     }
   }
 
   /** A note from the app; dropped before Gemini is ready, or past the notes' allowance. */
-  private note(message: object) {
-    const line = this.ready;
-    if (line && this.notes.spend(1)) {
-      send(line, message);
+  private note(kind: NoteKind, message: AppNote) {
+    if (this.ready && this.notes.spend(1)) {
+      this.gate.send(kind, () => message);
     }
+  }
+
+  /** Notes on their way to Gemini, once no turn is under way (live.gate.ts). */
+  private deliver(note: AppNote, kinds: NoteKind[], held: boolean) {
+    const line = this.ready;
+    if (!line) {
+      return;
+    }
+    this.lastNote = { kinds, at: this.options.now() };
+    if (held) {
+      this.options.log("info", { kinds }, "live notes held for a turn to end");
+    }
+    send(line, note);
   }
 
   private forward(message: Extract<LiveClientMessage, { type: "audio" | "frame" | "text" }>) {
@@ -489,7 +566,7 @@ export class LiveRelay {
       }
     }
     if (message.goAway) {
-      this.rotate();
+      this.rotate("goAway", message.goAway.timeLeft);
     }
   }
 
@@ -501,72 +578,158 @@ export class LiveRelay {
     }
     clearTimeout(line.setupTimer);
     line.ready = true;
-    const moved = line.shot !== this.shot;
-    line.shot = this.shot;
-    // The member's version arrived after the setup went (the browser sends it as it joins):
-    // Director knows it before it says anything.
-    if (!moved && briefOf(this.version, this.shot) !== line.briefed) {
-      send(line, versionMessage(this.version, this.shot));
-    }
     if (line === this.next) {
-      this.takeOver(line);
-    } else {
-      this.startedAt = this.options.now();
-      this.options.onCallStarted();
-      this.pacer.heard();
-      if (!moved) {
-        send(line, this.options.resumed ? resumedMessage(this.shot) : greetingMessage(this.shot));
-      }
+      return this.handOver();
+    }
+    const moved = this.briefLine(line);
+    this.startedAt = this.options.now();
+    this.options.onCallStarted();
+    this.pacer.heard();
+    if (!moved) {
+      send(line, this.options.resumed ? resumedMessage(this.shot) : greetingMessage(this.shot));
     }
     // The member moved on while this connection got ready: it opens on the shot they're on.
     if (moved) {
       send(line, shotMessage(this.options.plan, this.shot, this.version));
     }
-    clearTimeout(this.rotateTimer);
-    this.rotateTimer = setTimeout(() => this.rotate(), this.options.rotateAfterMs);
+    this.armRotation();
   }
 
   /**
-   * A fresh connection takes over: the old one is let go (its unanswered tool calls with
-   * it), and Gemini is caught up when it couldn't resume the conversation itself.
+   * What a connection that's ready must hear before anything else: the member's version,
+   * when it changed after its setup went (the browser sends it as it joins). Says whether
+   * the member has moved to another shot since, which the caller briefs it on.
+   */
+  private briefLine(line: Line): boolean {
+    const moved = line.shot !== this.shot;
+    line.shot = this.shot;
+    if (!moved && briefOf(this.version, this.shot) !== line.briefed) {
+      send(line, versionMessage(this.version, this.shot));
+    }
+    return moved;
+  }
+
+  private armRotation() {
+    clearTimeout(this.rotateTimer);
+    this.rotateTimer = setTimeout(() => this.rotate("timer"), this.options.rotateAfterMs);
+  }
+
+  /**
+   * The fresh connection is ready: it takes over once the turn under way is over (no
+   * sentence cut off, no tool call's answer lost), or by the deadline, whichever is first.
+   * The gate calls this again as each turn ends.
+   */
+  private handOver() {
+    const line = this.next;
+    if (!line?.ready) {
+      return;
+    }
+    const left = this.handOverBy - this.options.now();
+    if (this.gate.busy && this.current && left > 0) {
+      this.handOverTimer ??= setTimeout(() => this.takeOver(line), left);
+      return;
+    }
+    this.takeOver(line);
+  }
+
+  /**
+   * A fresh connection takes over: the old one is let go (an unanswered tool call with
+   * it, if the deadline came first), and Gemini is caught up when it couldn't resume the
+   * conversation itself.
    */
   private takeOver(line: Line) {
+    clearTimeout(this.handOverTimer);
+    this.handOverTimer = undefined;
     const old = this.current;
+    this.options.log(
+      "info",
+      { waitedMs: this.options.now() - this.rotatedAt, turnOpen: this.gate.busy },
+      "live connection handed over",
+    );
     this.current = line;
     this.next = null;
     this.rotating = false;
     if (old) {
       old.retired = true;
       old.socket.close();
+      this.dropCallsOn(old);
     }
+    const moved = this.briefLine(line);
     if (!line.resumed) {
       send(line, catchUpMessage(this.shot, this.recentText()));
     }
+    if (moved) {
+      // Director was told of the move on the old connection already.
+      send(line, shotMessage(this.options.plan, this.shot, this.version, false));
+    }
+    this.armRotation();
+    // Whatever turn was under way went with the old connection: the new one is listening.
+    this.gate.turnOver();
+  }
+
+  /** Tool calls a closed connection made: nobody can hear their answers now. */
+  private dropCallsOn(line: Line) {
+    for (const [id, pending] of this.pending) {
+      if (pending.line === line) {
+        clearTimeout(pending.timer);
+        this.pending.delete(id);
+      }
+    }
+    this.pacer.toolPending(this.pending.size > 0);
   }
 
   private relayContent(content: NonNullable<UpstreamMessage["serverContent"]>) {
     for (const part of content.modelTurn?.parts ?? []) {
       if (part.inlineData?.mimeType.startsWith("audio/pcm")) {
-        this.turn.spoke();
+        this.gate.turnGoesOn();
+        this.turn.spoke(Buffer.byteLength(part.inlineData.data, "base64"));
         this.toClient({ type: "audio", pcm16: part.inlineData.data });
       }
     }
     if (content.inputTranscription?.text) {
+      // The member is talking, and Director will answer: no note in between.
+      this.gate.turnGoesOn();
       this.turn.member("voice");
       this.transcript("you", content.inputTranscription.text);
     }
     if (content.outputTranscription?.text) {
+      this.gate.turnGoesOn();
+      this.turn.said();
       this.transcript("director", content.outputTranscription.text);
     }
     if (content.interrupted) {
-      this.toClient({ type: "interrupted" });
-      this.pacer.interrupted();
-      this.turn.cutIn();
+      this.interrupted();
     }
     if (content.turnComplete) {
       this.toClient({ type: "turn" });
-      this.options.onTurn(this.turn.complete(), this.shot);
+      const turn = this.turn.complete();
+      this.options.log("info", { ...turn, shot: this.shot + 1 }, "live turn");
+      this.options.onTurn(turn, this.shot);
+      this.gate.turnOver();
     }
+  }
+
+  /**
+   * The member talked over Director (or typed): what it was saying is dropped. Logged with
+   * how far into the turn and how long after the app's last note, so an interruption the
+   * app caused itself shows up as one.
+   */
+  private interrupted() {
+    const now = this.options.now();
+    this.options.log(
+      "info",
+      {
+        msIntoTurn: this.gate.turnAge(),
+        msSinceNote: this.lastNote ? now - this.lastNote.at : null,
+        lastNote: this.lastNote?.kinds ?? null,
+      },
+      "live turn interrupted",
+    );
+    this.toClient({ type: "interrupted" });
+    this.pacer.interrupted();
+    this.turn.cutIn();
+    // The member has the floor, and Director will answer them: notes still wait.
+    this.gate.turnGoesOn();
   }
 
   private transcript(who: "you" | "director", text: string) {
@@ -596,10 +759,16 @@ export class LiveRelay {
    */
   private toolCall(line: Line, call: FunctionCall) {
     const name = toolNamed(call.name);
-    const answerNow = (response: object) =>
+    const askedAt = this.options.now();
+    // Gemini says nothing more until it has its answer, and carries on from it.
+    this.gate.turnGoesOn();
+    const answerNow = (response: object) => {
+      this.logTool(call.name, outcomeOf(response), askedAt);
       send(line, {
         toolResponse: { functionResponses: [{ id: call.id, name: call.name, response }] },
       });
+      this.gate.turnGoesOn();
+    };
     if (call.name === RATE_TOOL) {
       this.turn.tool(RATE_TOOL);
       return this.rate(call.args, answerNow);
@@ -628,8 +797,30 @@ export class LiveRelay {
       }
     }
     const adaptation = browserCall.call.name === "adapt_shot" ? browserCall.call : undefined;
-    this.pending.set(id, { line, geminiId: call.id, name, timer, adaptation });
+    const moves = this.movesThem(browserCall.call);
+    this.ownMove = this.ownMove || moves;
+    this.pending.set(id, { line, geminiId: call.id, name, timer, adaptation, askedAt, moves });
+    this.pacer.toolPending(true);
     this.toClient({ type: "tool", id, call: browserCall.call });
+  }
+
+  /** Whether a call of Director's takes the member to another shot by itself. */
+  private movesThem(call: LiveToolCall) {
+    return (
+      (call.name === "go_to_shot" && call.shot !== this.shot) ||
+      (call.name === "skip_shot" && call.shot === this.shot)
+    );
+  }
+
+  /** A tool call and what came of it, for the log: never its arguments, which can be words. */
+  private logTool(tool: string, outcome: string, askedAt: number) {
+    const details = {
+      tool,
+      outcome,
+      shot: this.shot + 1,
+      waitedMs: this.options.now() - askedAt,
+    };
+    this.options.log("info", details, "live tool call");
   }
 
   /** Director rated an attempt, or the member said which to use: answered once it's done. */
@@ -652,7 +843,12 @@ export class LiveRelay {
     }
     this.pending.delete(id);
     clearTimeout(pending.timer);
-    const { line, geminiId, name, adaptation } = pending;
+    const { line, geminiId, name, adaptation, askedAt } = pending;
+    this.logTool(name, result, askedAt);
+    if (pending.moves && result !== "done") {
+      // A move the browser didn't make: the next one isn't Director's own.
+      this.ownMove = false;
+    }
     if (adaptation && result === "done") {
       const others = this.version.shots.filter(({ shot }) => shot !== adaptation.shot);
       const merged = { ...adaptationOf(this.version, adaptation.shot), ...adaptation };
@@ -667,6 +863,9 @@ export class LiveRelay {
     if (!line.retired && line.socket.readyState === WebSocket.OPEN) {
       send(line, { toolResponse: { functionResponses: [{ id: geminiId, name, response }] } });
     }
+    this.pacer.toolPending(this.pending.size > 0);
+    // Director carries on from the answer: held notes wait for that line to end.
+    this.gate.turnGoesOn();
   }
 
   // The browser's socket is open whenever this runs (Gemini answered while it was). One
@@ -682,8 +881,10 @@ export class LiveRelay {
     }
     this.ended = true;
     this.pacer.stop();
+    this.gate.stop();
     clearTimeout(this.timer);
     clearTimeout(this.rotateTimer);
+    clearTimeout(this.handOverTimer);
     for (const line of [this.current, this.next]) {
       clearTimeout(line?.setupTimer);
       line?.socket.close();

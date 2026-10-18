@@ -86,7 +86,7 @@ export function liveCallOptions(deps: {
   calls: { take(userId: string): Promise<void> };
   // A demo guest's calls, counted against its own, smaller limit.
   guestCalls: { take(userId: string): Promise<void> };
-  logger: Pick<Logger, "warn" | "error">;
+  logger: Pick<Logger, "log" | "warn" | "error">;
   activity: RecordActivity;
 }): LiveOptions {
   return {
@@ -107,7 +107,9 @@ export function liveCallOptions(deps: {
       url: env.LIVE_API_URL,
       auth: createGoogleAuth(env.GOOGLE_ACCESS_TOKEN),
     }),
-    log: (level, details, message) => deps.logger[level](details, message),
+    // Nest's logger calls the info level `log`.
+    log: (level, details, message) =>
+      deps.logger[level === "info" ? "log" : level](details, message),
     now: Date.now,
     recordCallStarted: (userId, videoId) =>
       deps.analytics.record("call_started", { userId, videoId }),

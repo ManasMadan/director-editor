@@ -33,7 +33,7 @@ function options(overrides: Partial<Parameters<typeof liveCallOptions>[0]> = {})
     analytics: { record: vi.fn() },
     calls: { take: vi.fn(() => Promise.resolve()) },
     guestCalls: { take: vi.fn(() => Promise.resolve()) },
-    logger: { warn: vi.fn(), error: vi.fn() },
+    logger: { log: vi.fn(), warn: vi.fn(), error: vi.fn() },
     activity: vi.fn(),
     ...overrides,
   });
@@ -109,6 +109,8 @@ describe("the live call's wiring", () => {
       tools: ["mark"],
       interrupted: false,
       spoke: true,
+      voiceMs: 2400,
+      captionLagMs: 350,
     });
     expect(record).toHaveBeenCalledWith("director_turn", {
       userId,
@@ -122,6 +124,8 @@ describe("the live call's wiring", () => {
         tools: ["mark"],
         interrupted: false,
         spoke: true,
+        voiceMs: 2400,
+        captionLagMs: 350,
       },
     });
   });
@@ -138,12 +142,14 @@ describe("the live call's wiring", () => {
   });
 
   it("logs through the given logger, at the level asked for", () => {
-    const logger = { warn: vi.fn(), error: vi.fn() };
+    const logger = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const live = options({ logger });
     live.log("warn", { detail: 1 }, "a warning");
     live.log("error", { detail: 2 }, "an error");
+    live.log("info", { detail: 3 }, "a tool call");
     expect(logger.warn).toHaveBeenCalledWith({ detail: 1 }, "a warning");
     expect(logger.error).toHaveBeenCalledWith({ detail: 2 }, "an error");
+    expect(logger.log).toHaveBeenCalledWith({ detail: 3 }, "a tool call");
   });
 
   it("is off without a Google Cloud project", () => {

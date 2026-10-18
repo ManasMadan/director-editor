@@ -29,12 +29,26 @@ export interface LiveTurn {
   interrupted: boolean;
   /** Director said something aloud (a turn can be only a tool call). */
   spoke: boolean;
+  /** How long Director's voice in the turn plays, from the audio Gemini sent. */
+  voiceMs: number;
+  /**
+   * How long after the turn's first audio its first words of transcript came from Gemini
+   * (negative when the words came first); null without both. The captions can't show
+   * words before they arrive, so this is how late they are at the start of a turn, before
+   * the network and the phone add their own.
+   */
+  captionLagMs: number | null;
 }
+
+/** Live's voice is 24 kHz 16-bit mono: 48 bytes a millisecond. */
+const VOICE_BYTES_PER_MS = 48;
 
 export class TurnMeter {
   private heardAt: number | null = null;
   private heard: Exclude<TurnInput, "app"> | null = null;
   private spokeAt: number | null = null;
+  private saidAt: number | null = null;
+  private voiceBytes = 0;
   private tools: TurnTool[] = [];
   private interrupted = false;
 
@@ -50,8 +64,14 @@ export class TurnMeter {
   }
 
   /** A piece of Director's voice: the first one is when the member stopped waiting. */
-  spoke() {
+  spoke(bytes: number) {
     this.spokeAt ??= this.now();
+    this.voiceBytes += bytes;
+  }
+
+  /** A piece of the transcript of Director's voice. */
+  said() {
+    this.saidAt ??= this.now();
   }
 
   tool(name: TurnTool) {
@@ -73,10 +93,15 @@ export class TurnMeter {
       tools: this.tools,
       interrupted: this.interrupted,
       spoke: this.spokeAt !== null,
+      voiceMs: Math.round(this.voiceBytes / VOICE_BYTES_PER_MS),
+      captionLagMs:
+        this.saidAt !== null && this.spokeAt !== null ? this.saidAt - this.spokeAt : null,
     };
     this.heardAt = null;
     this.heard = null;
     this.spokeAt = null;
+    this.saidAt = null;
+    this.voiceBytes = 0;
     this.tools = [];
     this.interrupted = false;
     return turn;
