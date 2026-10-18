@@ -85,4 +85,8 @@ describe("the live call's wiring", () => {
   it("is off without a Google Cloud project", () => {
     expect(options().upstream).toBeNull();
   });
+
+  it("keeps Live on for everyone while LIVE_OFF_USERS is empty", () => {
+    expect(options().liveOff(userId)).toBe(false);
+  });
 });

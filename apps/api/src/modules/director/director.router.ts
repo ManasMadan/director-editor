@@ -18,6 +18,9 @@ export const directorRouter = ({ inOrg }: Procedures, director: DirectorService)
   locate: inOrg.director.locate.handler(({ context, input }) =>
     director.locate(context.userId, context.orgId, input),
   ),
+  chat: inOrg.director.chat.handler(({ context, input }) =>
+    director.chat(context.userId, context.orgId, input),
+  ),
   speak: inOrg.director.speak.handler(({ context, input }) =>
     director.speak(context.userId, context.orgId, input),
   ),

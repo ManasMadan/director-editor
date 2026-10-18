@@ -11,6 +11,8 @@
 import { createHash } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import {
+  type DirectorChatInput,
+  type DirectorChatReply,
   type DirectorCut,
   type DirectorLibrary,
   type DirectorPlan,
@@ -32,10 +34,12 @@ import {
 import type { UploadPurpose } from "@repo/contracts/files";
 import type { DirectorCutId, FileId, OrgId, UserId, VideoId } from "@repo/contracts/ids";
 import { HOUR_S, MINUTE_S } from "@repo/contracts/time";
-import { AppError } from "@repo/nest-common";
+import { AppError, InjectPinoLogger, PinoLogger } from "@repo/nest-common";
 import * as z from "zod";
+import { env } from "../../env";
 import { aiCaller, callAi } from "../ai";
 import { FilesService } from "../files";
+import { chatUpstream, createGoogleAuth, DirectorChat } from "../live";
 import { RecordingService } from "../recording";
 import { ShortsService } from "../shorts";
 import { type AssetImageRow, planAssetImages, withAssetImages } from "./asset-images";
@@ -110,11 +114,25 @@ function toCut(row: unknown): DirectorCut {
 
 @Injectable()
 export class DirectorService {
+  /** Director's slower line, for when Gemini Live can't run: off without a Google Cloud project. */
+  private readonly chatLine: DirectorChat;
+
   constructor(
     private readonly shorts: ShortsService,
     private readonly files: FilesService,
     private readonly recording: RecordingService,
-  ) {}
+    @InjectPinoLogger(DirectorService.name) log: PinoLogger,
+  ) {
+    this.chatLine = new DirectorChat(
+      chatUpstream({
+        project: env.GOOGLE_CLOUD_PROJECT,
+        model: env.CHAT_MODEL,
+        url: env.CHAT_API_URL,
+        auth: createGoogleAuth(env.GOOGLE_ACCESS_TOKEN),
+      }),
+      (level, details, message) => log[level](details, message),
+    );
+  }
 
   async library(userId: UserId, orgId: OrgId): Promise<DirectorLibrary> {
     const { templates, indexUsed } = await callAi((ai) =>
@@ -166,6 +184,18 @@ export class DirectorService {
     return locatedSchema.parse(
       await callAi((ai) => ai.director.locate(aiCaller(userId, orgId), input)),
     );
+  }
+
+  /**
+   * One turn of Director's slower line, on a ready plan's shot (DIRECTOR_PLAN_NOT_FOUND
+   * before it's ready). Its reply is spoken with `speak`, like any of Director's lines.
+   */
+  async chat(userId: UserId, orgId: OrgId, input: DirectorChatInput): Promise<DirectorChatReply> {
+    const plan = await this.planOf(userId, orgId, input.videoId);
+    if (plan.status !== "ready" || !plan.plan) {
+      throw new AppError("DIRECTOR_PLAN_NOT_FOUND");
+    }
+    return this.chatLine.reply(plan.plan, input);
   }
 
   /**

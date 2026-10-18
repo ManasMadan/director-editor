@@ -4,7 +4,8 @@
  * (`/v1beta/models/<model>:generateContent`, ./gemini.ts), Gemini's Live API on Vertex AI
  * (a WebSocket at `LIVE_API_PATH`, ./live.ts), YouTube Data API v3's reads
  * (`/youtube/v3/...`, ./youtube.ts) and its resumable upload
- * (`/upload/youtube/v3/videos`, ./youtube-upload.ts), and Google sign-in, whose access
+ * (`/upload/youtube/v3/videos`, ./youtube-upload.ts), Vertex AI's generateContent for
+ * Director's slower line (./chat.ts), and Google sign-in, whose access
  * tokens the upload takes (./oauth.ts). Like the real ones it checks the key (Gemini's
  * `x-goog-api-key` header, YouTube's `key` parameter) or the access token, and answers
  * anything else with a 404. What it answers is mock data; everything that asks it (the
@@ -19,6 +20,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { buffer, text } from "node:stream/consumers";
 import * as z from "zod";
+import { CHAT_API_PATH, chatAnswer } from "./chat";
 import { answer, generateRequest, generateResponse, promptTokens, type SceneSteps } from "./gemini";
 import { createLive } from "./live";
 
@@ -102,6 +104,49 @@ async function bytesOf(request: IncomingMessage) {
 
 type Uploads = ReturnType<typeof createYouTubeUploads>;
 
+/** Director's slower line (./chat.ts), with the Live API's bearer token; 503 while it's down. */
+async function chat(
+  request: IncomingMessage,
+  response: ServerResponse,
+  token: string,
+  down: boolean,
+) {
+  if (request.headers.authorization !== `Bearer ${token}`) {
+    return refuse(response, 401, "UNAUTHENTICATED");
+  }
+  if (down) {
+    return refuse(response, 503, "UNAVAILABLE");
+  }
+  const answered = chatAnswer(JSON.parse((await body(request)) || "{}"));
+  return answered ? send(response, 200, answered) : refuse(response, 400, "INVALID_ARGUMENT");
+}
+
+/**
+ * Gemini's generateContent, as the AI service's agents call it (the Gemini API) and as
+ * the slower line does (Vertex AI); false for any other route.
+ */
+function modelRoute(
+  request: IncomingMessage,
+  response: ServerResponse,
+  url: URL,
+  context: { seen: SceneSteps; apiKey: string; liveToken: string; trouble: { chatDown: boolean } },
+): boolean {
+  if (request.method !== "POST") {
+    return false;
+  }
+  const failed = () => refuse(response, 400, "INVALID_ARGUMENT");
+  if (CHAT_API_PATH.test(url.pathname)) {
+    chat(request, response, context.liveToken, context.trouble.chatDown).catch(failed);
+    return true;
+  }
+  const asked = GEMINI.exec(url.pathname);
+  if (asked) {
+    gemini(request, response, String(asked[1]), context.seen, context.apiKey).catch(failed);
+    return true;
+  }
+  return false;
+}
+
 /** Sign-in and the upload: the routes a Google account's access token is for. */
 async function accountRoute(
   request: IncomingMessage,
@@ -145,7 +190,7 @@ export async function startFakeGoogle({
   const address = { url: "" };
   // Whether the project's daily YouTube quota is spent, and whether YouTube fails the
   // files it's sent: a test says so (exhaustQuota, breakUploads).
-  const trouble = { quotaSpent: false, uploadsBroken: false };
+  const trouble = { quotaSpent: false, uploadsBroken: false, chatDown: false };
   const uploads = createYouTubeUploads({
     url: () => address.url,
     audited: youtubeAudited,
@@ -155,11 +200,7 @@ export async function startFakeGoogle({
   const server = createServer((request, response) => {
     // A server's request always has its URL; node types it as maybe missing.
     const url = new URL(String(request.url), "http://fake-google.local");
-    const asked = GEMINI.exec(url.pathname);
-    if (asked && request.method === "POST") {
-      gemini(request, response, String(asked[1]), seen, apiKey).catch(() =>
-        refuse(response, 400, "INVALID_ARGUMENT"),
-      );
+    if (modelRoute(request, response, url, { seen, apiKey, liveToken, trouble })) {
       return;
     }
     const read = YOUTUBE.exec(url.pathname);
@@ -199,6 +240,10 @@ export async function startFakeGoogle({
     /** Has YouTube fail the file of every upload (a 503) once its session is open, or stop. */
     breakUploads: (broken: boolean) => {
       trouble.uploadsBroken = broken;
+    },
+    /** Has Director's slower line answer 503, as Gemini out of reach, or stop. */
+    chatOutage: (down: boolean) => {
+      trouble.chatDown = down;
     },
     /** Director live: each connection made to the Live API, and its warning that one closes soon. */
     live: { sessions: live.sessions, goAway: live.goAway },

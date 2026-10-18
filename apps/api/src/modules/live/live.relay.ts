@@ -20,16 +20,11 @@
 import { DIRECTOR_MAX_SHOTS, type ShotPlan } from "@repo/contracts/api";
 import { ERROR_CODES, type ErrorCode } from "@repo/contracts/errors";
 import {
-  LIVE_ADAPTATION_MAX_LENGTH,
-  LIVE_MARK_TEXT_MAX_LENGTH,
-  LIVE_TOOLS,
   type LiveAdaptation,
   type LiveClientMessage,
   type LiveServerMessage,
   type LiveTool,
-  type LiveToolCall,
   type LiveToolResult,
-  liveAdaptation,
   liveClientMessage,
 } from "@repo/contracts/live";
 import { PROVIDER_TIMEOUT_MS, SECOND_MS } from "@repo/contracts/time";
@@ -37,9 +32,8 @@ import { describeError } from "@repo/nest-common";
 import { type RawData, WebSocket } from "ws";
 import type { GoogleAuth } from "./google-auth";
 import { SlidingBudget } from "./live.budget";
-import { NOT_FOUND_RESPONSE, POINT_AT_ANSWER_MS, pointAtCall } from "./live.marks";
+import { POINT_AT_ANSWER_MS } from "./live.marks";
 import {
-  toolArgsSchemas,
   UPSTREAM_MAX_PAYLOAD_BYTES,
   type UpstreamMessage,
   upstreamMessageSchema,
@@ -57,6 +51,7 @@ import {
   takeMessage,
   versionMessage,
 } from "./live.setup";
+import { checkTool, TOOL_RESPONSES, toolNamed } from "./live.tools";
 
 /** How the relay reports what went wrong, for the service's log. */
 export type LiveLog = (
@@ -119,23 +114,6 @@ const TOOL_ANSWER_MS = 5 * SECOND_MS;
 /** What's kept of the conversation, to catch a fresh connection up: lines, and each's length. */
 const RECENT_LINES = 8;
 const RECENT_LINE_LENGTH = 300;
-
-/** What Gemini hears for each of the browser's answers to a tool call. */
-const TOOL_RESPONSES: Record<LiveToolResult | "unknown", object> = {
-  unknown: { result: "unknown", why: "The app didn't answer." },
-  done: { result: "done" },
-  busy: {
-    result: "refused",
-    why: "A take is under way: counting down, recording or being watched back. Wait until they've kept it or gone again.",
-  },
-  no_camera: { result: "refused", why: "Their camera isn't on." },
-  not_found: NOT_FOUND_RESPONSE,
-  paused: {
-    result: "refused",
-    why: "Recording is paused. Only their own tap on Resume starts it again.",
-  },
-  not_recording: { result: "refused", why: "Nothing is recording right now." },
-};
 
 /** Tells the browser why Director is going away, then closes the socket. */
 export function closeWithError(client: WebSocket, code: ErrorCode) {
@@ -583,7 +561,7 @@ export class LiveRelay {
    * browser, whose answer goes back to Gemini. What can't be done is answered at once.
    */
   private toolCall(line: Line, call: FunctionCall) {
-    const name = LIVE_TOOLS.find((tool) => tool === call.name);
+    const name = toolNamed(call.name);
     const answerNow = (response: object) =>
       send(line, {
         toolResponse: { functionResponses: [{ id: call.id, name: call.name, response }] },
@@ -592,7 +570,7 @@ export class LiveRelay {
       this.options.log("warn", { tool: call.name }, "unknown live tool call");
       return answerNow({ error: "unknown tool" });
     }
-    const browserCall = this.browserCall(name, call.args);
+    const browserCall = checkTool(this.options.plan, name, call.args);
     if ("response" in browserCall) {
       return answerNow(browserCall.response);
     }
@@ -600,92 +578,13 @@ export class LiveRelay {
     const id = `tool-${this.toolIds}`;
     const within = name === "point_at" ? POINT_AT_ANSWER_MS : TOOL_ANSWER_MS;
     const timer = setTimeout(() => this.answerTool(id, "unknown"), within);
+    // An attempt under way: no nudges while it runs, as with a take.
+    if (browserCall.call.name === "mark") {
+      this.pacer.take(browserCall.call.event === "start");
+    }
     const adaptation = browserCall.call.name === "adapt_shot" ? browserCall.call : undefined;
     this.pending.set(id, { line, geminiId: call.id, name, timer, adaptation });
     this.toClient({ type: "tool", id, call: browserCall.call });
-  }
-
-  private browserCall(name: LiveTool, raw: unknown): { call: LiveToolCall } | { response: object } {
-    switch (name) {
-      case "go_to_shot": {
-        const args = toolArgsSchemas.go_to_shot.safeParse(raw ?? {});
-        if (!args.success) {
-          return { response: { error: "shot must be a whole number" } };
-        }
-        const count = this.options.plan.shots.length;
-        const { shot } = args.data;
-        if (shot < 1 || shot > count) {
-          return {
-            response: {
-              result: "not_found",
-              why: `There's no shot ${shot}: they go from 1 to ${count}.`,
-            },
-          };
-        }
-        return { call: { name, shot: shot - 1 } };
-      }
-      case "switch_camera": {
-        const args = toolArgsSchemas.switch_camera.safeParse(raw ?? {});
-        if (!args.success) {
-          return { response: { error: 'to must be "front" or "back"' } };
-        }
-        return { call: { name, to: args.data.to } };
-      }
-      case "adapt_shot":
-        return this.adaptCall(raw);
-      case "point_at":
-        return pointAtCall(raw);
-      case "mark":
-        return this.markCall(raw);
-    }
-  }
-
-  /** An attempt starts or ends: no nudges while one runs, as with a take. */
-  private markCall(raw: unknown): { call: LiveToolCall } | { response: object } {
-    const args = toolArgsSchemas.mark.safeParse(raw ?? {});
-    if (!args.success) {
-      return { response: { error: 'event must be "start" or "end", line and note text' } };
-    }
-    const { event } = args.data;
-    const text = (value: string | undefined) =>
-      value?.trim().slice(0, LIVE_MARK_TEXT_MAX_LENGTH) || undefined;
-    this.pacer.take(event === "start");
-    const line = text(args.data.line);
-    const note = text(args.data.note);
-    return {
-      call: { name: "mark", event, ...(line ? { line } : {}), ...(note ? { note } : {}) },
-    };
-  }
-
-  /**
-   * The member's version of a shot, as Gemini put it: a shot the plan has, and at least
-   * one of where, what and the line, each a sentence or two (the contract's bounds).
-   */
-  private adaptCall(raw: unknown): { call: LiveToolCall } | { response: object } {
-    const args = toolArgsSchemas.adapt_shot.safeParse(raw ?? {});
-    if (!args.success) {
-      return { response: { error: "shot must be a whole number, the rest text" } };
-    }
-    const { shot, where, action, line } = args.data;
-    const count = this.options.plan.shots.length;
-    if (shot < 1 || shot > count) {
-      return {
-        response: {
-          result: "not_found",
-          why: `There's no shot ${shot}: they go from 1 to ${count}.`,
-        },
-      };
-    }
-    const adaptation = liveAdaptation.safeParse({ shot: shot - 1, where, action, line });
-    if (!adaptation.success) {
-      const error = `each of where, action and line is one to ${LIVE_ADAPTATION_MAX_LENGTH} characters`;
-      return { response: { error } };
-    }
-    const { data } = adaptation;
-    if (!(data.where || data.action || data.line)) {
-      return { response: { error: "say what changed: where, action or line" } };
-    }
-    return { call: { name: "adapt_shot", ...data } };
   }
 
   /**

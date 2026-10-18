@@ -75,6 +75,11 @@ export interface LiveOptions {
    */
   spendCallLimit(caller: Pick<OrgCaller, "userId" | "guest">): Promise<void>;
   upstream: LiveUpstream | null;
+  /**
+   * Whether Live is off for this member alone (LIVE_OFF_USERS): refused as if off, so the
+   * shoot screen moves to the slower line.
+   */
+  liveOff(userId: UserId): boolean;
   log: LiveLog;
   /** The clock camera frames are paced by (Date.now). */
   now: () => number;
@@ -265,6 +270,9 @@ export function mountLive(fastify: FastifyInstance, options: LiveOptions) {
       target = callTarget(query.data);
       const caller = await options.caller(headers);
       updateContext({ orgId: caller.orgId });
+      if (options.liveOff(caller.userId)) {
+        throw new AppError("FEATURE_DISABLED", { params: { feature: "live" } });
+      }
       if (calling.has(caller.userId)) {
         throw new AppError("CONFLICT");
       }
