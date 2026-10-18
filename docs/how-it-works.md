@@ -433,9 +433,17 @@ what is new (a stretch that isn't mostly a marked attempt) and what moved (an ed
 half a second or more), so a marked attempt never becomes a second take. New attempts
 are cut into takes like the marked ones, marked `origin: pass` ("Found in your footage"
 in the editor). It reads and writes the recording through two seams, `RecordingSource`
-and `AttemptSink`; until continuous recording's tables reach the AI service, a stand-in
-finds no session and the job does nothing. It spends the workspace's allowance like any
-model call (`director-pass`, at most 150,000 tokens a session).
+and `AttemptSink`, implemented in `app/session_recordings.py`: apps/api queues the job
+two minutes after Done (the session's id is the job's); the AI service reads the
+session's parts, slices and attempts (its grants allow reading them and adding attempts,
+nothing more), joins each part's stored slices with Cloud Storage compose into one object
+Gemini reads from its gs:// URI, deletes those copies afterwards, and queues each new
+attempt on the `recording` queue for apps/worker to cut. A take cut from a pass attempt
+is marked `origin: pass` with the pass's reason. Marked attempts whose edges moved are
+only logged for now: re-cutting one would swap a take the member may have picked. Without
+MEDIA_BUCKET there is nowhere to join footage, and the job does nothing. It spends the
+workspace's allowance like any model call (`director-pass`, at most 150,000 tokens a
+session).
 
 ## The editor
 
