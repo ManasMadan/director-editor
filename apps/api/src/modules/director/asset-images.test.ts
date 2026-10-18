@@ -3,7 +3,7 @@ import { type DirectorSeed, directorSeeds } from "@repo/contracts/director-seeds
 import { videoIdSchema } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
 import { describe, expect, it } from "vitest";
-import { planAssetImages, withAssetImages } from "./asset-images";
+import { planAssetImages, storyboardKeyAllowed, withAssetImages } from "./asset-images";
 import { seedAssetImages, withSeedAssets } from "./seed-media";
 
 const PLAN_ID = "0199f3a0-0000-7000-8000-000000000001";
@@ -106,5 +106,23 @@ describe("a seeded template's assets", () => {
     const other = videoIdSchema.parse("dQw4w9WgXcQ");
     expect(withSeedAssets(other, seed.plan, [withAssets])).toBe(seed.plan);
     expect(seedAssetImages(seed.videoId, seed.plan, [{ ...seed, media: undefined }])).toEqual([]);
+  });
+});
+
+describe("a created plan's storyboard cards", () => {
+  it("are signed only at the key a card of the plan's own may have", () => {
+    const card = "shot-0123456789abcdef";
+    expect(storyboardKeyAllowed(PLAN_ID, `${at}/${card}.png`)).toBe(true);
+    expect(storyboardKeyAllowed(PLAN_ID, `${at}/${card}.jpg`)).toBe(true);
+    for (const key of [
+      `files/${PLAN_ID}`,
+      `director-assets/0199f3a0-0000-7000-8000-000000000002/${card}.png`,
+      `${at}/chart.png`,
+      `${at}/${card}.png.exe`,
+      `${at}/../${card}.png`,
+      `${at}/${card}/x.png`,
+    ]) {
+      expect(storyboardKeyAllowed(PLAN_ID, key), key).toBe(false);
+    }
   });
 });

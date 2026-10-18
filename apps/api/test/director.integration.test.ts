@@ -156,6 +156,8 @@ interface StandInPlan {
   plan?: unknown;
   /** The default images of its assets, as the AI service reports them. */
   assetImages?: unknown[];
+  /** A created plan's storyboard cards, as the AI service reports them. */
+  storyboards?: unknown[];
 }
 const plans: StandInPlan[] = [];
 const takes: {
@@ -195,6 +197,7 @@ function planOut(plan: StandInPlan) {
     audioKey: plan.audioKey,
     // Left out unless a test sets them, as an AI service from before them answers.
     ...(plan.assetImages && { assetImages: plan.assetImages }),
+    ...(plan.storyboards && { storyboards: plan.storyboards }),
     createdAt: now,
     updatedAt: now,
   };
@@ -689,6 +692,31 @@ describe("Director's library", () => {
     const listed = templates.find((each) => each.id === plan.id);
     expect(listed?.plan?.assets.map((each) => each.id)).toEqual(["chart", "card", "end-card"]);
     expect(listed?.plan?.assets.some((each) => "image" in each)).toBe(false);
+  });
+
+  it("links a plan's storyboard cards only where its own may be stored", async () => {
+    const { session, me } = await signedIn();
+    const org = String(me.activeOrganizationId);
+    const plan = readyTemplate(org, "Storyboard1", null, {
+      user: me.id,
+      plan: { ...PLAN, shots: [PLAN.shots[0], PLAN.shots[0]] },
+    });
+    plan.storyboards = [
+      {
+        shotIndex: 0,
+        status: "ready",
+        objectKey: `director-assets/${plan.id}/shot-0123456789abcdef.png`,
+      },
+      // A key the AI service answered that isn't a card of this plan's: never signed.
+      { shotIndex: 1, status: "ready", objectKey: FOREIGN_KEY },
+    ];
+    const one = await session.rpc.director.plan({ videoId: "Storyboard1" });
+    const [first, second] = one.plan?.shots ?? [];
+    expect(new URL(String(first?.storyboardUrl)).pathname).toContain(
+      `director-assets/${plan.id}/shot-0123456789abcdef.png`,
+    );
+    expect(second).not.toHaveProperty("storyboardUrl");
+    expect(JSON.stringify(one)).not.toContain("files/");
   });
 
   it("links no media for any other plan, whatever its stored plan names", async () => {

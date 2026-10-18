@@ -59,7 +59,12 @@ import {
 } from "../live";
 import { RecordingService } from "../recording";
 import { ShortsService } from "../shorts";
-import { type AssetImageRow, planAssetImages, withAssetImages } from "./asset-images";
+import {
+  type AssetImageRow,
+  planAssetImages,
+  storyboardKeyAllowed,
+  withAssetImages,
+} from "./asset-images";
 import { chatTurnDetail } from "./chat-turn";
 import { seedAssetImages, seedMediaKeys, withMediaLinks, withSeedAssets } from "./seed-media";
 import { shotsOf } from "./shots";
@@ -531,7 +536,7 @@ export class DirectorService {
     const [served, signed] = await Promise.all([
       seed
         ? this.withSeedMedia(plan.videoId, shotPlan)
-        : this.withStoryboards(shotPlan, storyboards),
+        : this.withStoryboards(plan.id, shotPlan, storyboards),
       Promise.all(
         images.map(async (image) => ({
           image,
@@ -542,8 +547,12 @@ export class DirectorService {
     return { ...served, assets: withAssetImages(served.assets, signed) };
   }
 
-  /** A created plan with a link to each shot's storyboard card that's drawn. */
+  /**
+   * A created plan with a link to each shot's storyboard card that's drawn, signed only
+   * where a card of the plan's own may be stored.
+   */
   private async withStoryboards(
+    planId: string,
     shotPlan: ShotPlan,
     storyboards: readonly StoryboardRow[],
   ): Promise<ServedShotPlan> {
@@ -551,7 +560,7 @@ export class DirectorService {
     await Promise.all(
       storyboards.map(async ({ shotIndex, status, objectKey }) => {
         const url =
-          status === "ready" && objectKey
+          status === "ready" && objectKey && storyboardKeyAllowed(planId, objectKey)
             ? await this.files.objectUrl(objectKey, MEDIA_READ_EXPIRES_S)
             : null;
         if (url) {

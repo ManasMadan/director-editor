@@ -37,6 +37,16 @@ export function planAssetImages(planId: string, rows: readonly AssetImageRow[]):
 }
 
 /**
+ * Whether `key` may be a storyboard card of the plan's: in its own folder, named by a
+ * card's id (apps/ai app/storyboards.py `storyboard_id`). Anything else the AI service
+ * answers is never signed, as with the asset images.
+ */
+export function storyboardKeyAllowed(planId: string, key: string): boolean {
+  const folder = `director-assets/${planId}/`;
+  return key.startsWith(folder) && /^shot-[0-9a-f]{16}\.(png|jpg)$/.test(key.slice(folder.length));
+}
+
+/**
  * `assets` with each one's image in place: its status, and its link (null with uploads
  * off, as the audio's is). An asset with no image (footage, sound, past the limits) is
  * left as it is.
