@@ -27,6 +27,7 @@ import { type FormEvent, useEffect, useLayoutEffect, useRef, useState } from "re
 import { DirectorGate, YouTubeEmbed } from "@/modules/shorts";
 import { DirectorCaptions, DirectorOrb, useLiveFailure } from "../components/director-captions";
 import { MarksLayer } from "../components/marks-layer";
+import { MatchGhost } from "../components/match-ghost";
 import {
   DoneButton,
   PausedVeil,
@@ -695,6 +696,7 @@ function ShootScreen(shootProps: ShootProps) {
             mirrored={camera.facing === "front"}
           />
         ) : null}
+        {started ? <MatchGhost {...shootProps} facing={camera.facing} /> : null}
         {started ? null : (
           <StartCard
             first={memory.before.sessions === 0}

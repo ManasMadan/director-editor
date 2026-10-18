@@ -16,6 +16,7 @@ import * as z from "zod";
 import { createClient } from "./generated/client";
 import {
   addDirectorAsset,
+  alignDirectorMatchCut,
   checkDirectorScene,
   chooseDirectorAsset,
   clipDirectorAttempt,
@@ -44,6 +45,7 @@ import type {
   ErrorCode,
   ErrorIssue,
   LocateRequest,
+  MatchCutRequest,
   PublishCopyRequest,
   SceneCheckRequest,
   SpeechRequest,
@@ -238,6 +240,9 @@ function directorCalls(forCall: ClientFor) {
     },
     async writePublishCopy(caller: AiCaller, body: PublishCopyRequest) {
       return unwrap(writeDirectorPublishCopy({ client: await forCall(caller), body }));
+    },
+    async alignMatchCut(caller: AiCaller, body: MatchCutRequest) {
+      return unwrap(alignDirectorMatchCut({ client: await forCall(caller), body }));
     },
   };
 }

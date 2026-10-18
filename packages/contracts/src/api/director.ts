@@ -464,6 +464,56 @@ export const directorCutSchema = z.object({
 });
 export type DirectorCut = z.infer<typeof directorCutSchema>;
 
+/** A match cut's anchor: what stays on the same spot across the cut ("the watch"). */
+const MATCH_CUT_ANCHOR_MAX_LENGTH = 120;
+const takeMs = z
+  .number()
+  .int()
+  .min(0)
+  .max(DIRECTOR_MAX_SHOT_SECONDS * 1000);
+/** One side of a match cut: a take of the caller's, and where in it the cut falls. */
+const matchCutSideSchema = z.object({ takeId: directorTakeIdSchema, atMs: takeMs });
+
+/** A match cut to line up: the two takes either side of it, and what stays put. */
+const matchCutAskSchema = z.object({
+  videoId: videoIdSchema,
+  anchor: z.string().trim().min(1).max(MATCH_CUT_ANCHOR_MAX_LENGTH),
+  outgoing: matchCutSideSchema,
+  incoming: matchCutSideSchema,
+});
+export type MatchCutAsk = z.infer<typeof matchCutAskSchema>;
+
+/**
+ * A match cut lined up (the redesign spec's 9.5): where to end the outgoing take and
+ * start the incoming one, and how to draw the incoming one so the anchor stays put:
+ * scaled `scale` and turned `rotation` degrees clockwise about the frame's centre, then
+ * moved `x`, `y` pixels of the finished 720x1280 frame. `not-found`: the anchor wasn't
+ * seen in both, and the cut stays a plain cut. The offsets are what "Check the cut"
+ * shows, in pixels of the finished frame; the frames are JPEGs (base64) either side of
+ * the cut, the incoming one already aligned.
+ */
+export const matchCutAlignmentSchema = z.object({
+  status: z.enum(["aligned", "not-found"]),
+  outgoingEndMs: takeMs,
+  incomingStartMs: takeMs,
+  transform: z.object({
+    x: z.number().min(-720).max(720),
+    y: z.number().min(-1280).max(1280),
+    scale: z.number().min(0.25).max(4),
+    rotation: z.number().min(-180).max(180),
+  }),
+  offsetBeforePx: z.number().min(0),
+  offsetPx: z.number().min(0),
+  scaleDiff: z.number().min(0),
+  rotationDiff: z.number().min(0),
+  cropPercent: z.number().min(0).max(100),
+  withinTolerance: z.boolean(),
+  anchor: z.object({ x: fraction, y: fraction }).nullable(),
+  outgoingFrame: z.string().nullable(),
+  incomingFrame: z.string().nullable(),
+});
+export type MatchCutAlignment = z.infer<typeof matchCutAlignmentSchema>;
+
 /** A spoken line, stored as a WAV file: a short-lived link to play it from. */
 const directorSpeechSchema = z.object({ url: z.url(), expiresAt: z.date() });
 export type DirectorSpeech = z.infer<typeof directorSpeechSchema>;
@@ -581,6 +631,18 @@ export const directorContract = {
       }),
     )
     .output(directorCutSchema),
+  /**
+   * Lines up a match cut between two of the caller's video takes of the short
+   * (DIRECTOR_TAKE_NOT_FOUND unless both are theirs, ready and videos): Gemini finds the
+   * anchor either side of the cut and the AI service works out where to cut and how to
+   * move the incoming take so it stays put. Nothing is stored: the editor asks again.
+   */
+  alignMatchCut: route("POST", "/director/{videoId}/match-cuts", "Line up a match cut")
+    .meta({
+      rateLimit: { name: "director-match-cuts", points: 60, windowSeconds: HOUR_S, per: "user" },
+    })
+    .input(matchCutAskSchema)
+    .output(matchCutAlignmentSchema),
   /** Every cut of the caller's, newest first (the client groups them by template). */
   media: route("GET", "/media", "Your cuts").output(z.array(directorCutSchema)),
 };

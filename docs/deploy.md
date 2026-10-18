@@ -317,6 +317,68 @@ gcloud storage buckets describe gs://$BUCKET --format='value(lifecycle)'
 (A lifecycle file replaces the bucket's rules: it carries the spoken lines' 90-day rule,
 docs/files.md, too.)
 
+## The Cloud Run aligner
+
+The editor lines up each match cut (the anchor, a wrist with a watch, kept on the same
+spot while the background changes between two shots) through the AI service's
+`/v1/director/match-cuts`: ffmpeg reads the half second either side of the cut from both
+takes (presigned reads apps/api signs), Gemini (`DIRECTOR_MODEL`) boxes the anchor in the
+two boundary frames, and OpenCV refines it (template matching, then ECC on the anchor's
+patch) into where to cut and how to move the incoming take. With `ALIGNER_URL` set on the
+ai service, that runs on a private Cloud Run service, `director-aligner`, instead of in
+the ai pod: decoding two takes and the OpenCV work are CPU the VM's other services need.
+It's the same `ai` image (ffmpeg, OpenCV and NumPy are in it) with another entrypoint
+(`uvicorn app.aligner:app`, apps/ai/app/aligner.py) and the same code the ai service runs
+without it (apps/ai/app/aligning.py). It has no database, Redis or storage access: the
+takes come by presigned reads, and the answer carries what the Gemini call used, which
+the ai service counts against the workspace's tokens (`DIRECTOR_TOKENS_PER_ALIGNMENT` is
+the most one cut may reserve).
+
+Only the VM's account may call it (`--no-allow-unauthenticated`, and the aligner checks
+the ID token again: audience `ALIGNER_URL`, email `ALIGNER_INVOKER`). It calls Vertex AI
+as its own account, `director-aligner@…`. Until `ALIGNER_URL` is set on the ai service,
+match cuts are lined up in the ai pod itself, the same way.
+
+Like the indexer, it isn't deployed by Argo CD. With the variables from "The Cloud Run
+indexer" above, and these:
+
+```sh
+ALIGNER=director-aligner@$PROJECT.iam.gserviceaccount.com
+ALIGNER_URL=https://director-aligner-1053522546520.$REGION.run.app
+```
+
+Once per project:
+
+```sh
+gcloud iam service-accounts create director-aligner --project=$PROJECT \
+  --display-name="Director aligner (Cloud Run)"
+gcloud projects add-iam-policy-binding $PROJECT --member=serviceAccount:$ALIGNER \
+  --role=roles/aiplatform.user
+```
+
+Each release (the image copied to Artifact Registry as for the indexer):
+
+```sh
+gcloud run deploy director-aligner --project=$PROJECT --region=$REGION \
+  --image=$IMAGE \
+  --command=uvicorn --args=app.aligner:app,--host,0.0.0.0,--port,8080 --port=8080 \
+  --service-account=$ALIGNER --no-allow-unauthenticated \
+  --timeout=60 --memory=1Gi --cpu=2 --concurrency=2 \
+  --set-env-vars=NODE_ENV=production,LOG_LEVEL=info,RELEASE=sha-$COMMIT,ALIGNER_URL=$ALIGNER_URL,ALIGNER_INVOKER=$VM,GOOGLE_VERTEX=true,GOOGLE_CLOUD_PROJECT=$PROJECT,VERTEX_LOCATION=global,DIRECTOR_MODEL=gemini-3.8-flash
+
+# The VM's account (the ai service) may call it.
+gcloud run services add-iam-policy-binding director-aligner --project=$PROJECT \
+  --region=$REGION --member=serviceAccount:$VM --role=roles/run.invoker
+```
+
+`DIRECTOR_MODEL` should match the ai service's (it records the usage under its own).
+The ai service waits 27 seconds for it (`ALIGN_REQUEST_SECONDS` in app/aligning.py),
+under apps/api's 30-second wait for the ai service, so `--timeout=60` is plenty. Check it
+from the VM as for the indexer (`$ALIGNER_URL/health/live`), then set
+`ALIGNER_URL: <$ALIGNER_URL>` in the ai service's `env` in
+`deploy/environments/production/stack.yaml` and promote. Unsetting it again is the
+rollback: the ai pod lines up match cuts itself.
+
 ## Previews
 
 Adding the `preview` label to a pull request from this repository (not a fork) runs

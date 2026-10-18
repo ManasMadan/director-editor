@@ -1,6 +1,28 @@
 {
   "components": {
     "schemas": {
+      "AnchorPoint": {
+        "properties": {
+          "x": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "AnchorPoint",
+        "type": "object"
+      },
       "AspectRatio": {
         "enum": [
           "9:16",
@@ -1920,6 +1942,210 @@
         "title": "Located",
         "type": "object"
       },
+      "MatchCutAlignment": {
+        "description": "`aligned`: the anchor was found in both clips and the transform lines it up;\n`not-found`: Gemini couldn't see it in one of them, and the cut stays a plain cut\n(identity, the cut where it was asked).",
+        "properties": {
+          "anchor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnchorPoint"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The anchor's centre at the cut."
+          },
+          "cropPercent": {
+            "description": "How much of the frame's side is lost.",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Croppercent",
+            "type": "number"
+          },
+          "incomingFrame": {
+            "anyOf": [
+              {
+                "maxLength": 300000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The first after it, aligned, JPEG.",
+            "title": "Incomingframe"
+          },
+          "incomingStartMs": {
+            "maximum": 60000.0,
+            "minimum": 0.0,
+            "title": "Incomingstartms",
+            "type": "integer"
+          },
+          "offsetBeforePx": {
+            "description": "How far the anchor jumped unaligned.",
+            "minimum": 0.0,
+            "title": "Offsetbeforepx",
+            "type": "number"
+          },
+          "offsetPx": {
+            "description": "How far it still moves at the cut, aligned.",
+            "minimum": 0.0,
+            "title": "Offsetpx",
+            "type": "number"
+          },
+          "outgoingEndMs": {
+            "maximum": 60000.0,
+            "minimum": 0.0,
+            "title": "Outgoingendms",
+            "type": "integer"
+          },
+          "outgoingFrame": {
+            "anyOf": [
+              {
+                "maxLength": 300000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The last frame before the cut, JPEG.",
+            "title": "Outgoingframe"
+          },
+          "rotationDiff": {
+            "description": "Its turn left at the cut, in degrees.",
+            "minimum": 0.0,
+            "title": "Rotationdiff",
+            "type": "number"
+          },
+          "scaleDiff": {
+            "description": "The anchor's size change left, a fraction.",
+            "minimum": 0.0,
+            "title": "Scalediff",
+            "type": "number"
+          },
+          "status": {
+            "enum": [
+              "aligned",
+              "not-found"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "transform": {
+            "$ref": "#/components/schemas/MatchCutTransform"
+          },
+          "withinTolerance": {
+            "title": "Withintolerance",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "status",
+          "outgoingEndMs",
+          "incomingStartMs",
+          "transform",
+          "offsetBeforePx",
+          "offsetPx",
+          "scaleDiff",
+          "rotationDiff",
+          "cropPercent",
+          "withinTolerance",
+          "anchor",
+          "outgoingFrame",
+          "incomingFrame"
+        ],
+        "title": "MatchCutAlignment",
+        "type": "object"
+      },
+      "MatchCutClip": {
+        "additionalProperties": false,
+        "properties": {
+          "atMs": {
+            "description": "Where the cut falls in the take: the outgoing clip's end, the incoming's start.",
+            "maximum": 60000.0,
+            "minimum": 0.0,
+            "title": "Atms",
+            "type": "integer"
+          },
+          "url": {
+            "description": "A presigned read of the take.",
+            "maxLength": 4000,
+            "pattern": "^https?://",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "atMs"
+        ],
+        "title": "MatchCutClip",
+        "type": "object"
+      },
+      "MatchCutRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor": {
+            "description": "What lines up.",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Anchor",
+            "type": "string"
+          },
+          "incoming": {
+            "$ref": "#/components/schemas/MatchCutClip"
+          },
+          "outgoing": {
+            "$ref": "#/components/schemas/MatchCutClip"
+          }
+        },
+        "required": [
+          "anchor",
+          "outgoing",
+          "incoming"
+        ],
+        "title": "MatchCutRequest",
+        "type": "object"
+      },
+      "MatchCutTransform": {
+        "description": "How to draw the incoming clip: scaled by `scale` and turned `rotation` degrees\nclockwise about the frame's centre, then moved `x`, `y` pixels (of the 720x1280\nframe). Identity is scale 1 and the rest 0.",
+        "properties": {
+          "rotation": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Rotation",
+            "type": "number"
+          },
+          "scale": {
+            "maximum": 4.0,
+            "minimum": 0.25,
+            "title": "Scale",
+            "type": "number"
+          },
+          "x": {
+            "maximum": 720.0,
+            "minimum": -720.0,
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "maximum": 1280.0,
+            "minimum": -1280.0,
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "scale",
+          "rotation"
+        ],
+        "title": "MatchCutTransform",
+        "type": "object"
+      },
       "OverlayEdit": {
         "description": "Something drawn over the frame: an asset, or a mark (a circle, an underline).",
         "properties": {
@@ -3375,6 +3601,79 @@
           }
         },
         "summary": "Locate Director Target"
+      }
+    },
+    "/v1/director/match-cuts": {
+      "post": {
+        "description": "Lines up a match cut between two takes: Gemini locates the anchor in the frames\neither side of the cut, OpenCV refines it, and the answer says where to cut and how\nto move the incoming clip so the anchor stays put (status `not-found` when it can't\nbe seen in both).",
+        "operationId": "alignDirectorMatchCut",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchCutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchCutAlignment"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Align Director Match Cut"
       }
     },
     "/v1/director/plans": {

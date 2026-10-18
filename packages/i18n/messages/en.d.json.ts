@@ -940,6 +940,23 @@ declare const messages: {
       "using": "In your video",
       "placed": "Placed in your video",
       "undo": "Undo"
+    },
+    "matchCut": {
+      "aligning": "Lining up the cut into shot {index, number} on {anchor}…",
+      "aligned": "Aligned for you",
+      "alignedBody": "{anchor} stays put into shot {index, number}: {offset, number} px off at the cut (was {before, number} px).",
+      "notFound": "Couldn't spot {anchor} either side of the cut into shot {index, number}, so it's a plain cut.",
+      "failed": "Couldn't line up the cut into shot {index, number}. It plays as a plain cut.",
+      "check": "Check the cut",
+      "checkTitle": "The cut into shot {index, number}",
+      "checkBody": "Before the cut, with the first frame after it laid over at half strength. The crosshair is on {anchor}.",
+      "before": "Last frame before the cut",
+      "after": "First frame after the cut, aligned",
+      "offset": "Moves {offset, number} px at the cut",
+      "tolerance": "{within, select, true {Within the 8 px it may move} other {More than the 8 px it may move: try another take}}",
+      "close": "Done",
+      "ghost": "Line up {anchor} with the faint picture",
+      "ghostLabel": "The last frame of the shot before, to line up with"
     }
   },
   "library": {

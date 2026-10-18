@@ -4,8 +4,8 @@ import * as z from 'zod';
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddDirectorAssetData, AddDirectorAssetErrors, AddDirectorAssetResponses, CheckDirectorSceneData, CheckDirectorSceneErrors, CheckDirectorSceneResponses, ChooseDirectorAssetData, ChooseDirectorAssetErrors, ChooseDirectorAssetResponses, ClipDirectorAttemptData, ClipDirectorAttemptErrors, ClipDirectorAttemptResponses, CreateDirectorCutData, CreateDirectorCutErrors, CreateDirectorCutResponses, CreateDirectorTakeData, CreateDirectorTakeErrors, CreateDirectorTakeResponses, DependenciesData, DependenciesErrors, DependenciesResponses, DrawDirectorAssetData, DrawDirectorAssetErrors, DrawDirectorAssetResponses, GetDirectorCutData, GetDirectorCutErrors, GetDirectorCutResponses, GetDirectorLibraryData, GetDirectorLibraryErrors, GetDirectorLibraryResponses, GetDirectorPlanData, GetDirectorPlanErrors, GetDirectorPlanResponses, IndexDirectorPlanData, IndexDirectorPlanErrors, IndexDirectorPlanResponses, ListDirectorAssetsData, ListDirectorAssetsErrors, ListDirectorAssetsResponses, ListDirectorCutsData, ListDirectorCutsErrors, ListDirectorCutsResponses, ListDirectorMediaData, ListDirectorMediaErrors, ListDirectorMediaResponses, ListDirectorTakesData, ListDirectorTakesErrors, ListDirectorTakesResponses, LiveData, LiveErrors, LiveResponses, LocateDirectorTargetData, LocateDirectorTargetErrors, LocateDirectorTargetResponses, ReadyData, ReadyErrors, ReadyResponses, SpeakDirectorLineData, SpeakDirectorLineErrors, SpeakDirectorLineResponses, WriteDirectorPublishCopyData, WriteDirectorPublishCopyErrors, WriteDirectorPublishCopyResponses } from './types.gen';
-import { zAddDirectorAssetBody, zAddDirectorAssetHeaders, zAddDirectorAssetPath, zAddDirectorAssetResponse, zCheckDirectorSceneBody, zCheckDirectorSceneHeaders, zCheckDirectorSceneResponse, zChooseDirectorAssetBody, zChooseDirectorAssetHeaders, zChooseDirectorAssetPath, zChooseDirectorAssetResponse, zClipDirectorAttemptBody, zClipDirectorAttemptHeaders, zClipDirectorAttemptResponse, zCreateDirectorCutBody, zCreateDirectorCutHeaders, zCreateDirectorCutResponse, zCreateDirectorTakeBody, zCreateDirectorTakeHeaders, zCreateDirectorTakeResponse, zDependenciesResponse, zDrawDirectorAssetBody, zDrawDirectorAssetHeaders, zDrawDirectorAssetPath, zDrawDirectorAssetResponse, zGetDirectorCutHeaders, zGetDirectorCutPath, zGetDirectorCutResponse, zGetDirectorLibraryHeaders, zGetDirectorLibraryResponse, zGetDirectorPlanHeaders, zGetDirectorPlanPath, zGetDirectorPlanResponse, zIndexDirectorPlanBody, zIndexDirectorPlanHeaders, zIndexDirectorPlanResponse, zListDirectorAssetsHeaders, zListDirectorAssetsPath, zListDirectorAssetsResponse, zListDirectorCutsHeaders, zListDirectorCutsPath, zListDirectorCutsResponse, zListDirectorMediaHeaders, zListDirectorMediaResponse, zListDirectorTakesHeaders, zListDirectorTakesPath, zListDirectorTakesResponse, zLiveResponse, zLocateDirectorTargetBody, zLocateDirectorTargetHeaders, zLocateDirectorTargetResponse, zReadyResponse, zSpeakDirectorLineBody, zSpeakDirectorLineHeaders, zSpeakDirectorLineResponse, zWriteDirectorPublishCopyBody, zWriteDirectorPublishCopyHeaders, zWriteDirectorPublishCopyResponse } from './zod.gen';
+import type { AddDirectorAssetData, AddDirectorAssetErrors, AddDirectorAssetResponses, AlignDirectorMatchCutData, AlignDirectorMatchCutErrors, AlignDirectorMatchCutResponses, CheckDirectorSceneData, CheckDirectorSceneErrors, CheckDirectorSceneResponses, ChooseDirectorAssetData, ChooseDirectorAssetErrors, ChooseDirectorAssetResponses, ClipDirectorAttemptData, ClipDirectorAttemptErrors, ClipDirectorAttemptResponses, CreateDirectorCutData, CreateDirectorCutErrors, CreateDirectorCutResponses, CreateDirectorTakeData, CreateDirectorTakeErrors, CreateDirectorTakeResponses, DependenciesData, DependenciesErrors, DependenciesResponses, DrawDirectorAssetData, DrawDirectorAssetErrors, DrawDirectorAssetResponses, GetDirectorCutData, GetDirectorCutErrors, GetDirectorCutResponses, GetDirectorLibraryData, GetDirectorLibraryErrors, GetDirectorLibraryResponses, GetDirectorPlanData, GetDirectorPlanErrors, GetDirectorPlanResponses, IndexDirectorPlanData, IndexDirectorPlanErrors, IndexDirectorPlanResponses, ListDirectorAssetsData, ListDirectorAssetsErrors, ListDirectorAssetsResponses, ListDirectorCutsData, ListDirectorCutsErrors, ListDirectorCutsResponses, ListDirectorMediaData, ListDirectorMediaErrors, ListDirectorMediaResponses, ListDirectorTakesData, ListDirectorTakesErrors, ListDirectorTakesResponses, LiveData, LiveErrors, LiveResponses, LocateDirectorTargetData, LocateDirectorTargetErrors, LocateDirectorTargetResponses, ReadyData, ReadyErrors, ReadyResponses, SpeakDirectorLineData, SpeakDirectorLineErrors, SpeakDirectorLineResponses, WriteDirectorPublishCopyData, WriteDirectorPublishCopyErrors, WriteDirectorPublishCopyResponses } from './types.gen';
+import { zAddDirectorAssetBody, zAddDirectorAssetHeaders, zAddDirectorAssetPath, zAddDirectorAssetResponse, zAlignDirectorMatchCutBody, zAlignDirectorMatchCutHeaders, zAlignDirectorMatchCutResponse, zCheckDirectorSceneBody, zCheckDirectorSceneHeaders, zCheckDirectorSceneResponse, zChooseDirectorAssetBody, zChooseDirectorAssetHeaders, zChooseDirectorAssetPath, zChooseDirectorAssetResponse, zClipDirectorAttemptBody, zClipDirectorAttemptHeaders, zClipDirectorAttemptResponse, zCreateDirectorCutBody, zCreateDirectorCutHeaders, zCreateDirectorCutResponse, zCreateDirectorTakeBody, zCreateDirectorTakeHeaders, zCreateDirectorTakeResponse, zDependenciesResponse, zDrawDirectorAssetBody, zDrawDirectorAssetHeaders, zDrawDirectorAssetPath, zDrawDirectorAssetResponse, zGetDirectorCutHeaders, zGetDirectorCutPath, zGetDirectorCutResponse, zGetDirectorLibraryHeaders, zGetDirectorLibraryResponse, zGetDirectorPlanHeaders, zGetDirectorPlanPath, zGetDirectorPlanResponse, zIndexDirectorPlanBody, zIndexDirectorPlanHeaders, zIndexDirectorPlanResponse, zListDirectorAssetsHeaders, zListDirectorAssetsPath, zListDirectorAssetsResponse, zListDirectorCutsHeaders, zListDirectorCutsPath, zListDirectorCutsResponse, zListDirectorMediaHeaders, zListDirectorMediaResponse, zListDirectorTakesHeaders, zListDirectorTakesPath, zListDirectorTakesResponse, zLiveResponse, zLocateDirectorTargetBody, zLocateDirectorTargetHeaders, zLocateDirectorTargetResponse, zReadyResponse, zSpeakDirectorLineBody, zSpeakDirectorLineHeaders, zSpeakDirectorLineResponse, zWriteDirectorPublishCopyBody, zWriteDirectorPublishCopyHeaders, zWriteDirectorPublishCopyResponse } from './zod.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -177,6 +177,30 @@ export const locateDirectorTarget = <ThrowOnError extends boolean = false>(optio
     }).parseAsync(data),
     responseValidator: async (data) => await zLocateDirectorTargetResponse.parseAsync(data),
     url: '/v1/director/locate',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Align Director Match Cut
+ *
+ * Lines up a match cut between two takes: Gemini locates the anchor in the frames
+ * either side of the cut, OpenCV refines it, and the answer says where to cut and how
+ * to move the incoming clip so the anchor stays put (status `not-found` when it can't
+ * be seen in both).
+ */
+export const alignDirectorMatchCut = <ThrowOnError extends boolean = false>(options: Options<AlignDirectorMatchCutData, ThrowOnError>): RequestResult<AlignDirectorMatchCutResponses, AlignDirectorMatchCutErrors, ThrowOnError> => (options.client ?? client).post<AlignDirectorMatchCutResponses, AlignDirectorMatchCutErrors, ThrowOnError>({
+    requestValidator: async (data) => await z.object({
+        body: zAlignDirectorMatchCutBody,
+        headers: zAlignDirectorMatchCutHeaders.optional(),
+        path: z.never().optional(),
+        query: z.never().optional()
+    }).parseAsync(data),
+    responseValidator: async (data) => await zAlignDirectorMatchCutResponse.parseAsync(data),
+    url: '/v1/director/match-cuts',
     ...options,
     headers: {
         'Content-Type': 'application/json',

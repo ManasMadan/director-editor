@@ -224,6 +224,34 @@ describe("Director's calls", () => {
     ]);
   });
 
+  it("line up a match cut", async () => {
+    const alignment = {
+      status: "aligned",
+      outgoingEndMs: 1500,
+      incomingStartMs: 0,
+      transform: { x: -12.5, y: 4, scale: 0.97, rotation: -1.2 },
+      offsetBeforePx: 61.3,
+      offsetPx: 1.4,
+      scaleDiff: 0.004,
+      rotationDiff: 0.1,
+      cropPercent: 3.2,
+      withinTolerance: true,
+      anchor: { x: 0.5, y: 0.4 },
+      outgoingFrame: null,
+      incomingFrame: null,
+    };
+    handler = (_request, response) => json(response, 200, alignment);
+    const cut = {
+      anchor: "the watch",
+      outgoing: { url: "https://files.example.com/a", atMs: 1500 },
+      incoming: { url: "https://files.example.com/b", atMs: 0 },
+    };
+    await expect(client().director.alignMatchCut(caller, cut)).resolves.toEqual(alignment);
+    expect(seen.map(({ method, path, body }) => [`${method} ${path}`, body])).toEqual([
+      ["POST /v1/director/match-cuts", JSON.stringify(cut)],
+    ]);
+  });
+
   it("throw the service's error with its code, params and issues", async () => {
     handler = (_request, response) =>
       json(
