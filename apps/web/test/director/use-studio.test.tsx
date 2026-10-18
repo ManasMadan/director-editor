@@ -1,7 +1,7 @@
 import type { DirectorTake, FileInfo } from "@repo/contracts/api";
 import { directorTakeIdSchema, fileIdSchema } from "@repo/contracts/ids";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type StudioShot, useStudio } from "@/modules/director/hooks/use-studio";
+import { type StudioShot, shotPage, useStudio } from "@/modules/director/hooks/use-studio";
 import { currentUrl } from "../render";
 import { FakeRecorder, fakeCamera, id, renderHook, shot, standIn, until } from "./support";
 
@@ -189,6 +189,36 @@ describe("useStudio", () => {
     ]);
     expect(added).toMatchObject([{ shotIndex: 1, kind: "photo" }]);
     expect(stored).toHaveBeenCalledWith(STORAGE_URL, expect.objectContaining({ method: "PUT" }));
+  });
+
+  it("takes a retake from the editor back to the editor once it's kept, not on to the next shot", async () => {
+    const { api, added } = director();
+    const hook = await renderStudio(
+      {
+        videoId: VIDEO_ID,
+        shot: shot({ kind: "photo" }),
+        index: 0,
+        count: 3,
+        audio: "original",
+        retake: true,
+      },
+      api,
+    );
+    await until(() => expect(hook.current.camera.state).toBe("live"));
+    clock();
+    hook.current.actions.record();
+    await ticking(() => expect(hook.current.phase).toBe("preview"));
+    vi.useRealTimers();
+    hook.current.actions.use();
+    await expect.poll(currentUrl).toBe(`/director/${VIDEO_ID}/edit?audio=original`);
+    expect(added).toMatchObject([{ shotIndex: 0, kind: "photo" }]);
+  });
+
+  it("names a shot's page, and keeps a retake's way back to the editor", () => {
+    expect(shotPage(VIDEO_ID, 2, "voice")).toBe(`/director/${VIDEO_ID}/shoot?shot=2&audio=voice`);
+    expect(shotPage(VIDEO_ID, 2, "voice", true)).toBe(
+      `/director/${VIDEO_ID}/shoot?shot=2&audio=voice&then=edit`,
+    );
   });
 
   it("sends a photo the browser could only make a PNG of as a PNG", async () => {

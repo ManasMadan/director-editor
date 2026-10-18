@@ -39,7 +39,8 @@ export function useSubmitTakeMutation() {
   return useMutation({
     mutationKey: api.director.addTake.key(),
     mutationFn: (input: TakeInput) => submitTake(client, input),
-    // The editor's shots list the takes too: a retake shows there on the way back.
+    // The editor's shots list the takes too: a retake from the editor, which goes back
+    // there once it's kept, shows in its shot without a reload.
     onSuccess: (_take, { videoId }) =>
       Promise.all([
         queryClient.invalidateQueries({

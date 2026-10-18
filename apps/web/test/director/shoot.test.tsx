@@ -116,13 +116,13 @@ const smile = planShot({ kind: "photo", title: "Smile", durationSeconds: 1, scen
 
 async function openShoot(
   plan: Parameters<typeof shotPlan>[0],
-  query: { shot?: string; audio?: string },
+  query: { shot?: string; audio?: string; then?: string },
 ): Promise<{ page: Awaited<ReturnType<typeof renderPage>>; videoId: string; user: User }> {
   const videoId = newVideoId();
   await readyPlan(videoId, shotPlan(plan));
   const user = await signUp();
   const page = await renderPage(
-    <ShootPage videoId={videoId} shot={query.shot} audio={query.audio} />,
+    <ShootPage videoId={videoId} shot={query.shot} audio={query.audio} then={query.then} />,
     {
       url: `/director/${videoId}/shoot`,
     },
@@ -591,6 +591,21 @@ describe("sending a take", { tags: ["files"] }, () => {
     await userEvent.click(page.getByRole("button", { name: /Keep it/ }));
     await commands.checkUpload(await lastUpload(user));
     await expect.poll(currentUrl).toBe(`/director/${videoId}/edit?audio=original&wrap=1`);
+  });
+
+  it("takes a retake asked for in the editor back to the editor, not on to the next shot", async () => {
+    await commands.storageCors();
+    canvasCamera();
+    const { page, videoId, user } = await openShoot(
+      { audio: "music", shots: [smile, walkIn] },
+      { shot: "0", audio: "original", then: "edit" },
+    );
+    await expect.element(page.getByRole("img", { name: "Shot 1 of 2" })).toBeVisible();
+    await press(page, "Take the photo");
+    await expect.element(page.getByRole("img", { name: "Director's cut" })).toBeVisible();
+    await userEvent.click(page.getByRole("button", { name: /Keep it/ }));
+    await commands.checkUpload(await lastUpload(user));
+    await expect.poll(currentUrl).toBe(`/director/${videoId}/edit?audio=original`);
   });
 
   it("says why the take couldn't be sent, and lets the member try again", async () => {

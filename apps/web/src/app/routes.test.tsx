@@ -87,9 +87,16 @@ describe("route files", () => {
         params,
         searchParams: Promise.resolve({ shot: ["2", "5"], audio: "voice" }),
       }),
-    ).toEqual(<ShootPage videoId="dQw4w9WgXcQ" shot="2" audio="voice" />);
+    ).toEqual(<ShootPage videoId="dQw4w9WgXcQ" shot="2" audio="voice" then={undefined} />);
+    // A retake from the editor goes back there once it's kept.
+    expect(
+      await rendered(shoot.default, {
+        params,
+        searchParams: Promise.resolve({ shot: "1", audio: "voice", then: "edit" }),
+      }),
+    ).toEqual(<ShootPage videoId="dQw4w9WgXcQ" shot="1" audio="voice" then="edit" />);
     expect(await rendered(shoot.default, { params, searchParams: Promise.resolve({}) })).toEqual(
-      <ShootPage videoId="dQw4w9WgXcQ" shot={undefined} audio={undefined} />,
+      <ShootPage videoId="dQw4w9WgXcQ" shot={undefined} audio={undefined} then={undefined} />,
     );
     expect(
       await rendered(edit.default, {

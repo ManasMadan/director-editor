@@ -28,17 +28,23 @@ export interface StudioShot {
   index: number;
   count: number;
   audio: AudioMode;
+  /** A retake asked for from the editor: it goes back there once it's kept. */
+  retake?: boolean;
 }
 
-/** A shot's camera screen. */
-export const shotPage = (videoId: string, index: number, audio: AudioMode) =>
-  `/director/${videoId}/shoot?shot=${index}&audio=${audio}` as const;
+/** A shot's camera screen; `retake` marks one opened from the editor (`&then=edit`). */
+export const shotPage = (videoId: string, index: number, audio: AudioMode, retake = false) =>
+  `/director/${videoId}/shoot?shot=${index}&audio=${audio}${retake ? "&then=edit" : ""}` as const;
 
 /**
- * Where to go once a take is kept: the next shot, or, once all are in, the editor with
- * Director's cut of them, opened as a wrap.
+ * Where to go once a take is kept: back to the editor for a retake asked for there; else
+ * the next shot, or, once all are in, the editor with Director's cut of them, opened as
+ * a wrap.
  */
-export function nextPage({ videoId, index, count, audio }: Omit<StudioShot, "shot">) {
+export function nextPage({ videoId, index, count, audio, retake }: Omit<StudioShot, "shot">) {
+  if (retake) {
+    return `/director/${videoId}/edit?audio=${audio}` as const;
+  }
   return index + 1 < count
     ? shotPage(videoId, index + 1, audio)
     : (`/director/${videoId}/edit?audio=${audio}&wrap=1` as const);

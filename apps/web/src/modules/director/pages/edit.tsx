@@ -514,7 +514,7 @@ function Editor({
           picks={history.choices.picks}
           time={playback.time}
           playing={playback.playing}
-          shotHref={(index) => shotPage(videoId, index, audio)}
+          shotHref={(index) => shotPage(videoId, index, audio, true)}
           onPick={editor.pick}
           onSeek={editor.seek}
         />

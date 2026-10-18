@@ -10,5 +10,12 @@ export default async function Page({
   searchParams,
 }: PageProps<"/director/[videoId]/shoot">) {
   const [{ videoId }, query] = await Promise.all([params, searchParams]);
-  return <ShootPage videoId={videoId} shot={first(query.shot)} audio={first(query.audio)} />;
+  return (
+    <ShootPage
+      videoId={videoId}
+      shot={first(query.shot)}
+      audio={first(query.audio)}
+      then={first(query.then)}
+    />
+  );
 }
