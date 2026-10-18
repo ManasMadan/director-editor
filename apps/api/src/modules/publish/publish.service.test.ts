@@ -3,7 +3,7 @@
 import { YOUTUBE_UPLOAD_SCOPE } from "@repo/contracts/api";
 import { AppError } from "@repo/nest-common";
 import { describe, expect, it } from "vitest";
-import { allowsUploads, publishErrorOf } from "./publish.service";
+import { allowsUploads, noCreditWhileYouTubeIsDown, publishErrorOf } from "./publish.service";
 import { YouTubeUploadError } from "./youtube-upload";
 
 describe("a Google account's scopes", () => {
@@ -48,5 +48,16 @@ describe("a failed upload", () => {
     expect(outage).toMatchObject({ code: "UPSTREAM_UNAVAILABLE", params: { service: "youtube" } });
     const bug = new Error("a bug");
     expect(publishErrorOf(bug)).toBe(bug);
+  });
+});
+
+describe("the original's credit for the post", () => {
+  it("is left out while YouTube can't be read, and any other failure stays one", () => {
+    const outage = new AppError("UPSTREAM_UNAVAILABLE", { params: { service: "youtube" } });
+    expect(noCreditWhileYouTubeIsDown(outage)).toBeNull();
+    const off = new AppError("FEATURE_DISABLED", { params: { feature: "director" } });
+    expect(() => noCreditWhileYouTubeIsDown(off)).toThrow(off);
+    const bug = new Error("a bug");
+    expect(() => noCreditWhileYouTubeIsDown(bug)).toThrow(bug);
   });
 });

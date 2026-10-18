@@ -87,6 +87,18 @@ export function publishErrorOf(error: unknown): unknown {
   return new AppError("UPSTREAM_UNAVAILABLE", { params: { service: "youtube" }, cause: error });
 }
 
+/**
+ * The original's credit when YouTube can't be read: none. Gemini can write the post without
+ * the original's title and channel, and YouTube being out of quota, or down, mustn't stop
+ * it. Any other failure is still one.
+ */
+export function noCreditWhileYouTubeIsDown(error: unknown): null {
+  if (isAppError(error) && error.code === "UPSTREAM_UNAVAILABLE") {
+    return null;
+  }
+  throw error;
+}
+
 @Injectable()
 export class PublishService {
   private readonly youtube = new YouTubeUploader(uploadUrlOf(env.YOUTUBE_API_URL));
@@ -105,14 +117,7 @@ export class PublishService {
   /** Gemini's draft of the post, knowing the original Short as YouTube shows it. */
   async copy(userId: UserId, orgId: OrgId, cutId: DirectorCutId): Promise<PublishCopy> {
     const cut = await this.director.cut(userId, orgId, cutId);
-    const original = await this.shorts.credit(cut.videoId).catch((error: unknown) => {
-      // Gemini can write the post without the original's title and channel: YouTube being
-      // out of quota, or down, mustn't stop it.
-      if (isAppError(error) && error.code === "UPSTREAM_UNAVAILABLE") {
-        return null;
-      }
-      throw error;
-    });
+    const original = await this.shorts.credit(cut.videoId).catch(noCreditWhileYouTubeIsDown);
     const copy = await callAi((ai) =>
       ai.director.writePublishCopy(aiCaller(userId, orgId), { cutId, original }),
     );
