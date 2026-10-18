@@ -3,5 +3,5 @@
 # platform.yaml read this file at master's head). Written only by `bun run promote
 # <version>`, whose pull request is the deploy. Until the first promotion it follows
 # master, with no images to run.
-revision: v1.5.0
-imageTag: sha-5f8d1a2ffb01b5292a91904e81fe0883d36d26fe
+revision: v1.6.0
+imageTag: sha-3c9493c5049cf0df84db83c3e5f7d906ed6c6548
