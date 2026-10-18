@@ -90,9 +90,12 @@ misconfigurations:
     statement: >-
       Each keeps the CA bundle of its own admission webhooks current, which means updating their configurations
   - id: KSV-01010
-    paths: ["deploy/.rendered/addon-argocd.yaml", "deploy/.rendered/addon-kyverno.yaml"]
+    paths:
+      - "deploy/.rendered/addon-argocd.yaml"
+      - "deploy/.rendered/addon-kyverno.yaml"
+      - "deploy/.rendered/platform-dashboards.yaml"
     statement: >-
-      Not secrets: setting names containing "key" (instanceLabelKey, updateRequestThreshold) and the SOPS plugin's script naming its key file
+      Not secrets: setting names containing "key" (instanceLabelKey, updateRequestThreshold), the SOPS plugin's script naming its key file, and the Grafana dashboards' queries and descriptions, which name the fields that hold an email or a sign-in method but hold none themselves
   - id: KSV-0009
     paths: ["deploy/.rendered/addon-kube-prometheus-stack.yaml"]
     statement: >-

@@ -6,6 +6,13 @@
 deploymentMode: SingleBinary
 
 loki:
+  # A newer patch release than the chart's own (3.6.11), whose image has fixable high
+  # vulnerabilities that this one doesn't (scripts/image-scan.ts).
+  image:
+    registry: docker.io
+    repository: grafana/loki
+    # renovate: datasource=docker depName=grafana/loki
+    tag: 3.6.18
   # One tenant: nothing but Alloy and Grafana talk to it, both in this namespace.
   auth_enabled: false
   commonConfig:
