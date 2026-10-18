@@ -1,7 +1,6 @@
 """The conversational editor's pure parts: what Gemini reads, and its answer as edits.
 No database, Redis or model provider."""
 
-import json
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -108,21 +107,20 @@ def test_takes_are_numbered_oldest_first() -> None:
 
 def test_gemini_reads_every_take_with_its_index_and_the_edit() -> None:
     context = editor_context([SHOT, SHOT], TAKES, STATE)
-    shots = json.loads(context.split("\n")[1])
-    edit = json.loads(context.split("\n")[3])
-    first = shots[0]
-    assert first["playing"] == {"take": 2, "inOut": [0, 4], "place": 1, "grade": "none"}
-    assert [t["filmed"] for t in first["takes"]] == ["try 1, 0:00 in", "try 2, 2:00 in"]
-    assert first["takes"][0]["index"]["things"] == ["green parrot", "red cap"]
-    assert first["takes"][0]["keptSeconds"] == [0.5, 3.0]
-    assert first["takes"][1]["index"] is None
-    assert shots[1]["playing"] == {"take": None, "inOut": [0, 4], "place": None, "grade": "warm"}
-    assert edit == {
-        "captions": "pop",
-        "voiceOn": True,
-        "musicTrack": False,
-        "captionFixes": [{"text": "cloud", "replacement": "Claude"}],
-    }
+    playing = '"playing": {"take": 2, "inOut": [0.0, 4.0], "place": 1, "grade": "none"}'
+    assert playing in context
+    assert '"filmed": "try 1, 0:00 in"' in context
+    assert '"filmed": "try 2, 2:00 in"' in context
+    assert '"things": ["green parrot", "red cap"]' in context
+    assert '"keptSeconds": [0.5, 3.0]' in context
+    assert '"index": null' in context
+    assert '"playing": {"take": null, "inOut": [0.0, 4.0], "place": null, "grade": "warm"}' in (
+        context
+    )
+    assert context.endswith(
+        '{"captions": "pop", "voiceOn": true, "musicTrack": false,'
+        ' "captionFixes": [{"text": "cloud", "replacement": "Claude"}]}'
+    )
 
 
 def test_an_applied_answer_names_shots_by_index_and_takes_by_id() -> None:

@@ -42,6 +42,9 @@ const take = (shotIndex: number, kind: DirectorTake["kind"] = "video"): Director
   bestEndMs: 4000,
   score: 80,
   feedback: null,
+  reason: null,
+  chosen: false,
+  origin: "shoot",
   createdAt: new Date(),
 });
 
@@ -96,7 +99,7 @@ describe("Director's edits", () => {
       2, 0, 1,
     ]);
     const dropped = apply(action({ op: "drop_shot", shotIndex: 1 })).choices;
-    expect(playOrder(dropped, 3)).toEqual([0, 2]);
+    expect(playOrder(dropped, [0, 1, 2])).toEqual([0, 2]);
     expect(apply(action({ op: "swap_shots", shotIndex: 0, otherShotIndex: null })).choices).toBe(
       initial,
     );
@@ -152,7 +155,11 @@ describe("Director's edits", () => {
   });
 
   it("goes back to Director's picks", () => {
-    const changed = { ...initial, picks: { 0: takes[1].id }, trims: { 1: { from: 0, to: 1 } } };
+    const changed = {
+      ...initial,
+      picks: { 0: directorTakeIdSchema.parse(crypto.randomUUID()) },
+      trims: { 1: { from: 0, to: 1 } },
+    };
     expect(applyActions(changed, [action({ op: "reset_to_picks" })], clips).choices).toEqual(
       initial,
     );

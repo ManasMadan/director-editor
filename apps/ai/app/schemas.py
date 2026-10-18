@@ -1423,8 +1423,10 @@ MAX_EDITOR_ACTIONS = 40
 MAX_EDITOR_CHOICES = 4
 MAX_EDITOR_FIXES = 20
 
-type CaptionStyle = Literal["pop", "classic", "off"]
-type Grade = Literal["none", "black-and-white", "warm", "cool", "high-contrast", "vintage", "vivid"]
+type EditorCaptions = Literal["pop", "classic", "off"]
+type EditorGrade = Literal[
+    "none", "black-and-white", "warm", "cool", "high-contrast", "vintage", "vivid"
+]
 type EditorOp = Literal[
     "pick_take",
     "trim",
@@ -1453,7 +1455,7 @@ class EditorShotState(BaseModel):
     startSeconds: float = Field(ge=0, le=MAX_SHOT_SECONDS, description="In point in the take.")
     endSeconds: float = Field(ge=0, le=MAX_SHOT_SECONDS, description="Out point in the take.")
     position: int | None = Field(ge=0, lt=MAX_SHOTS, description="Its place; null if dropped.")
-    grade: Grade
+    grade: EditorGrade
 
 
 class CaptionFix(BaseModel):
@@ -1467,7 +1469,7 @@ class EditorState(BaseModel):
     model_config = REQUEST
 
     shots: list[EditorShotState] = Field(max_length=MAX_SHOTS)
-    captions: CaptionStyle
+    captions: EditorCaptions
     sound: bool
     music: bool = Field(description="Whether the video has a music track.")
     fixes: list[CaptionFix] = Field(max_length=MAX_EDITOR_FIXES)

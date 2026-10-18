@@ -183,6 +183,10 @@ function pickTake(step: Step, shotIndex: number, takeId: DirectorTakeId): Step {
   );
 }
 
+/** The choices with `takeId` picked for the shot, as a tap on the board picks it. */
+export const withPick = (choices: EditorChoices, shotIndex: number, takeId: DirectorTakeId) =>
+  pickTake({ choices, effects: [], shots: [] }, shotIndex, takeId).choices;
+
 function trim(step: Step, action: EditorAction, clips: readonly Clip[]): Step {
   const shotIndex = action.shotIndex;
   const clip = shotIndex === null ? undefined : clipOf(clips, shotIndex);

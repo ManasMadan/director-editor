@@ -61,6 +61,7 @@ import {
   editorState,
   fixLines,
   UNARRANGED,
+  withPick,
 } from "../lib/editor-actions";
 import { gradeFilter } from "../lib/grades";
 import { captionInk } from "../lib/ink";
@@ -442,8 +443,8 @@ function candidateClips(
   });
 }
 
-/** The shot a request just changed, outlined on the board for a moment. */
-function useHighlight() {
+/** The shot a request or a pick just changed: played, and outlined on the board a moment. */
+function useHighlight(clips: readonly Clip[], seek: (seconds: number) => void) {
   const [highlight, setHighlight] = useState<number | null>(null);
   useEffect(() => {
     if (highlight === null) {
@@ -452,7 +453,14 @@ function useHighlight() {
     const timer = window.setTimeout(() => setHighlight(null), 1500);
     return () => window.clearTimeout(timer);
   }, [highlight]);
-  return { highlight, setHighlight };
+  const showShot = (shotIndex: number) => {
+    setHighlight(shotIndex);
+    const clip = clips.find((one) => one.index === shotIndex);
+    if (clip) {
+      seek(clip.at);
+    }
+  };
+  return { highlight, showShot };
 }
 
 /**
@@ -491,7 +499,12 @@ function useArrangedClips(
   // reorders or drops shots, they're cut plainly.
   const inPlanOrder = choices.order === null && choices.dropped.length === 0;
   const matchCuts = useMatchCuts(videoId, plan, inPlanOrder ? arranged : NO_CLIPS);
-  return { played, byShot, clips: inPlanOrder ? matchCuts.clips : arranged, matchCuts };
+  const clips = inPlanOrder ? matchCuts.clips : arranged;
+  // Only the shots that play go into a saved cut: a dropped one isn't in the video.
+  const playing = new Map(
+    [...played].filter(([index]) => clips.some((clip) => clip.index === index)),
+  );
+  return { playing, byShot, clips, matchCuts };
 }
 
 /** Everything the editor holds: the shots and their picks, the takes, the clock, the choices. */
@@ -508,8 +521,7 @@ function useEditor(
     picks: {},
     ...UNARRANGED,
   });
-  const { picks } = history.choices;
-  const { played, byShot, clips, matchCuts } = useArrangedClips(
+  const { playing, byShot, clips, matchCuts } = useArrangedClips(
     videoId,
     plan,
     shots,
@@ -521,18 +533,7 @@ function useEditor(
   const total = editSeconds(clips);
   const playback = usePlayback(total);
   const [tool, setTool] = useState<Tool | null>(null);
-  const { highlight, setHighlight } = useHighlight();
-  const showShot = (shotIndex: number) => {
-    setHighlight(shotIndex);
-    const clip = clips.find((one) => one.index === shotIndex);
-    if (clip) {
-      playback.seek(clip.at);
-    }
-  };
-  // Only the shots that play go into a saved cut: a dropped one isn't in the video.
-  const playing = new Map(
-    [...played].filter(([index]) => clips.some((clip) => clip.index === index)),
-  );
+  const { highlight, showShot } = useHighlight(clips, playback.seek);
   return {
     byShot,
     clips,
@@ -555,14 +556,7 @@ function useEditor(
     ready: clips.length > 0 && complete(clips) && clips.every((clip) => loadedTake(media, clip)),
     left: clips.filter((clip) => clip.state === "missing").length,
     pick: (shotIndex: number, takeId: DirectorTakeId) => {
-      const { trims } = history.choices;
-      history.change({
-        picks: { ...picks, [shotIndex]: takeId },
-        // The new take plays the part its own review kept.
-        trims: Object.fromEntries(
-          Object.entries(trims).filter(([index]) => Number(index) !== shotIndex),
-        ),
-      });
+      history.change(withPick(history.choices, shotIndex, takeId));
       showShot(shotIndex);
     },
     seek: (clip: Clip) => {
@@ -712,6 +706,102 @@ function repeat(effect: EditorEffect, once: () => void) {
   }
 }
 
+/** The shots and their takes, and the "tell Director" bar under them. */
+function BoardPanel({
+  videoId,
+  audio,
+  plan,
+  version,
+  editor,
+  shots,
+  busy,
+}: {
+  videoId: string;
+  audio: AudioMode;
+  plan: ShotPlan;
+  version: YourVersion;
+  editor: EditorState;
+  shots: readonly DirectorShot[];
+  busy: boolean;
+}) {
+  const t = useTranslations("director");
+  const { playback, history, clips, media } = editor;
+  return (
+    <div className="flex h-[42dvh] min-h-64 shrink-0 flex-col gap-2 border-t border-studio-foreground/10 pt-3 lg:h-auto lg:min-h-0 lg:border-t-0 lg:border-l lg:pt-4">
+      {editor.left > 0 ? (
+        <p className="px-4 text-xs text-studio-foreground/60">
+          {t("review.left", { count: editor.left })}
+        </p>
+      ) : null}
+      <MatchCutNotes cuts={editor.matchCuts.cuts} />
+      <VersionGaps plan={plan} version={version} />
+      <BackToPicks
+        shots={shots}
+        picks={history.choices.picks}
+        onReset={(picks) => history.change({ picks })}
+      />
+      <ShotBoard
+        clips={clips}
+        shots={shots}
+        media={media}
+        picks={history.choices.picks}
+        time={playback.time}
+        playing={playback.playing}
+        shotHref={(index) => shotPage(videoId, index, audio, true)}
+        onPick={editor.pick}
+        onSeek={editor.seek}
+        locked={busy}
+        highlight={editor.highlight}
+      />
+      <div inert={busy} className={cn(busy && "opacity-40")}>
+        <TalkBar videoId={videoId} audio={audio} editor={editor} shots={shots} />
+      </div>
+    </div>
+  );
+}
+
+/** The "tell Director" bar, wired to the editor. */
+function TalkBar({
+  videoId,
+  audio,
+  editor,
+  shots,
+}: {
+  videoId: string;
+  audio: AudioMode;
+  editor: EditorState;
+  shots: readonly DirectorShot[];
+}) {
+  const talk = useTalk(videoId, editor, audio);
+  const { history, playback } = editor;
+  const dismiss = () => {
+    editor.setReply(null);
+    talk.dismiss();
+  };
+  return (
+    <TellDirector
+      reply={editor.reply}
+      pending={talk.pending}
+      error={talk.error}
+      shots={shots}
+      media={editor.media}
+      onSend={(request) =>
+        void talk.send(request, editorState(editor.byShot, history.choices, false))
+      }
+      onListen={playback.pause}
+      onPick={(shotIndex, takeId) => {
+        editor.pick(shotIndex, takeId);
+        dismiss();
+      }}
+      onUndo={() => {
+        history.undo();
+        dismiss();
+      }}
+      onDismiss={dismiss}
+    />
+  );
+}
+
 function Editor({
   videoId,
   plan,
@@ -728,15 +818,9 @@ function Editor({
   /** The member's version: its skipped shots and gaps aren't in the video. */
   version: YourVersion;
 }) {
-  const t = useTranslations("director");
   const editor = useEditor(videoId, plan, shots, audio, version);
   const saver = useSaveVideo(videoId, plan.title);
-  const talk = useTalk(videoId, editor, audio);
   const { playback, history, clips, media } = editor;
-  const dismiss = () => {
-    editor.setReply(null);
-    talk.dismiss();
-  };
   const save = () => {
     playback.pause();
     void saver.save({
@@ -777,55 +861,15 @@ function Editor({
           ) : null}
         </div>
       </div>
-      <div className="flex h-[42dvh] min-h-64 shrink-0 flex-col gap-2 border-t border-studio-foreground/10 pt-3 lg:h-auto lg:min-h-0 lg:border-t-0 lg:border-l lg:pt-4">
-        {editor.left > 0 ? (
-          <p className="px-4 text-xs text-studio-foreground/60">
-            {t("review.left", { count: editor.left })}
-          </p>
-        ) : null}
-        <MatchCutNotes cuts={editor.matchCuts.cuts} />
-        <VersionGaps plan={plan} version={version} />
-        <BackToPicks
-          shots={shots}
-          picks={history.choices.picks}
-          onReset={(picks) => history.change({ picks })}
-        />
-        <ShotBoard
-          clips={clips}
-          shots={shots}
-          media={media}
-          picks={history.choices.picks}
-          time={playback.time}
-          playing={playback.playing}
-          shotHref={(index) => shotPage(videoId, index, audio, true)}
-          onPick={editor.pick}
-          onSeek={editor.seek}
-          locked={saver.busy}
-          highlight={editor.highlight}
-        />
-        <div inert={saver.busy} className={cn(saver.busy && "opacity-40")}>
-          <TellDirector
-            reply={editor.reply}
-            pending={talk.pending}
-            error={talk.error}
-            shots={shots}
-            media={media}
-            onSend={(request) =>
-              void talk.send(request, editorState(editor.byShot, history.choices, false))
-            }
-            onListen={playback.pause}
-            onPick={(shotIndex, takeId) => {
-              editor.pick(shotIndex, takeId);
-              dismiss();
-            }}
-            onUndo={() => {
-              history.undo();
-              dismiss();
-            }}
-            onDismiss={dismiss}
-          />
-        </div>
-      </div>
+      <BoardPanel
+        videoId={videoId}
+        audio={audio}
+        plan={plan}
+        version={version}
+        editor={editor}
+        shots={shots}
+        busy={saver.busy}
+      />
       {saver.saving.step === "saved" ? (
         <Saved video={saver.saving.video} lines={saver.saving.lines} onClose={saver.close} />
       ) : null}

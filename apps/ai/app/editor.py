@@ -12,6 +12,7 @@ nothing, declines or wants a confirmation carries no edits.
 import json
 from collections.abc import Sequence
 from datetime import datetime
+from uuid import UUID
 
 from app.db.models import DirectorTake
 from app.schemas import (
@@ -149,7 +150,7 @@ def editor_context(shots: Sequence[Shot], takes: Sequence[DirectorTake], state: 
     return "The shots and their takes:\n" + json.dumps(lines) + "\nThe edit:\n" + json.dumps(edit)
 
 
-def _take_id(takes: Sequence[DirectorTake], shot: int | None, take: int | None):
+def _take_id(takes: Sequence[DirectorTake], shot: int | None, take: int | None) -> UUID | None:
     if shot is None or take is None:
         return None
     ordered = ordered_takes(takes, shot - 1)
