@@ -216,6 +216,15 @@ function takeCalls(forCall: ClientFor) {
   };
 }
 
+/** The conversational editor's call (apps/ai/app/editor.py). */
+function editorCalls(forCall: ClientFor) {
+  return {
+    async askEditor(caller: AiCaller, body: EditorRequest) {
+      return unwrap(askDirectorEditor({ client: await forCall(caller), body }));
+    },
+  };
+}
+
 /** Director's calls (apps/ai/app/director.py), each on a client made for that call. */
 function directorCalls(forCall: ClientFor) {
   return {
@@ -232,9 +241,6 @@ function directorCalls(forCall: ClientFor) {
     },
     async checkScene(caller: AiCaller, body: SceneCheckRequest) {
       return unwrap(checkDirectorScene({ client: await forCall(caller), body }));
-    },
-    async askEditor(caller: AiCaller, body: EditorRequest) {
-      return unwrap(askDirectorEditor({ client: await forCall(caller), body }));
     },
     async locate(caller: AiCaller, body: LocateRequest) {
       return unwrap(locateDirectorTarget({ client: await forCall(caller), body }));
@@ -322,6 +328,7 @@ export function createAiClient(options: { baseUrl: string; secret: string; timeo
       takeCalls(forCall),
       assetCalls(forCall),
       templateCalls(forCall),
+      editorCalls(forCall),
     ),
   };
 }

@@ -1550,7 +1550,7 @@ class EditorAction(BaseModel):
     steps: int | None
 
 
-class TakeChoice(BaseModel):
+class EditorChoice(BaseModel):
     shotIndex: int
     takeId: UUID
     atSeconds: float
@@ -1562,4 +1562,4 @@ class EditorReply(BaseModel):
     outcome: EditorOutcome
     say: str
     actions: list[EditorAction]
-    choices: list[TakeChoice]
+    choices: list[EditorChoice]

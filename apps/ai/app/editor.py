@@ -17,12 +17,12 @@ from uuid import UUID
 from app.db.models import DirectorTake
 from app.schemas import (
     EditorAction,
+    EditorChoice,
     EditorDraft,
     EditorDraftAction,
     EditorReply,
     EditorState,
     Shot,
-    TakeChoice,
     TakeIndex,
 )
 
@@ -206,7 +206,7 @@ def reply_of(draft: EditorDraft, shot_count: int, takes: Sequence[DirectorTake])
         if action is not None and changes
     ]
     choices = [
-        TakeChoice(
+        EditorChoice(
             shotIndex=choice.shot - 1, takeId=take_id, atSeconds=choice.atSeconds, note=choice.note
         )
         for choice in draft.choices

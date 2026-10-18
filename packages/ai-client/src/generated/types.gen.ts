@@ -465,6 +465,20 @@ export type BriefTurn = {
 export type CameraMove = 'static' | 'up' | 'down' | 'left' | 'right' | 'forward' | 'back' | 'orbit' | 'tilt-up' | 'tilt-down';
 
 /**
+ * CaptionFix
+ */
+export type CaptionFix = {
+    /**
+     * Replacement
+     */
+    replacement: string;
+    /**
+     * Text
+     */
+    text: string;
+};
+
+/**
  * ClipPause
  *
  * A stretch nothing was recorded: no take is ever cut across one.
@@ -862,6 +876,197 @@ export type Edit = ({
 } & EndCardEdit) | ({
     type: 'gap';
 } & GapEdit);
+
+/**
+ * EditorAction
+ *
+ * One edit for the browser to apply, with shots by index and takes by id.
+ */
+export type EditorAction = {
+    /**
+     * Endseconds
+     */
+    endSeconds: number | null;
+    /**
+     * Level
+     */
+    level: number | null;
+    op: EditorOp;
+    /**
+     * Othershotindex
+     */
+    otherShotIndex: number | null;
+    /**
+     * Position
+     */
+    position: number | null;
+    /**
+     * Replacement
+     */
+    replacement: string | null;
+    /**
+     * Shotindex
+     */
+    shotIndex: number | null;
+    /**
+     * Startseconds
+     */
+    startSeconds: number | null;
+    /**
+     * Steps
+     */
+    steps: number | null;
+    /**
+     * Takeid
+     */
+    takeId: string | null;
+    /**
+     * Text
+     */
+    text: string | null;
+    /**
+     * Value
+     */
+    value: string | null;
+};
+
+export type EditorCaptions = 'pop' | 'classic' | 'off';
+
+/**
+ * EditorChoice
+ */
+export type EditorChoice = {
+    /**
+     * Atseconds
+     */
+    atSeconds: number;
+    /**
+     * Note
+     */
+    note: string;
+    /**
+     * Shotindex
+     */
+    shotIndex: number;
+    /**
+     * Takeid
+     */
+    takeId: string;
+};
+
+export type EditorGrade = 'none' | 'black-and-white' | 'warm' | 'cool' | 'high-contrast' | 'vintage' | 'vivid';
+
+export type EditorOp = 'pick_take' | 'trim' | 'move_shot' | 'swap_shots' | 'drop_shot' | 'restore_shot' | 'captions' | 'edit_caption' | 'set_grade' | 'set_volume' | 'asset_request' | 'reset_to_picks' | 'undo' | 'redo' | 'reshoot';
+
+export type EditorOutcome = 'applied' | 'ask' | 'no-match' | 'declined' | 'confirm' | 'answer';
+
+/**
+ * EditorReply
+ */
+export type EditorReply = {
+    /**
+     * Actions
+     */
+    actions: Array<EditorAction>;
+    /**
+     * Choices
+     */
+    choices: Array<EditorChoice>;
+    /**
+     * Heard
+     */
+    heard: string;
+    outcome: EditorOutcome;
+    /**
+     * Say
+     */
+    say: string;
+};
+
+/**
+ * EditorRequest
+ */
+export type EditorRequest = {
+    /**
+     * Audio
+     *
+     * The request said, base64.
+     */
+    audio: string | null;
+    /**
+     * Audiotype
+     */
+    audioType: 'audio/webm' | 'audio/mp4' | 'audio/ogg' | null;
+    state: EditorState;
+    /**
+     * Text
+     */
+    text: string | null;
+    /**
+     * Videoid
+     */
+    videoId: string;
+};
+
+/**
+ * EditorShotState
+ */
+export type EditorShotState = {
+    /**
+     * Endseconds
+     *
+     * Out point in the take.
+     */
+    endSeconds: number;
+    grade: EditorGrade;
+    /**
+     * Position
+     *
+     * Its place; null if dropped.
+     */
+    position: number | null;
+    /**
+     * Shotindex
+     */
+    shotIndex: number;
+    /**
+     * Startseconds
+     *
+     * In point in the take.
+     */
+    startSeconds: number;
+    /**
+     * Takeid
+     *
+     * The take playing; null if none.
+     */
+    takeId: string | null;
+};
+
+/**
+ * EditorState
+ */
+export type EditorState = {
+    captions: EditorCaptions;
+    /**
+     * Fixes
+     */
+    fixes: Array<CaptionFix>;
+    /**
+     * Music
+     *
+     * Whether the video has a music track.
+     */
+    music: boolean;
+    /**
+     * Shots
+     */
+    shots: Array<EditorShotState>;
+    /**
+     * Sound
+     */
+    sound: boolean;
+};
 
 /**
  * EndCardEdit
@@ -2207,6 +2412,41 @@ export type GetDirectorCutResponses = {
 };
 
 export type GetDirectorCutResponse = GetDirectorCutResponses[keyof GetDirectorCutResponses];
+
+export type AskDirectorEditorData = {
+    body: EditorRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/director/editor-requests';
+};
+
+export type AskDirectorEditorErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type AskDirectorEditorError = AskDirectorEditorErrors[keyof AskDirectorEditorErrors];
+
+export type AskDirectorEditorResponses = {
+    /**
+     * Successful Response
+     */
+    200: EditorReply;
+};
+
+export type AskDirectorEditorResponse = AskDirectorEditorResponses[keyof AskDirectorEditorResponses];
 
 export type GetDirectorLibraryData = {
     body?: never;
