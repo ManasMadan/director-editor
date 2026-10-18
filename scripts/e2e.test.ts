@@ -172,6 +172,21 @@ describe("the e2e run", () => {
     }
   });
 
+  it("gives the run a demo account's password when it has none, the same to every service and suite", async () => {
+    captureOutput();
+    const { given, ran, environments } = stack();
+    expect(await e2e([], given)).toBe(0);
+    const [password] = environments.map((env) => env.DEMO_PASSWORD);
+    expect(password).toMatch(/^[\w-]{40,}$/);
+    for (const env of [...environments, ...ran.slice(1).map((options) => options.env ?? {})]) {
+      expect(env.DEMO_PASSWORD).toBe(password);
+    }
+    // The checkout's own, when its .env has one.
+    const own = stack({ env: { DEMO_PASSWORD: "this-checkouts-demo-password" } });
+    await e2e(["--app", "web"], own.given);
+    expect(own.environments[0]?.DEMO_PASSWORD).toBe("this-checkouts-demo-password");
+  });
+
   it("knows no port that .env.example doesn't name", () => {
     expect(() => stackPorts({}, new Map())).toThrow("API_PORT is in neither");
   });
