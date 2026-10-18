@@ -62,9 +62,13 @@ interface Stage {
   sound: MediaStreamAudioDestinationNode;
   recorder: MediaRecorder;
   withSound: boolean;
+  /** Cancelling the render: the segment playing stops at its next frame. */
+  signal: AbortSignal | undefined;
   /** Called after each frame is drawn, `seconds` into the current segment. */
   onFrame: (seconds: number) => void;
 }
+
+const cancelled = (stage: Stage) => stage.signal?.aborted === true;
 
 function nextFrame() {
   return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -93,7 +97,7 @@ async function playVideo(stage: Stage, segment: Extract<Segment, { kind: "video"
     // The recorder waited while the take loaded: no black or frozen gap between shots.
     stage.recorder.resume();
     const rect = coverRect(video.videoWidth, video.videoHeight);
-    while (video.currentTime < segment.endSeconds && !video.ended) {
+    while (video.currentTime < segment.endSeconds && !video.ended && !cancelled(stage)) {
       stage.ctx.drawImage(video, rect.x, rect.y, rect.w, rect.h);
       stage.onFrame(video.currentTime - segment.startSeconds);
       await nextFrame();
@@ -111,7 +115,7 @@ async function showPhoto(stage: Stage, segment: Extract<Segment, { kind: "photo"
   const start = performance.now();
   for (;;) {
     const elapsed = (performance.now() - start) / 1000;
-    if (elapsed >= segment.seconds) {
+    if (elapsed >= segment.seconds || cancelled(stage)) {
       break;
     }
     const zoom = 1 + PHOTO_ZOOM * (elapsed / segment.seconds);
@@ -138,11 +142,17 @@ export async function stitch(
     withSound,
     onProgress,
     captions,
+    signal,
   }: {
     audio: AudioContext;
     withSound: boolean;
     onProgress: (done: number) => void;
     captions: Captions;
+    /**
+     * Cancels the render (the member pressed Cancel or left): the recorder stops, the
+     * take playing is paused, and the promise rejects with an AbortError.
+     */
+    signal?: AbortSignal;
   },
 ): Promise<Blob> {
   const format = recorderFormat();
@@ -180,6 +190,7 @@ export async function stitch(
     sound,
     recorder,
     withSound,
+    signal,
     onFrame: (seconds) => {
       const at = offset + seconds;
       const words = captionAt(captions.lines, at);
@@ -192,6 +203,9 @@ export async function stitch(
   recorder.pause();
   try {
     for (const segment of segments) {
+      if (cancelled(stage)) {
+        break;
+      }
       await (segment.kind === "video" ? playVideo(stage, segment) : showPhoto(stage, segment));
       offset += totalSeconds([segment]);
     }
@@ -200,6 +214,7 @@ export async function stitch(
     await stopped;
     // `audio` is the caller's (made in its tap), so the caller closes it.
   }
+  signal?.throwIfAborted();
   onProgress(1);
   return new Blob(chunks, { type: format.uploadType });
 }

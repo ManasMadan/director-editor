@@ -682,6 +682,7 @@
       "uploading": "Saving to My media…",
       "renderFailed": "Your video couldn't be put together in this browser. Try Chrome or Safari.",
       "tooLong": "This video is too long to save: videos can be up to {minutes, number} minutes. Pick shorter takes, or film shorter shots.",
+      "tooBig": "This video came out bigger than {megabytes, number} MB, too big to save. Try shorter takes.",
       "saved": "Saved to My media",
       "openMedia": "Open My media"
     },

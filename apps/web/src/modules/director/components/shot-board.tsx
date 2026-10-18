@@ -305,6 +305,7 @@ export function ShotBoard({
   shotHref,
   onPick,
   onSeek,
+  locked = false,
 }: {
   clips: readonly Clip[];
   shots: readonly DirectorShot[];
@@ -315,6 +316,8 @@ export function ShotBoard({
   shotHref: (index: number) => ShotPage;
   onPick: (shotIndex: number, takeId: DirectorTakeId) => void;
   onSeek: (clip: Clip) => void;
+  /** While the video is being made: nothing on the board takes a tap. */
+  locked?: boolean;
 }) {
   const t = useTranslations("director.editor");
   const columns = useRef(new Map<number, HTMLFieldSetElement>());
@@ -332,6 +335,7 @@ export function ShotBoard({
   return (
     <section
       aria-label={t("board")}
+      inert={locked}
       className="flex min-h-0 snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto overscroll-x-contain px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] [scrollbar-width:none]"
     >
       {clips.map((clip) => (

@@ -18,11 +18,14 @@ interface CutInput {
   picks: DirectorCut["picks"];
   title: string;
   file: File;
+  /** The member cancelled or left: the upload stops, and no cut is saved. */
+  signal?: AbortSignal;
 }
 
-async function saveCut(client: ApiClient, { file, ...input }: CutInput) {
-  const uploaded = await uploadFile(client, "director-cut-video", file);
+async function saveCut(client: ApiClient, { file, signal, ...input }: CutInput) {
+  const uploaded = await uploadFile(client, "director-cut-video", file, signal);
   const ready = await fileReady(client, uploaded, CUT_CHECK_TIMEOUT_MS);
+  signal?.throwIfAborted();
   return client.director.saveCut({ ...input, fileId: ready.id });
 }
 

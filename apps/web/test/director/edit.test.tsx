@@ -172,7 +172,7 @@ function webmOnly() {
 }
 
 /** A ready short of a 1-second video shot and a half-second photo, with a take of each. */
-async function filmedShort(audio: "music" | "speech" = "music") {
+async function filmedShort(audio: "music" | "speech" = "music", photoSeconds = 0.5) {
   const user = await signUp();
   const videoId = newVideoId();
   await readyPlan(
@@ -185,7 +185,7 @@ async function filmedShort(audio: "music" | "speech" = "music") {
           durationSeconds: 1,
           script: [{ startSeconds: 0, endSeconds: 1, text: "Hi" }],
         }),
-        planShot({ kind: "photo", title: "Smile", durationSeconds: 0.5 }),
+        planShot({ kind: "photo", title: "Smile", durationSeconds: photoSeconds }),
       ],
     }),
   );
@@ -322,7 +322,8 @@ describe("the editor", { tags: ["files"] }, () => {
     await expect
       .element(page.getByRole("status", { name: /Putting your video together/ }))
       .toBeVisible();
-    await expect.element(save).toBeDisabled();
+    // Save gives way to Cancel while the video is made and uploaded.
+    await expect.element(page.getByRole("button", { name: "Cancel" })).toBeVisible();
     await expect
       .element(page.getByRole("status", { name: "Saving to My media…" }), { timeout: 20_000 })
       .toBeVisible();
@@ -370,6 +371,58 @@ describe("the editor", { tags: ["files"] }, () => {
       .toMatch(/^blob:/);
   });
 
+  /** The cut videos this member has uploaded (none, after a cancel). */
+  const cutFiles = (user: User) =>
+    commands.sql(
+      "SELECT id FROM files.file WHERE user_id = $1 AND purpose = 'director-cut-video'",
+      [user.id],
+    );
+
+  it("holds the editor still while it renders, and cancels: no upload, no cut", {
+    timeout: 60_000,
+  }, async () => {
+    await commands.storageCors();
+    // Long enough to cancel in the middle of.
+    const { user, videoId } = await filmedShort("music", 8);
+    const page = await openEditor(videoId, undefined);
+    const save = page.getByRole("button", { name: "Save video" });
+    await expect.element(save).toBeEnabled();
+    await userEvent.click(save);
+    await expect
+      .element(page.getByRole("status", { name: /Putting your video together/ }))
+      .toBeVisible();
+    // Nothing on the board or the transport takes a tap while it renders.
+    expect(document.querySelector("section[aria-label='Shots']")?.hasAttribute("inert")).toBe(true);
+    const held = (element: Element) => element.closest("[inert]") !== null;
+    expect(held(page.getByRole("button", { name: "Play", exact: true }).element())).toBe(true);
+    expect(held(page.getByRole("button", { name: "Captions" }).element())).toBe(true);
+    expect(page.getByRole("link", { name: "Retake" }).elements().every(held)).toBe(true);
+    await userEvent.click(page.getByRole("button", { name: "Cancel" }));
+    await expect
+      .element(page.getByRole("status", { name: /Putting your video together/ }))
+      .not.toBeInTheDocument();
+    await expect.poll(() => vi.mocked(stitch).mock.settledResults.at(-1)?.type).toBe("rejected");
+    await expect.element(page.getByRole("button", { name: "Save video" })).toBeEnabled();
+    expect(held(page.getByRole("button", { name: "Play", exact: true }).element())).toBe(false);
+    expect(page.getByRole("alert").query()).toBeNull();
+    expect(await cutFiles(user)).toEqual([]);
+  });
+
+  it("stops rendering when the member leaves mid-render, and saves nothing", {
+    timeout: 60_000,
+  }, async () => {
+    await commands.storageCors();
+    const { user, videoId } = await filmedShort("music", 8);
+    const page = await openEditor(videoId, undefined);
+    await userEvent.click(page.getByRole("button", { name: "Save video" }));
+    await expect
+      .element(page.getByRole("status", { name: /Putting your video together/ }))
+      .toBeVisible();
+    cleanup();
+    await expect.poll(() => vi.mocked(stitch).mock.settledResults.at(-1)?.type).toBe("rejected");
+    expect(await cutFiles(user)).toEqual([]);
+  });
+
   it("refuses a video too long to save before putting it together", async () => {
     await commands.storageCors();
     await signUp();
@@ -407,7 +460,7 @@ describe("the editor", { tags: ["files"] }, () => {
     await expect
       .element(page.getByRole("alert"), { timeout: 20_000 })
       .toHaveTextContent(
-        "This video is too long to save: videos can be up to 3 minutes. Pick shorter takes, or film shorter shots.",
+        "This video came out bigger than 100 MB, too big to save. Try shorter takes.",
       );
     const cuts = await commands.sql(
       "SELECT id FROM files.file WHERE user_id = $1 AND purpose = 'director-cut-video'",

@@ -663,6 +663,23 @@ describe("saving a cut", () => {
     await until(() => expect(result.current.media.data).toEqual([created]));
   });
 
+  it("is dropped, never saved, when cancelled while the video uploads", async () => {
+    const { api, saved } = cutApi(["ready"]);
+    const cancel = new AbortController();
+    storage.mockImplementationOnce(async (_url: string, init?: RequestInit) => {
+      // The member leaves while the bytes are on their way.
+      expect(init?.signal).toBe(cancel.signal);
+      cancel.abort();
+      return new Response(null, { status: 200 });
+    });
+    const { result } = renderHook(() => useSaveCutMutation(), api);
+    const error = await result.current
+      .mutateAsync({ videoId, picks, title: "Mine", file: video(), signal: cancel.signal })
+      .catch((e: unknown) => e);
+    expect(error).toHaveProperty("name", "AbortError");
+    expect(saved).toEqual([]);
+  });
+
   it("is turned down with the worker's reason, and never saved", async () => {
     const { api, saved } = cutApi(["pending", "rejected"]);
     const { result } = renderHook(() => useSaveCutMutation(), api);

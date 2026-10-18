@@ -11,6 +11,7 @@ import { uploadPurposes } from "@repo/contracts/files";
 import type { DirectorTakeId } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
 import { buttonVariants } from "@repo/ui/components/button";
+import { Dialog, DialogClose, DialogContent, DialogTitle } from "@repo/ui/components/dialog";
 import { GeminiLoader, GeminiShimmer } from "@repo/ui/components/gemini-loader";
 import { cn } from "@repo/ui/lib/utils";
 import {
@@ -68,7 +69,8 @@ type Saving =
   | { step: "idle" }
   | { step: "rendering"; done: number }
   | { step: "uploading" }
-  | { step: "saved"; video: Blob }
+  /** With the clips that were rendered, for the saved video's captions track. */
+  | { step: "saved"; video: Blob; clips: readonly Clip[] }
   | { step: "failed"; message: string };
 
 /** What a save is made from: the clips playing, their takes in memory, the choices. */
@@ -79,8 +81,12 @@ interface SaveInput {
   picks: DirectorCut["picks"];
 }
 
-/** Renders the edit in the browser, at a size a saved video may be. */
-async function render({ clips, media, choices }: SaveInput, onProgress: (done: number) => void) {
+/** Renders the edit in the browser, at a size a saved video may be, until `signal` cancels. */
+async function render(
+  { clips, media, choices }: SaveInput,
+  onProgress: (done: number) => void,
+  signal: AbortSignal,
+) {
   // Made in the tap itself: Safari starts audio only there (see lib/stitch.ts).
   const audio = new AudioContext();
   const resumed = audio.resume();
@@ -91,43 +97,32 @@ async function render({ clips, media, choices }: SaveInput, onProgress: (done: n
       withSound: choices.sound,
       onProgress,
       captions: { lines: editLines(clips), style: choices.style, ink: captionInk() },
+      signal,
     });
   } finally {
     await audio.close();
   }
 }
 
+const MEGABYTE = 1_000_000;
+
 /**
  * Saving the video: rendered here, refused before it's uploaded when it's bigger than a
- * saved video may be, then uploaded and recorded as a cut (it shows in My media).
+ * saved video may be, then uploaded and recorded as a cut (it shows in My media). Cancel,
+ * or leaving the editor, stops the render or the upload and saves nothing.
  */
 function useSaveVideo(videoId: string, title: string) {
   const t = useTranslations("director.editor");
   const errorMessage = useApiErrorMessage();
   const saveCut = useSaveCutMutation();
   const [saving, setSaving] = useState<Saving>({ step: "idle" });
+  const running = useRef<AbortController | null>(null);
+  // Leaving mid-save: nobody would watch it, so the render (or upload) stops.
+  useEffect(() => () => running.current?.abort(), []);
+  const fail = (message: string) => setSaving({ step: "failed", message });
   const { maxBytes } = uploadPurposes["director-cut-video"];
-  const tooLong = () =>
-    setSaving({
-      step: "failed",
-      message: t("tooLong", { minutes: Math.floor(MAX_SECONDS / 60) }),
-    });
 
-  const save = async (input: SaveInput) => {
-    // Rendering takes as long as the video plays: not for one that can't be kept.
-    if (editSeconds(input.clips) > MAX_SECONDS) {
-      return tooLong();
-    }
-    setSaving({ step: "rendering", done: 0 });
-    const video = await render(input, (done) => setSaving({ step: "rendering", done })).catch(
-      () => null,
-    );
-    if (!video) {
-      return setSaving({ step: "failed", message: t("renderFailed") });
-    }
-    if (video.size > maxBytes) {
-      return tooLong();
-    }
+  const upload = async (input: SaveInput, video: Blob, signal: AbortSignal) => {
     setSaving({ step: "uploading" });
     const extension = video.type === "video/mp4" ? "mp4" : "webm";
     try {
@@ -136,14 +131,53 @@ function useSaveVideo(videoId: string, title: string) {
         title,
         picks: input.picks,
         file: new File([video], `director-${videoId}.${extension}`, { type: video.type }),
+        signal,
       });
-      setSaving({ step: "saved", video });
+      setSaving({ step: "saved", video, clips: input.clips });
     } catch (error) {
-      setSaving({ step: "failed", message: errorMessage(error) });
+      if (!signal.aborted) {
+        fail(errorMessage(error));
+      }
     }
   };
+
+  const save = async (input: SaveInput) => {
+    // Rendering takes as long as the video plays: not for one that can't be kept.
+    if (editSeconds(input.clips) > MAX_SECONDS) {
+      return fail(t("tooLong", { minutes: Math.floor(MAX_SECONDS / 60) }));
+    }
+    const cancel = new AbortController();
+    running.current = cancel;
+    setSaving({ step: "rendering", done: 0 });
+    const onProgress = (done: number) => {
+      if (!cancel.signal.aborted) {
+        setSaving({ step: "rendering", done });
+      }
+    };
+    const video = await render(input, onProgress, cancel.signal).catch(() => null);
+    if (cancel.signal.aborted) {
+      return;
+    }
+    if (!video) {
+      return fail(t("renderFailed"));
+    }
+    // A short video whose picture came out busier than the bitrate allows.
+    if (video.size > maxBytes) {
+      return fail(t("tooBig", { megabytes: maxBytes / MEGABYTE }));
+    }
+    await upload(input, video, cancel.signal);
+  };
   const busy = saving.step === "rendering" || saving.step === "uploading";
-  return { saving, save, busy, close: () => setSaving({ step: "idle" }) };
+  return {
+    saving,
+    save,
+    busy,
+    cancel: () => {
+      running.current?.abort();
+      setSaving({ step: "idle" });
+    },
+    close: () => setSaving({ step: "idle" }),
+  };
 }
 
 /** The saved video over the editor: to watch, find in My media, download, or keep editing. */
@@ -164,50 +198,53 @@ function Saved({
   );
   const extension = video.type === "video/mp4" ? "mp4" : "webm";
   return (
-    <div className="fixed inset-0 z-30 flex flex-col items-center gap-4 overflow-y-auto bg-studio p-4 pt-[max(1rem,env(safe-area-inset-top))]">
-      <div className="flex w-full max-w-lg items-center gap-3">
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label={t("editor.backToEdit")}
-          className="flex size-9 items-center justify-center rounded-full hover:bg-studio-foreground/10"
-        >
-          <X className="size-6" aria-hidden />
-        </button>
-        <h2 className="font-semibold">{t("editor.saved")}</h2>
-      </div>
-      {/* The captions are in the picture; the track is there for screen readers' players. */}
-      <video
-        src={url ?? undefined}
-        controls
-        autoPlay
-        playsInline
-        className="aspect-9/16 max-h-[65dvh] rounded-xl bg-studio-foreground/10"
+    <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
+      <DialogContent
+        showCloseButton={false}
+        className="top-0 left-0 flex h-dvh max-w-none translate-x-0 translate-y-0 flex-col items-center gap-4 overflow-y-auto rounded-none bg-studio p-4 pt-[max(1rem,env(safe-area-inset-top))] text-studio-foreground ring-0 sm:max-w-none"
       >
-        <track
-          kind="captions"
-          src={captions ?? undefined}
-          srcLang={locale}
-          label={t("editor.saved")}
-        />
-      </video>
-      <div className="flex flex-wrap items-center justify-center gap-3">
-        <Link
-          href="/media"
-          className="rounded-full bg-record px-6 py-3 font-semibold text-record-foreground"
+        <div className="flex w-full max-w-lg items-center gap-3">
+          <DialogClose
+            aria-label={t("editor.backToEdit")}
+            className="flex size-9 items-center justify-center rounded-full hover:bg-studio-foreground/10"
+          >
+            <X className="size-6" aria-hidden />
+          </DialogClose>
+          <DialogTitle className="text-base font-semibold">{t("editor.saved")}</DialogTitle>
+        </div>
+        {/* The captions are in the picture; the track is there for screen readers' players. */}
+        <video
+          src={url ?? undefined}
+          controls
+          autoPlay
+          playsInline
+          className="aspect-9/16 max-h-[65dvh] rounded-xl bg-studio-foreground/10"
         >
-          {t("editor.openMedia")}
-        </Link>
-        <a
-          href={url ?? undefined}
-          download={`director-short.${extension}`}
-          className="flex items-center gap-2 rounded-full bg-studio-foreground/10 px-5 py-3 font-semibold"
-        >
-          <Download className="size-4" aria-hidden />
-          {t("review.download")}
-        </a>
-      </div>
-    </div>
+          <track
+            kind="captions"
+            src={captions ?? undefined}
+            srcLang={locale}
+            label={t("editor.saved")}
+          />
+        </video>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <Link
+            href="/media"
+            className="rounded-full bg-record px-6 py-3 font-semibold text-record-foreground"
+          >
+            {t("editor.openMedia")}
+          </Link>
+          <a
+            href={url ?? undefined}
+            download={`director-short.${extension}`}
+            className="flex items-center gap-2 rounded-full bg-studio-foreground/10 px-5 py-3 font-semibold"
+          >
+            <Download className="size-4" aria-hidden />
+            {t("review.download")}
+          </a>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -215,16 +252,22 @@ function TopBar({
   videoId,
   title,
   canSave,
+  busy,
   onSave,
+  onCancel,
 }: {
   videoId: string;
   title: string;
   canSave: boolean;
+  busy: boolean;
   onSave: () => void;
+  onCancel: () => void;
 }) {
   const t = useTranslations("director");
+  const common = useTranslations("common");
   return (
     <header className="flex items-center gap-3 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 lg:col-span-2 lg:px-6">
+      {/* Leaving mid-save stops it (useSaveVideo), so the way out stays open. */}
       <Link
         href={`/director/${videoId}`}
         aria-label={t("back")}
@@ -233,14 +276,24 @@ function TopBar({
         <X className="size-6" aria-hidden />
       </Link>
       <h1 className="min-w-0 flex-1 truncate text-lg font-semibold">{title}</h1>
-      <button
-        type="button"
-        onClick={onSave}
-        disabled={!canSave}
-        className="rounded-full bg-record px-5 py-2 font-semibold text-record-foreground transition-opacity disabled:opacity-40"
-      >
-        {t("editor.save")}
-      </button>
+      {busy ? (
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-full bg-studio-foreground/15 px-5 py-2 font-semibold"
+        >
+          {common("cancel")}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={!canSave}
+          className="rounded-full bg-record px-5 py-2 font-semibold text-record-foreground transition-opacity disabled:opacity-40"
+        >
+          {t("editor.save")}
+        </button>
+      )}
     </header>
   );
 }
@@ -481,8 +534,10 @@ function Editor({
       <TopBar
         videoId={videoId}
         title={plan.title}
-        canSave={editor.ready && !saver.busy}
+        canSave={editor.ready}
+        busy={saver.busy}
         onSave={save}
+        onCancel={saver.cancel}
       />
       <div className="flex min-h-0 flex-1 flex-col lg:pb-4">
         <div className="relative flex min-h-0 flex-1 flex-col">
@@ -494,12 +549,15 @@ function Editor({
             {saver.saving.message}
           </p>
         ) : null}
-        <Transport editor={editor} />
-        {editor.tool ? (
-          <div className="px-4 pb-3">
-            <Panel editor={editor} tool={editor.tool} audio={audio} />
-          </div>
-        ) : null}
+        {/* Held still while the video is made: what it's made of can't change under it. */}
+        <div inert={saver.busy}>
+          <Transport editor={editor} />
+          {editor.tool ? (
+            <div className="px-4 pb-3">
+              <Panel editor={editor} tool={editor.tool} audio={audio} />
+            </div>
+          ) : null}
+        </div>
       </div>
       <div className="flex h-[42dvh] min-h-64 shrink-0 flex-col gap-2 border-t border-studio-foreground/10 pt-3 lg:h-auto lg:min-h-0 lg:border-t-0 lg:border-l lg:pt-4">
         {editor.left > 0 ? (
@@ -517,10 +575,11 @@ function Editor({
           shotHref={(index) => shotPage(videoId, index, audio, true)}
           onPick={editor.pick}
           onSeek={editor.seek}
+          locked={saver.busy}
         />
       </div>
       {saver.saving.step === "saved" ? (
-        <Saved video={saver.saving.video} clips={clips} onClose={saver.close} />
+        <Saved video={saver.saving.video} clips={saver.saving.clips} onClose={saver.close} />
       ) : null}
     </div>
   );
