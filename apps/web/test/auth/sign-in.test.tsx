@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { commands, userEvent } from "vitest/browser";
 import { SignInPage } from "@/modules/auth";
+import { DEMO } from "../demo";
 import { cleanup, currentUrl, renderPage, router } from "../render";
 import { auth, enableTwoFactor, newUser, signOut, signUp } from "../users";
 
@@ -87,6 +88,33 @@ describe("sign in", () => {
       .toMatch(
         /^https:\/\/accounts\.google\.com\/.*client_id=web-tests\.apps\.googleusercontent\.com/,
       );
+  });
+
+  it("offers the demo account, showing its email and password, and fills the form with them", async () => {
+    const page = await renderPage(<SignInPage />, { url: "/sign-in" });
+    const card = page.getByRole("region", { name: "Try Director with the demo account" });
+    await expect.element(card.getByText(DEMO.email)).toBeVisible();
+    await expect.element(card.getByText(DEMO.password)).toBeVisible();
+    await expect.element(page.getByLabelText("Email")).toHaveValue("");
+
+    await userEvent.click(card.getByRole("button", { name: "Use demo account" }));
+    await expect.element(page.getByLabelText("Email")).toHaveValue(DEMO.email);
+    await expect.element(page.getByLabelText("Password")).toHaveValue(DEMO.password);
+  });
+
+  it("fills the form with the demo account from ?demo=1, the landing page's link", async () => {
+    const page = await renderPage(<SignInPage />, { url: "/sign-in?demo=1" });
+    await expect.element(page.getByLabelText("Email")).toHaveValue(DEMO.email);
+    await expect.element(page.getByLabelText("Password")).toHaveValue(DEMO.password);
+  });
+
+  it("says it's getting the demo account while ?demo=1 waits for it", async () => {
+    await commands.failRequests("/rpc/system/info", { status: 503 });
+    const page = await renderPage(<SignInPage />, { url: "/sign-in?demo=1" });
+    await expect
+      .element(page.getByRole("status", { name: "Getting the demo account…" }))
+      .toBeVisible();
+    await expect.element(page.getByLabelText("Email")).toHaveValue("");
   });
 
   it("links to the other auth steps, keeping the query", async () => {
