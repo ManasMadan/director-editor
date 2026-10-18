@@ -217,7 +217,7 @@ describe("useStudio", () => {
   it("names a shot's page, and keeps a retake's way back to the editor", () => {
     expect(shotPage(VIDEO_ID, 2, "voice")).toBe(`/director/${VIDEO_ID}/shoot?shot=2&audio=voice`);
     expect(shotPage(VIDEO_ID, 2, "voice", true)).toBe(
-      `/director/${VIDEO_ID}/shoot?shot=2&audio=voice&then=edit`,
+      `/director/${VIDEO_ID}/shoot?shot=2&audio=voice&back=edit`,
     );
   });
 

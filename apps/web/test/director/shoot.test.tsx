@@ -116,13 +116,13 @@ const smile = planShot({ kind: "photo", title: "Smile", durationSeconds: 1, scen
 
 async function openShoot(
   plan: Parameters<typeof shotPlan>[0],
-  query: { shot?: string; audio?: string; then?: string },
+  query: { shot?: string; audio?: string; back?: string },
 ): Promise<{ page: Awaited<ReturnType<typeof renderPage>>; videoId: string; user: User }> {
   const videoId = newVideoId();
   await readyPlan(videoId, shotPlan(plan));
   const user = await signUp();
   const page = await renderPage(
-    <ShootPage videoId={videoId} shot={query.shot} audio={query.audio} then={query.then} />,
+    <ShootPage videoId={videoId} shot={query.shot} audio={query.audio} back={query.back} />,
     {
       url: `/director/${videoId}/shoot`,
     },
@@ -598,7 +598,7 @@ describe("sending a take", { tags: ["files"] }, () => {
     canvasCamera();
     const { page, videoId, user } = await openShoot(
       { audio: "music", shots: [smile, walkIn] },
-      { shot: "0", audio: "original", then: "edit" },
+      { shot: "0", audio: "original", back: "edit" },
     );
     await expect.element(page.getByRole("img", { name: "Shot 1 of 2" })).toBeVisible();
     await press(page, "Take the photo");

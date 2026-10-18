@@ -15,7 +15,7 @@ export default async function Page({
       videoId={videoId}
       shot={first(query.shot)}
       audio={first(query.audio)}
-      then={first(query.then)}
+      back={first(query.back)}
     />
   );
 }

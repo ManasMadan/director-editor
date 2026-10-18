@@ -156,7 +156,7 @@ describe("Director's notes", () => {
     await expect.element(walkIn.getByText("Hold the phone still.")).toBeVisible();
     await expect
       .element(walkIn.getByRole("link", { name: "Retake" }))
-      .toHaveAttribute("href", `/director/${videoId}/shoot?shot=0&audio=voice&then=edit`);
+      .toHaveAttribute("href", `/director/${videoId}/shoot?shot=0&audio=voice&back=edit`);
     const wave = page.getByRole("group", { name: "Shot 2 · Wave" });
     await expect.element(wave.getByText("Nice wave.")).toBeVisible();
     expect(wave.getByText("Needs a retake").query()).toBeNull();
@@ -305,7 +305,7 @@ describe("the editor", { tags: ["files"] }, () => {
     // The shot still to film, offered on the board.
     const wave = page.getByRole("group", { name: "Shot 3 · Wave" });
     await userEvent.click(wave.getByRole("link", { name: "Film it" }));
-    expect(currentUrl()).toBe(`/director/${videoId}/shoot?shot=2&audio=voice&then=edit`);
+    expect(currentUrl()).toBe(`/director/${videoId}/shoot?shot=2&audio=voice&back=edit`);
   });
 
   it("saves the video, silent when it was filmed to the original, and it shows in My media", {

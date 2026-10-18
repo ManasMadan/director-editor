@@ -593,12 +593,12 @@ function Shoot({
   videoId,
   shot,
   audio,
-  then,
+  back,
 }: {
   videoId: string;
   shot: string | undefined;
   audio: string | undefined;
-  then?: string | undefined;
+  back?: string | undefined;
 }) {
   const t = useTranslations("director");
   const common = useTranslations("common");
@@ -635,7 +635,7 @@ function Shoot({
       index={index}
       count={ready.shots.length}
       audio={parseAudio(audio, ready)}
-      retake={then === "edit"}
+      retake={back === "edit"}
       call={call}
       ring={ring}
       link={link}
@@ -649,7 +649,7 @@ export function ShootPage(props: {
   shot: string | undefined;
   audio: string | undefined;
   /** "edit": a retake asked for from the editor, which goes back there once kept. */
-  then?: string | undefined;
+  back?: string | undefined;
 }) {
   return (
     <DirectorGate>

@@ -32,9 +32,9 @@ export interface StudioShot {
   retake?: boolean;
 }
 
-/** A shot's camera screen; `retake` marks one opened from the editor (`&then=edit`). */
+/** A shot's camera screen; `retake` marks one opened from the editor (`&back=edit`). */
 export const shotPage = (videoId: string, index: number, audio: AudioMode, retake = false) =>
-  `/director/${videoId}/shoot?shot=${index}&audio=${audio}${retake ? "&then=edit" : ""}` as const;
+  `/director/${videoId}/shoot?shot=${index}&audio=${audio}${retake ? "&back=edit" : ""}` as const;
 
 /**
  * Where to go once a take is kept: back to the editor for a retake asked for there; else

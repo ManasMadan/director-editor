@@ -72,7 +72,7 @@ and any pasted link opens too. Its scene checks and take reviews are in
 | `/library` | the workspace's templates (starters and members' own, each with its shot rhythm and length, or its indexing stage), and "Bring your own Short": paste a link and Gemini indexes it, live; a second one of your own opens the "You've used your AI credit" dialog |
 | `/shorts/[videoId]` | an old link: redirects to `/director/[videoId]` |
 | `/director/[videoId]` | the template: the original, its storyboard, each shot's scene, framing, phone angle and lines, what you've filmed, the audio choice, Start shooting |
-| `/director/[videoId]/shoot?shot=n&audio=voice\|original` | the camera, one shot at a time; with `&then=edit` (a retake asked for in the editor) it goes back to the editor once the take is kept |
+| `/director/[videoId]/shoot?shot=n&audio=voice\|original` | the camera, one shot at a time; with `&back=edit` (a retake asked for in the editor) it goes back to the editor once the take is kept |
 | `/director/[videoId]/edit?audio=voice\|original` | the editor: a board of shots left to right (each as wide as it is long), each shot's takes top to bottom with Director's pick marked, a stepper to change the pick, Director's note and a Retake on a shot whose best take scored below 60; the preview plays the picks; "Save video" renders the cut in the browser (about 720×1280 at 4 Mbit/s, at most 100 MB), uploads it and saves it to My media, with Cancel while it does |
 | `/media` | My media: the member's saved videos, under the template each was made from, to play, with each one's YouTube publish status |
 

@@ -630,7 +630,9 @@ describe("saving a cut", () => {
     return { api, purposes, saved };
   }
 
-  const storage = vi.fn(async () => new Response(null, { status: 200 }));
+  const storage = vi.fn(
+    async (_url: string, _init?: RequestInit) => new Response(null, { status: 200 }),
+  );
   beforeEach(() => {
     storage.mockClear();
     vi.stubGlobal("fetch", storage);
