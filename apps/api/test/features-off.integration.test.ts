@@ -38,6 +38,7 @@ describe("features off", () => {
         google: false,
         ai: false,
         captcha: false,
+        demoGuests: false,
         director: false,
         files: false,
         live: false,
@@ -45,6 +46,8 @@ describe("features off", () => {
       captchaSiteKey: null,
       demo: null,
     });
+    // No guests either: the guest sign-in isn't there.
+    expect((await createSession(harness).auth("/sign-in/guest", {})).status).toBe(404);
   });
 
   it("limits sign-in attempts at the demo account's address like any other without a demo account", async () => {

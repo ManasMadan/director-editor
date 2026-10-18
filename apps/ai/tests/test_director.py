@@ -50,6 +50,7 @@ from app.schemas import (
     SceneCheck,
 )
 from app.settings import get_settings
+from app.usage import Allowance
 from app.worker import director_processor
 from tests.fakes import (
     BIGQUERY_DATASET,
@@ -1059,7 +1060,7 @@ def _broken_director() -> Director:
         _Broken(),
         GEMINI_MODEL,
         Budgets(
-            monthly=2_000_000,
+            monthly=Allowance(2_000_000, 300_000),
             per_plan=PLAN_TOKENS,
             per_scene_check=12_000,
             per_review=120_000,

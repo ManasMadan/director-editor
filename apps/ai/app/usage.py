@@ -2,9 +2,10 @@
 model.
 
 Before the work, `reserve` takes what a run may spend out of the workspace's monthly
-allowance, atomically, so concurrent runs can't all fit into the same remainder; the run
-is then capped at what was reserved. After it, whatever happened (an answer, the run
-limit, a failure, a client that went away), `settle` records what the run actually used.
+allowance (smaller for a demo guest's workspace: `Allowance`), atomically, so concurrent
+runs can't all fit into the same remainder; the run is then capped at what was reserved.
+After it, whatever happened (an answer, the run limit, a failure, a client that went
+away), `settle` records what the run actually used.
 
 The ledger is append-only for this service (it may insert, never update), so a
 reservation is a row for the reserved tokens and settling adds the difference to what
@@ -17,7 +18,7 @@ from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID
 
-from sqlalchemy import func, select, text
+from sqlalchemy import Boolean, func, select, text, type_coerce
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import AiUsage
@@ -26,6 +27,16 @@ from app.db.session import tenant
 type Feature = Literal[
     "director-plan", "director-scene", "director-review", "director-speech", "director-publish"
 ]
+
+
+@dataclass(frozen=True)
+class Allowance:
+    """Tokens a workspace may use per calendar month: `monthly`, or `demo_guest` for a
+    demo guest's workspace (apps/api/src/auth/guest.ts), which lasts a day and of which
+    there may be dozens at once, so the demo can't spend what members get."""
+
+    monthly: int
+    demo_guest: int
 
 
 @dataclass(frozen=True)
@@ -49,6 +60,13 @@ async def _used_this_month(session: AsyncSession, org_id: UUID) -> int:
     return int(used or 0)
 
 
+async def _allowance_of(session: AsyncSession, org_id: UUID, allowance: Allowance) -> int:
+    # Asked of the database: this service may not read auth.user, and the function
+    # answers only whether the workspace is a demo guest's.
+    guest = await session.scalar(select(type_coerce(func.ai.demo_guest_workspace(org_id), Boolean)))
+    return min(allowance.monthly, allowance.demo_guest) if guest is True else allowance.monthly
+
+
 async def reserve(
     org_id: UUID,
     user_id: UUID | None,
@@ -56,7 +74,7 @@ async def reserve(
     model: str,
     *,
     most: int,
-    monthly: int,
+    allowance: Allowance,
 ) -> Reservation | None:
     """Up to `most` tokens of what's left of the month's allowance; None when nothing is."""
     async with tenant(org_id) as session:
@@ -66,6 +84,7 @@ async def reserve(
             text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
             {"key": f"ai.usage:{org_id}"},
         )
+        monthly = await _allowance_of(session, org_id, allowance)
         left = monthly - await _used_this_month(session, org_id)
         if left <= 0:
             return None

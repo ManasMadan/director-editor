@@ -38,6 +38,7 @@ const OPTIONAL_FEATURES_OFF = {
   AI_SERVICE_SECRET: "",
   YOUTUBE_API_KEY: "",
   DEMO_PASSWORD: "",
+  DEMO_GUESTS: "",
 };
 
 /** Local object storage (docker compose --profile files); CI runs the same. */

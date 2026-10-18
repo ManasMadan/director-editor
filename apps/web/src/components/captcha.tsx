@@ -13,6 +13,7 @@
  * nonce CSP ('strict-dynamic' trusts scripts our own bundle adds).
  */
 import { useSystemInfoQuery } from "@repo/client/api/system/info";
+import { SECOND_MS } from "@repo/contracts/time";
 import { useLocale, useTranslations } from "next-intl";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
@@ -26,6 +27,9 @@ declare global {
     turnstile?: TurnstileApi;
   }
 }
+
+/** How long a widget may take to hand over a token before the form stops waiting for it. */
+const CAPTCHA_PATIENCE_MS = 8 * SECOND_MS;
 
 const SCRIPT = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 let loading: Promise<TurnstileApi> | undefined;
@@ -46,6 +50,24 @@ function loadTurnstile(): Promise<TurnstileApi> {
   return loading;
 }
 
+/**
+ * Whether `waiting` has held for CAPTCHA_PATIENCE_MS: a widget that never answers
+ * (Cloudflare unreachable, the script hanging) counts as unavailable after a while,
+ * rather than leaving the form waiting for good.
+ */
+function useWaitedTooLong(waiting: boolean) {
+  const [tooLong, setTooLong] = useState(false);
+  useEffect(() => {
+    setTooLong(false);
+    if (!waiting) {
+      return;
+    }
+    const timer = setTimeout(() => setTooLong(true), CAPTCHA_PATIENCE_MS);
+    return () => clearTimeout(timer);
+  }, [waiting]);
+  return tooLong;
+}
+
 export interface Captcha {
   /** The widget to place in the form, or null when captcha is off. */
   widget: ReactNode;
@@ -53,13 +75,23 @@ export interface Captcha {
   ready: boolean;
   /** The widget's current token, or null (none yet, expired, or captcha off). */
   token: string | null;
+  /**
+   * The widget can't give a token: its script didn't load, or no token came within
+   * CAPTCHA_PATIENCE_MS. A form with another way in (the demo's shared account) offers it.
+   */
+  unavailable: boolean;
   /** Headers carrying the token, for better-auth's captcha plugin. */
   headers(): Record<string, string>;
   /** Get a fresh token after a submit: each one is valid once. */
   reset(): void;
 }
 
-export function useCaptcha(): Captcha {
+/**
+ * `interactionOnly` keeps the widget out of sight unless Cloudflare wants the person to
+ * do something (Turnstile's `appearance: "interaction-only"`): for one-tap flows like the
+ * demo, where a box to tick would be one tap too many.
+ */
+export function useCaptcha({ interactionOnly = false } = {}): Captcha {
   const { data: system } = useSystemInfoQuery();
   const siteKey = system?.captchaSiteKey ?? null;
   const locale = useLocale();
@@ -86,6 +118,7 @@ export function useCaptcha(): Captcha {
         widgetId.current = api.render(element, {
           sitekey: siteKey,
           language: locale,
+          ...(interactionOnly && { appearance: "interaction-only" }),
           callback: (value: string) => setToken(value),
           "expired-callback": () => setToken(null),
           "error-callback": () => setToken(null),
@@ -105,7 +138,10 @@ export function useCaptcha(): Captcha {
       }
       widgetId.current = undefined;
     };
-  }, [siteKey, locale]);
+  }, [siteKey, locale, interactionOnly]);
+
+  const timedOut = useWaitedTooLong(siteKey !== null && token === null);
+  const unavailable = siteKey !== null && (failed || timedOut);
 
   const reset = useCallback(() => {
     setToken(null);
@@ -118,7 +154,7 @@ export function useCaptcha(): Captcha {
     widget: siteKey ? (
       <div>
         <div ref={container} data-testid="captcha" />
-        {failed ? (
+        {unavailable ? (
           <p role="alert" className="text-sm text-destructive">
             {t("captchaFailed")}
           </p>
@@ -128,6 +164,7 @@ export function useCaptcha(): Captcha {
     // Until system.info answers, a submit might lack the token the API then requires.
     ready: system !== undefined && (!siteKey || token !== null),
     token,
+    unavailable,
     headers: (): Record<string, string> =>
       siteKey && token ? { "x-captcha-response": token } : {},
     reset,

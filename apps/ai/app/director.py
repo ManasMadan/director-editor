@@ -75,7 +75,7 @@ from app.schemas import (
     TokenUsage,
 )
 from app.settings import GeminiSettings, Settings
-from app.usage import Feature, Reservation, reserve, settle
+from app.usage import Allowance, Feature, Reservation, reserve, settle
 
 # What screens showing a plan or its takes are told when one changes.
 CHANGED = DirectorChanged(type="director.changed")
@@ -189,7 +189,7 @@ type TakeContentType = Literal["video/webm", "video/mp4", "image/jpeg"]
 
 @dataclass(frozen=True)
 class Budgets:
-    monthly: int
+    monthly: Allowance
     per_plan: int
     per_scene_check: int
     per_review: int
@@ -1016,7 +1016,7 @@ class Director:
             feature,
             model or self._model_name,
             most=most,
-            monthly=self._budgets.monthly,
+            allowance=self._budgets.monthly,
         )
 
 
@@ -1078,7 +1078,9 @@ def create_director(
         create_indexer(settings, http),
         settings.index_model,
         Budgets(
-            monthly=settings.monthly_tokens_per_org,
+            monthly=Allowance(
+                settings.monthly_tokens_per_org, settings.monthly_tokens_per_demo_guest
+            ),
             per_plan=settings.director_tokens_per_plan,
             per_scene_check=settings.director_tokens_per_scene_check,
             per_review=settings.director_tokens_per_review,

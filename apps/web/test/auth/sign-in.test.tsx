@@ -3,7 +3,35 @@ import { commands, userEvent } from "vitest/browser";
 import { SignInPage } from "@/modules/auth";
 import { DEMO } from "../demo";
 import { cleanup, currentUrl, renderPage, router } from "../render";
-import { auth, enableTwoFactor, newUser, signOut, signUp } from "../users";
+import { auth, currentSession, enableTwoFactor, newUser, signOut, signUp } from "../users";
+
+/** system.info as the full API answers it, changed to an environment it isn't running as. */
+interface SystemInfo {
+  features: { demoGuests: boolean; captcha: boolean };
+  demo: { email: string; password: string } | null;
+  captchaSiteKey: string | null;
+}
+
+/**
+ * system.info as it would be with captcha on too. The full API itself has it off, so it
+ * takes the guest sign-in with or without the token: what's checked is that the page
+ * sends one, and waits for it.
+ */
+const withCaptcha = (info: SystemInfo) => {
+  info.features.captcha = true;
+  info.captchaSiteKey = "1x00000000000000000000AA";
+};
+
+/** Answers the page's system.info with the full API's own answer, after `change`. */
+async function serveSystemInfo(change: (info: SystemInfo) => void) {
+  const answer = await fetch("/rpc/system/info", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  }).then((response) => response.json() as Promise<{ json: SystemInfo }>);
+  change(answer.json);
+  await commands.failRequests("/rpc/system/info", { status: 200, body: answer });
+}
 
 async function fillIn(
   page: Awaited<ReturnType<typeof renderPage>>,
@@ -82,7 +110,9 @@ describe("sign in", () => {
 
   it("offers Google when it's on, and goes there with ?next= as the way back", async () => {
     const page = await renderPage(<SignInPage />, { url: "/sign-in?next=/settings" });
-    await userEvent.click(page.getByRole("button", { name: "Continue with Google" }));
+    await userEvent.click(
+      page.getByRole("button", { name: "Continue with Google, to post to your channel" }),
+    );
     await expect
       .poll(async () => (await commands.hardNavigations())[0])
       .toMatch(
@@ -90,7 +120,139 @@ describe("sign in", () => {
       );
   });
 
-  it("offers the demo account, showing its email and password, and fills the form with them", async () => {
+  it("offers the demo as a guest of this browser's own, and signs in as one", async () => {
+    const page = await renderPage(<SignInPage />, { url: "/sign-in" });
+    const card = page.getByRole("region", { name: "Just looking? Use the demo." });
+    await expect
+      .element(
+        card.getByText("Your footage is deleted after a day, and posting to YouTube is off."),
+      )
+      .toBeVisible();
+    // The shared account's password stays out of sight while guests are given out.
+    expect(page.getByText(DEMO.password).elements()).toHaveLength(0);
+
+    await userEvent.click(card.getByRole("button", { name: "Use the demo" }));
+    await expect.poll(currentUrl).toBe("/library");
+    const { user } = await currentSession();
+    expect(user).toMatchObject({ name: "Guest", demo: true });
+    expect(user.email).toMatch(/@guest\.invalid$/);
+  });
+
+  it("starts the guest at once from ?demo=1, the landing page's link", async () => {
+    await renderPage(<SignInPage />, { url: "/sign-in?demo=1&next=/director/22k0fZarxh8" });
+    await expect.poll(currentUrl).toBe("/director/22k0fZarxh8");
+    expect((await currentSession()).user.demo).toBe(true);
+  });
+
+  // First of the captcha tests: Turnstile's script loads once a page, and once it has, it
+  // can't be blocked any more. A failed load is forgotten, so the next test loads it again.
+  it("falls back to the shared demo account when Turnstile can't load", async () => {
+    await serveSystemInfo(withCaptcha);
+    await commands.turnstile("blocked");
+    const page = await renderPage(<SignInPage />, { url: "/sign-in?demo=1" });
+    await expect
+      .element(page.getByText("Your own demo couldn't start just now.", { exact: false }))
+      .toBeVisible();
+    const card = page.getByRole("region", { name: "Try Director with the demo account" });
+    await expect.element(card.getByText(DEMO.password)).toBeVisible();
+    await expect.element(page.getByLabelText("Email")).toHaveValue(DEMO.email);
+    await expect.element(page.getByLabelText("Password")).toHaveValue(DEMO.password);
+    expect(await commands.sentHeaders("/api/auth/sign-in/guest")).toEqual([]);
+  });
+
+  // Next: this one needs the script still on its way.
+  it("waits for Turnstile's token before starting the guest from ?demo=1", async () => {
+    await serveSystemInfo(withCaptcha);
+    await commands.turnstile("held");
+    await renderPage(<SignInPage />, { url: "/sign-in?demo=1" });
+    await expect
+      .poll(() => document.head.querySelector('script[src*="challenges.cloudflare.com"]'))
+      .toBeTruthy();
+    expect(await commands.sentHeaders("/api/auth/sign-in/guest")).toEqual([]);
+    expect(currentUrl()).toBe("/sign-in?demo=1");
+    await commands.turnstile("fake");
+    await expect.poll(currentUrl).toBe("/library");
+    const [sent] = await commands.sentHeaders("/api/auth/sign-in/guest");
+    expect(sent?.["x-captcha-response"]).toBe("XXXX.DUMMY.TOKEN.XXXX");
+  });
+
+  it("sends the guest sign-in Turnstile's token, with the widget out of sight", async () => {
+    await serveSystemInfo(withCaptcha);
+    const page = await renderPage(<SignInPage />, { url: "/sign-in" });
+    const card = page.getByRole("region", { name: "Just looking? Use the demo." });
+    // Out of sight unless Cloudflare wants an interaction: still one tap.
+    await expect
+      .element(page.getByTestId("captcha"))
+      .toHaveAttribute("data-appearance", "interaction-only");
+    const start = card.getByRole("button", { name: "Use the demo" });
+    await expect.element(start).toBeEnabled();
+    await userEvent.click(start);
+    await expect.poll(currentUrl).toBe("/library");
+    const [sent] = await commands.sentHeaders("/api/auth/sign-in/guest");
+    expect(sent?.["x-captcha-response"]).toBe("XXXX.DUMMY.TOKEN.XXXX");
+  });
+
+  it("stops waiting for a token that never comes, and says why", { timeout: 20_000 }, async () => {
+    // No shared account to fall back on, this time: the card stays, and says what's wrong.
+    await serveSystemInfo((info) => {
+      withCaptcha(info);
+      info.demo = null;
+    });
+    Object.assign(window, { turnstileSilent: true });
+    try {
+      const page = await renderPage(<SignInPage />, { url: "/sign-in?demo=1" });
+      await expect
+        .element(page.getByRole("alert"), { timeout: 12_000 })
+        .toHaveTextContent(
+          "The security check couldn't load. Check your connection, allow challenges.cloudflare.com if you use a blocker, and reload.",
+        );
+      const card = page.getByRole("region", { name: "Just looking? Use the demo." });
+      await expect.element(card.getByRole("button", { name: "Use the demo" })).toBeDisabled();
+      expect(await commands.sentHeaders("/api/auth/sign-in/guest")).toEqual([]);
+    } finally {
+      Object.assign(window, { turnstileSilent: false });
+    }
+  });
+
+  it("falls back to the shared demo account, in the form, when no guest can be made", async () => {
+    await commands.failRequests("/api/auth/sign-in/guest", {
+      status: 503,
+      body: { code: "DEMO_GUESTS_FULL", message: "Full." },
+    });
+    const page = await renderPage(<SignInPage />, { url: "/sign-in?demo=1" });
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent(
+        "Your own demo couldn't start just now. The shared demo account below works too, but anyone trying Director can see what's filmed in it.",
+      );
+    const card = page.getByRole("region", { name: "Try Director with the demo account" });
+    await expect.element(card.getByText(DEMO.password)).toBeVisible();
+    await expect.element(page.getByLabelText("Email")).toHaveValue(DEMO.email);
+    await expect.element(page.getByLabelText("Password")).toHaveValue(DEMO.password);
+    expect(currentUrl()).toBe("/sign-in?demo=1");
+  });
+
+  it("says why when no guest can be made and there's no shared account", async () => {
+    await serveSystemInfo((info) => {
+      info.demo = null;
+    });
+    await commands.failRequests("/api/auth/sign-in/guest", {
+      status: 503,
+      body: { code: "DEMO_GUESTS_FULL", message: "Full." },
+    });
+    const page = await renderPage(<SignInPage />, { url: "/sign-in" });
+    const card = page.getByRole("region", { name: "Just looking? Use the demo." });
+    await userEvent.click(card.getByRole("button", { name: "Use the demo" }));
+    await expect
+      .element(card.getByRole("alert"))
+      .toHaveTextContent("The demo is full right now. Try again in a little while.");
+    await expect.element(page.getByLabelText("Email")).toHaveValue("");
+  });
+
+  it("offers the shared demo account, its email and password, when guests are off", async () => {
+    await serveSystemInfo((info) => {
+      info.features.demoGuests = false;
+    });
     const page = await renderPage(<SignInPage />, { url: "/sign-in" });
     const card = page.getByRole("region", { name: "Try Director with the demo account" });
     await expect.element(card.getByText(DEMO.email)).toBeVisible();
@@ -102,10 +264,23 @@ describe("sign in", () => {
     await expect.element(page.getByLabelText("Password")).toHaveValue(DEMO.password);
   });
 
-  it("fills the form with the demo account from ?demo=1, the landing page's link", async () => {
+  it("fills the form with the shared demo account from ?demo=1 when guests are off", async () => {
+    await serveSystemInfo((info) => {
+      info.features.demoGuests = false;
+    });
     const page = await renderPage(<SignInPage />, { url: "/sign-in?demo=1" });
     await expect.element(page.getByLabelText("Email")).toHaveValue(DEMO.email);
     await expect.element(page.getByLabelText("Password")).toHaveValue(DEMO.password);
+  });
+
+  it("offers no demo while system.info can't be read", async () => {
+    await commands.failRequests("/rpc/system/info", { status: 503 });
+    const page = await renderPage(<SignInPage />, { url: "/sign-in" });
+    await expect
+      .element(page.getByRole("button", { name: "Sign in with a passkey" }))
+      .toBeVisible();
+    expect(page.getByText("Just looking? Use the demo.").elements()).toHaveLength(0);
+    expect(page.getByText("Try Director with the demo account").elements()).toHaveLength(0);
   });
 
   it("says it's getting the demo account while ?demo=1 waits for it", async () => {

@@ -7,8 +7,8 @@ which are videos and which photos, in what order, where to stand, how to hold th
 what to say), and Director (Gemini Live) talks the member through each shot on the shoot
 screen. Gemini then reviews each take and picks its best part, and the browser stitches
 the takes into the finished short. This page covers the screens, the shoot screen, the
-data and the demo account; [how-it-works.md](how-it-works.md) follows each step
-underneath (indexing, Director live, reviews, the editor, publishing).
+data and the demo; [how-it-works.md](how-it-works.md) follows each step underneath
+(indexing, Director live, reviews, the editor, publishing).
 
 ```
 apps/web (library, camera)    ──@repo/client──▶  apps/api  ──ai-client (JWT)──▶  apps/ai  ──▶  Gemini
@@ -185,13 +185,63 @@ iOS asks before a page may read the tilt: the level shows a button for that.
   editor; `lib/` holds the
   pure parts: tilt, pose, framing, timeline, doodles, the edit, the stitcher).
 
-## The demo account
+## The demo
 
-Anyone can try Director without signing up: the sign-in page shows a shared account,
-`demo@director.mmadan.in`, with its password and a "Use demo account" button that fills
-the form (the landing page's "Try the demo" links to `/sign-in?demo=1`, which fills it at
-once). The page gets both from `system.info`, and only when the API has `DEMO_PASSWORD`
-set ([environment.md](environment.md)).
+Anyone can try Director without signing up: the landing page's "Try it now, no sign-up"
+opens `/sign-in?demo=1`, which signs the browser straight in to the demo and goes on to
+the library (or to the template the visitor tapped, through `next=`). The sign-in page
+also shows a demo card. Which demo it is depends on the API's configuration
+([environment.md](environment.md)), and the page learns it from `system.info`.
+
+### Demo guests
+
+With `DEMO_GUESTS=on` (production), each browser gets a private guest of its own
+(`apps/api/src/auth/guest.ts`), so judges never see each other's takes, videos or
+chatter. The card reads "Just looking? Use the demo. Your footage is deleted after a day,
+and posting to YouTube is off."
+
+- A guest is an ordinary user, made through better-auth's adapter by
+  `POST /api/auth/sign-in/guest`, so the sign-up hooks give it a personal workspace with
+  the seeded templates. Its address is on the reserved `guest.invalid` domain (nothing is
+  ever mailed to it), and its name is "Guest" in its own language. It may index one Short
+  of its own, like anyone.
+- It's flagged `demo`, so everything the shared account can't do below, a guest can't
+  either: publish (My media shows the post Director wrote, to read: "See the post Director
+  wrote"), or change, lock or link anything to its account.
+- `auth.user.guest_until` is when it's deleted: a day after it was made
+  (`DEMO_GUEST_LIFETIME_S`). Its session ends then too, whatever cookies the browser sends:
+  a database hook clamps any new session expiry to `guest_until`, so a refresh can't
+  stretch it, and the session's copy in Valkey expires with it.
+- The worker's hourly `demo-retention` task calls `auth.purge_expired_guests()`, which
+  deletes each expired guest with the workspaces only it belongs to (their plans, takes,
+  cuts and AI usage cascade from the workspace, its files and sessions from the user). It
+  first adds the guests' AI usage to `ai.demo_usage` (by month, feature and model), so the
+  demo's cost stays on record. The worker then deletes the guests' session keys from
+  Valkey and runs the files cleanup, so the deleted files' objects leave storage in the
+  same run.
+- A guest gets less than a member: `AI_MONTHLY_TOKENS_PER_DEMO_GUEST` tokens a month (the
+  AI service asks `ai.demo_guest_workspace()`) and `DEMO_GUEST_LIVE_CALLS_PER_HOUR` live
+  calls an hour.
+- A browser already signed in (a guest within its day, or a member) gets no new guest.
+- Abuse limits:
+  - Turnstile on the guest sign-in while captcha is on. The widget is invisible unless
+    Cloudflare wants an interaction, so it's still one tap.
+  - `DEMO_GUESTS_PER_ADDRESS` guests an hour from one client IP (better-auth's rate
+    limiter, 429).
+  - `DEMO_GUEST_LIMIT` guests at once in all (`DEMO_GUESTS_FULL`). The live guests are a
+    sorted set in Valkey, checked and added to in one script, so a burst of sign-ins
+    can't overshoot the cap.
+- When no guest can be made, the sign-in page says so and offers the shared demo account
+  below, filled in the form, with a line saying that others see what's filmed in it.
+  Without a shared account it says why (the demo is full, or too many tries) and the
+  card's button tries again.
+
+### The shared demo account
+
+The fallback with guests on, and the whole demo with them off: one account,
+`demo@director.mmadan.in`, whose email and password the sign-in page shows, with a "Use
+demo account" button that fills the form (`?demo=1` fills it at once when guests are off).
+The page gets both from `system.info`, and only when the API has `DEMO_PASSWORD` set.
 
 The account itself is made by a command, once per environment and again whenever the
 password changes:
@@ -211,15 +261,16 @@ the seeds. It doesn't check the password against public breaches, even with
 `PASSWORD_BREACH_CHECK` on: the sign-in page shows it to everyone anyway, so the check
 would protect nothing, and the command never depends on Have I Been Pwned being up.
 
-Everyone shares the account, so (`apps/api/src/auth/demo.ts`):
+Everyone shares the account, so (`apps/api/src/auth/demo.ts`, and the same for guests):
 
 - it can't publish: publishing refuses a session whose `session.user.demo` is true with
-  `PUBLISH_DEMO_DISABLED` <!-- verify after publish merges -->;
+  `PUBLISH_DEMO_DISABLED`; drafting the post still works, for My media to show it;
 - it can't change, lock or empty the account or its workspace: changing the password,
-  deleting the account, turning on two-step verification, linking a Google account, ending
-  sessions, renaming itself or changing its picture, and making, renaming, leaving or
-  deleting a workspace answer `DEMO_ACCOUNT_LOCKED` (its email and a password reset need
-  codes sent to its address). It can still set its own language and time zone;
+  deleting the account, turning on two-step verification, linking a Google account or a
+  passkey, ending sessions, renaming itself or changing its picture, and making,
+  renaming, leaving or deleting a workspace answer `DEMO_ACCOUNT_LOCKED` (its email and a
+  password reset need codes sent to its address). It can still set its own language and
+  time zone;
 - its device list shows only the device asking, never the others signed in to it;
 - while `DEMO_PASSWORD` is set, its sign-in has no per-account attempt limit, since its
   password is public; the per-address limit still applies.
@@ -229,6 +280,11 @@ with its account. Running the command again also puts back the account's and its
 workspace's names.
 
 It indexes a Short of its own like any account (one).
+
+Its footage lasts a day too, like a guest's: the worker's `demo-retention` task calls
+`files.purge_demo_footage()`, which deletes the account's takes and videos older than a
+day (their files, and the takes and cuts with them), and the files cleanup removes their
+objects from storage. Its library (the seeds and its own Short) stays.
 
 ## Limits
 

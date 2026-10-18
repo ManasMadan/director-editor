@@ -67,8 +67,9 @@ export const envSchema = {
   // Optional: Google sign-in.
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
-  // Optional: Cloudflare Turnstile on sign-up, emailed codes and password reset. The
-  // site key is public (browsers render the widget with it); the secret stays here.
+  // Optional: Cloudflare Turnstile on sign-up, emailed codes, password reset and the demo's
+  // guest sign-in. The site key is public (browsers render the widget with it); the
+  // secret stays here.
   TURNSTILE_SITE_KEY: z.string().min(1).optional(),
   TURNSTILE_SECRET_KEY: z.string().min(1).optional(),
   // Refuse passwords found in public breaches (Have I Been Pwned, k-anonymity: only a
@@ -83,6 +84,20 @@ export const envSchema = {
   // `system.info` shows on the sign-in page, on purpose: anyone may try Director with it.
   // Unset: no demo account is offered.
   DEMO_PASSWORD: z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH).optional(),
+  // Director's demo guests (src/auth/guest.ts): "on" gives each browser that tries the
+  // demo a private guest of its own, deleted with everything it made after a day, so
+  // nobody sees anyone else's footage. The shared demo account above, when set, is then
+  // the fallback for a guest that can't be made.
+  DEMO_GUESTS: z.enum(["on", "off"]).default("off"),
+  // How many guests may exist at once (each holds a workspace and its footage until it's
+  // deleted): past it the demo falls back to the shared account, or says it's full.
+  DEMO_GUEST_LIMIT: z.coerce.number().int().positive().default(50),
+  // How many guests one address may make an hour. One browser needs one a day, but a
+  // judging room or an office shares one address; with captcha on, a bot can't use them.
+  DEMO_GUESTS_PER_ADDRESS: z.coerce.number().int().positive().default(20),
+  // Live calls a guest may start an hour (a member gets 20): each is minutes of Gemini
+  // Live, and the demo may have DEMO_GUEST_LIMIT guests at once.
+  DEMO_GUEST_LIVE_CALLS_PER_HOUR: z.coerce.number().int().positive().default(6),
   // Optional: the Python AI service, and the secret this API signs its calls with
   // (the same AI_SERVICE_SECRET the service verifies with).
   AI_URL: z.url().optional(),

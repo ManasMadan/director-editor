@@ -322,3 +322,38 @@ export async function asWorkspace<T>(orgId: string, work: (client: pg.Client) =>
 export async function settled(page: Page) {
   await expect(page.locator("[data-slot=skeleton]")).toHaveCount(0);
 }
+
+// ---------------------------------------------------------------------------- plans
+/** A ready plan of one shot, for rows a test writes into a library itself. */
+export const madeUpPlan = (title: string) => ({
+  title,
+  format: "GRWM",
+  summary: "Coffee, a window and a smile.",
+  audio: "speech",
+  durationSeconds: 3,
+  shots: [
+    {
+      kind: "video",
+      title: "Walk in",
+      purpose: "Set the scene.",
+      sourceStartSeconds: 0,
+      sourceEndSeconds: 3,
+      durationSeconds: 3,
+      camera: "back",
+      scene: "By a window",
+      sceneLandmark: "window",
+      framing: {
+        shotSize: "medium",
+        subject: { x: 0.25, y: 0.2, width: 0.5, height: 0.7 },
+        note: "Waist up.",
+      },
+      phoneAngle: { pitch: 0, roll: 0, tolerance: 6, height: "chest" },
+      pose: { description: "Standing.", keypoints: [] },
+      steps: [{ atSeconds: 0, instruction: "Walk towards the camera.", cameraMove: "static" }],
+      script: [],
+    },
+  ],
+});
+
+/** An 11-character id no real video has, for rows the test makes itself. */
+export const madeUpVideoId = () => `t${randomUUID().replaceAll("-", "").slice(0, 10)}`;

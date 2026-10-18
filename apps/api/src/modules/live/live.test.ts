@@ -82,6 +82,7 @@ const caller: OrgCaller = {
   role: "member",
   signedInAt: new Date(0),
   demo: false,
+  guest: false,
 };
 
 const WEB = "http://localhost:3000";

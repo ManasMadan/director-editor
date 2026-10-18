@@ -9,6 +9,7 @@
  */
 import { InjectQueue, Processor } from "@nestjs/bullmq";
 import type { OnApplicationBootstrap } from "@nestjs/common";
+import { authSessionKeys, DEMO_GUEST_LIFETIME_S } from "@repo/contracts/auth-settings";
 import { entriesOf } from "@repo/contracts/objects";
 import {
   type JobName,
@@ -22,9 +23,12 @@ import {
   type Database,
   InjectDatabase,
   InjectPinoLogger,
+  InjectRedis,
   JobProcessor,
   PinoLogger,
+  type Redis,
   row,
+  rows,
   runJob,
 } from "@repo/nest-common";
 import * as z from "zod";
@@ -35,6 +39,8 @@ import { OUTBOX_SOURCES } from "../outbox/sources";
 // What the retention functions return: how many they made, dropped or deleted.
 const int = z.object({ n: z.number().int() });
 const count = z.object({ n: z.bigint() });
+// A demo guest auth.purge_expired_guests deleted, and its sessions' tokens.
+const expiredGuest = z.object({ guest_id: z.uuid(), session_tokens: z.array(z.string()) });
 
 type Task = JobName<"maintenance">;
 
@@ -44,7 +50,12 @@ const SCHEDULES: Record<Task, string> = {
   "outbox-retention": "15 3 * * *",
   "session-retention": "0 * * * *",
   "files-cleanup": "30 * * * *",
+  "demo-retention": "20 * * * *",
 };
+
+// Demo guests deleted a call (auth.purge_expired_guests); the task calls again while a
+// call fills its batch, so a backlog clears in one run without one long transaction.
+const GUEST_BATCH = 100;
 
 // Partitions exist this far around "now", so late and early timestamps always land.
 const PARTITIONS_BACK = 1;
@@ -56,6 +67,7 @@ export class MaintenanceProcessor extends JobProcessor implements OnApplicationB
     @InjectDatabase() private readonly database: Database,
     @InjectQueue("maintenance") private readonly queue: QueueOf<"maintenance">,
     private readonly files: FilesCleanup,
+    @InjectRedis() private readonly redis: Redis,
     @InjectPinoLogger(MaintenanceProcessor.name) private readonly log: PinoLogger,
   ) {
     super();
@@ -137,6 +149,9 @@ export class MaintenanceProcessor extends JobProcessor implements OnApplicationB
       case "files-cleanup":
         Object.assign(result, await this.files.run());
         break;
+      case "demo-retention":
+        Object.assign(result, await this.demoRetention());
+        break;
       case "session-retention": {
         const purged = await row(count, db.$queryRaw`SELECT auth.purge_expired() AS n`);
         result.expired = Number(purged.n);
@@ -145,5 +160,41 @@ export class MaintenanceProcessor extends JobProcessor implements OnApplicationB
     }
     this.log.info({ task, ...result }, "maintenance task finished");
     return result;
+  }
+
+  /**
+   * The demo's footage lasts a day (apps/api/src/auth/guest.ts):
+   *
+   * - the demo guests whose day is over are deleted, each with its workspace, takes and
+   *   videos, and their sessions leave Valkey too (better-auth reads sessions there first,
+   *   so the database's rows going isn't enough);
+   * - the shared demo account's takes and videos older than a day are deleted.
+   *
+   * The deleted files' objects are queued as their rows go, so the files cleanup runs
+   * straight after, and the footage leaves storage now rather than at its next turn.
+   */
+  private async demoRetention() {
+    let guests = 0;
+    for (;;) {
+      const purged = await rows(
+        expiredGuest,
+        this.database.write
+          .$queryRaw`SELECT guest_id, session_tokens FROM auth.purge_expired_guests(${GUEST_BATCH}::int)`,
+      );
+      const keys = purged.flatMap((guest) => authSessionKeys(guest.guest_id, guest.session_tokens));
+      if (keys.length > 0) {
+        await this.redis.del(...keys);
+      }
+      guests += purged.length;
+      if (purged.length < GUEST_BATCH) {
+        break;
+      }
+    }
+    const footage = await row(
+      count,
+      this.database.write.$queryRaw`
+        SELECT files.purge_demo_footage(make_interval(secs => ${DEMO_GUEST_LIFETIME_S}::int)) AS n`,
+    );
+    return { guests, sharedFootage: Number(footage.n), ...(await this.files.run()) };
   }
 }

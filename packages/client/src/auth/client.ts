@@ -10,6 +10,7 @@
 import { passkeyClient } from "@better-auth/passkey/client";
 import { userAdditionalFields } from "@repo/contracts/auth-settings";
 import type { Session } from "better-auth";
+import type { BetterAuthClientPlugin } from "better-auth/client";
 import {
   adminClient,
   emailOTPClient,
@@ -18,6 +19,24 @@ import {
   twoFactorClient,
 } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
+
+/** Where the demo signs a browser in as a guest of its own (apps/api/src/auth/guest.ts). */
+export const GUEST_SIGN_IN_PATH = "/sign-in/guest";
+
+/**
+ * The demo's guest sign-in: `client.$fetch(GUEST_SIGN_IN_PATH, { method: "POST", body })`.
+ * The server's plugin lives in the API, which this package can't import, so this declares
+ * only what better-auth's client needs to treat it as a sign-in: every `useSession`
+ * learns of the new session at once, as after any other.
+ */
+const guestClient = () =>
+  ({
+    id: "demo-guest",
+    pathMethods: { [GUEST_SIGN_IN_PATH]: "POST" },
+    atomListeners: [
+      { matcher: (path: string) => path === GUEST_SIGN_IN_PATH, signal: "$sessionSignal" },
+    ],
+  }) satisfies BetterAuthClientPlugin;
 
 export const authClientPlugins = (options: { onTwoFactorRequired?: () => void } = {}) => [
   emailOTPClient(),
@@ -28,6 +47,7 @@ export const authClientPlugins = (options: { onTwoFactorRequired?: () => void } 
   organizationClient(),
   adminClient(),
   inferAdditionalFields({ user: userAdditionalFields }),
+  guestClient(),
 ];
 
 export interface AuthClientOptions {

@@ -10,7 +10,9 @@ import { useRef, useState } from "react";
 import { DirectorGate } from "@/modules/shorts";
 import { CreditDialog } from "../components/credit-dialog";
 import { IndexCard } from "../components/index-card";
+import { QuickStart } from "../components/quick-start";
 import { TemplateCard } from "../components/template-card";
+import { quickStartOf } from "../lib/library";
 
 const GRID = "grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 xl:grid-cols-4";
 
@@ -32,8 +34,10 @@ function Loading() {
 function Templates({ library }: { library: DirectorLibrary }) {
   const t = useTranslations("library");
   const { templates } = library;
+  const quickStart = quickStartOf(templates);
   return (
     <section aria-labelledby="library-templates" className="flex flex-col gap-4">
+      {quickStart ? <QuickStart plan={quickStart} /> : null}
       <div className="flex items-baseline justify-between gap-4">
         <h2 id="library-templates" className="text-lg font-semibold">
           {t("templates")}

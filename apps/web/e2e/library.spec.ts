@@ -4,43 +4,18 @@
  * offering the starter templates, without adding anything.
  */
 import { randomUUID } from "node:crypto";
-import { asWorkspace, expect, expectAccessible, signUp, test } from "./support";
+import {
+  asWorkspace,
+  expect,
+  expectAccessible,
+  madeUpPlan,
+  madeUpVideoId,
+  signUp,
+  test,
+} from "./support";
 
 /** A real, public video under three minutes ("Me at the zoo"): the API checks it on YouTube. */
 const PUBLIC_SHORT = "jNQXAC9IVRw";
-
-const plan = (title: string) => ({
-  title,
-  format: "GRWM",
-  summary: "Coffee, a window and a smile.",
-  audio: "speech",
-  durationSeconds: 3,
-  shots: [
-    {
-      kind: "video",
-      title: "Walk in",
-      purpose: "Set the scene.",
-      sourceStartSeconds: 0,
-      sourceEndSeconds: 3,
-      durationSeconds: 3,
-      camera: "back",
-      scene: "By a window",
-      sceneLandmark: "window",
-      framing: {
-        shotSize: "medium",
-        subject: { x: 0.25, y: 0.2, width: 0.5, height: 0.7 },
-        note: "Waist up.",
-      },
-      phoneAngle: { pitch: 0, roll: 0, tolerance: 6, height: "chest" },
-      pose: { description: "Standing.", keypoints: [] },
-      steps: [{ atSeconds: 0, instruction: "Walk towards the camera.", cameraMove: "static" }],
-      script: [],
-    },
-  ],
-});
-
-/** An 11-character id no real video has, for rows the test makes itself. */
-const madeUpVideoId = () => `t${randomUUID().replaceAll("-", "").slice(0, 10)}`;
 
 /** Plans written straight into the library: one the member indexed, and a starter. */
 const fillLibrary = (orgId: string, userId: string, starterTitle: string) =>
@@ -48,8 +23,14 @@ const fillLibrary = (orgId: string, userId: string, starterTitle: string) =>
     const insert = `INSERT INTO ai.director_plan
       (org_id, created_by, video_id, source, status, stage, plan, model, updated_at)
       VALUES ($1, $2, $3, $4, 'ready', 'ready', $5, 'gemini-4-argon', now())`;
-    await client.query(insert, [orgId, userId, madeUpVideoId(), "user", plan("My own short")]);
-    await client.query(insert, [orgId, null, madeUpVideoId(), "seed", plan(starterTitle)]);
+    await client.query(insert, [
+      orgId,
+      userId,
+      madeUpVideoId(),
+      "user",
+      madeUpPlan("My own short"),
+    ]);
+    await client.query(insert, [orgId, null, madeUpVideoId(), "seed", madeUpPlan(starterTitle)]);
   });
 
 /** How many plans in the workspace the member indexed. */

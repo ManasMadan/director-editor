@@ -633,6 +633,16 @@ describe("the copy for a cut", () => {
     await expectError(other.session.rpc.publish.copy({ cutId }), "DIRECTOR_CUT_NOT_FOUND");
   });
 
+  it("is written for the demo too, which may read the post but not send it", async () => {
+    const { email, password, me } = await signedUpWithPassword();
+    const { cutId } = await aCut(me, false);
+    await sql('UPDATE auth."user" SET demo = true WHERE id = $1', [me.id]);
+    // A new session: a session's user is read when it signs in.
+    const demo = createSession(harness);
+    await demo.auth("/sign-in/email", { email, password });
+    await expect(demo.rpc.publish.copy({ cutId })).resolves.toEqual(COPY);
+  });
+
   it("is written without the original once YouTube no longer shows it", async () => {
     const { session, me } = await signInWithGoogle();
     const cutId = await cutOfShort(me, "GoneShort01");

@@ -13,7 +13,11 @@ const SECRET_KEY = "1x0000000000000000000000000000000AA";
 
 let harness: Harness;
 beforeAll(async () => {
-  harness = await startApi(9, { TURNSTILE_SITE_KEY: SITE_KEY, TURNSTILE_SECRET_KEY: SECRET_KEY });
+  harness = await startApi(9, {
+    TURNSTILE_SITE_KEY: SITE_KEY,
+    TURNSTILE_SECRET_KEY: SECRET_KEY,
+    DEMO_GUESTS: "on",
+  });
 });
 afterAll(() => harness?.close());
 
@@ -28,6 +32,8 @@ describe("captcha", () => {
     ["/sign-up/email", () => ({ email: newEmail(), password: newPassword(), name: "Bot" })],
     ["/email-otp/send-verification-otp", () => ({ email: newEmail(), type: "email-verification" })],
     ["/email-otp/request-password-reset", () => ({ email: newEmail() })],
+    // A demo guest: one tap for a person, the widget invisible, but never for a bot.
+    ["/sign-in/guest", () => ({})],
   ])("%s needs a captcha token", async (path, body) => {
     const response = await createSession(harness).auth(path, body());
     expect(response.status).toBe(400);

@@ -15,7 +15,7 @@ would.
 import datetime
 import uuid
 
-from sqlalchemy import ForeignKey, Index, Integer, Text, text
+from sqlalchemy import BigInteger, Date, ForeignKey, Index, Integer, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -64,6 +64,20 @@ class AiUsage(Base):
     input_tokens: Mapped[int] = mapped_column(Integer)
     output_tokens: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime.datetime] = _now()
+
+
+class AiDemoUsage(Base):
+    """What deleted demo guests spent, by month, feature and model. Written only by the
+    guests' purge (auth.purge_expired_guests); this service never reads or writes it."""
+
+    __tablename__ = "demo_usage"
+    __table_args__: TableArgs = ({"schema": "ai"},)
+
+    month: Mapped[datetime.date] = mapped_column(Date, primary_key=True)
+    feature: Mapped[str] = mapped_column(Text, primary_key=True)
+    model: Mapped[str] = mapped_column(Text, primary_key=True)
+    input_tokens: Mapped[int] = mapped_column(BigInteger, server_default=text("0"))
+    output_tokens: Mapped[int] = mapped_column(BigInteger, server_default=text("0"))
 
 
 class DirectorPlan(Base):

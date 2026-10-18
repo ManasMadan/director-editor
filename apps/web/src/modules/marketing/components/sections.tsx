@@ -5,9 +5,11 @@ import type { Route } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
+import { demoPathTo } from "../lib/demo";
 import { XRAY } from "../lib/seeds";
 import { thumbnailUrl } from "../lib/youtube";
 import { OriginalPlayer } from "./original-player";
+import { XRayStage } from "./xray";
 
 /*
  * The landing's sections below the hero. Server components: static text and links, plus
@@ -37,6 +39,22 @@ export async function Steps() {
           </li>
         ))}
       </ol>
+    </section>
+  );
+}
+
+/** How Director reads a Short: the plan Gemini wrote for a seed, drawn over its frame. */
+export async function XRay() {
+  const t = await getTranslations("home");
+  return (
+    <section aria-labelledby="xray-title" className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3">
+        <h2 id="xray-title" className={heading}>
+          {t("xray.title")}
+        </h2>
+        <p className="max-w-prose text-muted-foreground text-pretty">{t("xray.body")}</p>
+      </div>
+      <XRayStage />
     </section>
   );
 }
@@ -91,15 +109,16 @@ export async function Proof() {
 
 /** The Google Cloud services Director runs on today, each with what it does here. */
 const SERVICES = [
-  "argon",
-  "flash",
   "live",
+  "flash",
   "tts",
+  "argon",
   "nanoBanana",
   "veo",
   "lyria",
   "storage",
   "cloudRun",
+  "computeEngine",
   "bigquery",
   "youtube",
   "signIn",
@@ -124,7 +143,10 @@ export async function Cloud() {
   );
 }
 
-/** The 6 seed templates, each opening in Director (or the demo, signed out). */
+/**
+ * The 6 seed templates, each opening in Director; signed out, in the demo, which opens the
+ * template once the browser is in.
+ */
 export async function Templates({ signedIn }: { signedIn: boolean }) {
   const t = await getTranslations("home");
   return (
@@ -137,7 +159,7 @@ export async function Templates({ signedIn }: { signedIn: boolean }) {
       </div>
       <ul className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
         {directorSeeds.map(({ videoId, plan }) => {
-          const href: Route = signedIn ? `/director/${videoId}` : "/sign-in?demo=1";
+          const href: Route = signedIn ? `/director/${videoId}` : demoPathTo(videoId);
           return (
             <li key={videoId}>
               <Link

@@ -30,7 +30,7 @@ from app.errors import AppError
 from app.log import log
 from app.schemas import SpeechVoice
 from app.settings import Settings
-from app.usage import reserve, settle
+from app.usage import Allowance, reserve, settle
 
 # Someone is standing with their camera up, waiting to hear where to go; past this, the
 # shoot screen has long since said it in the browser's own voice.
@@ -107,7 +107,9 @@ def audio_of(response: GenerateContentResponse) -> bytes:
 
 
 class Speaker:
-    def __init__(self, model: GoogleModel, model_name: str, *, monthly: int, per_line: int) -> None:
+    def __init__(
+        self, model: GoogleModel, model_name: str, *, monthly: Allowance, per_line: int
+    ) -> None:
         # The short name for the usage ledger; `model.model_name` is the address sent to
         # Gemini, which on Vertex is the full resource name.
         self._model = model
@@ -124,7 +126,7 @@ class Speaker:
             "director-speech",
             self._model_name,
             most=self._per_line,
-            monthly=self._monthly,
+            allowance=self._monthly,
         )
         if reservation is None:
             raise AppError("AI_BUDGET_EXCEEDED")
@@ -160,6 +162,6 @@ def create_speaker(settings: Settings) -> Speaker | None:
     return Speaker(
         create_google_model(settings, settings.tts_model),
         settings.tts_model,
-        monthly=settings.monthly_tokens_per_org,
+        monthly=Allowance(settings.monthly_tokens_per_org, settings.monthly_tokens_per_demo_guest),
         per_line=settings.director_tokens_per_speech,
     )

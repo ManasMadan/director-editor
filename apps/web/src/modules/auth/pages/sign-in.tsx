@@ -13,7 +13,7 @@ import * as z from "zod";
 import { TextField } from "@/components/form-fields";
 import { authClient } from "@/lib/auth-client";
 import { AuthCard } from "../components/auth-card";
-import { DemoAccountOffer } from "../components/demo-account";
+import { DemoOffer } from "../components/demo-account";
 import { useAuthErrorMessage } from "../hooks/use-auth-error";
 import { useFinishSignIn } from "../hooks/use-finish-sign-in";
 import { useAuthStepHref, useNextPath } from "../hooks/use-next-path";
@@ -65,7 +65,20 @@ export function SignInPage() {
     <AuthCard title={t("auth.signInTitle")} description={t("auth.signInDescription")}>
       <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
         <FieldGroup>
-          <DemoAccountOffer onUse={(demo) => form.reset(demo)} />
+          <DemoOffer onUse={(demo) => form.reset(demo)} onSignedIn={done} />
+          {/* Google first for everyone else: it's how a member posts to their channel. */}
+          {system?.features.google ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => authClient.signIn.social({ provider: "google", callbackURL: next })}
+              >
+                {t("auth.googleToPost")}
+              </Button>
+              <FieldSeparator>{t("common.or")}</FieldSeparator>
+            </>
+          ) : null}
           <TextField
             control={form.control}
             name="email"
@@ -93,15 +106,6 @@ export function SignInPage() {
           <Button type="button" variant="outline" onClick={signInWithPasskey}>
             {t("auth.passkey")}
           </Button>
-          {system?.features.google ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => authClient.signIn.social({ provider: "google", callbackURL: next })}
-            >
-              {t("auth.google")}
-            </Button>
-          ) : null}
           <p className="text-center text-sm text-muted-foreground">
             {t("auth.noAccount")}{" "}
             <Link

@@ -325,8 +325,47 @@ function PublishBody({
   );
 }
 
+/**
+ * The post Director wrote, to read: what the demo sees, since it can't publish (the
+ * shared account and guests have no YouTube channel of their own to post to).
+ */
+function ReadOnlyPost({ cut }: { cut: DirectorCut }) {
+  const t = useTranslations("director.publish");
+  const { draft, failed } = useDraft(cut, null);
+  if (!draft) {
+    return <GeminiLoader label={t("writing")} showLabel className="py-6" />;
+  }
+  if (failed) {
+    return <p className="text-sm text-muted-foreground">{t("readOnly.failed")}</p>;
+  }
+  const fields = [
+    { label: t("fields.title"), value: draft.title },
+    { label: t("fields.description"), value: draft.description },
+    { label: t("fields.hashtags"), value: hashtagsText(draft.hashtags) },
+    { label: t("fields.credits"), value: draft.credits },
+  ].filter((field) => field.value);
+  return (
+    <dl className="flex flex-col gap-3 text-sm">
+      {fields.map(({ label, value }) => (
+        <div key={label} className="flex flex-col gap-1">
+          <dt className="font-medium">{label}</dt>
+          <dd className="whitespace-pre-line text-muted-foreground">{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 /** What opens the sheet, by where the cut's publishing stands. */
-function Trigger({ cut, onOpen }: { cut: DirectorCut; onOpen: () => void }) {
+function Trigger({
+  cut,
+  readOnly,
+  onOpen,
+}: {
+  cut: DirectorCut;
+  readOnly: boolean;
+  onOpen: () => void;
+}) {
   const t = useTranslations("director.publish");
   const { status, youtubeVideoId } = cut.publish;
   if (status === "published") {
@@ -337,8 +376,8 @@ function Trigger({ cut, onOpen }: { cut: DirectorCut; onOpen: () => void }) {
     return null;
   }
   return (
-    <Button size="sm" onClick={onOpen}>
-      {t("open")}
+    <Button size="sm" variant={readOnly ? "secondary" : "default"} onClick={onOpen}>
+      {readOnly ? t("readOnly.open") : t("open")}
     </Button>
   );
 }
@@ -361,6 +400,10 @@ export function PublishButton({
 }) {
   const t = useTranslations("director.publish");
   const router = useRouter();
+  // The demo reads the post Director wrote, and can't send it (the API refuses it too).
+  // Nothing opens the sheet until the session says which, so the demo never sees Publish.
+  const session = authClient.useSession();
+  const readOnly = session.data?.user.demo === true;
   const returning = useSearchParams().get("publish") === cut.id;
   const [resumed, setResumed] = useState(() => (returning ? unstash(cut) : null));
   const [open, setOpen] = useState(returning);
@@ -377,7 +420,9 @@ export function PublishButton({
   return (
     <>
       <span ref={trigger} className="contents">
-        <Trigger cut={cut} onOpen={() => setOpen(true)} />
+        {session.isPending ? null : (
+          <Trigger cut={cut} readOnly={readOnly} onOpen={() => setOpen(true)} />
+        )}
       </span>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
@@ -385,11 +430,16 @@ export function PublishButton({
           className="max-h-[calc(100dvh-2rem)] gap-5 overflow-y-auto sm:max-w-md"
         >
           <DialogHeader>
-            <DialogTitle className="text-lg font-semibold">{t("title")}</DialogTitle>
-            <DialogDescription>{t("description")}</DialogDescription>
+            <DialogTitle className="text-lg font-semibold">
+              {readOnly ? t("readOnly.title") : t("title")}
+            </DialogTitle>
+            <DialogDescription>
+              {readOnly ? t("readOnly.description") : t("description")}
+            </DialogDescription>
           </DialogHeader>
           <Preview cut={cut} />
-          {open ? (
+          {open && readOnly ? <ReadOnlyPost cut={cut} /> : null}
+          {open && !readOnly ? (
             <PublishBody cut={cut} resumed={resumed} onResumed={() => setResumed(null)} />
           ) : null}
         </DialogContent>

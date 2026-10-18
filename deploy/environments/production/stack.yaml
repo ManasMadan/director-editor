@@ -45,6 +45,12 @@ services:
       # and names the project BIGQUERY_DATASET's events are written to; not a secret.
       GOOGLE_CLOUD_PROJECT: project-18e15b18-c92e-44bb-9bf
       BIGQUERY_DATASET: director
+      # Each judge trying the demo gets a private guest, deleted after a day; the shared
+      # demo account (DEMO_PASSWORD, in secrets/api.sops.yaml) stays as the fallback.
+      DEMO_GUESTS: "on"
+      # At most this many at once: each holds an AI allowance and live calls for a day,
+      # and the project runs on a fixed budget of credits.
+      DEMO_GUEST_LIMIT: "50"
   worker:
     # Checks and moves uploaded files: it must agree with the api on where they live.
     allowMetadataServer: true

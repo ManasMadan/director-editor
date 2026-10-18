@@ -21,6 +21,17 @@ tests:
           path: "spec.template.spec.containers[0].env"
           content: { name: S3_BUCKET, valueFrom: { secretKeyRef: { name: storage, key: bucket } } }
 
+  - it: gives each browser trying the demo a private guest of its own
+    template: deployment.yaml
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: DEMO_GUESTS, value: "on" }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: DEMO_GUEST_LIMIT, value: "50" }
+
   - it: keeps the worker on the same bucket as the api
     template: deployment.yaml
     documentSelector: { path: metadata.name, value: demo-worker }

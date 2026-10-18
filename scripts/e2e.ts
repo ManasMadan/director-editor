@@ -263,11 +263,16 @@ export async function e2e(
   given: Partial<Stack> = {},
 ): Promise<number> {
   const base = { ...REAL, ...given };
-  // The demo account's spec (apps/web/e2e/demo.spec.ts) needs the API to offer one: the
-  // checkout's own password if its .env sets one, else a throwaway one for this run.
+  // The demo's specs need the API to offer it: demo guests (apps/web/e2e/demo-guests.spec.ts),
+  // on unless the checkout's .env says otherwise, and the shared account as their
+  // fallback, with the checkout's own password if its .env sets one, else a throwaway one.
   const stack = {
     ...base,
-    env: { ...base.env, DEMO_PASSWORD: base.env.DEMO_PASSWORD || newSecret() },
+    env: {
+      ...base.env,
+      DEMO_PASSWORD: base.env.DEMO_PASSWORD || newSecret(),
+      DEMO_GUESTS: base.env.DEMO_GUESTS || "on",
+    },
   };
   const ports = stackPorts(stack.env);
 

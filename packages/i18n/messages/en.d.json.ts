@@ -35,11 +35,25 @@ declare const messages: {
   },
   "home": {
     "title": "<line>Watch any Short.</line> <line>Shoot your own.</line>",
-    "subtitle": "Pick a Short you love. Gemini breaks it into shots, then directs you through filming each one on your phone, live. Cut your takes together and post your version to YouTube.",
-    "cta": "Try the demo",
+    "subtitle": "A friend on your phone helps you film it, shot by shot.",
+    "cta": "Try it now, no sign-up",
     "ctaSignedIn": "Open Director",
     "how": "See how it works",
+    "hero": {
+      "director": "Director:",
+      "you": "You:",
+      "ask": "Let's start at the market. Ready when you are!",
+      "answer": "I'm fine inside",
+      "adapt": "Inside it is! Your window light looks great.",
+      "cardBefore": "Where: the market",
+      "cardAfter": "Where: by your window",
+      "rec": "REC 01:12",
+      "pause": "Pause the conversation",
+      "caption": "Director on your phone: it asks for the market, you'd rather stay in, and the shot moves to your window."
+    },
     "xray": {
+      "title": "How Director reads a Short",
+      "body": "Gemini watches the Short once and writes a plan for every shot: the framing, the pose, how to hold the phone and what to say.",
       "caption": "The plan Gemini 4 Argon wrote for “{title}”: {shots, plural, one {# shot} other {# shots}}, each with its framing, pose, camera move and lines.",
       "original": "Original",
       "file": "plan.json",
@@ -50,16 +64,16 @@ declare const messages: {
     "steps": {
       "title": "From watching to posting, in three steps",
       "index": {
-        "title": "Index",
-        "body": "Paste a Short's link. Gemini 4 Argon watches it and writes the plan: every shot's framing, pose, camera move and lines."
+        "title": "Pick a Short",
+        "body": "Start from one that's ready to shoot, or paste the link of a Short you love. Gemini works out every shot."
       },
       "shoot": {
-        "title": "Shoot with Gemini",
-        "body": "Film each shot with Gemini Live beside you. It sees your camera, hears you, and talks you through where to stand and what to say."
+        "title": "Shoot it with Director",
+        "body": "The camera opens on you and Director talks you through each shot: where to stand, how to hold the phone, what to say. Say it your own way."
       },
       "publish": {
-        "title": "Publish",
-        "body": "Line your takes up on the timeline, add captions and post your version to YouTube Shorts."
+        "title": "Post it to YouTube Shorts",
+        "body": "Director picks your best takes and writes the post, credits included, for your channel."
       }
     },
     "proof": {
@@ -108,9 +122,13 @@ declare const messages: {
         "name": "Cloud Run",
         "use": "Runs the indexer, where Gemini watches each Short."
       },
+      "computeEngine": {
+        "name": "Compute Engine",
+        "use": "Runs Director's API, its line to Gemini Live and the job queues."
+      },
       "bigquery": {
         "name": "BigQuery",
-        "use": "Logs each Short Director indexes, each shoot Director joins and every take review's score."
+        "use": "Logs each Short Director indexes, each shoot it directs and every take review's score."
       },
       "youtube": {
         "name": "YouTube Data API",
@@ -138,6 +156,7 @@ declare const messages: {
     "signUpTitle": "Create your account",
     "signUpDescription": "We'll email you a code to verify your address.",
     "google": "Continue with Google",
+    "googleToPost": "Continue with Google, to post to your channel",
     "passkey": "Sign in with a passkey",
     "forgotPassword": "Forgot password?",
     "noAccount": "Don't have an account?",
@@ -166,7 +185,15 @@ declare const messages: {
       "title": "Try Director with the demo account",
       "description": "Everyone trying Director shares it, so publishing and account changes are off.",
       "use": "Use demo account",
-      "loading": "Getting the demo account…"
+      "loading": "Getting the demo account…",
+      "signingIn": "Opening the demo…",
+      "guestTitle": "Just looking? Use the demo.",
+      "guestDescription": "Your footage is deleted after a day, and posting to YouTube is off.",
+      "start": "Use the demo",
+      "fallback": "Your own demo couldn't start just now. The shared demo account below works too, but anyone trying Director can see what's filmed in it."
+    },
+    "guest": {
+      "name": "Guest"
     }
   },
   "validation": {
@@ -200,7 +227,8 @@ declare const messages: {
     "ORGANIZATION_NEEDS_OWNER": "You own a shared workspace. Make someone else its owner before deleting your account.",
     "generic": "Something went wrong. Please try again.",
     "SIGN_IN_INCOMPLETE": "The sign-in didn't finish. Please try again.",
-    "DEMO_ACCOUNT_LOCKED": "Everyone shares the demo account, so its settings can't be changed. Create your own account for that."
+    "DEMO_ACCOUNT_LOCKED": "The demo's settings can't be changed. Create your own account for that.",
+    "DEMO_GUESTS_FULL": "The demo is full right now. Try again in a little while."
   },
   "settings": {
     "title": "Settings",
@@ -381,7 +409,7 @@ declare const messages: {
     "TOO_MANY_REDIRECTS": "The address redirected too many times.",
     "UPSTREAM_UNAVAILABLE": "A service we depend on is unavailable. Please try again.",
     "NO_ACTIVE_ORGANIZATION": "Choose a workspace first.",
-    "DEMO_ACCOUNT_LOCKED": "The demo account can't do that. Create your own account to publish and change settings.",
+    "DEMO_ACCOUNT_LOCKED": "The demo can't do that. Create your own account to publish and change settings.",
     "FILE_NOT_FOUND": "That file doesn't exist, or it isn't yours.",
     "FILE_TYPE_NOT_ALLOWED": "That kind of file isn't allowed here. Use one of: {types}.",
     "FILE_TOO_LARGE": "That file is too big. The limit is {maxBytes, number, ::unit/byte unit-width-narrow compact-short}.",
@@ -400,7 +428,7 @@ declare const messages: {
     "DIRECTOR_TAKE_KIND_MISMATCH": "This shot needs a different kind of take: a video for a video shot, a photo for a photo shot.",
     "DIRECTOR_CALL_TOO_FAST": "Director was sent more than it can take in, so it stopped. Try again.",
     "DIRECTOR_CUT_NOT_FOUND": "That video isn't in My media.",
-    "PUBLISH_DEMO_DISABLED": "The demo account can't publish to YouTube. Sign in with your own Google account to publish your video.",
+    "PUBLISH_DEMO_DISABLED": "Posting is off for the demo. Sign in with Google to post your own.",
     "PUBLISH_NEEDS_YOUTUBE": "Director needs your permission to upload to your YouTube channel.",
     "PUBLISH_CUT_NOT_READY": "This video isn't ready to publish yet. Save it again from the editor.",
     "PUBLISH_NO_CHANNEL": "Your Google account doesn't have a YouTube channel yet. Create one on YouTube, then publish again.",
@@ -790,7 +818,13 @@ declare const messages: {
       "uploading": "Sending your video to YouTube…",
       "published": "It's on YouTube, {visibility, select, private {private: only you can watch it} unlisted {unlisted: anyone with the link can watch it} public {public: anyone can find it} other {}}.",
       "kept": "You asked for {asked, select, private {private} unlisted {unlisted} public {public} other {}}, but YouTube keeps videos from apps it hasn't reviewed yet private. You can change it in YouTube Studio.",
-      "underWay": "This video is already on its way to YouTube. It shows up in My media once it's there."
+      "underWay": "This video is already on its way to YouTube. It shows up in My media once it's there.",
+      "readOnly": {
+        "open": "See the post Director wrote",
+        "title": "The post Director wrote",
+        "description": "Posting is off for the demo. Sign in with Google to post your own.",
+        "failed": "Director couldn't write a post this time."
+      }
     }
   },
   "library": {
@@ -798,6 +832,10 @@ declare const messages: {
     "intro": "Gemini has broken each of these Shorts into shots. Pick one and it directs you through every shot, right from your phone.",
     "loading": "Loading your library…",
     "templates": "Templates",
+    "quickStart": {
+      "label": "Quick start",
+      "body": "Just you, talking to the camera. Works indoors."
+    },
     "count": "{count, plural, one {# Short} other {# Shorts}}",
     "empty": "Nothing here yet. Paste a Shorts link above and Gemini will turn it into a template.",
     "card": {

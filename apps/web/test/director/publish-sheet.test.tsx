@@ -17,7 +17,7 @@ import { commands, page, userEvent } from "vitest/browser";
 import { MediaPage } from "@/modules/director";
 import { PublishButton } from "@/modules/director/components/publish-sheet";
 import { cleanup, currentUrl, renderPage } from "../render";
-import { currentSession, signUp } from "../users";
+import { auth, currentSession, signUp } from "../users";
 
 const COPY = {
   title: "Three looks, one mirror",
@@ -33,13 +33,20 @@ interface Made {
   user: Awaited<ReturnType<typeof signUp>>;
 }
 
+/** Signs the page in as a demo guest (the full API gives them out), as a member is. */
+async function asGuest() {
+  await auth("/sign-in/guest", {});
+  const { user } = await currentSession();
+  return { ...user, password: "" };
+}
+
 /**
  * A member's cut of one of their workspace's seeded templates: in the database (where
  * the API records its publishing), as the AI stand-in answers it, and its video in
  * storage unless `stored` is false.
  */
-async function aCut({ stored = true, copy = true } = {}): Promise<Made> {
-  const user = await signUp();
+async function aCut({ stored = true, copy = true, guest = false } = {}): Promise<Made> {
+  const user = guest ? await asGuest() : await signUp();
   const { session } = await currentSession();
   const [plan] = await commands.sql<{ id: string; video_id: string }>(
     "SELECT id, video_id FROM ai.director_plan WHERE org_id = $1 LIMIT 1",
@@ -351,6 +358,36 @@ describe("publishing a cut", { tags: ["files"] }, () => {
       expect(view.getByRole("button").query(), publish.status).toBeNull();
       expect(view.getByRole("link").query(), publish.status).toBeNull();
     }
+  });
+
+  it("shows the demo the post Director wrote, to read, with posting off", async () => {
+    const { cut } = await aCut({ stored: false, guest: true });
+    const view = await renderPage(<Card cut={cut} />);
+    const see = view.getByRole("button", { name: "See the post Director wrote" });
+    await expect.element(see).toBeVisible();
+    await userEvent.click(see);
+    const sheet = page.getByRole("dialog", { name: "The post Director wrote" });
+    await expect
+      .element(
+        sheet.getByText("Posting is off for the demo. Sign in with Google to post your own."),
+      )
+      .toBeVisible();
+    await expect.element(sheet.getByText(COPY.title)).toBeVisible();
+    await expect.element(sheet.getByText(COPY.description)).toBeVisible();
+    await expect.element(sheet.getByText("#grwm #fitcheck")).toBeVisible();
+    await expect.element(sheet.getByText(COPY.credits)).toBeVisible();
+    expect(publishButton().query()).toBeNull();
+    expect(sheet.getByRole("textbox").query()).toBeNull();
+  });
+
+  it("tells the demo when Director couldn't write the post", async () => {
+    const { cut } = await aCut({ stored: false, guest: true, copy: false });
+    const view = await renderPage(<Card cut={cut} />);
+    const see = view.getByRole("button", { name: "See the post Director wrote" });
+    await expect.element(see).toBeVisible();
+    await userEvent.click(see);
+    await expect.element(page.getByText("Director couldn't write a post this time.")).toBeVisible();
+    expect(publishButton().query()).toBeNull();
   });
 
   it("links a published cut to YouTube instead", async () => {

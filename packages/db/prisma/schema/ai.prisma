@@ -20,6 +20,21 @@ model AiUsage {
   @@schema("ai")
 }
 
+/// What deleted demo guests spent on models, by month, feature and model: their usage
+/// rows go with their workspaces, so auth.purge_expired_guests adds them up here first.
+model AiDemoUsage {
+  /// The first day of the month (UTC).
+  month        DateTime @db.Date
+  feature      String
+  model        String
+  inputTokens  BigInt   @default(0) @map("input_tokens")
+  outputTokens BigInt   @default(0) @map("output_tokens")
+
+  @@id([month, feature, model])
+  @@map("demo_usage")
+  @@schema("ai")
+}
+
 /// Director: how to film one YouTube short, as Gemini worked it out from watching it.
 /// One per workspace and video, so everyone in the workspace reuses the analysis: the
 /// workspace's library of templates.
