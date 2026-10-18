@@ -107,4 +107,26 @@ describe("useCamera", () => {
     hook.current.flip();
     await expect.poll(() => hook.current.facing).toBe("front");
   });
+
+  it("closes the camera before opening the other, for phones that can't hold two open", async () => {
+    // Many Android phones refuse a second camera while the first is still open.
+    const open: MediaStream[] = [];
+    fakeCamera(async () => {
+      if (open.some((stream) => !ended(stream))) {
+        throw new DOMException("Could not start video source", "NotReadableError");
+      }
+      const stream = cameraStream();
+      open.push(stream);
+      return stream;
+    });
+    const hook = await renderHook(() => useCamera(false));
+    hook.current.start();
+    await expect.poll(() => hook.current.state).toBe("live");
+    const front = hook.current.stream;
+    hook.current.flip();
+    await expect.poll(() => hook.current.stream).not.toBe(front);
+    expect(hook.current.state).toBe("live");
+    expect(ended(front)).toBe(true);
+    hook.unmount();
+  });
 });

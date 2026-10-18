@@ -34,6 +34,7 @@ const mediaRecorder: RollOptions["record"] = (stream, events) => {
   const part: PartRecorder = {
     state: () => recorder.state,
     start: (timesliceMs) => recorder.start(timesliceMs),
+    requestData: () => recorder.requestData(),
     pause: () => recorder.pause(),
     resume: () => recorder.resume(),
     stop: () => recorder.stop(),
@@ -104,6 +105,13 @@ export function useRoll() {
     return () => window.clearInterval(timer);
   }, [phase]);
   useEffect(() => () => roll.leave(), [roll]);
+  // The page going away (a closed tab, iOS killing it in the background): what's
+  // recorded since the last slice is handed to the queue while it still can be.
+  useEffect(() => {
+    const going = () => roll.flush();
+    window.addEventListener("pagehide", going);
+    return () => window.removeEventListener("pagehide", going);
+  }, [roll]);
   return {
     roll,
     phase,

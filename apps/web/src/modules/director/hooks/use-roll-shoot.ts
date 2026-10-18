@@ -4,6 +4,7 @@ import { useRecordingSessionQuery } from "@repo/client/api/recording/session";
 import type { LiveToolCall, LiveToolResult } from "@repo/contracts/live";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef } from "react";
+import { wakeLiveAudio } from "../lib/live-audio";
 import { shotStates } from "../lib/roll";
 import type { useCamera } from "./use-camera";
 import type { DirectorLive } from "./use-director-live";
@@ -110,6 +111,8 @@ export function useRollShoot({ props, camera, live, wanted }: Options) {
     states: shotStates(props.count, session.data?.attempts ?? []),
     pause,
     resume: () => {
+      // The tap that resumes is also what lets iOS run Director's sound again after a lock.
+      wakeLiveAudio();
       const now = latest.current.camera;
       if (now.stream && roll.phase === "paused") {
         void roll.resume(now.stream, now.facing).then(() => latest.current.live.roll("resumed"));

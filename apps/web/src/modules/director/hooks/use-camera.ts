@@ -29,12 +29,16 @@ export function useCamera(withSound: boolean) {
     }
     let active = true;
     setState("starting");
+    // The camera open now closes first: many Android phones refuse a second one while it
+    // is (NotReadableError), which would read as no camera at all. A flip starts a new
+    // part of the roll anyway, so the moment between the two loses nothing.
+    stopStream(current.current);
+    current.current = null;
     openCamera(facing, withSound).then(
       (opened) => {
         if (!active) {
           return stopStream(opened);
         }
-        stopStream(current.current);
         current.current = opened;
         setStream(opened);
         setState("live");

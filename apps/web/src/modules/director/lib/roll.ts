@@ -79,6 +79,8 @@ export interface RollApi {
 export interface PartRecorder {
   state(): "inactive" | "recording" | "paused";
   start(timesliceMs: number): void;
+  /** Hands over what it has recorded since the last slice, now. */
+  requestData(): void;
   pause(): void;
   resume(): void;
   stop(): void;
@@ -86,7 +88,10 @@ export interface PartRecorder {
 
 export interface RollOptions {
   api: RollApi;
-  /** Queues for upload; the screen pauses when the queue is full (the uploader says so). */
+  /**
+   * Keeps a slice or a part's end for upload; resolves once it's kept, not sent. The
+   * screen pauses when the queue is full (the uploader says so).
+   */
   enqueue: (item: QueuedItem) => Promise<unknown>;
   /** A recorder for `stream`, or null when this browser can't record it. */
   record: (
@@ -133,6 +138,8 @@ export class Roll {
   private endedMs = 0;
   /** The attempts started so far: each start mark numbers the next, its end the same. */
   private attempts = 0;
+  /** A camera flipped while the roll was starting: it records once the roll has begun. */
+  private flipped: { stream: MediaStream; camera: Facing } | null = null;
 
   constructor(private readonly options: RollOptions) {}
 
@@ -162,7 +169,23 @@ export class Roll {
       return false;
     }
     this.set("recording");
+    const flipped = this.flipped;
+    if (flipped) {
+      this.flipped = null;
+      await this.flip(flipped.stream, flipped.camera);
+    }
     return true;
+  }
+
+  /**
+   * Hands over what the recorder holds, now rather than at the next ten seconds: on a
+   * pause, and when the page goes. A phone that then kills the backgrounded tab loses
+   * nothing already recorded.
+   */
+  flush() {
+    if (this.part?.recorder?.state() === "recording") {
+      this.part.recorder.requestData();
+    }
   }
 
   /** Stops the recording and what Director sees and hears; only a touch resumes it. */
@@ -172,6 +195,7 @@ export class Roll {
       return;
     }
     if (part.recorder?.state() === "recording") {
+      this.flush();
       part.recorder.pause();
     }
     part.freeze();
@@ -197,6 +221,11 @@ export class Roll {
 
   /** The camera flipped: this part ends, and the new camera records in the next one. */
   async flip(stream: MediaStream, camera: Facing) {
+    if (this.phase === "starting") {
+      // The first part may be opening on the camera that just closed.
+      this.flipped = { stream, camera };
+      return;
+    }
     if (this.phase !== "recording" && this.phase !== "paused") {
       return;
     }
@@ -283,7 +312,8 @@ export class Roll {
     });
     const recorder = this.options.record(stream, {
       onData: (bytes) => this.slice(part, bytes),
-      onStop: () => void this.closed(part).then(stopped),
+      // The part ends whatever became of its end (kept or not): a flip or Done waits on it.
+      onStop: () => void this.closed(part).finally(stopped),
     });
     if (!recorder) {
       throw new Error("this browser can't record the camera");

@@ -56,7 +56,7 @@ import { useLeaveGuard } from "../hooks/use-leave-guard";
 import { type Marks, useShotMarks } from "../hooks/use-marks";
 import { useMemory } from "../hooks/use-memory";
 import { type RollShoot, useRollShoot } from "../hooks/use-roll-shoot";
-import { useWakeLock } from "../hooks/use-screen";
+import { useWakeAudio, useWakeLock } from "../hooks/use-screen";
 import { nextPage, type Phase, type StudioShot, shotPage, useStudio } from "../hooks/use-studio";
 import { useYourVersion, type YourVersionState } from "../hooks/use-your-version";
 import { type AudioMode, parseAudio } from "../lib/audio";
@@ -772,6 +772,7 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
   const onFlip = useMemberFlip(camera, live);
   useQuietTakes(live, studio);
   useWakeLock();
+  useWakeAudio();
   const taps = versionTaps(yours, live, index);
   return {
     props,
