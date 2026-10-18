@@ -292,7 +292,7 @@ class RemoteIndexer:
 
 
 # Errors that mean the request never reached the indexer.
-_NEVER_SENT = (httpx.ConnectError, httpx.ConnectTimeout)
+_NEVER_SENT = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
 
 
 def _unreachable(what: str, error: httpx.HTTPError, used: TokenUsage) -> IndexFailed:
