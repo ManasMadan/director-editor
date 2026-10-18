@@ -11,19 +11,69 @@
  */
 import * as z from "zod";
 import { shotPlanSchema } from "./api/director";
+import mediaKeyRules from "./director-seed-media.json" with { type: "json" };
 import committed from "./director-seeds.json" with { type: "json" };
 import { videoIdSchema } from "./ids";
 
 export const DIRECTOR_SEED_COUNT = 6;
 
-const directorSeedSchema = z.strictObject({
-  videoId: videoIdSchema,
-  plan: shotPlanSchema,
-  /** The model that wrote the plan. */
-  model: z.string().min(1),
-  /** The Short's original audio: its object key in storage (uploaded once, by hand). */
-  audioKey: z.string().min(1),
+/**
+ * A seed's generated media (apps/ai/scripts/seed_media.py) is stored under
+ * `seed-media/<videoId>/`, and the API signs a link to whatever key the committed file
+ * names. So each key is held to exactly the object it must be: this rule (shared with
+ * the AI service's scripts through director-seed-media.json), then, for the seed, its own
+ * folder, its shot's position and the right kind of file.
+ */
+const mediaKey = z
+  .string()
+  .max(mediaKeyRules.keyMaxLength)
+  .regex(new RegExp(mediaKeyRules.keyPattern))
+  .optional();
+
+const seedMediaSchema = z.strictObject({
+  /** The music track. */
+  music: mediaKey,
+  /** One entry per shot of the plan, in its order. */
+  shots: z.array(z.strictObject({ storyboard: mediaKey, preview: mediaKey })),
 });
+export type SeedMedia = z.infer<typeof seedMediaSchema>;
+
+/** Every key `media` names, each with the only keys it may be for this seed. */
+function expectedKeys(videoId: string, media: SeedMedia) {
+  const at = `seed-media/${videoId}`;
+  return [
+    { key: media.music, allowed: [`${at}/music.mp3`, `${at}/music.wav`] },
+    ...media.shots.flatMap((shot, index) => [
+      { key: shot.storyboard, allowed: [`${at}/shot-${index}.png`, `${at}/shot-${index}.jpg`] },
+      { key: shot.preview, allowed: [`${at}/shot-${index}.mp4`] },
+    ]),
+  ];
+}
+
+const directorSeedSchema = z
+  .strictObject({
+    videoId: videoIdSchema,
+    plan: shotPlanSchema,
+    /** The model that wrote the plan. */
+    model: z.string().min(1),
+    /** The Short's original audio: its object key in storage (uploaded once, by hand). */
+    audioKey: z.string().min(1),
+    /** Its storyboard cards, preview clips and music, once made; see `mediaKey`. */
+    media: seedMediaSchema.optional(),
+  })
+  .superRefine(({ videoId, plan, media }, context) => {
+    if (!media) {
+      return;
+    }
+    if (media.shots.length !== plan.shots.length) {
+      context.addIssue({ code: "custom", path: ["media", "shots"], message: "one per shot" });
+    }
+    for (const { key, allowed } of expectedKeys(videoId, media)) {
+      if (key !== undefined && !allowed.includes(key)) {
+        context.addIssue({ code: "custom", path: ["media"], message: `${key} isn't this seed's` });
+      }
+    }
+  });
 export type DirectorSeed = z.infer<typeof directorSeedSchema>;
 
 export const directorSeedsSchema = z.array(directorSeedSchema).length(DIRECTOR_SEED_COUNT);

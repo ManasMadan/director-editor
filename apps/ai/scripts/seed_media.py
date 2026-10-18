@@ -15,15 +15,19 @@ which can name a brand; anyone in a picture is a generic person, never a likenes
 Short's creator. Run from the repo root, after `seeds:build` (which keeps the media of
 any seed whose plan came out unchanged, and drops it otherwise):
 
-    bun run --filter @repo/ai seeds:media -- --bucket <bucket> [--dry-run]
+    bun run --filter @repo/ai seeds:media -- --bucket <bucket> [--concurrency 1-8]
+    bun run --filter @repo/ai seeds:media -- --dry-run
 
-with <bucket> the Cloud Storage bucket the API serves files from (production's,
-director-media-1053522546520, where the seeds' audio already is). It says how many of
-each it will make and what that should cost before making any; `--dry-run` stops there
-and lists every prompt. It only makes what has no key yet, writing each key into the
-seed file as soon as its object is uploaded, so a run that stops halfway (or a medium
-that fails) is finished by running it again; commit the file afterwards. Veo clips are
-capped at `MAX_PREVIEWS` across all the seeds.
+with <bucket> the Cloud Storage bucket the API serves files from: production's,
+director-media-1053522546520, where the seeds' audio already is. The keys are the same
+everywhere, so an API reading another bucket (RustFS locally) finds nothing at them and
+its links 404. It says how many of each it will make and what that should cost before
+making any; `--dry-run` (no bucket needed) stops there and lists every prompt. It only
+makes what has no key yet, writing each key into the seed entry's `media` as soon as its
+object is uploaded, so a run that stops halfway (or a medium that fails) is finished by
+running it again; commit the seed file and the ledger afterwards. Veo clips are capped
+at `MAX_PREVIEWS` across every run, counted on the ledger (`Ledger`,
+scripts/seed-media-ledger.json): every clip Veo answered with, kept or not.
 
 Runs on a developer's machine, never in a service, as the gcloud account signed in on
 it (`gcloud auth print-access-token`), with no key file: the project's express-mode API
@@ -53,11 +57,20 @@ from google.genai.types import (
     ImageConfig,
 )
 from google.oauth2.credentials import Credentials as UserCredentials
+from pydantic import BaseModel, TypeAdapter
 
 from app.log import configure_logging, log
 from app.schemas import Shot, ShotPlan
 from app.settings import Settings, get_settings
-from scripts.build_seeds import TEMPLATES_PATH, SeedTemplate, load_templates, write_templates
+from scripts.build_seeds import (
+    APP_ROOT,
+    TEMPLATES_PATH,
+    SeedMedia,
+    SeedShotMedia,
+    SeedTemplate,
+    load_templates,
+    write_templates,
+)
 
 # The models, each checked to answer on Vertex AI on 2026-10-18: Nano Banana 2.1, Veo 3.1
 # Lite and Lyria 3 Clip (about 30 seconds of music).
@@ -67,6 +80,7 @@ MUSIC_MODEL = "lyria-3-clip-preview"
 # Veo isn't served from the "global" location the Gemini models are.
 PREVIEW_LOCATION = "us-central1"
 MAX_PREVIEWS = 40
+LEDGER_PATH = APP_ROOT / "scripts" / "seed-media-ledger.json"
 # Vertex AI's list prices on 2026-10-18, for the estimate printed before a run: a 1K
 # image (1,120 output tokens, plus the model's thinking), a second of 720p video without
 # sound, one Lyria 3 Clip track.
@@ -211,25 +225,32 @@ def music_prompt(plan: ShotPlan) -> str:
 # ---------------------------------------------------------------------------- what to make
 
 
-def media_jobs(templates: list[SeedTemplate], max_previews: int = MAX_PREVIEWS) -> list[Job]:
+def _media_of(template: SeedTemplate) -> SeedMedia:
+    """The seed's media so far: an empty entry per shot until it has any."""
+    return template.media or SeedMedia(shots=[SeedShotMedia() for _ in template.plan.shots])
+
+
+def media_jobs(
+    templates: list[SeedTemplate], billed: int = 0, max_previews: int = MAX_PREVIEWS
+) -> list[Job]:
     """Every medium the seeds have no key for yet, in the seed file's order; previews only
-    up to `max_previews` across all of them, counting those already made."""
-    previews_left = max_previews - sum(
-        1 for template in templates for shot in template.plan.shots if shot.previewKey
-    )
+    up to `max_previews` across every run, counting the `billed` clips Veo has already
+    answered with (the ledger: a clip is paid for whether or not its key was kept)."""
+    previews_left = max_previews - billed
     held_back = 0
     jobs: list[Job] = []
     for seed, template in enumerate(templates):
-        for index, shot in enumerate(template.plan.shots):
-            if shot.storyboardKey is None:
+        media = _media_of(template)
+        for index, (shot, made) in enumerate(zip(template.plan.shots, media.shots, strict=True)):
+            if made.storyboard is None:
                 jobs.append(Job("storyboard", seed, index, storyboard_prompt(shot)))
-            if shot.previewKey is None and previews_left <= 0:
+            if made.preview is None and previews_left <= 0:
                 held_back += 1
-            elif shot.previewKey is None:
+            elif made.preview is None:
                 seconds = preview_seconds(shot)
                 jobs.append(Job("preview", seed, index, preview_prompt(shot, seconds), seconds))
                 previews_left -= 1
-        if template.plan.musicKey is None:
+        if media.music is None:
             jobs.append(Job("music", seed, None, music_prompt(template.plan)))
     if held_back:
         log.warning("previews held back at the cap", held_back=held_back, cap=max_previews)
@@ -249,11 +270,19 @@ def estimated_usd(jobs: list[Job]) -> float:
 # -------------------------------------------------------------------------------- the run
 
 
-async def _make(template: SeedTemplate, job: Job, models: MediaModels, upload: Upload) -> None:
+async def _make(
+    template: SeedTemplate,
+    job: Job,
+    models: MediaModels,
+    upload: Upload,
+    billed: Callable[[Job], None],
+) -> None:
     if job.kind == "storyboard":
         data, media_type = await models.storyboard(job.prompt)
     elif job.kind == "preview":
         data, media_type = await models.preview(job.prompt, job.seconds)
+        # Paid for from here on, whatever becomes of it.
+        billed(job)
     else:
         data, media_type = await models.music(job.prompt)
     extension = _EXTENSIONS.get(media_type)
@@ -262,12 +291,14 @@ async def _make(template: SeedTemplate, job: Job, models: MediaModels, upload: U
     name = "music" if job.shot is None else f"shot-{job.shot}"
     key = f"seed-media/{template.videoId}/{name}.{extension}"
     await upload(key, data, media_type)
+    media = _media_of(template)
+    template.media = media
     if job.shot is None:
-        template.plan.musicKey = key
+        media.music = key
     elif job.kind == "storyboard":
-        template.plan.shots[job.shot].storyboardKey = key
+        media.shots[job.shot].storyboard = key
     else:
-        template.plan.shots[job.shot].previewKey = key
+        media.shots[job.shot].preview = key
 
 
 async def generate(
@@ -276,17 +307,19 @@ async def generate(
     models: MediaModels,
     upload: Upload,
     save: Callable[[list[SeedTemplate]], None],
+    billed: Callable[[Job], None],
     concurrency: int = 3,
 ) -> int:
     """Makes every job, `concurrency` at a time, saving the templates after each one
-    lands; returns how many failed (logged, their keys left unset for the next run)."""
+    lands and telling `billed` of each clip Veo answers with; returns how many failed
+    (logged, their keys left unset for the next run)."""
     slots = asyncio.Semaphore(concurrency)
 
     async def run(job: Job) -> bool:
         template = templates[job.seed]
         async with slots:
             try:
-                await _make(template, job, models, upload)
+                await _make(template, job, models, upload, billed)
             except Exception:
                 log.exception(
                     "seed media failed", kind=job.kind, video_id=template.videoId, shot=job.shot
@@ -505,30 +538,77 @@ async def connect_vertex(
 # ---------------------------------------------------------------------------- the command
 
 
+class _BilledClip(BaseModel):
+    videoId: str
+    shot: int | None
+    seconds: int
+
+
+_CLIPS = TypeAdapter(list[_BilledClip])
+
+
+class Ledger:
+    """Every clip Veo has answered with, across every run: what `MAX_PREVIEWS` caps, so
+    it bounds the bill rather than only the clips whose keys were kept (a clip whose
+    upload then failed was still paid for). Committed beside this script, so a run on
+    another machine counts the same; a filtered clip isn't billed and isn't on it."""
+
+    def __init__(self, path: Path = LEDGER_PATH) -> None:
+        self._path = path
+        self._clips = _CLIPS.validate_json(path.read_text()) if path.exists() else []
+
+    def count(self) -> int:
+        return len(self._clips)
+
+    def record(self, video_id: str, job: Job) -> None:
+        self._clips.append(_BilledClip(videoId=video_id, shot=job.shot, seconds=job.seconds))
+        self._path.write_text(_CLIPS.dump_json(self._clips, indent=2).decode() + "\n")
+
+
 class _Arguments(argparse.Namespace):
-    bucket: str = ""
+    bucket: str | None = None
     dry_run: bool = False
     concurrency: int = 3
 
 
+MAX_CONCURRENCY = 8
+
+
+def _concurrency(value: str) -> int:
+    # More at once only meets Vertex's per-minute quotas sooner (each call then waits
+    # them out), and a slip like 100 would start that many paid generations together.
+    if not value.isdigit() or not 1 <= int(value) <= MAX_CONCURRENCY:
+        raise argparse.ArgumentTypeError(f"a number from 1 to {MAX_CONCURRENCY}")
+    return int(value)
+
+
 def parse_args(argv: Sequence[str] | None) -> _Arguments:
     parser = argparse.ArgumentParser(description="Make the seed templates' media.")
-    parser.add_argument("--bucket", required=True, help="the Cloud Storage bucket to write to")
+    parser.add_argument(
+        "--bucket", help="the Cloud Storage bucket the API serves files from (not for --dry-run)"
+    )
     parser.add_argument("--dry-run", action="store_true", help="say what it would make, and stop")
-    parser.add_argument("--concurrency", type=int, default=3, help="media made at once")
-    return parser.parse_args(argv, namespace=_Arguments())
+    parser.add_argument(
+        "--concurrency", type=_concurrency, default=3, help="media made at once (1 to 8)"
+    )
+    arguments = parser.parse_args(argv, namespace=_Arguments())
+    if not arguments.dry_run and not arguments.bucket:
+        parser.error("--bucket is needed to make media (only --dry-run goes without)")
+    return arguments
 
 
 async def main(
     argv: Sequence[str] | None = None,
     templates_path: Path = TEMPLATES_PATH,
     connect: Connect = connect_vertex,
+    ledger_path: Path = LEDGER_PATH,
 ) -> int:
     arguments = parse_args(argv)
     settings = get_settings()
     configure_logging(settings.log_level, json=False)
     templates = load_templates(templates_path)
-    jobs = media_jobs(templates)
+    ledger = Ledger(ledger_path)
+    jobs = media_jobs(templates, ledger.count())
     log.info(
         "seed media to make",
         storyboards=sum(1 for job in jobs if job.kind == "storyboard"),
@@ -537,7 +617,7 @@ async def main(
         tracks=sum(1 for job in jobs if job.kind == "music"),
         estimated_usd=round(estimated_usd(jobs), 2),
     )
-    if arguments.dry_run:
+    if arguments.dry_run or arguments.bucket is None:
         for job in jobs:
             video_id = templates[job.seed].videoId
             log.info(
@@ -553,6 +633,7 @@ async def main(
         models,
         upload,
         lambda written: write_templates(written, templates_path),
+        lambda job: ledger.record(templates[job.seed].videoId, job),
         arguments.concurrency,
     )
     log.info("seed media done", made=len(jobs) - failed, failed=failed)

@@ -37,13 +37,6 @@ class HealthResponse(BaseModel):
 # `MAX_SCRIPT_LINES` or `MAX_POSE_KEYPOINTS` and validating the result against ShotPlan's
 # own Field constraints, so a trim that still runs over fails loudly instead of being
 # stored. Positions are fractions of a 9:16 portrait frame, from its top-left corner.
-#
-# The seeded templates also carry media made for them once, offline, by
-# scripts/seed_media.py: a storyboard card and a preview clip per shot, and a music
-# track per plan, each as its object key in storage (apps/api signs a link to each).
-# Those keys are optional and only ever written by that script, never by the planner
-# (its draft has no such fields); a plan without them dumps without the fields at all,
-# not with nulls, so plans stored before them read exactly as they did.
 
 VIDEO_ID_PATTERN = r"^[A-Za-z0-9_-]{11}$"
 MAX_SHOTS = 12
@@ -57,13 +50,6 @@ MAX_FRAME_BASE64 = 400_000
 # The most one plan may reserve (DIRECTOR_TOKENS_PER_PLAN's ceiling): a whole workspace's
 # default monthly allowance, far past what a three-minute short needs.
 MAX_PLAN_TOKENS = 2_000_000
-# "seed-media/<videoId>/shot-<n>.png" and the like, with room to spare.
-MAX_MEDIA_KEY = 200
-
-
-def _unset(value: object) -> bool:
-    return value is None
-
 
 type KeypointName = Literal[
     "nose",
@@ -180,20 +166,6 @@ class Shot(BaseModel):
     script: list[ScriptLine] = Field(
         max_length=MAX_SCRIPT_LINES, description="Empty when nothing is said."
     )
-    storyboardKey: str | None = Field(
-        default=None,
-        min_length=1,
-        max_length=MAX_MEDIA_KEY,
-        exclude_if=_unset,
-        description="A seed's storyboard card for the shot: its object key in storage.",
-    )
-    previewKey: str | None = Field(
-        default=None,
-        min_length=1,
-        max_length=MAX_MEDIA_KEY,
-        exclude_if=_unset,
-        description="A seed's short preview clip of the shot: its object key in storage.",
-    )
 
 
 class ShotPlan(BaseModel):
@@ -203,13 +175,6 @@ class ShotPlan(BaseModel):
     audio: Literal["speech", "music", "speech-and-music", "none"]
     durationSeconds: float = Field(ge=0.5, le=MAX_SHORT_SECONDS)
     shots: list[Shot] = Field(min_length=1, max_length=MAX_SHOTS)
-    musicKey: str | None = Field(
-        default=None,
-        min_length=1,
-        max_length=MAX_MEDIA_KEY,
-        exclude_if=_unset,
-        description="A seed's music track: its object key in storage.",
-    )
 
 
 class TargetPoseDraft(TargetPose):

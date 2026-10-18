@@ -6,6 +6,7 @@ HTTP server)."""
 
 import asyncio
 import gc
+import json
 import os
 import subprocess
 import sys
@@ -36,6 +37,7 @@ from scripts.seed_media import (
     STORYBOARD_MODEL,
     GcloudToken,
     Job,
+    Ledger,
     Media,
     VertexMediaModels,
     access_token,
@@ -125,13 +127,26 @@ PLAN: dict[str, object] = {
 }
 
 
-def template(video_id: str = VIDEO, **plan: object) -> SeedTemplate:
-    return SeedTemplate(
-        videoId=video_id,
-        plan=ShotPlan.model_validate({**PLAN, **plan}),
-        model="gemini-4-argon",
-        audioKey=f"seed-audio/{video_id}.m4a",
+def template(video_id: str = VIDEO, media: dict[str, object] | None = None) -> SeedTemplate:
+    return SeedTemplate.model_validate(
+        {
+            "videoId": video_id,
+            "plan": PLAN,
+            "model": "gemini-4-argon",
+            "audioKey": f"seed-audio/{video_id}.m4a",
+            **({"media": media} if media else {}),
+        }
     )
+
+
+def keys(seed: SeedTemplate) -> tuple[str | None, list[tuple[str | None, str | None]]]:
+    """A seed's music key and each shot's (storyboard, preview) keys."""
+    if seed.media is None:
+        return None, [(None, None) for _ in seed.plan.shots]
+    return seed.media.music, [(shot.storyboard, shot.preview) for shot in seed.media.shots]
+
+
+AT = f"seed-media/{VIDEO}"
 
 
 def person() -> Shot:
@@ -270,24 +285,29 @@ def test_every_missing_medium_is_a_job_in_the_seed_file_s_order() -> None:
 
 def test_what_already_has_a_key_is_skipped() -> None:
     done = template(
-        musicKey=f"seed-media/{VIDEO}/music.mp3",
-        shots=[
-            {**PERSON_SHOT, "storyboardKey": "a.png", "previewKey": "a.mp4"},
-            {**OBJECT_SHOT, "storyboardKey": "b.png"},
-        ],
+        media={
+            "music": f"{AT}/music.mp3",
+            "shots": [
+                {"storyboard": f"{AT}/shot-0.png", "preview": f"{AT}/shot-0.mp4"},
+                {"storyboard": f"{AT}/shot-1.png"},
+            ],
+        }
     )
 
     assert [(job.kind, job.shot) for job in media_jobs([done])] == [("preview", 1)]
 
 
-def test_previews_stop_at_the_cap_counting_the_ones_already_made() -> None:
-    one_made = template(shots=[{**PERSON_SHOT, "previewKey": "a.mp4"}, OBJECT_SHOT])
+def test_previews_stop_at_the_cap_counting_every_clip_ever_billed() -> None:
+    """The cap bounds what Veo bills, so it counts the ledger (every clip Veo answered
+    with, kept or not), not the keys that happen to be saved."""
+    jobs = media_jobs([template(), template(OTHER)], billed=2, max_previews=4)
 
-    jobs = media_jobs([one_made, template(OTHER)], max_previews=3)
-
-    assert [(job.seed, job.shot) for job in jobs if job.kind == "preview"] == [(0, 1), (1, 0)]
+    assert [(job.seed, job.shot) for job in jobs if job.kind == "preview"] == [(0, 0), (0, 1)]
     # The cap holds back clips only: every storyboard is still made.
     assert len([job for job in jobs if job.kind == "storyboard"]) == 4
+    assert [job.kind for job in media_jobs([template()], billed=4, max_previews=4)].count(
+        "preview"
+    ) == 0
 
 
 def test_the_estimate_prices_each_image_second_of_video_and_track() -> None:
@@ -314,17 +334,23 @@ async def test_each_medium_is_uploaded_and_its_key_written_as_it_lands(tmp_path:
 
     def save(written: list[SeedTemplate]) -> None:
         write_templates(written, path)
-        saved.append(sum(1 for line in path.read_text().splitlines() if "Key" in line))
+        saved.append(path.read_text().count("seed-media/"))
 
-    failures = await generate(templates, media_jobs(templates), FakeModels(), uploads, save)
+    billed: list[Job] = []
+    failures = await generate(
+        templates, media_jobs(templates), FakeModels(), uploads, save, billed.append
+    )
 
     assert failures == 0
     [written] = load_templates(path)
-    assert written.plan.musicKey == f"seed-media/{VIDEO}/music.mp3"
-    assert [(shot.storyboardKey, shot.previewKey) for shot in written.plan.shots] == [
-        (f"seed-media/{VIDEO}/shot-0.png", f"seed-media/{VIDEO}/shot-0.mp4"),
-        (f"seed-media/{VIDEO}/shot-1.png", f"seed-media/{VIDEO}/shot-1.mp4"),
-    ]
+    assert keys(written) == (
+        f"{AT}/music.mp3",
+        [(f"{AT}/shot-0.png", f"{AT}/shot-0.mp4"), (f"{AT}/shot-1.png", f"{AT}/shot-1.mp4")],
+    )
+    # Each clip Veo answered with is on the ledger.
+    assert [(job.kind, job.shot) for job in billed] == [("preview", 0), ("preview", 1)]
+    # The plan itself is untouched: the media sits beside it.
+    assert written.plan == templates[0].plan == ShotPlan.model_validate(PLAN)
     assert uploads.objects == {
         f"seed-media/{VIDEO}/shot-0.png": (b"png", "image/png"),
         f"seed-media/{VIDEO}/shot-0.mp4": (b"mp4 4s", "video/mp4"),
@@ -333,9 +359,9 @@ async def test_each_medium_is_uploaded_and_its_key_written_as_it_lands(tmp_path:
         f"seed-media/{VIDEO}/music.mp3": (b"track", "audio/mpeg"),
     }
     # Saved after every one, so a run that stops halfway keeps what it paid for.
-    assert len(saved) == 5
+    assert saved == [1, 2, 3, 4, 5]
     # Everything else about the seed is as it was.
-    assert written.model_dump(exclude={"plan"}) == templates[0].model_dump(exclude={"plan"})
+    assert written.model_dump(exclude={"media"}) == template().model_dump()
     # A second run finds nothing left to make.
     assert media_jobs([written]) == []
 
@@ -348,16 +374,20 @@ async def test_a_failed_medium_leaves_its_key_unset_and_the_rest_still_land(
     models = FakeModels(refuse="At a kitchen counter.")
 
     failures = await generate(
-        templates, media_jobs(templates), models, Uploads(), lambda t: write_templates(t, path)
+        templates,
+        media_jobs(templates),
+        models,
+        Uploads(),
+        lambda t: write_templates(t, path),
+        lambda _: None,
     )
 
     assert failures == 2
     [written] = load_templates(path)
-    assert written.plan.shots[0].storyboardKey is not None
-    assert written.plan.shots[0].previewKey is not None
-    assert written.plan.shots[1].storyboardKey is None
-    assert written.plan.shots[1].previewKey is None
-    assert written.plan.musicKey is not None
+    assert keys(written) == (
+        f"{AT}/music.mp3",
+        [(f"{AT}/shot-0.png", f"{AT}/shot-0.mp4"), (None, None)],
+    )
     assert [(job.kind, job.shot) for job in media_jobs([written])] == [
         ("storyboard", 1),
         ("preview", 1),
@@ -368,9 +398,16 @@ async def test_the_music_key_takes_the_format_lyria_answered_with() -> None:
     templates = [template()]
     jobs = [job for job in media_jobs(templates) if job.kind == "music"]
 
-    await generate(templates, jobs, FakeModels(music_type="audio/wav"), Uploads(), lambda _: None)
+    await generate(
+        templates,
+        jobs,
+        FakeModels(music_type="audio/wav"),
+        Uploads(),
+        lambda _: None,
+        lambda _: None,
+    )
 
-    assert templates[0].plan.musicKey == f"seed-media/{VIDEO}/music.wav"
+    assert keys(templates[0])[0] == f"{AT}/music.wav"
 
 
 async def test_a_format_it_can_t_name_fails_that_medium() -> None:
@@ -379,12 +416,59 @@ async def test_a_format_it_can_t_name_fails_that_medium() -> None:
     uploads = Uploads()
 
     failures = await generate(
-        templates, jobs, FakeModels(music_type="audio/ogg"), uploads, lambda _: None
+        templates,
+        jobs,
+        FakeModels(music_type="audio/ogg"),
+        uploads,
+        lambda _: None,
+        lambda _: None,
     )
 
     assert failures == 1
-    assert templates[0].plan.musicKey is None
+    assert keys(templates[0])[0] is None
     assert uploads.objects == {}
+
+
+async def test_a_clip_is_on_the_ledger_even_when_its_upload_fails() -> None:
+    """Veo bills a clip as soon as it answers: the ledger counts it whatever happens
+    after, so the cap bounds the bill and not only what was kept."""
+    templates = [template()]
+    jobs = [job for job in media_jobs(templates) if job.kind == "preview"][:1]
+    billed: list[Job] = []
+
+    async def failing_upload(_key: str, _data: bytes, _type: str) -> None:
+        raise RuntimeError("the bucket refused it")
+
+    failures = await generate(
+        templates, jobs, FakeModels(), failing_upload, lambda _: None, billed.append
+    )
+
+    assert failures == 1
+    assert billed == jobs
+    assert keys(templates[0])[1][0] == (None, None)
+
+
+def test_the_ledger_records_each_billed_clip_and_reads_back(tmp_path: Path) -> None:
+    ledger = Ledger(tmp_path / "ledger.json")
+    assert ledger.count() == 0
+
+    ledger.record(VIDEO, Job("preview", 0, 3, "p", seconds=6))
+    ledger.record(OTHER, Job("preview", 1, 0, "p", seconds=4))
+
+    again = Ledger(tmp_path / "ledger.json")
+    assert again.count() == 2
+    assert json.loads((tmp_path / "ledger.json").read_text()) == [
+        {"videoId": VIDEO, "shot": 3, "seconds": 6},
+        {"videoId": OTHER, "shot": 0, "seconds": 4},
+    ]
+
+
+def test_the_committed_ledger_counts_every_clip_already_made() -> None:
+    """The clips made before the ledger existed are on it: one per committed preview."""
+    previews = sum(
+        1 for seed in load_templates() for _, preview in keys(seed)[1] if preview is not None
+    )
+    assert Ledger().count() >= previews == 35
 
 
 # ------------------------------------------------------------------------- the command
@@ -418,13 +502,17 @@ async def test_a_dry_run_says_what_it_would_make_and_makes_nothing(tmp_path: Pat
     async def connect(_settings: Settings, _bucket: str) -> tuple[FakeModels, Uploads]:
         raise AssertionError("a dry run connects to nothing")
 
-    assert await main(["--bucket", "b", "--dry-run"], path, connect) == 0
+    ledger = tmp_path / "ledger.json"
+    # No bucket needed just to look.
+    assert await main(["--dry-run"], path, connect, ledger) == 0
     assert path.read_bytes() == before
+    assert not ledger.exists()
 
 
 @pytest.mark.usefixtures("env")
 async def test_the_command_makes_what_s_missing_into_the_bucket_it_names(tmp_path: Path) -> None:
     path = tmp_path / "templates.json"
+    ledger = tmp_path / "ledger.json"
     write_templates([template()], path)
     uploads = Uploads()
     buckets: list[str] = []
@@ -434,13 +522,33 @@ async def test_the_command_makes_what_s_missing_into_the_bucket_it_names(tmp_pat
         buckets.append(bucket)
         return FakeModels(), uploads
 
-    assert await main(["--bucket", "seed-bucket", "--concurrency", "2"], path, connect) == 0
+    argv = ["--bucket", "seed-bucket", "--concurrency", "2"]
+    assert await main(argv, path, connect, ledger) == 0
     assert buckets == ["seed-bucket"]
     assert len(uploads.objects) == 5
     assert media_jobs(load_templates(path)) == []
+    assert Ledger(ledger).count() == 2
     # Nothing left: a second run connects to nothing.
-    assert await main(["--bucket", "seed-bucket"], path, connect) == 0
+    assert await main(["--bucket", "seed-bucket"], path, connect, ledger) == 0
     assert buckets == ["seed-bucket"]
+
+
+@pytest.mark.usefixtures("env")
+async def test_the_command_makes_no_clip_once_the_ledger_is_at_the_cap(tmp_path: Path) -> None:
+    path = tmp_path / "templates.json"
+    ledger = tmp_path / "ledger.json"
+    write_templates([template()], path)
+    spent = Ledger(ledger)
+    for _ in range(seed_media.MAX_PREVIEWS):
+        spent.record(OTHER, Job("preview", 0, 0, "p", seconds=4))
+    models = FakeModels()
+
+    async def connect(_settings: Settings, _bucket: str) -> tuple[FakeModels, Uploads]:
+        return models, Uploads()
+
+    assert await main(["--bucket", "b"], path, connect, ledger) == 0
+    assert "preview" not in {kind for kind, _ in models.asked}
+    assert Ledger(ledger).count() == seed_media.MAX_PREVIEWS
 
 
 @pytest.mark.usefixtures("env")
@@ -451,13 +559,27 @@ async def test_the_command_fails_when_a_medium_did_so_it_s_run_again(tmp_path: P
     async def connect(_settings: Settings, _bucket: str) -> tuple[FakeModels, Uploads]:
         return FakeModels(refuse="Instrumental"), Uploads()
 
-    assert await main(["--bucket", "b"], path, connect) == 1
-    assert load_templates(path)[0].plan.musicKey is None
+    assert await main(["--bucket", "b"], path, connect, tmp_path / "ledger.json") == 1
+    assert keys(load_templates(path)[0])[0] is None
 
 
-def test_the_command_needs_a_bucket() -> None:
+@pytest.mark.parametrize(
+    "argv",
+    [
+        [],  # making media needs the bucket it goes to
+        ["--bucket", "b", "--concurrency", "0"],
+        ["--bucket", "b", "--concurrency", "9"],
+        ["--bucket", "b", "--concurrency", "many"],
+    ],
+)
+def test_the_command_refuses_arguments_it_can_t_run_with(argv: list[str]) -> None:
     with pytest.raises(SystemExit):
-        seed_media.parse_args([])
+        seed_media.parse_args(argv)
+
+
+def test_the_command_runs_one_to_eight_at_a_time() -> None:
+    assert seed_media.parse_args(["--bucket", "b", "--concurrency", "8"]).concurrency == 8
+    assert seed_media.parse_args(["--dry-run"]).bucket is None
 
 
 # --------------------------------------------------------------------------- credentials

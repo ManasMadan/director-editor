@@ -82,9 +82,7 @@
               "endSeconds": 5.3,
               "text": "While traveling around India, I've noticed four variations of the head nod, and it is a gesture of agreeance."
             }
-          ],
-          "storyboardKey": "seed-media/22k0fZarxh8/shot-0.png",
-          "previewKey": "seed-media/22k0fZarxh8/shot-0.mp4"
+          ]
         },
         {
           "kind": "video",
@@ -150,9 +148,7 @@
               "endSeconds": 2.4,
               "text": "So the first one is like this."
             }
-          ],
-          "storyboardKey": "seed-media/22k0fZarxh8/shot-1.png",
-          "previewKey": "seed-media/22k0fZarxh8/shot-1.mp4"
+          ]
         },
         {
           "kind": "video",
@@ -207,9 +203,7 @@
               "cameraMove": "static"
             }
           ],
-          "script": [],
-          "storyboardKey": "seed-media/22k0fZarxh8/shot-2.png",
-          "previewKey": "seed-media/22k0fZarxh8/shot-2.mp4"
+          "script": []
         },
         {
           "kind": "video",
@@ -270,9 +264,7 @@
               "endSeconds": 1.2,
               "text": "Then there's the really quick"
             }
-          ],
-          "storyboardKey": "seed-media/22k0fZarxh8/shot-3.png",
-          "previewKey": "seed-media/22k0fZarxh8/shot-3.mp4"
+          ]
         },
         {
           "kind": "video",
@@ -327,9 +319,7 @@
               "cameraMove": "right"
             }
           ],
-          "script": [],
-          "storyboardKey": "seed-media/22k0fZarxh8/shot-4.png",
-          "previewKey": "seed-media/22k0fZarxh8/shot-4.mp4"
+          "script": []
         },
         {
           "kind": "video",
@@ -390,9 +380,7 @@
               "endSeconds": 1.0,
               "text": "Then there's this one."
             }
-          ],
-          "storyboardKey": "seed-media/22k0fZarxh8/shot-5.png",
-          "previewKey": "seed-media/22k0fZarxh8/shot-5.mp4"
+          ]
         },
         {
           "kind": "video",
@@ -447,9 +435,7 @@
               "cameraMove": "static"
             }
           ],
-          "script": [],
-          "storyboardKey": "seed-media/22k0fZarxh8/shot-6.png",
-          "previewKey": "seed-media/22k0fZarxh8/shot-6.mp4"
+          "script": []
         },
         {
           "kind": "video",
@@ -530,9 +516,7 @@
               "endSeconds": 6.8,
               "text": "And then there's this one."
             }
-          ],
-          "storyboardKey": "seed-media/22k0fZarxh8/shot-7.png",
-          "previewKey": "seed-media/22k0fZarxh8/shot-7.mp4"
+          ]
         },
         {
           "kind": "video",
@@ -592,9 +576,7 @@
               "cameraMove": "static"
             }
           ],
-          "script": [],
-          "storyboardKey": "seed-media/22k0fZarxh8/shot-8.png",
-          "previewKey": "seed-media/22k0fZarxh8/shot-8.mp4"
+          "script": []
         },
         {
           "kind": "video",
@@ -665,15 +647,57 @@
               "endSeconds": 2.8,
               "text": "And I find it so cute, I have even started to do it."
             }
-          ],
-          "storyboardKey": "seed-media/22k0fZarxh8/shot-9.png",
-          "previewKey": "seed-media/22k0fZarxh8/shot-9.mp4"
+          ]
         }
-      ],
-      "musicKey": "seed-media/22k0fZarxh8/music.mp3"
+      ]
     },
     "model": "gemini-4-argon",
-    "audioKey": "seed-audio/22k0fZarxh8.m4a"
+    "audioKey": "seed-audio/22k0fZarxh8.m4a",
+    "media": {
+      "music": "seed-media/22k0fZarxh8/music.mp3",
+      "shots": [
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-0.png",
+          "preview": "seed-media/22k0fZarxh8/shot-0.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-1.png",
+          "preview": "seed-media/22k0fZarxh8/shot-1.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-2.png",
+          "preview": "seed-media/22k0fZarxh8/shot-2.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-3.png",
+          "preview": "seed-media/22k0fZarxh8/shot-3.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-4.png",
+          "preview": "seed-media/22k0fZarxh8/shot-4.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-5.png",
+          "preview": "seed-media/22k0fZarxh8/shot-5.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-6.png",
+          "preview": "seed-media/22k0fZarxh8/shot-6.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-7.png",
+          "preview": "seed-media/22k0fZarxh8/shot-7.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-8.png",
+          "preview": "seed-media/22k0fZarxh8/shot-8.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-9.png",
+          "preview": "seed-media/22k0fZarxh8/shot-9.mp4"
+        }
+      ]
+    }
   },
   {
     "videoId": "152Jy2c3XSM",
@@ -732,9 +756,7 @@
               "endSeconds": 2.7,
               "text": "A new Eilik is here!"
             }
-          ],
-          "storyboardKey": "seed-media/152Jy2c3XSM/shot-0.png",
-          "previewKey": "seed-media/152Jy2c3XSM/shot-0.mp4"
+          ]
         },
         {
           "kind": "video",
@@ -779,9 +801,7 @@
               "endSeconds": 1.2,
               "text": "\ud83d\ude32"
             }
-          ],
-          "storyboardKey": "seed-media/152Jy2c3XSM/shot-1.png",
-          "previewKey": "seed-media/152Jy2c3XSM/shot-1.mp4"
+          ]
         },
         {
           "kind": "video",
@@ -826,9 +846,7 @@
               "endSeconds": 1.3,
               "text": "*knocks*"
             }
-          ],
-          "storyboardKey": "seed-media/152Jy2c3XSM/shot-2.png",
-          "previewKey": "seed-media/152Jy2c3XSM/shot-2.mp4"
+          ]
         },
         {
           "kind": "video",
@@ -873,9 +891,7 @@
               "endSeconds": 1.5,
               "text": "\ud83d\ude0d"
             }
-          ],
-          "storyboardKey": "seed-media/152Jy2c3XSM/shot-3.png",
-          "previewKey": "seed-media/152Jy2c3XSM/shot-3.mp4"
+          ]
         },
         {
           "kind": "video",
@@ -920,9 +936,7 @@
               "endSeconds": 2.6,
               "text": "Let's unbox her!"
             }
-          ],
-          "storyboardKey": "seed-media/152Jy2c3XSM/shot-4.png",
-          "previewKey": "seed-media/152Jy2c3XSM/shot-4.mp4"
+          ]
         },
         {
           "kind": "video",
@@ -967,9 +981,7 @@
               "endSeconds": 2.2,
               "text": "Let's unbox her!"
             }
-          ],
-          "storyboardKey": "seed-media/152Jy2c3XSM/shot-5.png",
-          "previewKey": "seed-media/152Jy2c3XSM/shot-5.mp4"
+          ]
         },
         {
           "kind": "video",
@@ -1014,9 +1026,7 @@
               "endSeconds": 1.1,
               "text": "Wow! \ud83d\ude06"
             }
-          ],
-          "storyboardKey": "seed-media/152Jy2c3XSM/shot-6.png",
-          "previewKey": "seed-media/152Jy2c3XSM/shot-6.mp4"
+          ]
         },
         {
           "kind": "video",
@@ -1061,9 +1071,7 @@
               "endSeconds": 2.9,
               "text": "Wow! \ud83d\ude06"
             }
-          ],
-          "storyboardKey": "seed-media/152Jy2c3XSM/shot-7.png",
-          "previewKey": "seed-media/152Jy2c3XSM/shot-7.mp4"
+          ]
         },
         {
           "kind": "video",
@@ -1113,9 +1121,7 @@
               "endSeconds": 8.7,
               "text": "Let's power her on!"
             }
-          ],
-          "storyboardKey": "seed-media/152Jy2c3XSM/shot-8.png",
-          "previewKey": "seed-media/152Jy2c3XSM/shot-8.mp4"
+          ]
         },
         {
           "kind": "video",
@@ -1160,9 +1166,7 @@
               "endSeconds": 1.3,
               "text": "Why is she so angry?"
             }
-          ],
-          "storyboardKey": "seed-media/152Jy2c3XSM/shot-9.png",
-          "previewKey": "seed-media/152Jy2c3XSM/shot-9.mp4"
+          ]
         },
         {
           "kind": "video",
@@ -1227,15 +1231,61 @@
               "endSeconds": 5.5,
               "text": "Thanks for watching!"
             }
-          ],
-          "storyboardKey": "seed-media/152Jy2c3XSM/shot-10.png",
-          "previewKey": "seed-media/152Jy2c3XSM/shot-10.mp4"
+          ]
         }
-      ],
-      "musicKey": "seed-media/152Jy2c3XSM/music.mp3"
+      ]
     },
     "model": "gemini-4-argon",
-    "audioKey": "seed-audio/152Jy2c3XSM.m4a"
+    "audioKey": "seed-audio/152Jy2c3XSM.m4a",
+    "media": {
+      "music": "seed-media/152Jy2c3XSM/music.mp3",
+      "shots": [
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-0.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-0.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-1.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-1.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-2.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-2.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-3.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-3.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-4.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-4.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-5.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-5.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-6.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-6.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-7.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-7.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-8.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-8.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-9.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-9.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-10.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-10.mp4"
+        }
+      ]
+    }
   },
   {
     "videoId": "_HonL1arbaA",
@@ -1299,9 +1349,7 @@
               "endSeconds": 4.0,
               "text": "It's only three ingredients and you don't even need an oven."
             }
-          ],
-          "storyboardKey": "seed-media/_HonL1arbaA/shot-0.png",
-          "previewKey": "seed-media/_HonL1arbaA/shot-0.mp4"
+          ]
         },
         {
           "kind": "video",
@@ -1366,9 +1414,7 @@
               "endSeconds": 4.2,
               "text": "then crush up the biscuits."
             }
-          ],
-          "storyboardKey": "seed-media/_HonL1arbaA/shot-1.png",
-          "previewKey": "seed-media/_HonL1arbaA/shot-1.mp4"
+          ]
         },
         {
           "kind": "video",
@@ -1438,9 +1484,7 @@
               "endSeconds": 5.0,
               "text": "and stir everything together until smooth."
             }
-          ],
-          "storyboardKey": "seed-media/_HonL1arbaA/shot-2.png",
-          "previewKey": "seed-media/_HonL1arbaA/shot-2.mp4"
+          ]
         },
         {
           "kind": "video",
@@ -1505,9 +1549,7 @@
               "endSeconds": 4.6,
               "text": "and microwave for about six minutes."
             }
-          ],
-          "storyboardKey": "seed-media/_HonL1arbaA/shot-3.png",
-          "previewKey": "seed-media/_HonL1arbaA/shot-3.mp4"
+          ]
         },
         {
           "kind": "video",
@@ -1557,9 +1599,7 @@
               "endSeconds": 1.9,
               "text": "Let it cool fully, then turn it upside down."
             }
-          ],
-          "storyboardKey": "seed-media/_HonL1arbaA/shot-4.png",
-          "previewKey": "seed-media/_HonL1arbaA/shot-4.mp4"
+          ]
         },
         {
           "kind": "video",
@@ -1614,15 +1654,41 @@
               "endSeconds": 4.1,
               "text": "You can eat it like this or add a topping to make it look and taste even better."
             }
-          ],
-          "storyboardKey": "seed-media/_HonL1arbaA/shot-5.png",
-          "previewKey": "seed-media/_HonL1arbaA/shot-5.mp4"
+          ]
         }
-      ],
-      "musicKey": "seed-media/_HonL1arbaA/music.mp3"
+      ]
     },
     "model": "gemini-4-argon",
-    "audioKey": "seed-audio/_HonL1arbaA.m4a"
+    "audioKey": "seed-audio/_HonL1arbaA.m4a",
+    "media": {
+      "music": "seed-media/_HonL1arbaA/music.mp3",
+      "shots": [
+        {
+          "storyboard": "seed-media/_HonL1arbaA/shot-0.png",
+          "preview": "seed-media/_HonL1arbaA/shot-0.mp4"
+        },
+        {
+          "storyboard": "seed-media/_HonL1arbaA/shot-1.png",
+          "preview": "seed-media/_HonL1arbaA/shot-1.mp4"
+        },
+        {
+          "storyboard": "seed-media/_HonL1arbaA/shot-2.png",
+          "preview": "seed-media/_HonL1arbaA/shot-2.mp4"
+        },
+        {
+          "storyboard": "seed-media/_HonL1arbaA/shot-3.png",
+          "preview": "seed-media/_HonL1arbaA/shot-3.mp4"
+        },
+        {
+          "storyboard": "seed-media/_HonL1arbaA/shot-4.png",
+          "preview": "seed-media/_HonL1arbaA/shot-4.mp4"
+        },
+        {
+          "storyboard": "seed-media/_HonL1arbaA/shot-5.png",
+          "preview": "seed-media/_HonL1arbaA/shot-5.mp4"
+        }
+      ]
+    }
   },
   {
     "videoId": "WvGUjw7OwZo",
@@ -1711,9 +1777,7 @@
               "cameraMove": "forward"
             }
           ],
-          "script": [],
-          "storyboardKey": "seed-media/WvGUjw7OwZo/shot-0.png",
-          "previewKey": "seed-media/WvGUjw7OwZo/shot-0.mp4"
+          "script": []
         },
         {
           "kind": "video",
@@ -1813,9 +1877,7 @@
               "cameraMove": "static"
             }
           ],
-          "script": [],
-          "storyboardKey": "seed-media/WvGUjw7OwZo/shot-1.png",
-          "previewKey": "seed-media/WvGUjw7OwZo/shot-1.mp4"
+          "script": []
         },
         {
           "kind": "video",
@@ -1895,9 +1957,7 @@
               "cameraMove": "forward"
             }
           ],
-          "script": [],
-          "storyboardKey": "seed-media/WvGUjw7OwZo/shot-2.png",
-          "previewKey": "seed-media/WvGUjw7OwZo/shot-2.mp4"
+          "script": []
         },
         {
           "kind": "video",
@@ -1936,9 +1996,7 @@
               "cameraMove": "forward"
             }
           ],
-          "script": [],
-          "storyboardKey": "seed-media/WvGUjw7OwZo/shot-3.png",
-          "previewKey": "seed-media/WvGUjw7OwZo/shot-3.mp4"
+          "script": []
         },
         {
           "kind": "video",
@@ -1982,9 +2040,7 @@
               "cameraMove": "right"
             }
           ],
-          "script": [],
-          "storyboardKey": "seed-media/WvGUjw7OwZo/shot-4.png",
-          "previewKey": "seed-media/WvGUjw7OwZo/shot-4.mp4"
+          "script": []
         },
         {
           "kind": "video",
@@ -2044,15 +2100,41 @@
               "cameraMove": "tilt-down"
             }
           ],
-          "script": [],
-          "storyboardKey": "seed-media/WvGUjw7OwZo/shot-5.png",
-          "previewKey": "seed-media/WvGUjw7OwZo/shot-5.mp4"
+          "script": []
         }
-      ],
-      "musicKey": "seed-media/WvGUjw7OwZo/music.mp3"
+      ]
     },
     "model": "gemini-4-argon",
-    "audioKey": "seed-audio/WvGUjw7OwZo.m4a"
+    "audioKey": "seed-audio/WvGUjw7OwZo.m4a",
+    "media": {
+      "music": "seed-media/WvGUjw7OwZo/music.mp3",
+      "shots": [
+        {
+          "storyboard": "seed-media/WvGUjw7OwZo/shot-0.png",
+          "preview": "seed-media/WvGUjw7OwZo/shot-0.mp4"
+        },
+        {
+          "storyboard": "seed-media/WvGUjw7OwZo/shot-1.png",
+          "preview": "seed-media/WvGUjw7OwZo/shot-1.mp4"
+        },
+        {
+          "storyboard": "seed-media/WvGUjw7OwZo/shot-2.png",
+          "preview": "seed-media/WvGUjw7OwZo/shot-2.mp4"
+        },
+        {
+          "storyboard": "seed-media/WvGUjw7OwZo/shot-3.png",
+          "preview": "seed-media/WvGUjw7OwZo/shot-3.mp4"
+        },
+        {
+          "storyboard": "seed-media/WvGUjw7OwZo/shot-4.png",
+          "preview": "seed-media/WvGUjw7OwZo/shot-4.mp4"
+        },
+        {
+          "storyboard": "seed-media/WvGUjw7OwZo/shot-5.png",
+          "preview": "seed-media/WvGUjw7OwZo/shot-5.mp4"
+        }
+      ]
+    }
   },
   {
     "videoId": "8OLAi6Eba98",
@@ -2167,15 +2249,21 @@
               "endSeconds": 9.0,
               "text": "CHANGE THE SITUATION."
             }
-          ],
-          "storyboardKey": "seed-media/8OLAi6Eba98/shot-0.png",
-          "previewKey": "seed-media/8OLAi6Eba98/shot-0.mp4"
+          ]
         }
-      ],
-      "musicKey": "seed-media/8OLAi6Eba98/music.mp3"
+      ]
     },
     "model": "gemini-4-argon",
-    "audioKey": "seed-audio/8OLAi6Eba98.m4a"
+    "audioKey": "seed-audio/8OLAi6Eba98.m4a",
+    "media": {
+      "music": "seed-media/8OLAi6Eba98/music.mp3",
+      "shots": [
+        {
+          "storyboard": "seed-media/8OLAi6Eba98/shot-0.png",
+          "preview": "seed-media/8OLAi6Eba98/shot-0.mp4"
+        }
+      ]
+    }
   },
   {
     "videoId": "vUZWe5kAsSM",
@@ -2324,14 +2412,20 @@
               "cameraMove": "right"
             }
           ],
-          "script": [],
-          "storyboardKey": "seed-media/vUZWe5kAsSM/shot-0.png",
-          "previewKey": "seed-media/vUZWe5kAsSM/shot-0.mp4"
+          "script": []
         }
-      ],
-      "musicKey": "seed-media/vUZWe5kAsSM/music.mp3"
+      ]
     },
     "model": "gemini-4-argon",
-    "audioKey": "seed-audio/vUZWe5kAsSM.m4a"
+    "audioKey": "seed-audio/vUZWe5kAsSM.m4a",
+    "media": {
+      "music": "seed-media/vUZWe5kAsSM/music.mp3",
+      "shots": [
+        {
+          "storyboard": "seed-media/vUZWe5kAsSM/shot-0.png",
+          "preview": "seed-media/vUZWe5kAsSM/shot-0.mp4"
+        }
+      ]
+    }
   }
 ]

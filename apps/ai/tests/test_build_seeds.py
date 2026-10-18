@@ -17,11 +17,15 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 from pydantic_ai.exceptions import UsageLimitExceeded
 
-from app.schemas import ShotPlan
+from app.schemas import Shot, ShotPlan
 from app.settings import Settings, get_settings
 from scripts.build_seeds import (
     APP_ROOT,
+    MEDIA_RULES_PATH,
     TEMPLATES_PATH,
+    MediaKeyRules,
+    SeedMedia,
+    SeedShotMedia,
     SeedSource,
     SeedTemplate,
     audio_key,
@@ -220,50 +224,99 @@ def test_seed_template_refuses_a_plan_with_no_shots() -> None:
         )
 
 
-def test_a_plan_s_seed_media_keys_are_optional_and_left_out_when_unset() -> None:
-    """Only the seeds carry media (scripts/seed_media.py): a plan the model wrote has no
-    keys, and its JSON (stored, served, committed) has no key fields at all rather than
-    nulls, so every plan and seed file from before reads the same."""
-    plan = shot_plan()
-    assert plan.musicKey is None
-    assert plan.shots[0].storyboardKey is None
-    assert plan.shots[0].previewKey is None
-    assert plan.model_dump(mode="json") == PLAN
-
-    with_media = {
-        **PLAN,
-        "musicKey": "seed-media/22k0fZarxh8/music.mp3",
-        "shots": [
-            {
-                **PLAN_SHOT,
-                "storyboardKey": "seed-media/22k0fZarxh8/shot-0.png",
-                "previewKey": "seed-media/22k0fZarxh8/shot-0.mp4",
-            }
-        ],
-    }
-    assert ShotPlan.model_validate(with_media).model_dump(mode="json") == with_media
+def test_a_plan_names_no_storage_path() -> None:
+    """A seed's media lives beside its plan, on the seed entry: the plan is only what the
+    planner writes, the same in every workspace's copy and in every prompt it reaches
+    (the take reviewer's dumps the whole shot)."""
+    assert not {"storyboardKey", "previewKey"} & set(Shot.model_fields)
+    assert "musicKey" not in ShotPlan.model_fields
+    assert shot_plan().model_dump(mode="json") == PLAN
 
 
-def _template(plan: ShotPlan, video_id: str = "22k0fZarxh8") -> SeedTemplate:
+VIDEO = "22k0fZarxh8"
+AT = f"seed-media/{VIDEO}"
+
+
+def _media(video_id: str = VIDEO) -> SeedMedia:
+    at = f"seed-media/{video_id}"
+    return SeedMedia(
+        music=f"{at}/music.mp3",
+        shots=[SeedShotMedia(storyboard=f"{at}/shot-0.png", preview=f"{at}/shot-0.mp4")],
+    )
+
+
+def _template(
+    plan: ShotPlan, video_id: str = VIDEO, media: SeedMedia | None = None
+) -> SeedTemplate:
     return SeedTemplate(
-        videoId=video_id, plan=plan, model="gemini-4-argon", audioKey=audio_key(video_id)
+        videoId=video_id,
+        plan=plan,
+        model="gemini-4-argon",
+        audioKey=audio_key(video_id),
+        media=media,
     )
 
 
-def _with_media(plan: ShotPlan) -> ShotPlan:
-    return plan.model_copy(
-        update={
-            "musicKey": "seed-media/22k0fZarxh8/music.mp3",
-            "shots": [
-                shot.model_copy(update={"storyboardKey": f"seed-media/22k0fZarxh8/shot-{n}.png"})
-                for n, shot in enumerate(plan.shots)
-            ],
-        }
-    )
+def test_a_seed_s_media_is_left_out_of_its_json_until_it_has_some() -> None:
+    assert "media" not in _template(shot_plan()).model_dump(mode="json")
+    partial = SeedMedia(shots=[SeedShotMedia(preview=f"{AT}/shot-0.mp4")])
+    assert _template(shot_plan(), media=partial).model_dump(mode="json")["media"] == {
+        "shots": [{"preview": f"{AT}/shot-0.mp4"}]
+    }
+    assert _template(shot_plan(), media=_media()).model_dump(mode="json")["media"] == {
+        "music": f"{AT}/music.mp3",
+        "shots": [{"storyboard": f"{AT}/shot-0.png", "preview": f"{AT}/shot-0.mp4"}],
+    }
+
+
+REFUSED_MEDIA: list[dict[str, object]] = [
+    # Another object altogether: a member's take in another workspace.
+    {"music": "files/0199f3a0-0000-7000-8000-000000000001/take.webm", "shots": [{}]},
+    # Another seed's.
+    {"music": "seed-media/152Jy2c3XSM/music.mp3", "shots": [{}]},
+    # The wrong kind of file for what it is.
+    {"music": f"{AT}/shot-0.mp4", "shots": [{}]},
+    {"shots": [{"storyboard": f"{AT}/shot-0.mp4"}]},
+    {"shots": [{"preview": f"{AT}/shot-0.png"}]},
+    # Another shot's.
+    {"shots": [{"storyboard": f"{AT}/shot-1.png"}]},
+    # Out of the seed's folder.
+    {"shots": [{"storyboard": f"{AT}/../x/shot-0.png"}]},
+    # Not one entry per shot.
+    {"shots": []},
+    {"shots": [{}, {}]},
+    {"shots": [{}], "extra": True},
+]
+
+
+@pytest.mark.parametrize("media", REFUSED_MEDIA)
+def test_a_seed_refuses_a_media_key_anywhere_but_its_own_seed_shot_and_kind(
+    media: dict[str, object],
+) -> None:
+    with pytest.raises(ValidationError):
+        SeedTemplate.model_validate(
+            {
+                "videoId": VIDEO,
+                "plan": PLAN,
+                "model": "gemini-4-argon",
+                "audioKey": audio_key(VIDEO),
+                "media": media,
+            }
+        )
+
+
+def test_media_keys_follow_the_rule_the_contract_checks_them_with() -> None:
+    """packages/contracts/src/director-seed-media.json, which the API's zod schema reads
+    too: the scripts that write the file and the API that reads it agree on a key."""
+    rules = MediaKeyRules.model_validate_json(MEDIA_RULES_PATH.read_text())
+    schema: dict[str, object] = SeedShotMedia.model_json_schema()
+    field = json.dumps(schema)
+    assert json.dumps(rules.keyPattern) in field
+    assert f'"maxLength": {rules.keyMaxLength}' in field
 
 
 def test_keep_media_carries_a_seed_s_media_over_when_its_plan_is_unchanged() -> None:
-    previous = [_template(_with_media(shot_plan()))]
+    previous = [_template(shot_plan(), media=_media())]
 
     assert keep_media([_template(shot_plan())], previous) == previous
 
@@ -271,24 +324,24 @@ def test_keep_media_carries_a_seed_s_media_over_when_its_plan_is_unchanged() -> 
 def test_keep_media_drops_the_media_of_a_seed_whose_plan_changed() -> None:
     """Media drawn from the old plan's shots would show the wrong scenes: a changed seed
     starts without any, and scripts/seed_media.py makes its media again."""
-    previous = [_template(_with_media(shot_plan()))]
+    previous = [_template(shot_plan(), media=_media())]
     changed = shot_plan().model_copy(update={"title": "Another plan"})
 
     [kept] = keep_media([_template(changed)], previous)
 
     assert kept == _template(changed)
-    assert kept.plan.musicKey is None
+    assert kept.media is None
 
 
 def test_keep_media_leaves_a_seed_with_no_previous_entry_alone() -> None:
-    previous = [_template(_with_media(shot_plan()), "152Jy2c3XSM")]
+    previous = [_template(shot_plan(), "152Jy2c3XSM", _media("152Jy2c3XSM"))]
 
     assert keep_media([_template(shot_plan())], previous) == [_template(shot_plan())]
 
 
 def test_load_templates_reads_what_write_templates_wrote(tmp_path: Path) -> None:
     path = tmp_path / "templates.json"
-    templates = [_template(_with_media(shot_plan()))]
+    templates = [_template(shot_plan(), media=_media())]
     write_templates(templates, path)
 
     assert load_templates(path) == templates
@@ -304,7 +357,7 @@ async def test_main_keeps_the_media_of_a_seed_whose_plan_came_out_the_same(
     seeds = tmp_path / "seeds.json"
     seeds.write_text(json.dumps([{"videoId": "22k0fZarxh8"}]))
     templates = tmp_path / "templates.json"
-    previous = [_template(_with_media(shot_plan())).model_copy(update={"model": GEMINI_MODEL})]
+    previous = [_template(shot_plan(), media=_media()).model_copy(update={"model": GEMINI_MODEL})]
     write_templates(previous, templates)
     for key, value in gemini_env(gemini[0].url).items():
         monkeypatch.setenv(key, value)

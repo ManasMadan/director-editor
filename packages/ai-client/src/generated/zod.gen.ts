@@ -358,7 +358,6 @@ export const zShot = z.object({
     kind: z.enum(['video', 'photo']),
     phoneAngle: zPhoneAngle,
     pose: zTargetPose,
-    previewKey: z.string().min(1).max(200).nullish(),
     purpose: z.string().min(1).max(240),
     scene: z.string().min(1).max(200),
     sceneLandmark: z.string().max(40).nullable(),
@@ -366,7 +365,6 @@ export const zShot = z.object({
     sourceEndSeconds: z.number().gte(0.1).lte(180),
     sourceStartSeconds: z.number().gte(0).lte(180),
     steps: z.array(zShotStep).min(1).max(10),
-    storyboardKey: z.string().min(1).max(200).nullish(),
     title: z.string().min(1).max(80)
 });
 
@@ -382,7 +380,6 @@ export const zShotPlan = z.object({
     ]),
     durationSeconds: z.number().gte(0.5).lte(180),
     format: z.string().min(1).max(60),
-    musicKey: z.string().min(1).max(200).nullish(),
     shots: z.array(zShot).min(1).max(12),
     summary: z.string().min(1).max(400),
     title: z.string().min(1).max(120)

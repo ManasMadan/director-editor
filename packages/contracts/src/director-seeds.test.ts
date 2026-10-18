@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
+import * as z from "zod";
+import mediaKeyRules from "./director-seed-media.json" with { type: "json" };
 import { DIRECTOR_SEED_COUNT, directorSeeds, directorSeedsSchema } from "./director-seeds";
 import committed from "./director-seeds.json" with { type: "json" };
 import { required } from "./objects";
+
+const first = required(directorSeeds[0], "a committed seed");
+const media = required(first.media, "the first seed's media");
+const base = `seed-media/${first.videoId}`;
+
+/** The committed file with the first seed's media swapped for `swapped`. */
+function withMedia(swapped: unknown) {
+  return [{ ...first, media: swapped }, ...committed.slice(1)];
+}
 
 describe("Director's seeded templates", () => {
   it("are the 6 committed Shorts, each with a plan and its audio", () => {
@@ -19,46 +30,74 @@ describe("Director's seeded templates", () => {
     expect(directorSeeds).toEqual(committed);
   });
 
-  it("keep a seed's media keys, which a seed may or may not have yet", () => {
-    const first = required(directorSeeds[0], "a committed seed");
-    const { musicKey, shots, ...barePlan } = first.plan;
-    const { storyboardKey, previewKey, ...bareShot } = required(shots[0], "a shot");
-    const bare = { ...first, plan: { ...barePlan, shots: [bareShot] } };
-    const media = {
-      ...first,
-      plan: {
-        ...barePlan,
-        musicKey: `seed-media/${first.videoId}/music.mp3`,
-        shots: [
-          {
-            ...bareShot,
-            storyboardKey: `seed-media/${first.videoId}/shot-0.png`,
-            previewKey: `seed-media/${first.videoId}/shot-0.mp4`,
-          },
-        ],
-      },
+  it("each carry their media: a storyboard and a preview per shot, and a track", () => {
+    for (const seed of directorSeeds) {
+      const at = `seed-media/${seed.videoId}`;
+      expect(seed.media?.music).toBe(`${at}/music.mp3`);
+      expect(seed.media?.shots).toEqual(
+        seed.plan.shots.map((_, index) => ({
+          storyboard: `${at}/shot-${index}.png`,
+          preview: `${at}/shot-${index}.mp4`,
+        })),
+      );
+      // The plan itself names no storage path: it's what the planner writes, and what
+      // every workspace's copy of it holds.
+      expect(JSON.stringify(seed.plan)).not.toContain("seed-media/");
+    }
+  });
+
+  it("may have no media yet, or only some of it", () => {
+    expect(directorSeedsSchema.safeParse(withMedia(undefined)).success).toBe(true);
+    const some = {
+      shots: media.shots.map((_, index) => (index === 0 ? { preview: `${base}/shot-0.mp4` } : {})),
     };
-    expect(directorSeedsSchema.parse([media, ...committed.slice(1)])[0]).toEqual(media);
-    const [parsed] = directorSeedsSchema.parse([bare, ...committed.slice(1)]);
-    expect(parsed?.plan).not.toHaveProperty("musicKey");
-    expect(parsed?.plan.shots[0]).not.toHaveProperty("storyboardKey");
-    expect(
-      directorSeedsSchema.safeParse([
-        { ...media, plan: { ...media.plan, musicKey: "" } },
-        ...committed.slice(1),
-      ]).success,
-    ).toBe(false);
+    expect(directorSeedsSchema.safeParse(withMedia(some)).success).toBe(true);
+  });
+
+  it("refuse a media key anywhere but its own seed, shot and kind", () => {
+    const shots = media.shots;
+    const swapShot = (index: number, shot: unknown) =>
+      withMedia({ ...media, shots: shots.map((each, at) => (at === index ? shot : each)) });
+    const refused = [
+      // Another object altogether: a member's take in another workspace.
+      withMedia({ ...media, music: "files/0199f3a0-0000-7000-8000-000000000001/take.webm" }),
+      // Another seed's media.
+      withMedia({ ...media, music: "seed-media/152Jy2c3XSM/music.mp3" }),
+      // The wrong kind of file for what it is.
+      withMedia({ ...media, music: `${base}/shot-0.mp4` }),
+      swapShot(0, { storyboard: `${base}/shot-0.mp4` }),
+      swapShot(0, { preview: `${base}/shot-0.png` }),
+      // Another shot's.
+      swapShot(1, { storyboard: `${base}/shot-0.png` }),
+      // A path that climbs out of the seed's folder.
+      swapShot(0, { storyboard: `${base}/../x/shot-0.png` }),
+      // Not one entry per shot.
+      withMedia({ ...media, shots: shots.slice(1) }),
+      withMedia({ ...media, extra: true }),
+    ];
+    for (const file of refused) {
+      expect(directorSeedsSchema.safeParse(file).success).toBe(false);
+    }
+  });
+
+  it("check every media key against the rule the AI service's scripts check it with", () => {
+    // director-seed-media.json is read by apps/ai/scripts/build_seeds.py too, so the
+    // file's writers and its reader agree on what a key may be.
+    const schema = JSON.stringify(z.toJSONSchema(directorSeedsSchema, { io: "input" }));
+    // (as a RegExp's source, which escapes the slashes)
+    expect(schema).toContain(JSON.stringify(new RegExp(mediaKeyRules.keyPattern).source));
+    expect(schema).toContain(`"maxLength":${mediaKeyRules.keyMaxLength}`);
   });
 
   it("refuse a file that isn't exactly 6 well-formed templates", () => {
-    const [first] = committed;
+    const [entry] = committed;
     expect(directorSeedsSchema.safeParse(committed.slice(1)).success).toBe(false);
     expect(
-      directorSeedsSchema.safeParse([{ ...first, videoId: "not a video" }, ...committed.slice(1)])
+      directorSeedsSchema.safeParse([{ ...entry, videoId: "not a video" }, ...committed.slice(1)])
         .success,
     ).toBe(false);
     expect(
-      directorSeedsSchema.safeParse([{ ...first, extra: true }, ...committed.slice(1)]).success,
+      directorSeedsSchema.safeParse([{ ...entry, extra: true }, ...committed.slice(1)]).success,
     ).toBe(false);
   });
 });

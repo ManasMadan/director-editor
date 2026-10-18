@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { directorSeeds } from "../director-seeds";
 import { required } from "../objects";
-import { directorPlanSchema } from "./director";
+import { directorPlanSchema, shotPlanSchema } from "./director";
 
 const seed = required(directorSeeds[0], "a committed seed");
 const [shot] = seed.plan.shots;
@@ -48,6 +48,16 @@ describe("a plan as the API serves it", () => {
     expect(plan.plan).not.toHaveProperty("musicKey");
     expect(plan.plan?.shots[0]).not.toHaveProperty("storyboardKey");
     expect(plan.plan?.shots[0]).not.toHaveProperty("previewKey");
+  });
+
+  it("names no storage path in a plan: a seed's media lives beside it, in the seed", () => {
+    const stored = shotPlanSchema.parse({
+      ...seed.plan,
+      musicKey: "files/someone/take.webm",
+      shots: [{ ...shot, storyboardKey: "files/someone/take.webm" }],
+    });
+
+    expect(JSON.stringify(stored)).not.toContain("files/");
   });
 
   it("serves a plan with no media as it always has", () => {
