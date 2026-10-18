@@ -840,18 +840,30 @@ describe("what the member does on screen", () => {
 
   it("keeps Director quiet while a take records, and has it speak first once it ends", async () => {
     const { fake, browser } = await liveCall();
+    browser.send({ type: "take", state: "countdown" });
+    browser.send({ type: "take", state: "cancelled" });
+    browser.send({ type: "take", state: "countdown" });
     browser.send({ type: "take", state: "recording" });
     browser.send({ type: "take", state: "recorded" });
     browser.send({ type: "take", state: "discarded" });
+    // Quiet from the first number of the 3-2-1, not only once it records.
     expect(await noteOf(fake, 2)).toEqual({
-      text: expect.stringContaining("Stay completely silent until it ends"),
+      text: expect.stringContaining("Go quiet now"),
       answer: false,
     });
     expect(await noteOf(fake, 3)).toEqual({
+      text: "[They called the countdown off: no take this time.]",
+      answer: false,
+    });
+    expect(await noteOf(fake, 5)).toEqual({
+      text: expect.stringContaining("Stay completely silent until it ends"),
+      answer: false,
+    });
+    expect(await noteOf(fake, 6)).toEqual({
       text: expect.stringContaining("Speak first"),
       answer: true,
     });
-    expect(await noteOf(fake, 4)).toEqual({
+    expect(await noteOf(fake, 7)).toEqual({
       text: "[They're going again on shot 1.]",
       answer: false,
     });

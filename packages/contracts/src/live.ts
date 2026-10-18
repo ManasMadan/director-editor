@@ -47,10 +47,10 @@ const LIVE_TOOL_RESULTS = ["done", "busy", "no_camera"] as const;
 export type LiveToolResult = (typeof LIVE_TOOL_RESULTS)[number];
 
 /**
- * Where a take is: recording, just recorded (the member is watching it back), or thrown
- * away to go again.
+ * Where a take is: counting in (the 3-2-1), the count called off, recording, just
+ * recorded (the member is watching it back), or thrown away to go again.
  */
-const LIVE_TAKE_STATES = ["recording", "recorded", "discarded"] as const;
+const LIVE_TAKE_STATES = ["countdown", "cancelled", "recording", "recorded", "discarded"] as const;
 export type LiveTakeState = (typeof LIVE_TAKE_STATES)[number];
 
 /**

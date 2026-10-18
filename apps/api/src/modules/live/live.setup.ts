@@ -122,6 +122,13 @@ export function cameraMessage(facing: Facing) {
 /** Where a take is: Director stays quiet while it records, and speaks first once it ends. */
 export function takeMessage(state: LiveTakeState, index: number) {
   switch (state) {
+    case "countdown":
+      return note(
+        `[They're counting in to a take of shot ${index + 1}. Go quiet now, and stay silent until the take ends.]`,
+        false,
+      );
+    case "cancelled":
+      return note("[They called the countdown off: no take this time.]", false);
     case "recording":
       return note(
         `[A take of shot ${index + 1} is recording now. Stay completely silent until it ends.]`,

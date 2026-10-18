@@ -28,10 +28,9 @@ describe("what the browser sends", () => {
       type: "camera",
       facing: "back",
     });
-    expect(liveClientMessage.parse({ type: "take", state: "recorded" })).toEqual({
-      type: "take",
-      state: "recorded",
-    });
+    for (const state of ["countdown", "cancelled", "recording", "recorded", "discarded"]) {
+      expect(liveClientMessage.parse({ type: "take", state })).toEqual({ type: "take", state });
+    }
     expect(liveClientMessage.safeParse({ type: "take", state: "say something" }).success).toBe(
       false,
     );
