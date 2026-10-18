@@ -119,7 +119,7 @@ export type LiveTakeState = (typeof LIVE_TAKE_STATES)[number];
  * Where the roll (the continuous recording) is: recording from Start shooting, paused
  * and resumed by the member's touch, done.
  */
-const LIVE_ROLL_STATES = ["recording", "paused", "resumed", "done"] as const;
+export const LIVE_ROLL_STATES = ["recording", "paused", "resumed", "done"] as const;
 export type LiveRollState = (typeof LIVE_ROLL_STATES)[number];
 
 /**

@@ -25,7 +25,13 @@ import { AppError, describeError } from "@repo/nest-common";
 import * as z from "zod";
 import type { GoogleAuth } from "./google-auth";
 import type { LiveLog } from "./live.relay";
-import { cameraMessage, functionDeclarations, systemInstruction, takeMessage } from "./live.setup";
+import {
+  cameraMessage,
+  functionDeclarations,
+  rollMessage,
+  systemInstruction,
+  takeMessage,
+} from "./live.setup";
 import { checkTool, TOOL_RESPONSES, toolNamed } from "./live.tools";
 
 /** Where the slower line's requests go, or null when Director live is off. */
@@ -113,6 +119,8 @@ function turnText(input: DirectorChatInput): { text: string; answer: boolean } {
       return noteOf(cameraMessage(turn.facing));
     case "take":
       return noteOf(takeMessage(turn.state, shotIndex));
+    case "roll":
+      return noteOf(rollMessage(turn.state));
   }
 }
 
@@ -123,6 +131,8 @@ function contextText(input: DirectorChatInput): string | null {
     ({ tool, result }) => `${tool}: ${JSON.stringify(TOOL_RESPONSES[result])}`,
   );
   const notes = [
+    // Every turn stands alone, so a recording roll is said each time, in Live's words.
+    input.rolling ? noteOf(rollMessage("recording")).text : null,
     said.length > 0 ? `[What was said last:\n${said.join("\n")}]` : null,
     answers.length > 0 ? `[What came of what you did last time:\n${answers.join("\n")}]` : null,
   ].filter((note) => note !== null);

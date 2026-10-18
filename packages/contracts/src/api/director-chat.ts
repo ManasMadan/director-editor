@@ -13,6 +13,7 @@ import * as z from "zod";
 import { videoIdSchema } from "../ids";
 import {
   facing,
+  LIVE_ROLL_STATES,
   LIVE_TAKE_STATES,
   LIVE_TEXT_MAX_LENGTH,
   LIVE_TOOL_RESULTS,
@@ -39,7 +40,8 @@ const shotIndex = z
 
 /**
  * What this turn is: the member said or typed something, the slower line just took over
- * (Director speaks first), they flipped the camera, or a take moved on.
+ * (Director speaks first), they flipped the camera, a take moved on, or the roll (the
+ * continuous recording) did.
  */
 const directorChatTurn = z.discriminatedUnion("kind", [
   z.object({
@@ -49,6 +51,7 @@ const directorChatTurn = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("start") }),
   z.object({ kind: z.literal("camera"), facing }),
   z.object({ kind: z.literal("take"), state: z.enum(LIVE_TAKE_STATES) }),
+  z.object({ kind: z.literal("roll"), state: z.enum(LIVE_ROLL_STATES) }),
 ]);
 export type DirectorChatTurn = z.infer<typeof directorChatTurn>;
 
@@ -69,6 +72,11 @@ const directorChatInput = z.object({
       }),
     )
     .max(DIRECTOR_CHAT_RECENT_LINES),
+  /**
+   * Whether the roll (the continuous recording) is recording now: Director then marks
+   * each attempt as it starts and ends, as on Live.
+   */
+  rolling: z.boolean().optional(),
   /** What came of the tool calls of Director's last reply, as the screen carried them out. */
   answers: z
     .array(z.object({ tool: z.enum(LIVE_TOOLS), result: z.enum(LIVE_TOOL_RESULTS) }))

@@ -27,6 +27,7 @@ import {
   type Facing,
   LIVE_VOICE,
   type LiveAdaptation,
+  type LiveRollState,
   type LiveTakeState,
   type LiveTool,
   type LiveToolResult,
@@ -62,6 +63,8 @@ const ENDING: readonly ErrorCode[] = [
 ];
 /** The takes Director answers on the slower line: a called-off count, and a take to watch back. */
 const ANSWERED_TAKES: readonly LiveTakeState[] = ["cancelled", "recorded"];
+/** Where the roll is recording, so Director marks attempts. */
+const ROLLING: readonly LiveRollState[] = ["recording", "resumed"];
 const FRAME_WIDTH = 640;
 const FRAME_QUALITY = 0.6;
 /** What `director.speak` reads in one go; a longer reply is still captioned in full. */
@@ -119,6 +122,10 @@ class SlowLine {
   readonly player: Player;
   private readonly dictation: Dictation | null;
   private readonly videoId: VideoId;
+  /** The roll is recording: Director marks attempts. */
+  rolling = false;
+  /** Paused: nothing of the member (dictation, the camera) goes to Director. */
+  private muted = false;
 
   constructor(private readonly target: SlowTarget) {
     this.shot = target.shot;
@@ -127,7 +134,7 @@ class SlowLine {
     this.player = createPlayer(liveAudio(), (speaking) => {
       target.events.onSpeaking(speaking);
       // Director's voice from the speaker would come back as the member's words.
-      this.dictation?.pause(speaking || this.held);
+      this.dictation?.pause(speaking || this.held || this.muted);
     });
     this.player.hold(this.held);
     this.dictation = startDictation({
@@ -147,7 +154,12 @@ class SlowLine {
   hold(on: boolean) {
     this.held = on;
     this.player.hold(on);
-    this.dictation?.pause(on);
+    this.dictation?.pause(on || this.muted);
+  }
+
+  mute(on: boolean) {
+    this.muted = on;
+    this.dictation?.pause(on || this.held);
   }
 
   answer(id: string, result: LiveToolResult) {
@@ -177,7 +189,8 @@ class SlowLine {
       videoId: this.videoId,
       shotIndex: this.shot,
       turn: next,
-      frame: await frameOf(this.target.video.current),
+      frame: this.muted ? undefined : await frameOf(this.target.video.current),
+      rolling: this.rolling,
       adaptations: this.target.adaptations(),
       recent: [...this.recent],
       answers: this.answers,
@@ -267,5 +280,12 @@ export function startSlowSession(target: SlowTarget) {
         line.turn({ kind: "take", state });
       }
     },
+    /** Where the roll is: Director marks attempts while it records, and hears a pause. */
+    roll: (state: LiveRollState) => {
+      line.rolling = ROLLING.includes(state);
+      line.turn({ kind: "roll", state });
+    },
+    /** Paused: nothing of the member goes to Director (dictation, the camera). */
+    mute: (on: boolean) => line.mute(on),
   };
 }
