@@ -610,7 +610,7 @@ class AssetMaker:
             "director-asset",
             filmmaker.model_name,
             most=self._per_clip,
-            monthly=self._monthly,
+            allowance=self._monthly,
         )
         if reservation is None or reservation.tokens < self._per_clip:
             if reservation is not None:

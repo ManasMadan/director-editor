@@ -102,8 +102,8 @@ describe("the YouTube uploader", () => {
     );
     await uploader().upload("token-1", { ...video, containsSyntheticMedia: true }, file());
     const [start] = received;
-    expect(JSON.parse(String(start?.body)).status).toMatchObject({
-      containsSyntheticMedia: true,
+    expect(JSON.parse(String(start?.body))).toMatchObject({
+      status: { containsSyntheticMedia: true },
     });
   });
 

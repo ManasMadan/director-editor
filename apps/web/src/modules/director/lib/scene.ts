@@ -41,7 +41,7 @@ export function editTime(clips: readonly Clip[], source: number): number {
 }
 
 /** An edit's span on the edit's clock. */
-export interface Span {
+interface Span {
   start: number;
   end: number;
 }
