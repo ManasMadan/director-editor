@@ -130,7 +130,9 @@ function ShutterFace({ mode }: { mode: ShutterMode }) {
     <span
       className={cn(
         "transition-all duration-300 ease-out",
-        mode === "stop" ? "size-7 rounded-lg bg-record" : "size-[60px] rounded-full",
+        // Radii in pixels, not rounded-full: a 9999px radius would stay round through the
+        // whole morph, and the stop only turned square in its last frame.
+        mode === "stop" ? "size-7 rounded-[5px] bg-record" : "size-[60px] rounded-[30px]",
         mode === "record" && "bg-record group-hover:scale-95",
         mode === "photo" && "bg-studio-foreground group-hover:scale-95",
       )}
