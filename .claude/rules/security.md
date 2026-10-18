@@ -19,7 +19,7 @@ paths:
 - Authorization is the procedure builder (`authed`, `inOrg` in
   `apps/api/src/rpc/procedures.ts`) plus the service's own check for anything finer
   (ownership). A new procedure on tenant data is at least `inOrg`. A workspace has one
-  member, its owner; a procedure that needs a role adds its builder here, with tests.
+  member, its owner; a procedure that needs a role adds its builder to `procedures.ts`, with tests.
 - A role is parsed with `parseOrgRole` from `@repo/contracts/roles`, never cast from the
   stored string (better-auth joins several with commas, and anything can be written
   there), and checked by an allow-list (`role === "owner"`), never by excluding one

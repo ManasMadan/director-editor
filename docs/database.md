@@ -87,8 +87,7 @@ A transaction that starts on non-tenant data and goes on to tenant rows calls
 inserted) and copying Director's seeded templates into it, in one transaction.
 
 `withUser` is the same for `app.user_id` (each per-user write is one statement today, so
-there is no per-user transaction helper). They take a branded id, an `OrgId`
-or a `UserId` from `@repo/contracts/ids` ([architecture.md](architecture.md#auth-and-tenancy)),
+there is no per-user transaction helper). Both take a branded id, an `OrgId` or a `UserId` from `@repo/contracts/ids` ([architecture.md](architecture.md#auth-and-tenancy)),
 so a user's id can't scope a workspace's query. The setting must be applied inside
 the transaction that runs the query, because PgBouncer (transaction mode) hands each
 transaction a different connection. `tenantTx` holds a connection until it ends, so it
