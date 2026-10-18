@@ -5,31 +5,46 @@ and the worker's dispatch."""
 
 import asyncio
 import base64
+import contextlib
 import os
+import socket
 import subprocess
 import sys
+import threading
 import time
 from collections.abc import Callable, Generator, Iterator
 from contextlib import AbstractContextManager, contextmanager
+from pathlib import Path
 from uuid import UUID, uuid4
 
 import httpx2 as httpx
+import jwt
 import pytest
 from fastapi.testclient import TestClient
+from httpx import AsyncClient as HttpClient
 from psycopg.types.json import Jsonb
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from app import analytics
 from app.db.models import DirectorPlan
-from app.director import PLANNER_RETRIES, Director, ReviewInterrupted, index_lock_key
+from app.director import (
+    Budgets,
+    Director,
+    ReviewInterrupted,
+    create_director_model,
+    index_lock_key,
+)
 from app.errors import AppError
-from app.queues import JobLike
+from app.indexing import PLANNER_RETRIES, IndexFailed, Watched
+from app.queues import DirectorQueue, JobLike
 from app.schemas import (
     DirectorCutOut,
     DirectorLibraryOut,
     DirectorPlanOut,
     DirectorTakeOut,
+    IndexRequest,
+    IndexResult,
     SceneCheck,
 )
 from app.settings import get_settings
@@ -37,18 +52,23 @@ from app.worker import director_processor
 from tests.fakes import (
     BIGQUERY_DATASET,
     BIGQUERY_PROJECT,
+    GCS_UPLOAD,
     GEMINI_MODEL,
     GEMINI_PATH,
     INSERT_ALL,
+    MEDIA_BUCKET,
     Fake,
+    Identity,
     Reply,
     bigquery_client,
     bigquery_inserted,
+    gcs_uploaded,
     gemini_error,
     gemini_output,
     inserted_rows,
     serve,
     serve_files,
+    serve_identity,
 )
 from tests.support import (
     ENV,
@@ -393,12 +413,34 @@ def test_indexing_a_short_queues_its_analysis_once(client: TestClient) -> None:
     assert published(events) == []
 
 
+def stage_of(org: UUID, plan_id: UUID) -> object:
+    """The plan's stage as stored right now (read from a fake's handler, mid-call)."""
+    [(stage,)] = as_org(org, "SELECT stage FROM ai.director_plan WHERE id = %s", (plan_id,))
+    return stage
+
+
 def test_the_analysis_watches_the_short_and_stores_the_plan(
     client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
 ) -> None:
     org, user = new_org()
-    plan = ready_plan(client, org, user)
+    queued = index_plan(client, org, user)
+    stages: list[object] = []
+
+    def watched(sent: bytes) -> Reply:
+        stages.append(stage_of(org, queued.id))
+        return gemini_output(PLAN)(sent)
+
+    gemini[1][GEMINI_PATH] = watched
+    events = subscribe(f"realtime:org:{org}")
+    on_app_loop(client, lambda: director().analyze(org, queued.id, user))
+    plan = plan_of(client, org, user)
+    # Each stage is stored and announced: watching while Gemini watches the short, then
+    # writing once it has answered, then ready.
+    assert stages == ["watching"]
+    assert published(events) == [{"type": "director.changed"}] * 3
     assert (plan.status, plan.stage) == ("ready", "ready")
+    # No MEDIA_BUCKET here: the original audio isn't captured.
+    assert (plan.audioStatus, plan.audioKey) == ("none", None)
     assert plan.model == GEMINI_MODEL
     assert plan.plan is not None
     assert [shot.kind for shot in plan.plan.shots] == ["video", "photo"]
@@ -567,6 +609,64 @@ def test_indexing_on_vertex_addresses_the_model_by_its_resource_name(
     assert GEMINI_PATH not in paths
 
 
+def fake_yt_dlp(directory: Path, *, exit_code: int = 0) -> str:
+    """A PATH with a stand-in `yt-dlp` first: it writes the audio file where it's told to
+    (-o), as the real one would, or exits with `exit_code` without writing anything."""
+    script = directory / "yt-dlp"
+    script.write_text(
+        f"#!{sys.executable}\n"
+        "import pathlib, sys\n"
+        f"if {exit_code}:\n"
+        f"    sys.exit({exit_code})\n"
+        "args = sys.argv[1:]\n"
+        'out = args[args.index("-o") + 1].replace("%(ext)s", "m4a")\n'
+        'pathlib.Path(out).write_bytes(b"original audio")\n'
+    )
+    script.chmod(0o755)
+    return f"{directory}{os.pathsep}{os.environ['PATH']}"
+
+
+def test_the_short_s_audio_is_captured_while_the_plan_is_written(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, extra_env: dict[str, str]
+) -> None:
+    stages: list[object] = []
+    handlers: dict[str, Callable[[bytes], Reply]] = {}
+    with serve(handlers) as storage:
+        monkeypatch.setenv("PATH", fake_yt_dlp(tmp_path))
+        monkeypatch.setenv("STORAGE_EMULATOR_HOST", storage.url)
+        with _client_with_env(monkeypatch, {**extra_env, "MEDIA_BUCKET": MEDIA_BUCKET}) as test:
+            org, user = new_org()
+            queued = index_plan(test, org, user)
+
+            def uploaded(sent: bytes) -> Reply:
+                stages.append(stage_of(org, queued.id))
+                return gcs_uploaded(sent)
+
+            handlers[GCS_UPLOAD] = uploaded
+            on_app_loop(test, lambda: director().analyze(org, queued.id, user))
+            plan = plan_of(test, org, user)
+    # After Gemini has answered: the plan is being written up.
+    assert stages == ["writing"]
+    assert (plan.status, plan.audioStatus, plan.audioKey) == (
+        "ready",
+        "ready",
+        f"audio/{VIDEO}.m4a",
+    )
+    [(_, sent)] = storage.received
+    assert b'"name": "audio/dQw4w9WgXcQ.m4a"' in sent
+    assert b"original audio" in sent
+
+
+def test_audio_that_can_t_be_fetched_still_leaves_a_ready_plan(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, extra_env: dict[str, str]
+) -> None:
+    monkeypatch.setenv("PATH", fake_yt_dlp(tmp_path, exit_code=1))
+    with _client_with_env(monkeypatch, {**extra_env, "MEDIA_BUCKET": MEDIA_BUCKET}) as test:
+        org, user = new_org()
+        plan = ready_plan(test, org, user)
+    assert (plan.status, plan.audioStatus, plan.audioKey) == ("ready", "failed", None)
+
+
 def test_a_plan_nobody_asked_for_is_not_found(client: TestClient) -> None:
     org, user = new_org()
     response = client.get(f"/v1/director/plans/{VIDEO}", headers=headers(org, user))
@@ -583,13 +683,36 @@ def test_another_workspace_never_sees_a_plan(client: TestClient) -> None:
     assert error_of(response).code == "DIRECTOR_PLAN_NOT_FOUND"
 
 
+@pytest.mark.parametrize(
+    ("status", "reason", "message"),
+    [
+        (403, "PERMISSION_DENIED", "The video is private."),
+        (403, "PERMISSION_DENIED", "The YouTube video is age-restricted."),
+        (404, "NOT_FOUND", "The video was removed or does not exist."),
+        (400, "INVALID_ARGUMENT", "Cannot fetch content from the provided file_uri."),
+    ],
+    ids=["private", "age-restricted", "removed", "unreadable url"],
+)
 def test_a_video_gemini_may_not_watch_fails_without_retrying(
-    client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+    client: TestClient,
+    gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]],
+    status: int,
+    reason: str,
+    message: str,
 ) -> None:
-    gemini[1][GEMINI_PATH] = gemini_error(403, "PERMISSION_DENIED", "The video is private.")
+    """[RF 1] What YouTube's API still lists but Gemini can't watch (private, removed,
+    age-restricted) fails with the reason the member is shown for a link that's no good."""
+    gemini[1][GEMINI_PATH] = gemini_error(status, reason, message)
     org, user = new_org()
+    events = subscribe(f"realtime:org:{org}")
     plan = ready_plan(client, org, user)
-    assert (plan.status, plan.error) == ("failed", "DIRECTOR_VIDEO_UNREADABLE")
+    assert (plan.status, plan.stage, plan.error) == (
+        "failed",
+        "failed",
+        "DIRECTOR_VIDEO_UNAVAILABLE",
+    )
+    # Announced as it starts watching and as it fails.
+    assert published(events)[-2:] == [{"type": "director.changed"}] * 2
     # About the video, not the model: neither retried nor sent to the fallback.
     assert len(gemini[0].received) == 1
 
@@ -666,6 +789,308 @@ def test_a_short_that_needs_more_than_a_plan_may_spend_fails_it(
     assert usage(org, "director-plan") == 10_000_000
 
 
+# ------------------------------------------------------------------------------- the indexer
+
+REMOTE_USAGE = {"inputTokens": 4_000, "outputTokens": 500}
+# DIRECTOR_TOKENS_PER_PLAN in the tests (.env.example's): what a plan reserves.
+PLAN_TOKENS = 200_000
+INDEXED: dict[str, object] = {
+    "plan": PLAN,
+    "model": "gemini-on-cloud-run",
+    "audio": {"status": "ready", "objectKey": f"audio/{VIDEO}.m4a"},
+    "usage": REMOTE_USAGE,
+}
+
+
+def error_body(code: str, status: int, params: dict[str, object]) -> dict[str, object]:
+    """An error as this service answers one (app/errors.py)."""
+    return {
+        "defined": True,
+        "code": code,
+        "status": status,
+        "message": code,
+        "data": {"params": params},
+    }
+
+
+@pytest.fixture
+def identity(monkeypatch: pytest.MonkeyPatch) -> Iterator[Identity]:
+    """The worker's metadata server, for its ID tokens."""
+    with serve_identity() as found:
+        monkeypatch.setenv("GCE_METADATA_HOST", found.host)
+        yield found
+
+
+@contextmanager
+def _with_indexer(
+    monkeypatch: pytest.MonkeyPatch, extra_env: dict[str, str]
+) -> Generator[tuple[TestClient, Fake, dict[str, Callable[[bytes], Reply]]]]:
+    """A client whose plans the Cloud Run indexer writes (a stand-in at INDEXER_URL)."""
+    handlers: dict[str, Callable[[bytes], Reply]] = {}
+    with (
+        serve(handlers) as remote,
+        _client_with_env(monkeypatch, {**extra_env, "INDEXER_URL": remote.url}) as test_client,
+    ):
+        yield test_client, remote, handlers
+
+
+_CLAIMS = TypeAdapter(dict[str, object])
+
+
+def test_with_an_indexer_url_the_cloud_run_indexer_writes_the_plan(
+    monkeypatch: pytest.MonkeyPatch,
+    extra_env: dict[str, str],
+    identity: Identity,
+    gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]],
+) -> None:
+    stages: list[object] = []
+    with _with_indexer(monkeypatch, extra_env) as (test_client, remote, handlers):
+        org, user = new_org()
+        queued = index_plan(test_client, org, user)
+
+        def indexed(_sent: bytes) -> Reply:
+            stages.append(stage_of(org, queued.id))
+            return 200, INDEXED
+
+        handlers["/v1/index"] = indexed
+        events = subscribe(f"realtime:org:{org}")
+        on_app_loop(test_client, lambda: director().analyze(org, queued.id, user))
+        plan = plan_of(test_client, org, user)
+
+    [(path, sent)] = remote.received
+    assert path == "/v1/index"
+    assert _CLAIMS.validate_json(sent) == {
+        "videoId": VIDEO,
+        "orgId": str(org),
+        "planId": str(queued.id),
+        "maxTokens": 200_000,
+    }
+    # An ID token from the worker's own metadata server, for the indexer's URL.
+    [authorization] = remote.authorizations
+    assert authorization is not None
+    assert authorization.startswith("Bearer ")
+    claims = _CLAIMS.validate_python(
+        jwt.decode(authorization.removeprefix("Bearer "), options={"verify_signature": False})
+    )
+    assert (claims["aud"], claims["email"]) == (remote.url, identity.service_account)
+    assert stages == ["watching"]
+    assert published(events) == [{"type": "director.changed"}] * 3
+    assert (plan.status, plan.stage, plan.model) == ("ready", "ready", "gemini-on-cloud-run")
+    assert (plan.audioStatus, plan.audioKey) == ("ready", f"audio/{VIDEO}.m4a")
+    assert plan.plan is not None
+    assert plan.plan.title == "Get ready with me"
+    # What the indexer says the run used is what's counted; Gemini isn't called here.
+    assert usage(org, "director-plan") == 4_500
+    assert gemini[0].received == []
+
+
+@pytest.mark.parametrize(
+    ("status", "reply", "code", "used"),
+    [
+        (
+            422,
+            error_body("DIRECTOR_VIDEO_UNAVAILABLE", 422, {"inputTokens": 40, "outputTokens": 2}),
+            "DIRECTOR_VIDEO_UNAVAILABLE",
+            42,
+        ),
+        (
+            422,
+            error_body("DIRECTOR_ANALYSIS_FAILED", 422, {"inputTokens": 9_000, "outputTokens": 1}),
+            "DIRECTOR_ANALYSIS_FAILED",
+            9_001,
+        ),
+        (401, error_body("UNAUTHENTICATED", 401, {}), "DIRECTOR_ANALYSIS_FAILED", 0),
+        # Cloud Run's own refusal (IAM), before the indexer: not this service's error shape.
+        (403, {"error": "Forbidden"}, "DIRECTOR_ANALYSIS_FAILED", 0),
+        # What it used doesn't parse (another version of the indexer): the whole
+        # reservation counts, since the run's real usage is unknown.
+        (
+            422,
+            error_body("DIRECTOR_VIDEO_UNAVAILABLE", 422, {"inputTokens": "many"}),
+            "DIRECTOR_VIDEO_UNAVAILABLE",
+            PLAN_TOKENS,
+        ),
+        # A success that isn't an IndexResult: the same, and not worth a retry either.
+        (200, {}, "DIRECTOR_ANALYSIS_FAILED", PLAN_TOKENS),
+    ],
+    ids=[
+        "video unavailable",
+        "analysis failed",
+        "token refused",
+        "not an invoker",
+        "usage unreadable",
+        "result unreadable",
+    ],
+)
+def test_a_refusal_from_the_indexer_fails_the_plan_without_a_retry(
+    monkeypatch: pytest.MonkeyPatch,
+    extra_env: dict[str, str],
+    identity: Identity,
+    status: int,
+    reply: dict[str, object],
+    code: str,
+    used: int,
+) -> None:
+    with _with_indexer(monkeypatch, extra_env) as (test_client, _, handlers):
+        handlers["/v1/index"] = lambda _sent: (status, reply)
+        org, user = new_org()
+        plan = index_plan(test_client, org, user)
+        # Not the last attempt, and still not left for a retry: it would fail the same way.
+        on_app_loop(test_client, lambda: director().analyze(org, plan.id, user, final=False))
+        failed = plan_of(test_client, org, user)
+    assert (failed.status, failed.stage, failed.error) == ("failed", "failed", code)
+    assert usage(org, "director-plan") == used
+
+
+@pytest.mark.parametrize(
+    ("status", "reply", "used"),
+    [
+        (
+            502,
+            error_body(
+                "UPSTREAM_UNAVAILABLE",
+                502,
+                {"service": "gemini", "inputTokens": 7, "outputTokens": 0},
+            ),
+            7,
+        ),
+        # Cloud Run's own 503 or 504 may come after the indexer started (or finished) a
+        # run: its usage is unknown, so the whole reservation counts.
+        (503, {"error": "Service Unavailable"}, PLAN_TOKENS),
+        # Refused before reaching the indexer: nothing ran.
+        (429, {"error": "Too Many Requests"}, 0),
+    ],
+    ids=["gemini down", "cloud run down", "cloud run busy"],
+)
+def test_an_indexer_outage_is_retried_then_fails_the_plan(
+    monkeypatch: pytest.MonkeyPatch,
+    extra_env: dict[str, str],
+    identity: Identity,
+    status: int,
+    reply: dict[str, object],
+    used: int,
+) -> None:
+    with _with_indexer(monkeypatch, extra_env) as (test_client, _, handlers):
+        handlers["/v1/index"] = lambda _sent: (status, reply)
+        org, user = new_org()
+        plan = index_plan(test_client, org, user)
+        with pytest.raises(IndexFailed):
+            on_app_loop(test_client, lambda: director().analyze(org, plan.id, user, final=False))
+        assert plan_of(test_client, org, user).status == "analyzing"
+        with pytest.raises(IndexFailed):
+            on_app_loop(test_client, lambda: director().analyze(org, plan.id, user))
+        failed = plan_of(test_client, org, user)
+    assert (failed.status, failed.error) == ("failed", "DIRECTOR_ANALYSIS_FAILED")
+    assert usage(org, "director-plan") == used * 2
+
+
+def test_an_indexer_or_metadata_server_that_can_t_be_reached_is_retried(
+    monkeypatch: pytest.MonkeyPatch, extra_env: dict[str, str], identity: Identity
+) -> None:
+    # Nothing listens on port 9: the connection is refused.
+    with _client_with_env(monkeypatch, {**extra_env, "INDEXER_URL": "http://127.0.0.1:9"}) as test:
+        org, user = new_org()
+        plan = index_plan(test, org, user)
+        with pytest.raises(IndexFailed):
+            on_app_loop(test, lambda: director().analyze(org, plan.id, user, final=False))
+        monkeypatch.setenv("GCE_METADATA_HOST", "127.0.0.1:9")
+        with pytest.raises(IndexFailed):
+            on_app_loop(test, lambda: director().analyze(org, plan.id, user, final=False))
+        assert plan_of(test, org, user).status == "analyzing"
+    # Neither request reached the indexer: nothing ran, nothing counts.
+    assert usage(org, "director-plan") == 0
+
+
+@contextmanager
+def _hanging_up() -> Generator[str]:
+    """An indexer that reads the request and closes the connection without answering (it
+    crashed mid-run): what it did, and used, is unknown."""
+    listener = socket.create_server(("127.0.0.1", 0))
+
+    def accept() -> None:
+        with contextlib.suppress(OSError):
+            while True:
+                with listener.accept()[0] as connection:
+                    _ = connection.recv(65536)
+
+    threading.Thread(target=accept, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{listener.getsockname()[1]}"
+    finally:
+        listener.close()
+
+
+def test_an_indexer_that_hangs_up_mid_run_counts_the_whole_reservation(
+    monkeypatch: pytest.MonkeyPatch, extra_env: dict[str, str], identity: Identity
+) -> None:
+    with (
+        _hanging_up() as url,
+        _client_with_env(monkeypatch, {**extra_env, "INDEXER_URL": url}) as test,
+    ):
+        org, user = new_org()
+        plan = index_plan(test, org, user)
+        with pytest.raises(IndexFailed):
+            on_app_loop(test, lambda: director().analyze(org, plan.id, user, final=False))
+        assert plan_of(test, org, user).status == "analyzing"
+    assert usage(org, "director-plan") == PLAN_TOKENS
+
+
+class _Broken:
+    """An indexer with a bug: it gets as far as Gemini's answer, then fails in a way no
+    IndexFailed describes (the kind of thing a database error in a stage update is)."""
+
+    async def index(self, request: IndexRequest, *, watched: Watched) -> IndexResult:
+        await watched()
+        raise RuntimeError(f"a bug indexing {request.videoId}")
+
+
+def _broken_director() -> Director:
+    """The service's own Director, its indexer swapped for one with a bug."""
+    from app.main import services
+
+    settings = get_settings()
+    model = create_director_model(settings)
+    assert model is not None
+    return Director(
+        model,
+        GEMINI_MODEL,
+        _Broken(),
+        GEMINI_MODEL,
+        Budgets(
+            monthly=2_000_000, per_plan=PLAN_TOKENS, per_scene_check=12_000, per_review=120_000
+        ),
+        DirectorQueue(str(settings.redis_url)),
+        services().redis,
+        HttpClient(),
+        None,
+    )
+
+
+def test_an_unexpected_failure_fails_the_plan_on_the_last_attempt(client: TestClient) -> None:
+    """Whatever goes wrong, a plan never stays `analyzing` (still counting as the member's
+    one short) once its last attempt is over."""
+    org, user = new_org()
+    plan = index_plan(client, org, user)
+    broken = _broken_director()
+    with pytest.raises(RuntimeError, match="a bug"):
+        on_app_loop(client, lambda: broken.analyze(org, plan.id, user, final=False))
+    assert (plan_of(client, org, user).status, plan_of(client, org, user).stage) == (
+        "analyzing",
+        "writing",
+    )
+    with pytest.raises(RuntimeError, match="a bug"):
+        on_app_loop(client, lambda: broken.analyze(org, plan.id, user))
+    failed = plan_of(client, org, user)
+    assert (failed.status, failed.stage, failed.error) == (
+        "failed",
+        "failed",
+        "DIRECTOR_ANALYSIS_FAILED",
+    )
+    # Its usage unknown, each attempt counts its whole reservation.
+    assert usage(org, "director-plan") == 2 * PLAN_TOKENS
+    assert library(client, org, user).indexUsed is False
+
+
 # ------------------------------------------------------------------------------- the library
 
 OTHER = "Other_Short"
@@ -686,10 +1111,16 @@ def test_a_member_indexes_one_short_of_their_own(client: TestClient) -> None:
 def test_a_failed_index_doesn_t_count(
     client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
 ) -> None:
+    """[RF 1] A short Gemini can't watch fails with its reason and leaves the member's
+    one index unused."""
     gemini[1][GEMINI_PATH] = gemini_error(403, "PERMISSION_DENIED", "The video is private.")
     org, user = new_org()
     failed = ready_plan(client, org, user)
-    assert (failed.status, failed.stage) == ("failed", "failed")
+    assert (failed.status, failed.stage, failed.error) == (
+        "failed",
+        "failed",
+        "DIRECTOR_VIDEO_UNAVAILABLE",
+    )
     assert library(client, org, user).indexUsed is False
     _ = index_plan(client, org, user, OTHER)
     # Trying the failed one again would be a second short of their own.
@@ -1038,6 +1469,40 @@ def bigquery(monkeypatch: pytest.MonkeyPatch) -> Iterator[Fake]:
         yield fake
 
 
+def events_of(bigquery: Fake, kind: str) -> list[dict[str, object]]:
+    """The rows of one kind the stand-in BigQuery got, once there are some: they're
+    written in the background, after the work that records them has returned."""
+    deadline = time.monotonic() + 10
+    rows: list[dict[str, object]] = []
+    while time.monotonic() < deadline and not rows:
+        rows = [row for row in inserted_rows(bigquery) if row["kind"] == kind]
+        time.sleep(0.05)
+    return rows
+
+
+def test_a_ready_plan_is_counted_as_indexed_and_a_failed_one_is_not(
+    bigquery: Fake,
+    client: TestClient,
+    gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]],
+) -> None:
+    org, user = new_org()
+    gemini[1][GEMINI_PATH] = gemini_error(403, "PERMISSION_DENIED", "The video is private.")
+    _ = ready_plan(client, org, user)
+    gemini[1][GEMINI_PATH] = gemini_output(PLAN)
+    retried = index_plan(client, org, user)
+    # The job's user is optional; the event names who asked for the plan.
+    on_app_loop(client, lambda: director().analyze(org, retried.id, None))
+    [row] = events_of(bigquery, "indexed")
+    assert {key: value for key, value in row.items() if key != "time"} == {
+        "kind": "indexed",
+        "user_id": str(user),
+        "template_id": None,
+        "video_id": VIDEO,
+        "score": None,
+        "detail": '{"model": "gemini-test", "audio": "none"}',
+    }
+
+
 def test_a_reviewed_take_is_counted_with_its_score_and_a_failed_one_is_not(
     bigquery: Fake,
     client: TestClient,
@@ -1054,11 +1519,7 @@ def test_a_reviewed_take_is_counted_with_its_score_and_a_failed_one_is_not(
         take = add_take(client, org, user, f"{files.url}/take.webm")
         # The job's user is optional; the event names the take's own.
         on_app_loop(client, lambda: director().review(org, take.id, f"{files.url}/take.webm", None))
-    # Written in the background, after the review has already returned.
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline and not inserted_rows(bigquery):
-        time.sleep(0.05)
-    [row] = inserted_rows(bigquery)
+    [row] = events_of(bigquery, "take_reviewed")
     assert {key: value for key, value in row.items() if key != "time"} == {
         "kind": "take_reviewed",
         "user_id": str(user),

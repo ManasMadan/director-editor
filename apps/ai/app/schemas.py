@@ -47,6 +47,9 @@ MAX_SCRIPT_LINES = 20
 MAX_POSE_KEYPOINTS = 13
 # A camera frame for a scene check, base64: a 640-pixel JPEG is 40-120 kB.
 MAX_FRAME_BASE64 = 400_000
+# The most one plan may reserve (DIRECTOR_TOKENS_PER_PLAN's ceiling): a whole workspace's
+# default monthly allowance, far past what a three-minute short needs.
+MAX_PLAN_TOKENS = 2_000_000
 
 type KeypointName = Literal[
     "nose",
@@ -280,6 +283,43 @@ class DirectorPlanOut(BaseModel):
 class DirectorLibraryOut(BaseModel):
     templates: list[DirectorPlanOut] = Field(description="The workspace's plans, newest first.")
     indexUsed: bool = Field(description="The caller has indexed their one short of their own.")
+
+
+# ------------------------------------------------------------------------- the indexer
+# The Cloud Run indexer's request and answer (app/indexer.py), which the worker sends and
+# reads (app/indexing.py's RemoteIndexer). Both ends are this service, deployed from the
+# same image, so they change together; neither is in openapi.json, which is apps/api's.
+
+
+class IndexRequest(BaseModel):
+    model_config = REQUEST
+
+    videoId: str = Field(pattern=VIDEO_ID_PATTERN)
+    # For the logs: the indexer reads and writes no database.
+    orgId: UUID = Field(strict=False)
+    planId: UUID = Field(strict=False)
+    maxTokens: int = Field(
+        ge=1,
+        le=MAX_PLAN_TOKENS,
+        description="The run's token cap: what the worker reserved for it.",
+    )
+
+
+class TokenUsage(BaseModel):
+    inputTokens: int = Field(ge=0)
+    outputTokens: int = Field(ge=0)
+
+
+class AudioCapture(BaseModel):
+    status: AudioStatus = Field(description='"none" when no MEDIA_BUCKET is configured.')
+    objectKey: str | None = Field(max_length=200, description="Its key in MEDIA_BUCKET.")
+
+
+class IndexResult(BaseModel):
+    plan: ShotPlan
+    model: str = Field(min_length=1, max_length=200, description="The model that wrote it.")
+    audio: AudioCapture
+    usage: TokenUsage = Field(description="What the run used, for the worker to count.")
 
 
 class SceneCheckRequest(BaseModel):

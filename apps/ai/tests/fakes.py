@@ -3,12 +3,19 @@ under test talks to them exactly as it would to the real thing (the same idea as
 packages/fake-google on the TypeScript side)."""
 
 import json
+import secrets
 import threading
+import time
 from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs
 
+import jwt
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from google.api_core.client_options import ClientOptions
 from google.auth.credentials import AnonymousCredentials
 from google.cloud.bigquery import Client as BigQueryClient
@@ -23,6 +30,8 @@ class Fake:
 
     url: str
     received: list[tuple[str, bytes]] = field(default_factory=list[tuple[str, bytes]])
+    # Each request's Authorization header (None when it had none), in the same order.
+    authorizations: list[str | None] = field(default_factory=list[str | None])
 
 
 @contextmanager
@@ -33,6 +42,7 @@ def serve(handlers: dict[str, Callable[[bytes], Reply]]) -> Generator[Fake]:
         def do_POST(self) -> None:
             body = self.rfile.read(int(self.headers.get("content-length") or 0))
             fake.received.append((self.path, body))
+            fake.authorizations.append(self.headers.get("authorization"))
             handler = handlers.get(self.path)
             status, reply = handler(body) if handler else (404, {"error": "not found"})
             payload = json.dumps(reply).encode()
@@ -180,5 +190,135 @@ def serve_files(files: dict[str, tuple[str, bytes]]) -> Generator[Fake]:
     thread.start()
     try:
         yield fake
+    finally:
+        server.shutdown()
+
+
+MEDIA_BUCKET = "director-media-test"
+# A multipart upload, as google-cloud-storage sends one for a small file (with
+# STORAGE_EMULATOR_HOST pointing it at the fake, under anonymous credentials).
+GCS_UPLOAD = f"/upload/storage/v1/b/{MEDIA_BUCKET}/o?uploadType=multipart"
+
+
+def gcs_uploaded(_body: bytes) -> Reply:
+    """Cloud Storage's JSON API accepting an upload (the object resource it answers with)."""
+    return 200, {"bucket": MEDIA_BUCKET, "name": "uploaded", "generation": "1"}
+
+
+# ---------------------------------------------------------------------- Google identity
+# The GCE metadata server (what Cloud Run and the VM hand ID and access tokens out from)
+# and Google's certificate endpoint for verifying those ID tokens, served by one local
+# server: the metadata server's paths need the `Metadata-Flavor: Google` header, as the
+# real one's do, and the certificates are the public half of the key it signs with.
+
+SERVICE_ACCOUNT = "director-vm@test-project.iam.gserviceaccount.com"
+ACCESS_TOKEN = secrets.token_urlsafe(16)
+CERTS_PATH = "/oauth2/v1/certs"
+GOOGLE_ISSUER = "https://accounts.google.com"
+_ACCOUNT = "/computeMetadata/v1/instance/service-accounts/default"
+
+
+@dataclass
+class Identity:
+    """The running stand-in: `url` for the certificates, `host` (host:port) for
+    GCE_METADATA_HOST, `requests` every path it was asked for."""
+
+    url: str
+    host: str
+    service_account: str
+    key: RSAPrivateKey
+    key_id: str = "fake-key"
+    requests: list[str] = field(default_factory=list[str])
+
+    def token(self, audience: str, **claims: object) -> str:
+        """An ID token as the metadata server signs one for `audience` (format=full),
+        with any claim replaced or added."""
+        now = int(time.time())
+        payload: dict[str, object] = {
+            "iss": GOOGLE_ISSUER,
+            "aud": audience,
+            "azp": "1234567890",
+            "sub": "1234567890",
+            "email": self.service_account,
+            "email_verified": True,
+            "iat": now,
+            "exp": now + 3600,
+        }
+        return jwt.encode({**payload, **claims}, self.key, "RS256", {"kid": self.key_id})
+
+
+type _Route = Callable[[str], tuple[str, bytes]]
+
+
+def _metadata_routes(identity: Identity) -> dict[str, _Route]:
+    """Each metadata path's content type and body, from its query string."""
+
+    def text(value: str) -> tuple[str, bytes]:
+        return "text/plain", value.encode()
+
+    def data(value: object) -> tuple[str, bytes]:
+        return "application/json", json.dumps(value).encode()
+
+    return {
+        # google-auth's check that it runs on Google Cloud: any answer with the header.
+        "/": lambda _query: text("ok"),
+        "/computeMetadata/v1/project/project-id": lambda _query: text("test-project"),
+        f"{_ACCOUNT}/": lambda _query: data(
+            {"email": identity.service_account, "aliases": ["default"], "scopes": []}
+        ),
+        f"{_ACCOUNT}/token": lambda _query: data(
+            {"access_token": ACCESS_TOKEN, "expires_in": 3599, "token_type": "Bearer"}
+        ),
+        f"{_ACCOUNT}/identity": lambda query: text(identity.token(parse_qs(query)["audience"][0])),
+    }
+
+
+# A status, then the body's content type and bytes.
+type _Answer = tuple[int, tuple[str, bytes]]
+
+
+def _identity_reply(identity: Identity, path: str, query: str, flavor: str | None) -> _Answer:
+    if path == CERTS_PATH:
+        public = identity.key.public_key().public_bytes(
+            Encoding.PEM, PublicFormat.SubjectPublicKeyInfo
+        )
+        return 200, ("application/json", json.dumps({identity.key_id: public.decode()}).encode())
+    route = _metadata_routes(identity).get(path)
+    if route is None:
+        return 404, ("text/plain", b"not found")
+    if path != "/" and flavor != "Google":
+        return 403, ("text/plain", b"missing Metadata-Flavor: Google")
+    return 200, route(query)
+
+
+@contextmanager
+def serve_identity(service_account: str = SERVICE_ACCOUNT) -> Generator[Identity]:
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    identity = Identity(url="", host="", service_account=service_account, key=key)
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            identity.requests.append(self.path)
+            path, _, query = self.path.partition("?")
+            status, (content_type, payload) = _identity_reply(
+                identity, path, query, self.headers.get("metadata-flavor")
+            )
+            self.send_response(status)
+            self.send_header("metadata-flavor", "Google")
+            self.send_header("content-type", content_type)
+            self.send_header("content-length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, format: str, *args: object) -> None:
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    identity.host = f"127.0.0.1:{server.server_address[1]}"
+    identity.url = f"http://{identity.host}"
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield identity
     finally:
         server.shutdown()

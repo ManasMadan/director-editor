@@ -1,6 +1,6 @@
 """Builds packages/contracts/src/director-seeds.json: the plan every one of the 6 seed
 Shorts (app/seeds/seeds.json) gets, indexed for real with Gemini on Vertex AI, the same way the
-plan job indexes a member's own short (`app.director.index_short`). Run from the repo
+plan job indexes a member's own short (`app.indexing.index_short`). Run from the repo
 root whenever the plan schema changes:
 
     bun run --filter @repo/ai seeds:build
@@ -28,7 +28,8 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 from pydantic_ai.usage import RunUsage, UsageLimits
 
-from app.director import create_index_model, create_planner_agent, index_short
+from app.director import create_index_model, create_planner_agent
+from app.indexing import index_short
 from app.log import configure_logging, log
 from app.schemas import VIDEO_ID_PATTERN, ShotPlan
 from app.settings import Settings, get_settings

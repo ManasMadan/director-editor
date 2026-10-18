@@ -57,7 +57,11 @@ to its logs. The models ignore fields they don't know, so
 a newer producer can add an optional field without an older worker rejecting the job,
 and the job names are a generated `Literal`: a job added in `packages/jobs` is a type
 error in the worker until it's handled. A failure throws, and BullMQ retries with the same backoff the TypeScript
-side uses (the queue settings are generated from `packages/jobs`). It publishes a live
+side uses (the queue settings are generated from `packages/jobs`). A plan job's indexing
+(`app/indexing.py`) runs in the worker, or, with `INDEXER_URL` set, on the private Cloud
+Run indexer (`app/indexer.py`, the same image; [deploy.md](deploy.md#the-cloud-run-indexer)),
+which the worker calls with an ID token from the metadata server (`app/google_auth.py`).
+It publishes a live
 nudge to the organization when a plan or a take changes, so the web app refreshes
 (`app/realtime.py`: the message models and the channel's Redis name are generated from
 `packages/contracts/src/realtime.ts`, so both sides agree on them).

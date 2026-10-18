@@ -1,11 +1,12 @@
-"""Downloading a short's audio track with yt-dlp, for a later task to index.
+"""Capturing a short's original audio with yt-dlp, while it's indexed (app/indexing.py's
+LocalIndexer, once the plan is written).
 
 yt-dlp runs as a subprocess, behind an injectable runner so tests fake it instead of
 reaching the network or a real binary; what it extracts is uploaded to Cloud Storage with
 Application Default Credentials (no key file), behind an injectable uploader for the same
-reason. Not wired into indexing yet (a later task does that): this is only the capture.
-Any failure (yt-dlp can't reach the video, no audio comes out, the upload fails) is
-logged and swallowed, never raised: a short with no audio capture still gets its plan.
+reason. Any failure (yt-dlp can't reach the video, hangs past AUDIO_TIMEOUT_SECONDS, no
+audio comes out, the upload fails) is logged and swallowed, never raised: a short with
+no audio capture still gets its plan.
 """
 
 import asyncio
@@ -22,14 +23,25 @@ from app.schemas import VIDEO_ID_PATTERN
 type Runner = Callable[[list[str]], Awaitable[tuple[int | None, bytes]]]
 type Uploader = Callable[[str, str, Path], Awaitable[None]]
 
+# A Short's audio (three minutes at most) downloads in seconds; past this yt-dlp is stuck
+# (a throttled or stalled stream), and the plan it follows is held up waiting for it.
+AUDIO_TIMEOUT_SECONDS = 120.0
+
 
 async def run_yt_dlp(args: list[str]) -> tuple[int | None, bytes]:
-    """Runs yt-dlp as a real subprocess: its exit code and whatever it wrote to stderr."""
+    """Runs yt-dlp as a real subprocess: its exit code and whatever it wrote to stderr.
+    Given up on (cancelled, or timed out by the caller), the process is killed and
+    reaped, never left running."""
     # No shell: each argument reaches the process as its own argv entry, never interpreted.
     process = await asyncio.create_subprocess_exec(
         *args, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE
     )
-    _, stderr = await process.communicate()
+    try:
+        _, stderr = await process.communicate()
+    except asyncio.CancelledError:
+        process.kill()
+        _ = await process.wait()
+        raise
     return process.returncode, stderr
 
 
@@ -53,6 +65,7 @@ async def fetch_audio(
     *,
     run: Runner = run_yt_dlp,
     upload: Uploader = upload_to_gcs,
+    give_up_after: float = AUDIO_TIMEOUT_SECONDS,
 ) -> str | None:
     """Downloads `video_id`'s audio with yt-dlp and uploads it to `bucket`, returning its
     object key (`audio/{video_id}.m4a`). Any failure is logged and answered with None,
@@ -75,7 +88,11 @@ async def fetch_audio(
             f"https://www.youtube.com/watch?v={video_id}",
         ]
         try:
-            code, stderr = await run(args)
+            async with asyncio.timeout(give_up_after):
+                code, stderr = await run(args)
+        except TimeoutError:
+            log.warning("yt-dlp took too long; giving up on the audio", video_id=video_id)
+            return None
         except Exception:
             # yt-dlp missing, not executable, or otherwise unable to start.
             log.exception("couldn't run yt-dlp", video_id=video_id)

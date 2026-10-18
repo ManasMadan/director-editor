@@ -3,6 +3,10 @@
 Loaded lazily (`get_settings()`), so tools that only import the app, like the OpenAPI
 export, don't need a full environment. A missing or malformed value stops the service
 at its first use, with a readable message.
+
+Two processes read it: the service and its worker (`Settings`), and the Cloud Run
+indexer (`IndexerSettings`, app/indexer.py), which has no database, Redis or caller
+secret of its own. What indexing a short needs, in either, is `GeminiSettings`.
 """
 
 from functools import lru_cache
@@ -11,8 +15,17 @@ from typing import Literal, Self
 from pydantic import AnyHttpUrl, Field, PostgresDsn, RedisDsn, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.schemas import MAX_PLAN_TOKENS
 
-class Settings(BaseSettings):
+# A URL's origin and nothing after it: the indexer's URL is also the audience of the ID
+# token the worker calls it with, which Cloud Run compares with the service's URL as is.
+ORIGIN_PATTERN = r"^https?://[^/\s]+$"
+GOOGLE_CERTS_URL = "https://www.googleapis.com/oauth2/v1/certs"
+
+
+class GeminiSettings(BaseSettings):
+    """What indexing a short with Gemini needs, wherever it runs."""
+
     # An empty `KEY=` (as .env.example ships the optional ones) means unset.
     model_config = SettingsConfigDict(extra="ignore", env_ignore_empty=True)
 
@@ -23,6 +36,62 @@ class Settings(BaseSettings):
         default="info", alias="LOG_LEVEL"
     )
     release: str = Field(default="dev", alias="RELEASE")
+
+    google_api_key: str | None = Field(default=None, min_length=1, alias="GOOGLE_API_KEY")
+    # Another endpoint for the Gemini API: a gateway, or locally the mock Google
+    # (packages/fake-google), which production refuses.
+    google_base_url: AnyHttpUrl | None = Field(default=None, alias="GOOGLE_BASE_URL")
+    # Gemini through Vertex AI instead of the Gemini API. With GOOGLE_API_KEY, express
+    # mode (a Vertex key, bound to a service account); without one, Application Default
+    # Credentials (the Cloud Run indexer's service account). Vertex bills through Cloud
+    # Billing, so a project's Cloud credits pay for it; the Gemini API bills separately.
+    # Defaults to true in .env.example so a key added later is billed through Vertex
+    # without an extra step; true alone (no key yet) is harmless for the service, since
+    # nothing calls Gemini without DIRECTOR_MODEL, which needs a key.
+    google_vertex: bool = Field(default=False, alias="GOOGLE_VERTEX")
+    # Required once GOOGLE_VERTEX is true and something calls Gemini: every call addresses
+    # its model by the full resource name (app/director.py's create_google_model), which
+    # needs the project (an API key otherwise drops it from the request). The same
+    # variable apps/api reads for Director's live video call.
+    google_cloud_project: str | None = Field(
+        default=None, min_length=1, alias="GOOGLE_CLOUD_PROJECT"
+    )
+    # The Vertex location every Gemini call addresses its model at. Newer models
+    # (gemini-4-argon) are served only from "global"; an API key routes a bare model name
+    # to us-central1 regardless, which is why the resource name carries this instead.
+    vertex_location: str = Field(default="global", min_length=1, alias="VERTEX_LOCATION")
+    # Indexing (a plan job, never a live request) uses its own model: one picked for
+    # watching an arbitrary short unattended, not the one DIRECTOR_MODEL names for the
+    # scene checks and reviews a member waits on. INDEX_FALLBACK_MODEL stands in once a
+    # plan's retries on INDEX_MODEL are all spent (app/indexing.py's index_short).
+    index_model: str = Field(default="gemini-4-argon", min_length=1, alias="INDEX_MODEL")
+    index_fallback_model: str = Field(
+        default="gemini-3.1-pro-preview", min_length=1, alias="INDEX_FALLBACK_MODEL"
+    )
+    # The Cloud Storage bucket a short's original audio is captured into while it's
+    # indexed (app/audio.py, `audio/<videoId>.m4a`), with Application Default Credentials;
+    # the same bucket as apps/api's GCS_BUCKET, which signs links to it. Unset: no capture.
+    media_bucket: str | None = Field(
+        default=None, pattern=r"^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$", alias="MEDIA_BUCKET"
+    )
+
+    @model_validator(mode="after")
+    def _production_uses_real_providers(self) -> Self:
+        if (
+            self.node_env == "production"
+            and self.google_base_url
+            and self.google_base_url.scheme != "https"
+        ):
+            raise ValueError("GOOGLE_BASE_URL must be HTTPS in production")
+        return self
+
+    def _refuse_plain_http_indexer(self, indexer_url: str | None) -> None:
+        if self.node_env == "production" and indexer_url and not indexer_url.startswith("https:"):
+            raise ValueError("INDEXER_URL must be HTTPS in production")
+
+
+class Settings(GeminiSettings):
+    """The service (app/main.py) and its worker (app/worker.py)."""
 
     database_url: PostgresDsn = Field(alias="AI_DATABASE_URL")
     database_pool_max: int = Field(default=5, ge=1, le=100, alias="AI_DATABASE_POOL_MAX")
@@ -39,31 +108,10 @@ class Settings(BaseSettings):
     # that watches a YouTube video from its URL. Unset: Director off. There is no local
     # stand-in, on purpose: a plan or a review that no model wrote would be made up.
     director_model: str | None = Field(default=None, min_length=1, alias="DIRECTOR_MODEL")
-    google_api_key: str | None = Field(default=None, min_length=1, alias="GOOGLE_API_KEY")
-    # Another endpoint for the Gemini API: a gateway, or locally the mock Google
-    # (packages/fake-google), which production refuses.
-    google_base_url: AnyHttpUrl | None = Field(default=None, alias="GOOGLE_BASE_URL")
-    # Gemini through Vertex AI (express mode: GOOGLE_API_KEY is a Vertex key, bound to a
-    # service account) instead of the Gemini API. Vertex bills through Cloud Billing, so a
-    # project's Cloud credits pay for it; the Gemini API bills separately. Defaults to true
-    # in .env.example so a key added later is billed through Vertex without an extra step;
-    # true alone (no key yet) is harmless, since nothing calls Gemini without one.
-    google_vertex: bool = Field(default=False, alias="GOOGLE_VERTEX")
-    # Required once GOOGLE_VERTEX is true and a key turns it on: an API key drops the
-    # project/location from the request unless every call addresses its model by the full
-    # resource name (app/director.py's create_google_model), which needs the project. The
-    # same variable apps/api reads for Director's live video call.
-    google_cloud_project: str | None = Field(
-        default=None, min_length=1, alias="GOOGLE_CLOUD_PROJECT"
-    )
-    # The Vertex location every Gemini call addresses its model at. Newer models
-    # (gemini-4-argon) are served only from "global"; an API key routes a bare model name
-    # to us-central1 regardless, which is why the resource name carries this instead.
-    vertex_location: str = Field(default="global", min_length=1, alias="VERTEX_LOCATION")
     # A plan watches the whole short (about 300 tokens a second) and thinks; a scene check
     # looks at one frame; a review watches one take.
     director_tokens_per_plan: int = Field(
-        default=200_000, ge=10_000, alias="DIRECTOR_TOKENS_PER_PLAN"
+        default=200_000, ge=10_000, le=MAX_PLAN_TOKENS, alias="DIRECTOR_TOKENS_PER_PLAN"
     )
     director_tokens_per_scene_check: int = Field(
         default=12_000, ge=2_000, alias="DIRECTOR_TOKENS_PER_SCENE_CHECK"
@@ -71,30 +119,21 @@ class Settings(BaseSettings):
     director_tokens_per_review: int = Field(
         default=120_000, ge=10_000, alias="DIRECTOR_TOKENS_PER_REVIEW"
     )
-    # Indexing (a plan job, never a live request) uses its own model: one picked for
-    # watching an arbitrary short unattended, not the one DIRECTOR_MODEL names for the
-    # scene checks and reviews a member waits on. INDEX_FALLBACK_MODEL stands in once a
-    # plan's retries on INDEX_MODEL are all spent (see app/director.py's retry loop).
-    index_model: str = Field(default="gemini-4-argon", min_length=1, alias="INDEX_MODEL")
-    index_fallback_model: str = Field(
-        default="gemini-3.1-pro-preview", min_length=1, alias="INDEX_FALLBACK_MODEL"
-    )
 
-    # Product analytics (app/analytics.py): take reviews, with their scores, streamed into
+    # Product analytics (app/analytics.py): plans indexed and take reviews, streamed into
     # this BigQuery dataset's `events` table in GOOGLE_CLOUD_PROJECT, the same table
     # apps/api writes to. A dataset name is letters, digits and underscores. Unset: off.
     bigquery_dataset: str | None = Field(
         default=None, pattern=r"^[A-Za-z0-9_]{1,1024}$", alias="BIGQUERY_DATASET"
     )
+    # The Cloud Run indexer (app/indexer.py), where plan jobs send their short to be
+    # indexed, with an ID token for this URL from the metadata server. Unset: they're
+    # indexed here in the worker, the same way.
+    indexer_url: str | None = Field(default=None, pattern=ORIGIN_PATTERN, alias="INDEXER_URL")
 
     @model_validator(mode="after")
-    def _production_uses_real_providers(self) -> Self:
-        if (
-            self.node_env == "production"
-            and self.google_base_url
-            and self.google_base_url.scheme != "https"
-        ):
-            raise ValueError("GOOGLE_BASE_URL must be HTTPS in production")
+    def _indexer_is_https_in_production(self) -> Self:
+        self._refuse_plain_http_indexer(self.indexer_url)
         return self
 
     @model_validator(mode="after")
@@ -121,6 +160,38 @@ class Settings(BaseSettings):
         return self
 
 
+class IndexerSettings(GeminiSettings):
+    """The Cloud Run indexer (app/indexer.py)."""
+
+    # Its own URL (the worker's INDEXER_URL): the only audience the ID tokens it accepts
+    # may name.
+    indexer_url: str = Field(pattern=ORIGIN_PATTERN, alias="INDEXER_URL")
+    # The one service account allowed to call it (the VM's, which the worker runs as):
+    # Cloud Run's IAM already lets only invokers in, and the indexer checks again itself.
+    indexer_invoker: str = Field(pattern=r"^[^@\s]+@[^@\s]+$", alias="INDEXER_INVOKER")
+    # Where Google publishes the keys its ID tokens are signed with. Only tests point it
+    # elsewhere (a local stand-in), which production refuses.
+    google_certs_url: AnyHttpUrl = Field(
+        default=AnyHttpUrl(GOOGLE_CERTS_URL), alias="GOOGLE_CERTS_URL"
+    )
+
+    @model_validator(mode="after")
+    def _indexer_reaches_gemini_safely(self) -> Self:
+        self._refuse_plain_http_indexer(self.indexer_url)
+        if self.google_vertex and not self.google_cloud_project:
+            raise ValueError("GOOGLE_VERTEX=true needs GOOGLE_CLOUD_PROJECT")
+        if not self.google_vertex and not self.google_api_key:
+            raise ValueError("the indexer needs GOOGLE_API_KEY or GOOGLE_VERTEX=true")
+        if self.node_env == "production" and self.google_certs_url.scheme != "https":
+            raise ValueError("GOOGLE_CERTS_URL must be HTTPS in production")
+        return self
+
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()  # pyright: ignore[reportCallIssue]  # values come from the environment
+
+
+@lru_cache
+def get_indexer_settings() -> IndexerSettings:
+    return IndexerSettings()  # pyright: ignore[reportCallIssue]  # values come from the environment
