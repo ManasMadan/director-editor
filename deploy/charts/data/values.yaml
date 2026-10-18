@@ -129,6 +129,10 @@ storage:
     # The Secret the stack reads: bucket, region, endpoint (in-cluster), publicEndpoint,
     # accessKeyId, secretAccessKey.
     secretName: storage
+    # RustFS's web console on port 9001 (signed in with the server's keys), which only
+    # the gateway's proxies may reach: the internal tools route storage.<zone> to it,
+    # behind basic auth (deploy/platform/internal-tools).
+    console: true
     storage:
       size: 20Gi
       storageClass: local-path
@@ -140,6 +144,9 @@ storage:
   backups:
     bucket: backups
     nodeSelector: {}
+    # As the uploads server's, but the internal tools give it no host by default, so
+    # it's opened through a port-forward (deploy/README.md, "Internal tools").
+    console: true
     storage:
       size: 50Gi
       storageClass: local-path

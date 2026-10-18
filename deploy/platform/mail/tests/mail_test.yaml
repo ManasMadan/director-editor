@@ -19,6 +19,7 @@ tests:
 
   - it: publishes the mail ports on a LoadBalancer, only on the mail node
     template: service.yaml
+    documentIndex: 0
     asserts:
       - equal: { path: spec.type, value: LoadBalancer }
       - equal: { path: spec.externalTrafficPolicy, value: Local }
@@ -90,14 +91,65 @@ tests:
           path: 'data["plan.ndjson"]'
           pattern: '(?m)^\{"@type":"update","object":"SystemSettings","value":\{"maxConnections":1000\}\}$'
 
-  - it: takes connections on the mail ports only, never the management port
+  - it: takes connections on the mail ports, and on the management port from the gateway only
     template: networkpolicy.yaml
     asserts:
       - equal: { path: spec.policyTypes, value: [Ingress] }
       - equal:
           path: spec.ingress
-          value: [{ ports: [{ port: 9930 }, { port: 2525 }, { port: 5870 }, { port: 4650 }] }]
+          value:
+            - { ports: [{ port: 9930 }, { port: 2525 }, { port: 5870 }, { port: 4650 }] }
+            - from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: envoy-gateway-system } } }]
+              ports: [{ port: 8080 }]
       - equal: { path: spec.podSelector.matchLabels, value: { app.kubernetes.io/name: stalwart, app.kubernetes.io/instance: stalwart } }
+
+  - it: keeps the management port closed to everything without the web admin
+    template: networkpolicy.yaml
+    set:
+      webAdmin.enabled: false
+    asserts:
+      - equal:
+          path: spec.ingress
+          value: [{ ports: [{ port: 9930 }, { port: 2525 }, { port: 5870 }, { port: 4650 }] }]
+
+  - it: serves the web admin inside the cluster on its own Service
+    template: service.yaml
+    documentIndex: 1
+    asserts:
+      - equal: { path: metadata.name, value: stalwart-admin }
+      - equal: { path: spec.type, value: ClusterIP }
+      - equal: { path: spec.ports, value: [{ name: http, port: 8080, targetPort: http }] }
+
+  - it: has no web admin Service when it's off
+    template: service.yaml
+    set:
+      webAdmin.enabled: false
+    asserts:
+      - hasDocuments: { count: 1 }
+
+  - it: makes an administrator for the web admin, its password filled in at start
+    template: configmap.yaml
+    asserts:
+      - matchRegex:
+          path: 'data["plan.ndjson"]'
+          pattern: '(?m)^\{"@type":"upsert","matchOn":\["name","domainId"\],"object":"Account","value":\{"webadmin":\{"@type":"User","credentials":\{"0":\{"@type":"Password","secret":"@WEBADMIN_PASSWORD@"\}\},"domainId":"#domain","name":"admin","roles":\{"@type":"Admin"\}\}\}\}$'
+
+  - it: drops the administrator when the Secret has no web admin password
+    template: statefulset.yaml
+    asserts:
+      - contains:
+          path: "spec.template.spec.initContainers[0].env"
+          content:
+            name: WEBADMIN_PASSWORD
+            valueFrom: { secretKeyRef: { name: stalwart, key: WEBADMIN_PASSWORD, optional: true } }
+      - matchRegex: { path: "spec.template.spec.initContainers[0].args[0]", pattern: '"\) webadmin=./@WEBADMIN_PASSWORD@/d' }
+
+  - it: makes no administrator with the web admin off
+    template: configmap.yaml
+    set:
+      webAdmin.enabled: false
+    asserts:
+      - notMatchRegex: { path: 'data["plan.ndjson"]', pattern: 'WEBADMIN' }
 
   - it: delivers directly unless a relay is set
     template: configmap.yaml

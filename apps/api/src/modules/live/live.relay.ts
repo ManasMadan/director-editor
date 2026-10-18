@@ -82,6 +82,15 @@ export function closeWithError(client: WebSocket, code: ErrorCode) {
   client.close(ERROR_CODES[code] >= 500 ? 1011 : 1008);
 }
 
+/**
+ * How a call ended: why (the code the browser was told, or null when it hung up) and when
+ * it had started, if Gemini ever answered its setup.
+ */
+export interface CallEnd {
+  code: ErrorCode | null;
+  startedAt: number | null;
+}
+
 type FunctionCall = NonNullable<NonNullable<UpstreamMessage["toolCall"]>["functionCalls"]>[number];
 
 /** A frame's bytes as text, whichever of ws's shapes it arrived in. */
@@ -110,7 +119,9 @@ export class LiveRelay {
   private readonly moves: SlidingBudget;
   private readonly timer: NodeJS.Timeout;
   private setupTimer: NodeJS.Timeout | undefined;
-  private readonly finished = Promise.withResolvers<void>();
+  private readonly finished = Promise.withResolvers<CallEnd>();
+  /** When Gemini's setup completed and the call truly started. */
+  private startedAt: number | null = null;
   /** The shot the browser is on, which Gemini directs. */
   private shot: number;
 
@@ -127,8 +138,8 @@ export class LiveRelay {
     client.on("close", () => this.end(null));
   }
 
-  /** Opens the upstream; resolves once the call is over, however it ended. */
-  async run(): Promise<void> {
+  /** Opens the upstream; resolves once the call is over, with how it ended. */
+  async run(): Promise<CallEnd> {
     await this.connect();
     return this.finished.promise;
   }
@@ -262,6 +273,7 @@ export class LiveRelay {
       // A browser that moved on while Gemini got ready opens on the shot it's on now.
       this.toUpstream(this.shot === shot ? greetingMessage(shot) : shotMessage(plan, this.shot));
       if (justStarted && !this.ended) {
+        this.startedAt = this.options.now();
         this.options.onCallStarted();
       }
     }
@@ -330,6 +342,6 @@ export class LiveRelay {
       closeWithError(this.client, code);
     }
     this.upstream?.close();
-    this.finished.resolve();
+    this.finished.resolve({ code, startedAt: this.startedAt });
   }
 }

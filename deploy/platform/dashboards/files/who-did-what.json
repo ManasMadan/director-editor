@@ -1,0 +1,218 @@
+{
+  "title": "Who did what",
+  "uid": "director-who-did-what",
+  "description": "One person's timeline from the activity logs: put their email or user id in Person (docs/observability.md).",
+  "tags": ["director", "activity"],
+  "timezone": "browser",
+  "editable": true,
+  "schemaVersion": 39,
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Logs",
+        "type": "datasource",
+        "query": "loki",
+        "hide": 0
+      },
+      {
+        "name": "namespace",
+        "label": "Namespace",
+        "type": "query",
+        "datasource": { "type": "loki", "uid": "${datasource}" },
+        "query": "label_values(namespace)",
+        "definition": "label_values(namespace)",
+        "refresh": 2,
+        "current": { "text": "__NAMESPACE__", "value": "__NAMESPACE__" },
+        "hide": 0
+      },
+      {
+        "name": "person",
+        "label": "Person (email or user id)",
+        "description": "Exactly their email or user id. An email finds what they did while signed in; a user id also finds their background jobs and every other line of their requests, which carry only the id.",
+        "type": "textbox",
+        "query": "",
+        "current": { "text": "", "value": "" },
+        "hide": 0
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "People",
+      "type": "link",
+      "url": "/d/director-people?var-namespace=${namespace}&${__url_time_range}"
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "What they did, by kind",
+      "gridPos": { "x": 0, "y": 0, "w": 16, "h": 8 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "custom": { "drawStyle": "bars", "stacking": { "mode": "normal" } } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{activity}}",
+          "expr": "sum by (activity) (count_over_time({namespace=\"$namespace\"} |= \"$person\" | json | activity!=\"\" | actor_email=\"$person\" or actor_userId=\"$person\" [$__interval]))"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Where from",
+      "description": "The addresses and browsers their activity came from.",
+      "gridPos": { "x": 16, "y": 0, "w": 8, "h": 8 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "instant",
+          "format": "table",
+          "expr": "sum by (ip, userAgent) (count_over_time({namespace=\"$namespace\"} |= \"$person\" | json | activity!=\"\" | actor_email=\"$person\" or actor_userId=\"$person\" | ip!=\"\" [$__range]))"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true },
+            "renameByName": { "ip": "IP", "userAgent": "Browser", "Value #A": "Lines" }
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "table",
+      "title": "Timeline",
+      "description": "Every activity line, newest first: sign-ins, every call with its outcome, Director's work, and (looked up by user id) their background jobs. Click a trace id to open the trace.",
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 14 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "range",
+          "maxLines": 1000,
+          "expr": "{namespace=\"$namespace\"} |= \"$person\" | json | activity!=\"\" | actor_email=\"$person\" or actor_userId=\"$person\""
+        }
+      ],
+      "transformations": [
+        { "id": "extractFields", "options": { "source": "labels", "format": "auto" } },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "Time",
+                "activity",
+                "outcome",
+                "reason",
+                "target_procedure",
+                "target_method",
+                "target_videoId",
+                "target_cutId",
+                "durationMs",
+                "actor_email",
+                "ip",
+                "requestId",
+                "traceId"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "activity": "Activity",
+              "outcome": "Outcome",
+              "reason": "Reason",
+              "target_procedure": "Procedure",
+              "target_method": "Method",
+              "target_videoId": "Video",
+              "target_cutId": "Cut",
+              "durationMs": "ms",
+              "actor_email": "Email",
+              "ip": "IP",
+              "requestId": "Request",
+              "traceId": "Trace"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Trace" },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open the trace",
+                    "url": "",
+                    "internal": {
+                      "datasourceUid": "__JAEGER_UID__",
+                      "datasourceName": "Jaeger",
+                      "query": { "query": "${__value.raw}" }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Outcome" },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "ok": { "color": "green", "index": 0 },
+                      "refused": { "color": "orange", "index": 1 },
+                      "failed": { "color": "red", "index": 2 }
+                    }
+                  }
+                ]
+              },
+              { "id": "custom.cellOptions", "value": { "type": "color-text" } }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "type": "logs",
+      "title": "Everything logged for them",
+      "description": "Every line that is theirs. With a user id: everything their requests and background jobs logged, errors included. With an email: their activity lines only, since the other lines carry the user id. A line's traceId links to Jaeger.",
+      "gridPos": { "x": 0, "y": 22, "w": 24, "h": 12 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{namespace=\"$namespace\"} |= \"$person\" | json | actor_email=\"$person\" or actor_userId=\"$person\" or userId=\"$person\""
+        }
+      ]
+    }
+  ]
+}

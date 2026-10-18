@@ -38,6 +38,19 @@ tests:
       - exists: { path: spec.provider.kubernetes.envoyDeployment.container.resources.limits.cpu }
       - exists: { path: spec.provider.kubernetes.envoyDeployment.container.resources.limits.memory }
 
+  - it: runs one proxy unless told otherwise
+    template: gateway.yaml
+    documentSelector: { path: kind, value: EnvoyProxy }
+    asserts:
+      - equal: { path: spec.provider.kubernetes.envoyDeployment.replicas, value: 1 }
+
+  - it: runs as many proxies as asked
+    template: gateway.yaml
+    set: { gateway.proxy.replicas: 3 }
+    documentSelector: { path: kind, value: EnvoyProxy }
+    asserts:
+      - equal: { path: spec.provider.kubernetes.envoyDeployment.replicas, value: 3 }
+
   - it: trusts one proxy hop (Cloudflare) for the client's address on the site's hosts
     template: gateway.yaml
     documentSelector: { path: metadata.name, value: public, matchMany: true }

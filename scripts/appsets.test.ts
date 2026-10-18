@@ -92,31 +92,42 @@ describe("what each environment deploys", () => {
   });
 });
 
-describe("the add-ons' order", () => {
-  const waves = (dir: string) =>
-    readdirSync(join(ROOT, dir))
-      .filter((file) => file.endsWith(".yaml"))
-      .map(
-        (file) =>
-          (Bun.YAML.parse(readFileSync(join(ROOT, dir, file), "utf8")) as { wave: string }).wave,
-      );
-  const steps = (file: string) =>
+// Argo CD's progressive sync (RollingSync) forces automated.enabled: false on every
+// Application it generates, so nothing self-heals, and one Application that never reports
+// Synced holds back every step after it. Production's mail server sat on an old release
+// that way. Only previews, short-lived, still roll out data before stack with it.
+describe("syncing", () => {
+  const specOf = (file: string) =>
     (
       Bun.YAML.parse(readFileSync(join(APPSETS, file), "utf8")) as {
         spec: {
-          strategy: { rollingSync: { steps: { matchExpressions: { values: string[] }[] }[] } };
+          strategy?: unknown;
+          template: {
+            spec: {
+              syncPolicy: {
+                automated?: { prune?: boolean; selfHeal?: boolean; enabled?: boolean };
+                retry?: { limit: number };
+              };
+            };
+          };
         };
       }
-    ).spec.strategy.rollingSync.steps.flatMap((step) => step.matchExpressions[0]?.values ?? []);
+    ).spec;
 
-  it.each([
-    ["platform.yaml", "deploy/platform/addons"],
-    ["observability.yaml", "deploy/platform/addons/observability"],
-  ])("%s rolls out every wave of %s, in order", (appset, dir) => {
-    const expected = [...new Set(waves(dir))]
-      .sort((a, b) => Number(a) - Number(b))
-      .map((w) => `wave${w}`);
-    expect(steps(appset)).toEqual(expected);
+  it.each(["envs.yaml", "platform.yaml", "observability.yaml"])(
+    "%s syncs, prunes and heals each Application on its own, retrying until it succeeds",
+    (file) => {
+      const spec = specOf(file);
+      expect(spec.strategy).toBeUndefined();
+      expect(spec.template.spec.syncPolicy.automated).toEqual({ prune: true, selfHeal: true });
+      expect(spec.template.spec.syncPolicy.retry?.limit).toBe(-1);
+    },
+  );
+
+  it("needs no order between add-ons: none names a wave", () => {
+    const files = [...new Bun.Glob("deploy/platform/addons/**/*.yaml").scanSync({ cwd: ROOT })];
+    const waved = files.filter((file) => /^wave:/m.test(readFileSync(join(ROOT, file), "utf8")));
+    expect(waved).toEqual([]);
   });
 });
 

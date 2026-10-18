@@ -27,6 +27,9 @@ gateway:
   # version (Renovate moves the two together); CPU and memory requested and limited, as
   # for every container here.
   proxy:
+    # One proxy: on one node a second adds no availability, only its requests. Raise it
+    # with more nodes (Cloudflare reaches every node, and each forwards to any proxy).
+    replicas: 1
     image: docker.io/envoyproxy/envoy:distroless-v1.39.1@sha256:eb2c01c13125d1629637cb4e4cce7207009fb7cc2c8027f9742758549d15b6f4
     resources:
       requests: { cpu: 100m, memory: 256Mi }

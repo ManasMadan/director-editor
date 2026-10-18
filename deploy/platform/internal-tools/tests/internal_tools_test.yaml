@@ -1,0 +1,137 @@
+suite: internal-tools
+templates: [routes.yaml]
+release: { name: internal-tools, namespace: gateway-system }
+set:
+  domain: example.com
+tests:
+  - it: puts each tool on its own host under the zone, proxied through external-dns's record
+    documentSelector: { path: "spec.hostnames[0]", value: argocd.example.com }
+    asserts:
+      - equal: { path: metadata.name, value: internal-argocd }
+      - equal: { path: spec.parentRefs, value: [{ group: gateway.networking.k8s.io, kind: Gateway, name: public }] }
+      - equal: { path: metadata.annotations, value: { director-editor.dev/external-dns: "true" } }
+      - equal:
+          path: "spec.rules[0].backendRefs"
+          value: [{ group: "", kind: Service, name: argocd-server, namespace: argocd, port: 80, weight: 1 }]
+
+  - it: uses the direct zone when the cluster has one, under OpenTofu's wildcard record
+    set: { directZone: app.example.com }
+    documentSelector: { path: "spec.hostnames[0]", value: argocd.app.example.com }
+    asserts:
+      - equal: { path: metadata.name, value: internal-argocd }
+      - notExists: { path: metadata.annotations }
+
+  - it: asks for the basic-auth password on every tool, and keeps its header from the tool
+    documentSelector: { path: "spec.hostnames[0]", value: argocd.example.com }
+    asserts:
+      - equal: { path: "spec.rules[0].name", value: protected }
+      - equal:
+          path: "spec.rules[0].filters"
+          value: [{ type: RequestHeaderModifier, requestHeaderModifier: { remove: [Authorization] } }]
+
+  - it: sends the bare host to the tool's page, behind the same password
+    asserts:
+      - equal:
+          path: "spec.rules[0].matches"
+          value: [{ path: { type: PathPrefix, value: /jmap } }, { path: { type: PathPrefix, value: /api } }]
+        documentSelector: { path: "spec.hostnames[0]", value: mail-admin.example.com }
+      - equal:
+          path: "spec.rules[1]"
+          value:
+            name: home
+            matches:
+              - path: { type: Exact, value: / }
+                method: GET
+                headers: [{ type: Exact, name: Sec-Fetch-Mode, value: navigate }]
+            filters:
+              - type: RequestRedirect
+                requestRedirect: { path: { type: ReplaceFullPath, replaceFullPath: /admin/ }, statusCode: 302 }
+        documentSelector: { path: "spec.hostnames[0]", value: mail-admin.example.com }
+      - equal:
+          path: spec.targetRefs
+          value:
+            - { group: gateway.networking.k8s.io, kind: HTTPRoute, name: internal-mail-admin, sectionName: home }
+            - { group: gateway.networking.k8s.io, kind: HTTPRoute, name: internal-mail-admin, sectionName: protected }
+        documentSelector: { path: "spec.targetRefs[0].name", value: internal-mail-admin }
+
+  - it: protects each route's rule with the shared basic-auth Secret
+    asserts:
+      - equal: { path: spec.basicAuth.users, value: { name: internal-tools-auth } }
+        documentSelector: { path: kind, value: SecurityPolicy, matchMany: true }
+      - equal:
+          path: spec.targetRefs
+          value: [{ group: gateway.networking.k8s.io, kind: HTTPRoute, name: internal-argocd, sectionName: protected }]
+        documentSelector: { path: "spec.targetRefs[0].name", value: internal-argocd }
+
+  - it: leaves a tool's open paths to its own sign-in
+    set:
+      tools.mail-admin.openPaths: [/api, /auth]
+    documentSelector: { path: "spec.hostnames[0]", value: mail-admin.example.com }
+    asserts:
+      - equal: { path: "spec.rules[0].name", value: open }
+      - equal: { path: "spec.rules[1].name", value: home }
+      - equal:
+          path: "spec.rules[0].matches"
+          value: [{ path: { type: PathPrefix, value: /api } }, { path: { type: PathPrefix, value: /auth } }]
+      - notExists: { path: "spec.rules[0].filters" }
+      - equal: { path: "spec.rules[2].name", value: protected }
+
+  - it: protects only the console's page on a storage host, leaving its signed API calls to the server
+    documentSelector: { path: "spec.hostnames[0]", value: storage.example.com }
+    asserts:
+      - equal: { path: "spec.rules[0].name", value: open }
+      - equal: { path: "spec.rules[0].matches", value: [{ path: { type: PathPrefix, value: / } }] }
+      - equal: { path: "spec.rules[2].name", value: protected }
+      - equal: { path: "spec.rules[2].matches", value: [{ path: { type: PathPrefix, value: /rustfs/console } }] }
+
+  - it: has no observability tools on a cluster without observability
+    asserts:
+      - hasDocuments: { count: 9 }
+      - notContains: { path: spec.hostnames, content: grafana.example.com }
+        documentSelector: { path: kind, value: HTTPRoute, matchMany: true }
+
+  - it: has them on a cluster with observability
+    set: { observability: "true" }
+    documentSelector: { path: "spec.hostnames[0]", value: grafana.example.com }
+    asserts:
+      - equal: { path: metadata.name, value: internal-grafana }
+      - equal:
+          path: "spec.rules[0].backendRefs"
+          value: [{ group: "", kind: Service, name: kube-prometheus-stack-grafana, namespace: observability, port: 80, weight: 1 }]
+
+  - it: lets the routes reach each tool's namespace, and only Services there
+    set: { observability: "true" }
+    documentSelector: { path: metadata.namespace, value: observability }
+    asserts:
+      - equal:
+          path: spec.from
+          value: [{ group: gateway.networking.k8s.io, kind: HTTPRoute, namespace: gateway-system }]
+      - equal: { path: spec.to, value: [{ group: "", kind: Service }] }
+
+  - it: leaves out a tool that's turned off, and the grant for a namespace no tool uses
+    set:
+      tools.storage.enabled: false
+    asserts:
+      - hasDocuments: { count: 6 }
+      - notContains: { path: spec.hostnames, content: storage.example.com }
+        documentSelector: { path: kind, value: HTTPRoute, matchMany: true }
+
+  - it: keeps the backups server's console off unless it's turned on
+    asserts:
+      - notContains: { path: spec.hostnames, content: backups.example.com }
+        documentSelector: { path: kind, value: HTTPRoute, matchMany: true }
+
+  - it: routes the backups server's console when it's turned on
+    set:
+      tools.backups.enabled: true
+    documentSelector: { path: "spec.hostnames[0]", value: backups.example.com }
+    asserts:
+      - equal: { path: metadata.name, value: internal-backups }
+      - equal:
+          path: "spec.rules[0].backendRefs"
+          value: [{ group: "", kind: Service, name: director-editor-backups, namespace: director-editor, port: 9001, weight: 1 }]
+
+  - it: needs the cluster's domain
+    set: { domain: "" }
+    asserts:
+      - failedTemplate: { errorMessage: domain is required }

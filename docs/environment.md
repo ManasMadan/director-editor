@@ -77,7 +77,7 @@ listens on 8000.
 
 | Variable | Default | What it does |
 |---|---|---|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | An OTLP/HTTP collector, e.g. `http://otel-collector:4318`, or locally Jaeger at `http://localhost:54318` (in the `full` profile). Set, every service exports traces and metrics there and log lines carry `trace_id`; unset, nothing starts. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | An OTLP/HTTP collector, e.g. `http://otel-collector:4318`, or locally Jaeger at `http://localhost:54318` (in the `full` profile). Set, every service exports traces and metrics there and log lines carry `traceId`; unset, nothing starts. |
 | `OTEL_SERVICE_NAME` | the service (`api`, `worker`, …, `ai`, `ai-worker`) | Overrides the name traces are reported under. |
 
 The other standard `OTEL_*` variables work as OpenTelemetry documents them (sampling,

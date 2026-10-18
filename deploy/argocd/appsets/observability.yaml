@@ -36,31 +36,11 @@ spec:
               pathParamPrefix: file
               files:
                 - path: deploy/platform/addons/observability/*.yaml
-  # Add-ons roll out in the order of their waves, each once the one before is healthy
-  # (the CRDs an add-on needs are installed by one of an earlier wave). A sync-wave
-  # annotation on generated Applications orders nothing; progressive syncs do (OpenTofu's
-  # bootstrap turns them on). A new wave needs a step here.
-  strategy:
-    type: RollingSync
-    rollingSync:
-      steps:
-        - matchExpressions:
-            - key: wave
-              operator: In
-              values: ["wave-10"]
-        - matchExpressions:
-            - key: wave
-              operator: In
-              values: ["wave0"]
-        - matchExpressions:
-            - key: wave
-              operator: In
-              values: ["wave10"]
+  # No progressive sync, as in the platform ApplicationSet: each Application syncs and
+  # heals on its own, retrying until the CRDs it needs (kube-prometheus-stack's) exist.
   template:
     metadata:
       name: "{{ .name }}-{{ .addon }}"
-      labels:
-        wave: "wave{{ .wave }}"
       finalizers:
         - resources-finalizer.argocd.argoproj.io
     spec:
@@ -81,7 +61,7 @@ spec:
             # node-exporter reads the host (hostPath, hostNetwork, hostPID).
             pod-security.kubernetes.io/enforce: privileged
         retry:
-          limit: 10
+          limit: -1
           backoff:
             duration: 10s
             factor: 2

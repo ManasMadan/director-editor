@@ -15,6 +15,9 @@ configs:
   # also install the observability add-ons on every cluster, opted in or not.
   params:
     applicationsetcontroller.enable.new.git.file.globbing: true
+    # Plain HTTP inside the cluster: the gateway terminates TLS for argocd.<the cluster's
+    # zone> (deploy/platform/internal-tools) and routes to the server's port 80.
+    server.insecure: true
   cmp:
     create: true
     plugins:

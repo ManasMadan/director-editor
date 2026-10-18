@@ -15,6 +15,7 @@ DIRECTOR_MODEL the feature is off, because a plan no model wrote would be made u
 
 import base64
 import binascii
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -37,6 +38,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.activity import Target, log_activity, outcome_of
 from app.analytics import Analytics, AnalyticsEvent, Recorder, create_analytics
 from app.contracts.error_response import ErrorCode
 from app.contracts.realtime_message import DirectorChanged
@@ -544,6 +546,7 @@ class Director:
         when it's asked for (`index`), watching while Gemini watches the short, writing
         once Gemini has answered (the audio is captured and the plan saved), then ready,
         or failed with the reason."""
+        began = time.monotonic()
         started = await self._start_watching(org_id, plan_id)
         if started is None:
             return
@@ -555,7 +558,7 @@ class Director:
             org_id, user_id, "director-plan", self._budgets.per_plan, model=self._index_model_name
         )
         if reservation is None:
-            await self._fail_plan(org_id, plan_id, "AI_BUDGET_EXCEEDED")
+            await self._fail_plan(org_id, plan_id, "AI_BUDGET_EXCEEDED", {"videoId": video_id})
             return
         request = IndexRequest(
             videoId=video_id, orgId=org_id, planId=plan_id, maxTokens=reservation.tokens
@@ -565,7 +568,12 @@ class Director:
             await self._save_plan(org_id, plan_id, result)
         except IndexFailed as failure:
             if final or not failure.retryable:
-                await self._fail_plan(org_id, plan_id, failure.code)
+                await self._fail_plan(
+                    org_id,
+                    plan_id,
+                    failure.code,
+                    {"videoId": video_id, **_tokens(failure.usage)},
+                )
             if failure.retryable:
                 raise
             return
@@ -575,7 +583,9 @@ class Director:
             # attempt, where it would still count as the member's one short of their own.
             log.exception("indexing a short failed unexpectedly", plan_id=str(plan_id))
             if final:
-                await self._fail_plan(org_id, plan_id, "DIRECTOR_ANALYSIS_FAILED")
+                await self._fail_plan(
+                    org_id, plan_id, "DIRECTOR_ANALYSIS_FAILED", {"videoId": video_id}
+                )
             raise
         # Only here, once the plan is stored: a run that fails or is retried isn't one.
         self._events.record(
@@ -585,6 +595,18 @@ class Director:
                 video_id=video_id,
                 detail={"model": result.model, "audio": result.audio.status},
             )
+        )
+        log_activity(
+            "director.indexed",
+            target={
+                "planId": str(plan_id),
+                "videoId": video_id,
+                "model": result.model,
+                "audio": result.audio.status,
+                **_tokens(result.usage),
+            },
+            duration_ms=(time.monotonic() - began) * 1000,
+            user_id=asked_by,
         )
 
     async def _index_and_settle(
@@ -646,7 +668,9 @@ class Director:
             )
         await publish_to_org(self._redis, org_id, CHANGED)
 
-    async def _fail_plan(self, org_id: UUID, plan_id: UUID, code: ErrorCode) -> None:
+    async def _fail_plan(
+        self, org_id: UUID, plan_id: UUID, code: ErrorCode, details: Target
+    ) -> None:
         async with tenant(org_id) as session:
             await session.execute(
                 update(DirectorPlan)
@@ -654,6 +678,13 @@ class Director:
                 .values(status="failed", stage="failed", error=code, updated_at=func.now())
             )
         await publish_to_org(self._redis, org_id, CHANGED)
+        # For whoever asked for it (the job's user, on the log context).
+        log_activity(
+            "director.indexed",
+            outcome=outcome_of(code),
+            reason=code,
+            target={"planId": str(plan_id), **details},
+        )
 
     # ------------------------------------------------------------------------ scene checks
 
@@ -748,7 +779,7 @@ class Director:
             shot = _shot(plan, take.shot_index)
             kind = take.kind
             # For the analytics event: the take's own user, since a job may not name one.
-            reviewer, video_id = take.user_id, plan.video_id
+            reviewer, video_id, shot_index = take.user_id, plan.video_id, take.shot_index
             take.status, take.updated_at = "reviewing", func.now()
         await publish_to_org(self._redis, org_id, CHANGED)
         try:
@@ -811,6 +842,19 @@ class Director:
             AnalyticsEvent(
                 kind="take_reviewed", user_id=reviewer, video_id=video_id, score=review.score
             )
+        )
+        log_activity(
+            "director.take_reviewed",
+            target={
+                "takeId": str(take_id),
+                "videoId": video_id,
+                "shotIndex": shot_index,
+                "kind": kind,
+                "score": review.score,
+                "inputTokens": usage.input_tokens,
+                "outputTokens": usage.output_tokens,
+            },
+            user_id=reviewer,
         )
 
     # ------------------------------------------------------------------------ cuts
@@ -950,6 +994,12 @@ class Director:
                 .values(status="failed", error=code, updated_at=func.now())
             )
         await publish_to_org(self._redis, org_id, CHANGED)
+        log_activity(
+            "director.take_reviewed",
+            outcome=outcome_of(code),
+            reason=code,
+            target={"takeId": str(take_id)},
+        )
 
     async def _reserve(
         self,
@@ -1005,6 +1055,11 @@ def _content_type(header: str) -> TakeContentType:
     if kind == "image/jpeg":
         return "image/jpeg"
     raise ValueError(f"not a take's type: {kind}")
+
+
+def _tokens(usage: TokenUsage) -> Target:
+    """What a run used, as an activity line's fields."""
+    return {"inputTokens": usage.inputTokens, "outputTokens": usage.outputTokens}
 
 
 def _stamp(moment: datetime) -> int:

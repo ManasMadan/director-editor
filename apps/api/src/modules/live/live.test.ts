@@ -15,14 +15,15 @@ import {
 import { orgIdSchema, userIdSchema } from "@repo/contracts/ids";
 import { LIVE_PATH, LIVE_TOOLS } from "@repo/contracts/live";
 import { PROVIDER_TIMEOUT_MS } from "@repo/contracts/time";
-import { AppError } from "@repo/nest-common";
+import { AppError, currentContext } from "@repo/nest-common";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
 import * as z from "zod";
+import type { RecordActivity } from "../../activity";
 import type { OrgCaller } from "../../rpc/procedures";
 import type { GoogleAuth } from "./google-auth";
-import { type LiveOptions, liveUpstream, MAX_CALL_MS, mountLive } from "./live.gateway";
+import { callEnded, type LiveOptions, liveUpstream, MAX_CALL_MS, mountLive } from "./live.gateway";
 import { CLIENT_MAX_PAYLOAD_BYTES } from "./live.messages";
 import { systemInstruction } from "./live.setup";
 
@@ -180,6 +181,8 @@ async function startApi(overrides: Partial<LiveOptions> = {}, fake = new FakeLiv
     log,
     now: () => clock,
     recordCallStarted: vi.fn(),
+    context: () => ({ requestId: "call-1" }),
+    activity: vi.fn(),
     ...overrides,
   });
   app.get("/plain", () => Promise.resolve("plain answer"));
@@ -771,7 +774,8 @@ describe("starting a call", () => {
       .fn<LiveOptions["plan"]>()
       .mockReturnValueOnce(loaded.promise)
       .mockReturnValueOnce(broke.promise);
-    const { call, fake, log } = await startApi({ plan });
+    const activity = vi.fn<RecordActivity>();
+    const { call, fake, log } = await startApi({ plan, activity });
     for (const finish of [
       () => loaded.resolve(readyPlan),
       () => broke.reject(new Error("too late")),
@@ -784,6 +788,14 @@ describe("starting a call", () => {
     }
     await vi.waitFor(() => expect(log).toHaveBeenCalledOnce());
     expect(fake.socket).toBeNull();
+    // The first ended before it began; the second failed to start.
+    expect(activity).toHaveBeenCalledWith({
+      activity: "director.call_ended",
+      outcome: "ok",
+      reason: "HUNG_UP",
+      target: { videoId: "dQw4w9WgXcQ", shot: 0, started: false },
+      durationMs: undefined,
+    });
   });
 
   it("refuses an upgrade from another site, or to another path", async () => {
@@ -856,6 +868,74 @@ describe("starting a call", () => {
     const client = callWithoutOrigin();
     await fake.message(1);
     client.socket.close();
+  });
+});
+
+describe("the call's activity lines", () => {
+  /** A recorder that also notes the request each line was written in. */
+  function recorder() {
+    const lines: { line: Parameters<RecordActivity>[0]; requestId: string | undefined }[] = [];
+    const activity = vi.fn<RecordActivity>((line) => {
+      lines.push({ line, requestId: currentContext()?.requestId });
+    });
+    const named = (name: string) => lines.filter(({ line }) => line.activity === name);
+    return { activity, lines, named };
+  }
+
+  it("says the call started, in its own request, and how long it lasted once hung up", async () => {
+    const { activity, named } = recorder();
+    const { browser, tick } = await liveCall({ activity });
+    await vi.waitFor(() => expect(named("director.call_started")).toHaveLength(1));
+    expect(named("director.call_started")[0]).toEqual({
+      line: { activity: "director.call_started", target: { videoId: "dQw4w9WgXcQ", shot: 0 } },
+      requestId: "call-1",
+    });
+    tick(42_000);
+    browser.socket.close();
+    await vi.waitFor(() => expect(named("director.call_ended")).toHaveLength(1));
+    expect(named("director.call_ended")[0]).toEqual({
+      line: {
+        activity: "director.call_ended",
+        outcome: "ok",
+        reason: "HUNG_UP",
+        target: { videoId: "dQw4w9WgXcQ", shot: 0, started: true },
+        durationMs: 42_000,
+      },
+      requestId: "call-1",
+    });
+  });
+
+  it("says why a call never started", async () => {
+    const { activity, named } = recorder();
+    const { call } = await startApi({ activity, upstream: null });
+    await call().closed;
+    expect(named("director.call_started").map(({ line }) => line)).toEqual([
+      {
+        activity: "director.call_started",
+        outcome: "refused",
+        reason: "FEATURE_DISABLED",
+        target: {},
+      },
+    ]);
+  });
+
+  it("says a call Gemini dropped failed, and one that ran its time was fine", () => {
+    const target = { videoId: "dQw4w9WgXcQ", shot: 1 };
+    expect(callEnded({ code: "UPSTREAM_UNAVAILABLE", startedAt: null }, target, 9)).toEqual({
+      activity: "director.call_ended",
+      outcome: "failed",
+      reason: "UPSTREAM_UNAVAILABLE",
+      target: { ...target, started: false },
+      durationMs: undefined,
+    });
+    expect(callEnded({ code: "TIMEOUT", startedAt: 0 }, target, MAX_CALL_MS)).toMatchObject({
+      outcome: "ok",
+      reason: "TIMEOUT",
+      durationMs: MAX_CALL_MS,
+    });
+    expect(callEnded({ code: "DIRECTOR_CALL_TOO_FAST", startedAt: 0 }, target, 1)).toMatchObject({
+      outcome: "refused",
+    });
   });
 });
 

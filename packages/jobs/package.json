@@ -23,6 +23,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@repo/logger": "workspace:*",
     "@repo/testing": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@repo/vitest-config": "workspace:*",

@@ -1,6 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import { describe, expect, it } from "vitest";
-import { createRequestIdGenerator } from "./logging";
+import { createClientAddress, createRequestIdGenerator } from "./logging";
 
 const request = (peer: string | undefined, id?: string | string[]) =>
   ({
@@ -25,5 +25,20 @@ describe("request ids", () => {
     expect(generate(request("10.1.2.3"))).toMatch(uuid);
     // A socket already gone has no peer address.
     expect(generate(request(undefined, "r1"))).toMatch(uuid);
+  });
+});
+
+describe("a raw request's client address", () => {
+  const address = createClientAddress(["loopback"]);
+  const forwarded = (peer: string) =>
+    ({
+      headers: { "x-forwarded-for": "198.51.100.7" },
+      socket: { remoteAddress: peer },
+      connection: { remoteAddress: peer },
+    }) as unknown as IncomingMessage;
+
+  it("is the forwarded one from a trusted proxy, and the peer otherwise", () => {
+    expect(address(forwarded("127.0.0.1"))).toBe("198.51.100.7");
+    expect(address(forwarded("203.0.113.9"))).toBe("203.0.113.9");
   });
 });

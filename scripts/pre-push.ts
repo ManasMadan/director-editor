@@ -27,7 +27,18 @@ import * as z from "zod";
 import { testEnvironment } from "../packages/testing/src/environment";
 import { type Clamd, clamdFor } from "../packages/testing/src/fake-clamd";
 import { type Area, areas } from "./changes";
-import { fail, ok, type Ran, ROOT, type Run, readEnv, runMain, runSync, warn } from "./lib";
+import {
+  fail,
+  ok,
+  type Ran,
+  ROOT,
+  type Run,
+  readEnv,
+  runMain,
+  runSync,
+  warn,
+  withoutGitRepository,
+} from "./lib";
 import { dockerMemory } from "./services";
 import { pushBase } from "./unit-coverage";
 
@@ -719,13 +730,21 @@ export async function schedule(
   );
 }
 
-/** Runs commands for a step: in their own process group, killed when `signal` aborts. */
-export function spawnExec(signal: AbortSignal, log: (text: string) => void): Exec {
+/**
+ * Runs commands for a step: in their own process group, killed when `signal` aborts, and
+ * without the GIT_DIR and friends git runs this hook with, so the tests' git commands in
+ * their temporary repositories never reach this one.
+ */
+export function spawnExec(
+  signal: AbortSignal,
+  log: (text: string) => void,
+  environment: NodeJS.ProcessEnv = process.env,
+): Exec {
   const exec: Exec = (command, args, options = {}) =>
     new Promise((resolve) => {
       const spawnOptions: SpawnOptions = {
         cwd: options.cwd ?? ROOT,
-        env: { ...process.env, ...options.env },
+        env: { ...withoutGitRepository(environment), ...options.env },
         detached: true,
         stdio: ["ignore", "pipe", "pipe"],
       };

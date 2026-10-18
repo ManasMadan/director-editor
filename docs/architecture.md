@@ -59,9 +59,13 @@ CloudNativePG, Valkey, RustFS for Postgres's backups, copied every hour to a Clo
 Storage bucket offsite), the stack chart (the services above) and the platform add-ons
 (Envoy Gateway, cert-manager, KEDA, Kyverno, which admits only images CI signed, and the
 Stalwart mail server, which sends through Resend because Compute Engine blocks outgoing
-port 25). Media lives in Cloud Storage, and the services that call Google take their
-credentials from the VM's metadata server, as its service account, with no key file.
-Indexing runs on Cloud Run, outside the cluster. [deploy.md](deploy.md) has the details.
+port 25), and observability: Prometheus, Grafana, Alertmanager, Jaeger for traces and
+Loki for every pod's logs. Those tools, Argo CD, the mail server's admin and the storage
+consoles each have a host under the site's name behind one shared basic-auth login
+([deploy/README.md](../deploy/README.md#internal-tools)). Media lives in Cloud Storage,
+and the services that call Google take their credentials from the VM's metadata server,
+as its service account, with no key file. Indexing runs on Cloud Run, outside the
+cluster. [deploy.md](deploy.md) has the details.
 <!-- verify after deploy: INDEXER_URL set in production -->
 
 Locally the gateway's job is done by `next.config.ts` rewrites (`/rpc`, `/api`, `/docs`),

@@ -1,0 +1,80 @@
+# The cluster's facts (the platform ApplicationSet sets them from its Argo CD Secret).
+# Each tool is at <host>.<directZone> when the cluster has a direct zone (served by the
+# gateway with its own certificate, under OpenTofu's DNS-only wildcard, like the files
+# host), or else at <host>.<domain>, proxied by Cloudflare through a record external-dns
+# publishes.
+domain: ""
+directZone: ""
+# "true" on clusters labelled director-editor.dev/observability: only those run the
+# tools marked `observability`.
+observability: ""
+
+# The Gateway the routes attach to, in this release's namespace (the routes live there,
+# beside the one basic-auth Secret; each tool's namespace grants them its Service).
+gateway: public
+
+# Every host asks for this user and password first (Envoy Gateway's basic auth), before
+# the tool's own sign-in where it has one. The Secret, in this release's namespace, has
+# the key `.htpasswd`: one line, user:{SHA}<base64 of the password's SHA-1>, the one
+# hash Envoy takes (deploy/platform/secrets/<env>/internal-tools-auth.sops.yaml).
+basicAuth:
+  secretName: internal-tools-auth
+
+# The tools: the host's first label, and the Service it routes to. `home` is where the
+# bare host redirects to, for a tool whose page isn't at /. `protectedPaths` (default
+# /) are the path prefixes that ask for the basic-auth password. `openPaths` are path
+# prefixes left to the tool's own sign-in, without basic auth: requests the tool's page
+# makes with its own Authorization header, which basic auth would refuse. Everything
+# else asks for the basic-auth password, and the Authorization header it adds is
+# removed before the request reaches the tool.
+tools:
+  argocd:
+    host: argocd
+    service: { namespace: argocd, name: argocd-server, port: 80 }
+  grafana:
+    host: grafana
+    observability: true
+    service: { namespace: observability, name: kube-prometheus-stack-grafana, port: 80 }
+  prometheus:
+    host: prometheus
+    observability: true
+    service: { namespace: observability, name: kube-prometheus-stack-prometheus, port: 9090 }
+  alertmanager:
+    host: alertmanager
+    observability: true
+    service: { namespace: observability, name: kube-prometheus-stack-alertmanager, port: 9093 }
+  jaeger:
+    host: jaeger
+    observability: true
+    service: { namespace: observability, name: jaeger, port: 16686 }
+  # Stalwart's web admin (deploy/platform/mail, webAdmin). Once signed in, the page calls
+  # JMAP and the management API with its own bearer token, which basic auth would
+  # refuse; both ask for Stalwart's own sign-in on every call (the page itself, /admin,
+  # stays behind basic auth).
+  mail-admin:
+    host: mail-admin
+    home: /admin/
+    openPaths: [/jmap, /api]
+    service: { namespace: mail, name: mail-admin, port: 8080 }
+  # RustFS's consoles (deploy/charts/data, storage.<server>.console), in the
+  # environment's namespace. The console's page is behind basic auth; the requests it
+  # makes once signed in are S3 and admin API calls signed with the server's keys
+  # (AWS signatures in Authorization), which basic auth would refuse, so they go to the
+  # server as they are, and it refuses anything not signed with its keys.
+  storage:
+    host: storage
+    home: /rustfs/console/
+    protectedPaths: [/rustfs/console]
+    openPaths: [/]
+    service: { namespace: director-editor, name: director-editor-uploads, port: 9001 }
+  # The backups server's console is off: behind the gateway, its S3 API would answer
+  # on the internet with only the server's keys in the way, and that server holds
+  # every copy of the database. Reach its console through a port-forward instead
+  # (deploy/README.md, "Internal tools"); `enabled: true` routes backups.<zone> to it.
+  backups:
+    enabled: false
+    host: backups
+    home: /rustfs/console/
+    protectedPaths: [/rustfs/console]
+    openPaths: [/]
+    service: { namespace: director-editor, name: director-editor-backups, port: 9001 }

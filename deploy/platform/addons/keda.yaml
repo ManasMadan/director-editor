@@ -4,4 +4,3 @@ namespace: keda
 repoURL: https://kedacore.github.io/charts
 chart: keda
 version: 2.21.0
-wave: "-20"

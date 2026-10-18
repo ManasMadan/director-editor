@@ -1,14 +1,19 @@
 # Staging and production: the data and stack releases on each cluster labelled
 # director-editor.dev/environment=staging|production, with that environment's values
-# (deploy/environments/<env>/). Data syncs first, so the stack's migration finds the
-# database up. The stack also gets the environment's Secrets, decrypted from
-# deploy/environments/<env>/secrets/ by Argo CD's sops plugin, and exports telemetry to
-# the cluster's Jaeger and Prometheus when it has the director-editor.dev/observability
-# label. Staging follows master, and CI commits its image tag on every merge.
-# Production runs a release: its charts, values and Secrets are read at the tag in
-# deploy/environments/production/release.yaml, with that release's images, and only a
-# promotion pull request changes that file. So merging a chart change deploys it to
-# staging, not to production.
+# (deploy/environments/<env>/). Each syncs and heals on its own (no progressive sync,
+# which turns self-heal off): on a new cluster the stack's migration fails until the
+# data release's database is up, and the sync is retried until it is. The stack also
+# gets the environment's Secrets, decrypted from deploy/environments/<env>/secrets/ by
+# Argo CD's sops plugin, and exports telemetry to the cluster's Jaeger and Prometheus
+# when it has the director-editor.dev/observability label. Staging follows master, and
+# CI commits its image tag on every merge. Production runs a release: its charts,
+# values and Secrets are read at the tag in deploy/environments/production/release.yaml,
+# with that release's images, and only a promotion pull request changes that file. So
+# merging a chart change deploys it to staging, not to production.
+#
+# Both sync with client-side apply. Never sync them by hand with the server-side apply
+# option: fields applied that way stay when a later client-side sync drops them
+# (deploy/README.md, "Troubleshooting").
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -40,18 +45,6 @@ spec:
               elements:
                 - chart: data
                 - chart: stack
-  strategy:
-    type: RollingSync
-    rollingSync:
-      steps:
-        - matchExpressions:
-            - key: chart
-              operator: In
-              values: [data]
-        - matchExpressions:
-            - key: chart
-              operator: In
-              values: [stack]
   template:
     metadata:
       name: '{{ index .metadata.labels "director-editor.dev/environment" }}-{{ .chart }}'
@@ -71,6 +64,12 @@ spec:
           selfHeal: true
         syncOptions:
           - CreateNamespace=true
+        retry:
+          limit: -1
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 5m
         managedNamespaceMetadata:
           labels:
             pod-security.kubernetes.io/enforce: restricted

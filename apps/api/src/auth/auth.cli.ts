@@ -12,16 +12,19 @@ import { createDb } from "@repo/db";
 import type { Producer } from "@repo/jobs";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { Redis } from "ioredis";
+import type { RecordActivity } from "../activity";
 import { env } from "../env";
 import { createAuth } from "./auth";
 import { createMemberships } from "./memberships";
 
-/** What the configuration would send or change through, all refusing. */
+/** What the configuration would send, change or log through: refusing, or doing nothing. */
 export const inert = {
   notifications: {
     add: (..._job: Parameters<Producer<"notifications-critical">["add"]>) =>
       Promise.reject(new Error("The auth CLI never sends notifications")),
   },
+  // Nobody signs in through the CLI, so there's no activity to log.
+  activity: ((_activity) => undefined) satisfies RecordActivity,
 };
 
 const db = createDb({ url: env.API_DATABASE_URL, poolMax: 1, service: "auth-cli" });
@@ -33,5 +36,6 @@ export const auth = createAuth({
   redis,
   notifications: inert.notifications,
   memberships: createMemberships(db, redis),
+  activity: inert.activity,
   database: memoryAdapter({}),
 });

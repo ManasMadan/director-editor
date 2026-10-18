@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./activity": "./src/activity.ts"
   },
   "scripts": {
     "check-types": "tsc",
@@ -11,7 +12,8 @@
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "pino": "catalog:"
+    "pino": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",

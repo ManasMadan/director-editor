@@ -1,7 +1,8 @@
 /**
  * JobProcessor, in a real Nest app with BullMQ on the docker compose Valkey: a failing
  * job is logged, from the handlers the base class declares (which @nestjs/bullmq has to
- * find on the subclass), and an unrecoverable one isn't retried.
+ * find on the subclass), an unrecoverable one isn't retried, and every run, done or failed,
+ * writes its activity line.
  */
 import { randomUUID } from "node:crypto";
 import { BullModule, Processor } from "@nestjs/bullmq";
@@ -10,6 +11,7 @@ import { NestFactory } from "@nestjs/core";
 import { eventually } from "@repo/testing/eventually";
 import { Queue, UnrecoverableError } from "bullmq";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { AppError } from "../src/errors";
 import { JobProcessor } from "../src/job-processor";
 import { redisDatabase } from "../src/testing";
 
@@ -19,8 +21,14 @@ const connection = { url: redisDatabase(12) };
 @Processor(QUEUE)
 class FailingProcessor extends JobProcessor {
   async process(job: { data: { kind: string } }) {
+    if (job.data.kind === "good") {
+      return;
+    }
     if (job.data.kind === "bad") {
       throw new UnrecoverableError("bad payload");
+    }
+    if (job.data.kind === "unavailable") {
+      throw new AppError("SERVICE_UNAVAILABLE");
     }
     throw new Error("outer", { cause: new Error("the real reason") });
   }
@@ -33,9 +41,11 @@ class FailingProcessor extends JobProcessor {
 class TestModule {}
 
 const errors: unknown[][] = [];
+const infos: unknown[][] = [];
+const warnings: unknown[][] = [];
 const logger: LoggerService = {
-  log: () => undefined,
-  warn: () => undefined,
+  log: (...args: unknown[]) => void infos.push(args),
+  warn: (...args: unknown[]) => void warnings.push(args),
   error: (...args: unknown[]) => void errors.push(args),
 };
 
@@ -81,5 +91,63 @@ describe("JobProcessor", () => {
     expect(message).toBe("job failed for good");
     expect(fields).toMatchObject({ final: true, attempt: 1 });
     expect((await queue.getJob(job.id as string))?.attemptsMade).toBe(1);
+  });
+});
+
+/** The activity line written for a job, from Nest's log or warn calls. */
+function activityOf(lines: unknown[][], jobId: string) {
+  return eventually(
+    () =>
+      lines.find(
+        (args) =>
+          args[1] === "activity" &&
+          (args[0] as { target?: { jobId?: string } })?.target?.jobId === jobId,
+      ),
+    (entry): entry is unknown[] => entry !== undefined,
+    { timeout: 5_000 },
+  );
+}
+
+describe("a job's activity line", () => {
+  const meta = { requestId: "r-1", userId: "u-1", orgId: "o-1" };
+
+  it("is written when it's done, for the user it ran for", async () => {
+    const job = await queue.add("work", { kind: "good", meta });
+    const [line] = await activityOf(infos, job.id as string);
+    expect(line).toMatchObject({
+      activity: "job.finished",
+      outcome: "ok",
+      actor: { userId: "u-1" },
+      orgId: "o-1",
+      requestId: "r-1",
+      target: { queue: QUEUE, job: "work", attempt: 1 },
+      durationMs: expect.any(Number),
+    });
+  });
+
+  it("is written at warn when it fails, saying whether it's for good", async () => {
+    const job = await queue.add("work", { kind: "broken", meta }, { attempts: 1 });
+    const [line] = await activityOf(warnings, job.id as string);
+    expect(line).toMatchObject({
+      activity: "job.finished",
+      outcome: "failed",
+      reason: "Error",
+      actor: { userId: "u-1" },
+      target: { final: true },
+    });
+  });
+
+  it("gives an error code of the catalog as the reason, rather than the error's kind", async () => {
+    const job = await queue.add(
+      "work",
+      { kind: "unavailable", meta },
+      { attempts: 2, backoff: 10 },
+    );
+    const [line] = await activityOf(warnings, job.id as string);
+    expect(line).toMatchObject({
+      outcome: "failed",
+      reason: "SERVICE_UNAVAILABLE",
+      target: { final: false },
+    });
   });
 });

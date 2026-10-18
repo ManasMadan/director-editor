@@ -5,7 +5,14 @@
  * sign-ups fail rather than let a password through unchecked.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { createSession, type Harness, newEmail, newPassword, startApi } from "./harness";
+import {
+  createSession,
+  type Harness,
+  newEmail,
+  newPassword,
+  pwnedPasswords,
+  startApi,
+} from "./harness";
 
 let harness: Harness;
 beforeAll(async () => {
@@ -13,23 +20,6 @@ beforeAll(async () => {
 });
 afterAll(() => harness.close());
 afterEach(() => vi.restoreAllMocks());
-
-const RANGE = "https://api.pwnedpasswords.com/range/";
-
-/** Answers HIBP's range requests with `answer`; every other request goes out as usual. */
-function pwnedPasswords(answer: (prefix: string) => Response) {
-  const real = globalThis.fetch;
-  const asked: string[] = [];
-  vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
-    const url = input instanceof Request ? input.url : String(input);
-    if (!url.startsWith(RANGE)) {
-      return real(input, init);
-    }
-    asked.push(url.slice(RANGE.length));
-    return Promise.resolve(answer(url.slice(RANGE.length)));
-  });
-  return asked;
-}
 
 /**
  * A fixed password and its SHA-1, worked out once (`printf %s ... | shasum`): HIBP's range

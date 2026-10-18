@@ -1,0 +1,9 @@
+apiVersion: v2
+name: internal-tools
+description: >-
+  The operators' web tools on hosts of their own under the cluster's zone (Argo CD,
+  Grafana, Prometheus, Alertmanager, Jaeger, the mail server's admin, the object storage
+  consoles), each behind the gateway's basic auth.
+type: application
+version: 0.1.0
+kubeVersion: ">=1.31.0-0"

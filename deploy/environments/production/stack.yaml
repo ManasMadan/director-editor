@@ -4,8 +4,9 @@ site:
   host: director.mmadan.in
 env:
   LOG_LEVEL: info
-# Sized for one 16 GB machine (a demo on a fixed budget): one replica of each service,
-# scaling out a little under load. Raise these with the machine.
+# Sized for one machine (an e2-standard-8: 8 vCPUs, 32 GB) that also runs the platform
+# and observability: one replica of each service, scaling out a little under load. Raise
+# these with the machine.
 defaults:
   replicas: 1
   resources:
@@ -70,8 +71,9 @@ services:
       # Take reviews and indexing run here: both go to the same events table as the api's.
       BIGQUERY_DATASET: director
       MEDIA_BUCKET: director-media-1053522546520
-      # Plans are indexed here in the worker until the Cloud Run indexer is deployed;
-      # then INDEXER_URL: https://director-indexer-1053522546520.us-central1.run.app
-      # sends them there (docs/deploy.md, "The Cloud Run indexer").
+      # Plans are indexed by the Cloud Run indexer, called with the VM's ID token
+      # (docs/deploy.md, "The Cloud Run indexer"); without INDEXER_URL the worker
+      # indexes them itself.
+      INDEXER_URL: https://director-indexer-1053522546520.us-central1.run.app
   clamav:
     enabled: true

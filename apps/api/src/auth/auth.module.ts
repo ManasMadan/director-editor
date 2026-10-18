@@ -1,5 +1,6 @@
 import { Global, Inject, Module } from "@nestjs/common";
 import { DATABASE, type Database, REDIS, type Redis } from "@repo/nest-common";
+import { ACTIVITY, type RecordActivity } from "../activity";
 import { env } from "../env";
 import { CRITICAL_NOTIFICATIONS, type CriticalNotifications } from "../notifications";
 import { type Auth, createAuth } from "./auth";
@@ -21,13 +22,14 @@ export type { Auth, Memberships };
     },
     {
       provide: AUTH,
-      inject: [DATABASE, REDIS, CRITICAL_NOTIFICATIONS, MEMBERSHIPS],
+      inject: [DATABASE, REDIS, CRITICAL_NOTIFICATIONS, MEMBERSHIPS, ACTIVITY],
       useFactory: (
         database: Database,
         redis: Redis,
         notifications: CriticalNotifications,
         memberships: Memberships,
-      ) => createAuth({ env, db: database.write, redis, notifications, memberships }),
+        activity: RecordActivity,
+      ) => createAuth({ env, db: database.write, redis, notifications, memberships, activity }),
     },
   ],
   exports: [AUTH, MEMBERSHIPS],

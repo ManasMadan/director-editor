@@ -2,14 +2,25 @@
 import { describe, expect, it } from "vitest";
 import { directorCutIdSchema, videoIdSchema } from "../ids";
 import {
+  allowsUploads,
   descriptionBytes,
   fitsYouTube,
   PUBLISH_DESCRIPTION_MAX_LENGTH,
   publishContract,
   publishCopySchema,
+  YOUTUBE_UPLOAD_SCOPE,
   youtubeDescription,
   youtubeTitle,
 } from "./publish";
+
+describe("a Google account's scopes", () => {
+  it("allow uploads only with YouTube's upload scope, however they're joined", () => {
+    expect(allowsUploads(`openid,email,${YOUTUBE_UPLOAD_SCOPE}`)).toBe(true);
+    expect(allowsUploads(`openid ${YOUTUBE_UPLOAD_SCOPE}`)).toBe(true);
+    expect(allowsUploads("openid,email,profile")).toBe(false);
+    expect(allowsUploads(null)).toBe(false);
+  });
+});
 
 const videoId = videoIdSchema.parse("dQw4w9WgXcQ");
 const cutId = directorCutIdSchema.parse("0199f3a0-0000-7000-8000-000000000001");

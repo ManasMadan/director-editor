@@ -10,6 +10,7 @@ describe("auth audit events", () => {
     ["/callback/google", "social"],
     ["/two-factor/verify-totp", "two-factor"],
     ["/email-otp/verify-email", "email-code"],
+    ["/sign-in/email-otp", "email-code"],
     ["/admin/impersonate-user", "impersonation"],
     ["/magic-link/verify", "other"],
     [undefined, "other"],

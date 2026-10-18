@@ -1,0 +1,74 @@
+# Logs: Loki as one process (the single binary), its chunks and index on a local-path
+# volume, every line kept 30 days. Alloy (values/alloy.yaml) ships every pod's output
+# here; Grafana reads it (values/kube-prometheus-stack.yaml) and links a line's trace id
+# to Jaeger. One replica, like everything else observability runs here: a restart loses
+# nothing that reached the disk.
+deploymentMode: SingleBinary
+
+loki:
+  # A newer patch release than the chart's own (3.6.11), whose image has fixable high
+  # vulnerabilities that this one doesn't (scripts/image-scan.ts).
+  image:
+    registry: docker.io
+    repository: grafana/loki
+    # renovate: datasource=docker depName=grafana/loki
+    tag: 3.6.18
+  # One tenant: nothing but Alloy and Grafana talk to it, both in this namespace.
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: filesystem
+  schemaConfig:
+    configs:
+      - from: "2026-10-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index: { prefix: index_, period: 24h }
+  limits_config:
+    retention_period: 720h
+    # The services' JSON lines are parsed at query time (`| json`); the labels stay few.
+    max_query_lookback: 720h
+  # Deletes what's older than the retention, from the same disk.
+  compactor:
+    retention_enabled: true
+    delete_request_store: filesystem
+  # Each pod as user and group 10001 (the chart's own default, set here so it's seen).
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile: { type: RuntimeDefault }
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: local-path
+    # Scaling the StatefulSet down or deleting it keeps the logs.
+    whenScaled: Retain
+    whenDeleted: Retain
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+# The scalable modes' components, off in single-binary mode.
+read: { replicas: 0 }
+write: { replicas: 0 }
+backend: { replicas: 0 }
+
+# Nothing between Alloy and Grafana and Loki: no nginx gateway, no memcached caches (a
+# few gigabytes of memory for a volume of logs this size doesn't need), no canary or
+# Helm test, no bundled MinIO.
+gateway: { enabled: false }
+chunksCache: { enabled: false }
+resultsCache: { enabled: false }
+lokiCanary: { enabled: false }
+test: { enabled: false }
+minio: { enabled: false }
+sidecar:
+  rules: { enabled: false }

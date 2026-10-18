@@ -7,8 +7,13 @@
  * fail the action that triggered it, so it is never awaited here or by a caller. A
  * failure is still logged, with the kind that failed, so a gap in the report is visible
  * in the logs rather than silent.
+ *
+ * The kinds are @repo/contracts/activity's ANALYTICS_KINDS, which apps/ai records under
+ * the same spellings (`indexed` and `take_reviewed` are only recorded there, once a plan
+ * is ready and once a review has its score).
  */
 import { Inject, Injectable } from "@nestjs/common";
+import type { AnalyticsKind } from "@repo/contracts/activity";
 import type { UserId, VideoId } from "@repo/contracts/ids";
 import {
   ANALYTICS,
@@ -17,25 +22,6 @@ import {
   InjectPinoLogger,
   PinoLogger,
 } from "@repo/nest-common";
-
-/**
- * Every kind this API records today, plus the kinds later tasks will: a new call site
- * picks from this list instead of inventing its own spelling. `indexed` and
- * `take_reviewed` are recorded by apps/ai instead (app/analytics.py, with the same
- * spellings), once a plan is ready and once a review has its score; they stay here so
- * the two lists match. Not re-exported from
- * `index.ts`: a caller only ever needs `AnalyticsService.record("kind", fields)`, which
- * TypeScript already checks against `AnalyticsKind` below; export this list from the
- * barrel too only once something needs to enumerate or branch on every kind.
- */
-export const ANALYTICS_KINDS = [
-  "indexed",
-  "take_reviewed",
-  "cut_saved",
-  "published",
-  "call_started",
-] as const;
-export type AnalyticsKind = (typeof ANALYTICS_KINDS)[number];
 
 export interface AnalyticsFields {
   userId?: UserId;

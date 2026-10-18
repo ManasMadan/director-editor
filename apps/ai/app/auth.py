@@ -56,16 +56,21 @@ def verify(token: str, secret: str) -> Caller:
         raise AppError("UNAUTHENTICATED") from error
 
 
-def caller(
+async def caller(
     settings: Annotated[Settings, Depends(get_settings)],
     authorization: Annotated[str | None, Header()] = None,
     x_request_id: Annotated[str | None, Header()] = None,
 ) -> Caller:
+    """Async on purpose: FastAPI runs a sync dependency in its threadpool, in a copy of the
+    context, so what it binds would never reach the endpoint's log lines. Verifying is one
+    HMAC, which doesn't hold up the event loop."""
     if not authorization or not authorization.startswith("Bearer "):
         raise AppError("UNAUTHENTICATED")
     verified = verify(authorization.removeprefix("Bearer "), settings.service_secret)
+    # Only this request's ids: a connection kept alive carries its context to the next.
+    structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(
-        request_id=x_request_id, org_id=str(verified.org_id), user_id=str(verified.user_id)
+        requestId=x_request_id, orgId=str(verified.org_id), userId=str(verified.user_id)
     )
     return verified
 

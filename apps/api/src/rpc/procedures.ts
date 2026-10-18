@@ -41,6 +41,7 @@ import type { Auth } from "../auth/auth";
 import { sessionWithIds } from "../auth/ids";
 import type { Memberships } from "../auth/memberships";
 import { env } from "../env";
+import { actorContext } from "../http-context";
 
 /** `instanceof ORPCError`, typed: the bare check narrows to ORPCError<any, any>. */
 const isOrpcError = (error: unknown): error is ORPCError<string, unknown> =>
@@ -189,7 +190,10 @@ export function orgCallerFor(auth: Auth, memberships: Memberships) {
     if (!result) {
       throw new AppError("UNAUTHENTICATED");
     }
-    updateContext({ userId: result.user.id, locale: required(result.user.locale, "the locale") });
+    updateContext({
+      ...actorContext(result.user),
+      locale: required(result.user.locale, "the locale"),
+    });
     const orgId = result.session.activeOrganizationId;
     if (!orgId) {
       throw new AppError("NO_ACTIVE_ORGANIZATION");
@@ -236,7 +240,11 @@ export function createProcedures(auth: Auth, memberships: Memberships, redis: Re
         throw new AppError("UNAUTHENTICATED");
       }
       // The column is NOT NULL; better-auth types optional fields as nullable.
-      updateContext({ userId: result.user.id, locale: required(result.user.locale, "the locale") });
+      updateContext({
+        ...actorContext(result.user),
+        orgId: result.session.activeOrganizationId ?? undefined,
+        locale: required(result.user.locale, "the locale"),
+      });
       await spendLimit(meta, { user: result.user.id });
       return next({ context: { user: result.user, session: result.session } });
     },

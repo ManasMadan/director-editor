@@ -15,6 +15,7 @@ import {
   runMain,
   runSync,
   warn,
+  withoutGitRepository,
   writeEnvValue,
 } from "./lib";
 import { captureOutput } from "./stand-ins";
@@ -104,6 +105,21 @@ describe("running a command", () => {
   it("keeps output larger than spawnSync's default limit", () => {
     const script = "process.stdout.write('x'.repeat(3 * 1024 * 1024))";
     expect(runSync("bun", ["-e", script]).stdout).toHaveLength(3 * 1024 * 1024);
+  });
+});
+
+describe("an environment without git's repository", () => {
+  it("drops the variables that tie git to one repository, and keeps the rest", () => {
+    const env = {
+      GIT_DIR: "/repo/.git",
+      GIT_WORK_TREE: "/repo",
+      GIT_INDEX_FILE: "/repo/.git/index",
+      GIT_COMMON_DIR: "/repo/.git",
+      GIT_SSH_COMMAND: "ssh -i key",
+      PATH: "/bin",
+      UNSET: undefined,
+    };
+    expect(withoutGitRepository(env)).toEqual({ GIT_SSH_COMMAND: "ssh -i key", PATH: "/bin" });
   });
 });
 

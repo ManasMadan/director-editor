@@ -4,6 +4,7 @@
  */
 import { type OrgId, orgIdSchema, type UserId } from "@repo/contracts/ids";
 import { type Database, tenantTx, transaction } from "@repo/db";
+import { hashPassword } from "better-auth/crypto";
 import { copySeedTemplates } from "../modules/director/seeds.repository";
 import { emitEvent } from "../outbox";
 import type { Auth } from "./auth.module";
@@ -49,6 +50,16 @@ interface Dependencies {
   auth: Auth;
   database: Database;
 }
+
+/**
+ * The demo password, hashed with better-auth's own hasher (scrypt), which sign-in checks
+ * it with: auth.ts sets no other. Not with `auth.$context`'s `password.hash`: with
+ * PASSWORD_BREACH_CHECK on (production), the Have I Been Pwned plugin wraps that, and the
+ * wrapper reads the request it runs in, which this command, run outside any request,
+ * doesn't have. It skips the breach check on purpose: the check keeps a secret password
+ * from being guessed, and this one is shown on the sign-in page.
+ */
+const hashDemoPassword = (password: string) => hashPassword(password);
 
 export type DemoAccountOutcome =
   | { outcome: "created" | "reset" }
@@ -96,7 +107,7 @@ async function createDemoAccount({ auth }: Dependencies, password: string) {
     userId: user.id,
     providerId: "credential",
     accountId: user.id,
-    password: await context.password.hash(password),
+    password: await hashDemoPassword(password),
   });
 }
 
@@ -107,11 +118,11 @@ async function updateDemoAccount(
   password: string,
 ) {
   const userId = userIdOf(found);
-  const { internalAdapter, password: hasher } = await auth.$context;
+  const { internalAdapter } = await auth.$context;
   // better-auth also rewrites the user its sessions hold in Redis, so one signed in
   // before the flag was set has it from the next request on.
   await internalAdapter.updateUser(userId, { name: DEMO_NAME, emailVerified: true, demo: true });
-  const hash = await hasher.hash(password);
+  const hash = await hashDemoPassword(password);
   if (await internalAdapter.findCredentialAccount(userId)) {
     await internalAdapter.updatePassword(userId, hash);
   } else {

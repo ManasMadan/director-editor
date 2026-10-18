@@ -1,0 +1,11 @@
+apiVersion: v2
+name: dashboards
+description: >-
+  Grafana dashboards for clusters that opt into observability, read from the services'
+  activity logs in Loki (docs/observability.md): People (who signed in, how and from
+  where), Who did what (one person's timeline, linked to their traces) and Director
+  (indexing, calls, takes, cuts and publishes). Each is a ConfigMap labelled
+  grafana_dashboard, which Grafana's sidecar loads.
+type: application
+version: 0.1.0
+kubeVersion: ">=1.31.0-0"
