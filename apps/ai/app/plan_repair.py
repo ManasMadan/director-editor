@@ -94,7 +94,7 @@ def repair_plan(plan: ShotPlanDraft, video_seconds: float | None) -> ShotPlan:
     repaired = [
         _repair_shot(shot, duration) for shot, duration in zip(shots, durations, strict=True)
     ]
-    end = _end_of_short(repaired, video_seconds)
+    end = _end_of_short([shot.sourceEndSeconds for shot in repaired], video_seconds)
     assets, renamed = _repair_assets(plan.assets, end)
     # Validated against the real ShotPlan (its Field constraints, not the draft's looser
     # ones): a trim that still leaves too much of something raises here, loudly, rather
@@ -106,6 +106,25 @@ def repair_plan(plan: ShotPlanDraft, video_seconds: float | None) -> ShotPlan:
             "durationSeconds": sum(shot.durationSeconds for shot in repaired),
             "assets": assets,
             "edits": _repair_edits(plan.edits, renamed, end),
+        }
+    )
+
+
+def with_assets_and_edits(plan: ShotPlan, source: ShotPlan) -> ShotPlan:
+    """`plan` with `source`'s assets and edits, repaired against `plan`'s own Short: how a
+    seed already filmed and drawn for gains the assets and edits a newer index of the same
+    Short found, without its shots (and the media made from them) changing
+    (scripts/seed_assets.py)."""
+    end = _end_of_short([shot.sourceEndSeconds for shot in plan.shots], None)
+    assets, renamed = _repair_assets(
+        [AssetDraft.model_validate(asset.model_dump()) for asset in source.assets], end
+    )
+    edits = [EditDraft.model_validate(edit.model_dump()) for edit in source.edits]
+    return ShotPlan.model_validate(
+        {
+            **plan.model_dump(mode="json"),
+            "assets": assets,
+            "edits": _repair_edits(edits, renamed, end),
         }
     )
 
@@ -270,11 +289,11 @@ type Fields = dict[str, object]
 type AssetOf = Callable[[str | None], str | None]
 
 
-def _end_of_short(shots: list[ShotDraft], video_seconds: float | None) -> float:
+def _end_of_short(shot_ends: list[float], video_seconds: float | None) -> float:
     """Where the Short ends, for an asset's or an edit's timing (seconds of the original,
     like a shot's source range): the video's own length when it's known, otherwise where
     its last shot ends."""
-    end = video_seconds if video_seconds is not None else max(s.sourceEndSeconds for s in shots)
+    end = video_seconds if video_seconds is not None else max(shot_ends)
     return max(end, MIN_EDIT_SECONDS)
 
 

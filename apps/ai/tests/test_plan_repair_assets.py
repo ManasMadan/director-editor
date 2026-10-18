@@ -5,7 +5,7 @@ and every edit turned into its own type's model, or dropped when it can't be mad
 
 import pytest
 
-from app.plan_repair import repair_plan
+from app.plan_repair import repair_plan, with_assets_and_edits
 from app.schemas import (
     MAX_ASSET_TEXT_LINES,
     MAX_ASSETS,
@@ -277,3 +277,24 @@ def test_edits_are_trimmed_to_their_limit() -> None:
     repaired = repair_plan(plan(edits=edits), video_seconds=None)
     assert len(repaired.edits) == MAX_EDITS
     assert repaired.edits[-1].startSeconds == (MAX_EDITS - 1) / 10
+
+
+def test_a_plan_takes_another_index_s_assets_and_edits_without_changing_its_shots() -> None:
+    plan_ = repair_plan(plan(), video_seconds=None)
+    newer = repair_plan(
+        plan(
+            assets=[asset(id="Chart", sourceEndSeconds=40)],
+            edits=[edit("layout", layout="split", assetId="Chart", endSeconds=40)],
+            shots=[shot(sourceStartSeconds=0, sourceEndSeconds=40, durationSeconds=40)],
+        ),
+        video_seconds=None,
+    )
+    merged = with_assets_and_edits(plan_, newer)
+
+    assert merged.shots == plan_.shots
+    [chart] = merged.assets
+    # Fitted to this plan's own Short, which ends at 10 s.
+    assert (chart.id, chart.sourceEndSeconds) == ("chart", 10)
+    [layout] = merged.edits
+    assert isinstance(layout, LayoutEdit)
+    assert (layout.assetId, layout.endSeconds) == ("chart", 10)

@@ -90,6 +90,12 @@ def image_prompt(asset: Asset) -> str:
     return "\n".join([*lines, _GENERIC_PERSON, _NO_MARKS])
 
 
+def drawn_aspect_ratio(asset: Asset) -> str:
+    """The shape Nano Banana draws the asset in: its reference's, or the nearest it has."""
+    ratio = asset.reference.aspectRatio
+    return _DRAWN_AS.get(ratio, ratio)
+
+
 def asset_key(plan_id: UUID, asset_id: str, media_type: str) -> str:
     """Where an asset's default image is kept (an id the plan's pattern allows, so the
     key stays inside the plan's folder)."""
@@ -134,10 +140,9 @@ class Artist:
         self.model_name = model_name
 
     async def draw(self, asset: Asset) -> Drawing:
-        ratio = asset.reference.aspectRatio
         config = GenerateContentConfig(
             response_modalities=["IMAGE"],
-            image_config=ImageConfig(aspect_ratio=_DRAWN_AS.get(ratio, ratio), image_size="1K"),
+            image_config=ImageConfig(aspect_ratio=drawn_aspect_ratio(asset), image_size="1K"),
             http_options=HttpOptions(timeout=DRAW_TIMEOUT_MS),
         )
         response = await self._model.client.aio.models.generate_content(  # pyright: ignore[reportUnknownMemberType]  # its contents type names Pillow's Image, not installed
