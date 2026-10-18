@@ -43,7 +43,11 @@ export function drawInto(
   ctx: CanvasRenderingContext2D,
   picture: Picture,
   box: FrameBox,
-  { fit = "cover", zoom = 1, filter = null }: { fit?: "cover" | "contain"; zoom?: number; filter?: string | null } = {},
+  {
+    fit = "cover",
+    zoom = 1,
+    filter = null,
+  }: { fit?: "cover" | "contain"; zoom?: number; filter?: string | null } = {},
 ) {
   const { width: cw, height: ch } = ctx.canvas;
   const bx = box.x * cw;
@@ -84,7 +88,15 @@ function drawMark(ctx: CanvasRenderingContext2D, mark: Scene["marks"][number]) {
   ctx.beginPath();
   switch (mark.mark) {
     case "circle":
-      ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * mark.drawn);
+      ctx.ellipse(
+        x + w / 2,
+        y + h / 2,
+        w / 2,
+        h / 2,
+        0,
+        -Math.PI / 2,
+        -Math.PI / 2 + Math.PI * 2 * mark.drawn,
+      );
       break;
     case "underline":
       ctx.moveTo(x, y + h);
@@ -168,14 +180,18 @@ function drawEndCard(
     return;
   }
   if (card.text) {
-    drawWords(ctx, {
-      text: card.text,
-      style: "title",
-      position: "middle",
-      color: null,
-      highlight: null,
-      shown: 1,
-    }, 0);
+    drawWords(
+      ctx,
+      {
+        text: card.text,
+        style: "title",
+        position: "middle",
+        color: null,
+        highlight: null,
+        shown: 1,
+      },
+      0,
+    );
   }
 }
 
@@ -235,13 +251,18 @@ export function composer(
       const gapPicture = gapVisual ? pictureOf(gapVisual) : null;
       if (scene.gap && (gapPicture || !camera)) {
         // B-roll over the camera; a skipped shot with nothing chosen holds the nearest take.
-        const picture =
-          gapPicture ??
-          (hasHeld ? { source: held, width: cw, height: ch } : hold);
+        const picture = gapPicture ?? (hasHeld ? { source: held, width: cw, height: ch } : hold);
         if (picture) {
           const zoom =
-            gapVisual?.kind === "video" ? 1 : 1 + PUSH_IN * (scene.gap.seconds / Math.max(0.5, scene.gap.length));
-          drawInto(ctx, picture, { x: 0, y: 0, width: 1, height: 1 }, { zoom, filter: scene.assetFilter ?? scene.cameraFilter });
+            gapVisual?.kind === "video"
+              ? 1
+              : 1 + PUSH_IN * (scene.gap.seconds / Math.max(0.5, scene.gap.length));
+          drawInto(
+            ctx,
+            picture,
+            { x: 0, y: 0, width: 1, height: 1 },
+            { zoom, filter: scene.assetFilter ?? scene.cameraFilter },
+          );
         }
       } else {
         if (camera && scene.camera) {
@@ -249,10 +270,18 @@ export function composer(
         }
         const asset = scene.asset ? visualPicture(scene.asset.assetId) : null;
         if (scene.asset && asset) {
-          drawInto(ctx, asset, scene.asset.box, { fit: scene.asset.fit, filter: scene.assetFilter });
+          drawInto(ctx, asset, scene.asset.box, {
+            fit: scene.asset.fit,
+            filter: scene.assetFilter,
+          });
         } else if (camera && !scene.camera) {
           // The asset this moment needs isn't there: the member's picture rather than nothing.
-          drawInto(ctx, camera, { x: 0, y: 0, width: 1, height: 1 }, { filter: scene.cameraFilter });
+          drawInto(
+            ctx,
+            camera,
+            { x: 0, y: 0, width: 1, height: 1 },
+            { filter: scene.cameraFilter },
+          );
         }
       }
       if (camera && heldCtx) {
@@ -272,7 +301,12 @@ export function composer(
         drawMark(ctx, mark);
       }
       if (scene.endCard) {
-        drawEndCard(ctx, scene.endCard, scene.endCard.assetId ? assets.get(scene.endCard.assetId) : undefined, scene.assetFilter);
+        drawEndCard(
+          ctx,
+          scene.endCard,
+          scene.endCard.assetId ? assets.get(scene.endCard.assetId) : undefined,
+          scene.assetFilter,
+        );
       }
       scene.words.forEach((words, index) => drawWords(ctx, words, index));
       return scene.captionsY;

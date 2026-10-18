@@ -52,7 +52,9 @@ async function videoOf(blob: Blob): Promise<Visual> {
  * Each slot's picture, ready to draw. One that can't be read is left out: its moment
  * shows the member's own picture instead (lib/compose.ts), rather than failing the save.
  */
-export async function loadVisuals(media: ReadonlyMap<string, SlotMedia>): Promise<Map<string, Visual>> {
+export async function loadVisuals(
+  media: ReadonlyMap<string, SlotMedia>,
+): Promise<Map<string, Visual>> {
   const loaded = await Promise.all(
     [...media].map(async ([slotId, { url, video }]): Promise<[string, Visual] | null> => {
       try {

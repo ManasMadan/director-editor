@@ -226,7 +226,8 @@ export class AssetsService {
     const assets = await this.list(userId, orgId, videoId);
     return assets.slots.some((slot) =>
       slot.images.some(
-        (image) => image.id === slot.chosenId && image.origin === "created" && image.media === "video",
+        (image) =>
+          image.id === slot.chosenId && image.origin === "created" && image.media === "video",
       ),
     );
   }

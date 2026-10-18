@@ -46,7 +46,10 @@ export interface Span {
   end: number;
 }
 
-export const spanOf = (clips: readonly Clip[], edit: { startSeconds: number; endSeconds: number }) => ({
+export const spanOf = (
+  clips: readonly Clip[],
+  edit: { startSeconds: number; endSeconds: number },
+) => ({
   start: editTime(clips, edit.startSeconds),
   end: editTime(clips, edit.endSeconds),
 });
@@ -122,7 +125,9 @@ function layoutBoxes(edit: EditOf<"layout">): { camera: FrameBox | null; asset: 
         };
   }
   if (edit.layout === "picture-in-picture" && edit.box) {
-    return edit.inset === "camera" ? { camera: edit.box, asset: FULL } : { camera: FULL, asset: edit.box };
+    return edit.inset === "camera"
+      ? { camera: edit.box, asset: FULL }
+      : { camera: FULL, asset: edit.box };
   }
   // Full: the asset takes the frame when the layout names one, else the camera does.
   return edit.assetId ? { camera: null, asset: FULL } : { camera: FULL, asset: null };
@@ -203,10 +208,12 @@ function frameOf(plan: ShotPlan, clips: readonly Clip[], at: number, clip: Clip 
   let camera = boxes.camera;
   // Only the member's voice is used, or nothing of their take: the picture is the asset.
   if (clip && clip.shot.mode !== "on-camera") {
-    const own = asset ?? (() => {
-      const found = assetOfShot(plan, clip);
-      return found ? placed(plan, found.id, FULL, 1) : null;
-    })();
+    const own =
+      asset ??
+      (() => {
+        const found = assetOfShot(plan, clip);
+        return found ? placed(plan, found.id, FULL, 1) : null;
+      })();
     if (own) {
       asset = { ...own, box: FULL };
       camera = null;
@@ -235,7 +242,12 @@ export function sceneAt(plan: ShotPlan, clips: readonly Clip[], at: number): Sce
         overlays.push(placed(plan, edit.assetId, edit.box, shown));
       } else if (edit.mark) {
         const drawn = edit.entry === "draw" ? Math.min(1, (at - span.start) / 0.6) : 1;
-        marks.push({ mark: edit.mark, box: edit.box, color: edit.color, drawn: Math.min(drawn, shown) });
+        marks.push({
+          mark: edit.mark,
+          box: edit.box,
+          color: edit.color,
+          drawn: Math.min(drawn, shown),
+        });
       }
     } else if (edit.type === "text") {
       if (edit.style === "captions") {

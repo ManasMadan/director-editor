@@ -182,6 +182,12 @@ export type AssetDrawingCreate = {
      */
     baseId: string | null;
     /**
+     * Clip
+     *
+     * A gap's slot: a Veo clip rather than a still (3 a video, none for a demo guest).
+     */
+    clip?: boolean;
+    /**
      * Demo
      *
      * The caller is a demo guest, with fewer images a video.
