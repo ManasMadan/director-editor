@@ -594,8 +594,6 @@ export type CutPick = {
     takeId: string;
 };
 
-export type Direction = 'none' | 'left' | 'right' | 'forward' | 'back' | 'turn-left' | 'turn-right';
-
 /**
  * DirectorCutCreate
  */
@@ -1635,68 +1633,6 @@ export type ReviseResult = {
      */
     summary: string;
     version: YourVersion;
-};
-
-/**
- * SceneCheck
- */
-export type SceneCheck = {
-    direction: Direction;
-    /**
-     * Distancemeters
-     */
-    distanceMeters: number | null;
-    /**
-     * Inplace
-     *
-     * The frame already looks like the shot's scene.
-     */
-    inPlace: boolean;
-    /**
-     * Instruction
-     *
-     * One short spoken direction: "Move about five meters left, to the tree."
-     */
-    instruction: string;
-    /**
-     * Where the scene's landmark is in this frame, when it is in it.
-     */
-    landmark: SceneLandmark | null;
-    /**
-     * Lighting
-     */
-    lighting: 'good' | 'too-dark' | 'too-bright' | 'backlit';
-};
-
-/**
- * SceneCheckRequest
- */
-export type SceneCheckRequest = {
-    /**
-     * Image
-     *
-     * A JPEG camera frame, base64.
-     */
-    image: string;
-    /**
-     * Shotindex
-     */
-    shotIndex: number;
-    /**
-     * Videoid
-     */
-    videoId: string;
-};
-
-/**
- * SceneLandmark
- */
-export type SceneLandmark = {
-    box: Box;
-    /**
-     * Label
-     */
-    label: string;
 };
 
 /**
@@ -3004,41 +2940,6 @@ export type WriteDirectorPublishCopyResponses = {
 };
 
 export type WriteDirectorPublishCopyResponse = WriteDirectorPublishCopyResponses[keyof WriteDirectorPublishCopyResponses];
-
-export type CheckDirectorSceneData = {
-    body: SceneCheckRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-        /**
-         * X-Request-Id
-         */
-        'x-request-id'?: string | null;
-    };
-    path?: never;
-    query?: never;
-    url: '/v1/director/scene-checks';
-};
-
-export type CheckDirectorSceneErrors = {
-    /**
-     * An error.
-     */
-    default: ErrorResponse;
-};
-
-export type CheckDirectorSceneError = CheckDirectorSceneErrors[keyof CheckDirectorSceneErrors];
-
-export type CheckDirectorSceneResponses = {
-    /**
-     * Successful Response
-     */
-    200: SceneCheck;
-};
-
-export type CheckDirectorSceneResponse = CheckDirectorSceneResponses[keyof CheckDirectorSceneResponses];
 
 export type SpeakDirectorLineData = {
     body: SpeechRequest;

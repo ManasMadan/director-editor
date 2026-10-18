@@ -2032,13 +2032,14 @@ describe("the call's configuration", () => {
     expect(plan).not.toBeNull();
     if (plan) {
       const target = { project: "p", location: "l", model: "m" };
-      const plain = setupMessage(target, plan, 0).setup;
+      const plain = setupMessage(target, plan, 0, { version: EMPTY_VERSION }).setup;
       expect(plain).not.toHaveProperty("proactivity");
       expect(plain.generationConfig).not.toHaveProperty("enableAffectiveDialog");
       const expressive = setupMessage(
         { ...target, proactiveAudio: true, affectiveDialog: true },
         plan,
         0,
+        { version: EMPTY_VERSION },
       ).setup;
       expect(expressive).toMatchObject({
         proactivity: { proactiveAudio: true },

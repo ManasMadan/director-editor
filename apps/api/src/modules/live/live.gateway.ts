@@ -210,7 +210,7 @@ function relayFor(
     onTurn: (turn, shot) =>
       options.recordTurn({
         ...turn,
-        userId: call.userId,
+        userId: call.caller.userId,
         videoId: call.videoId,
         template: call.plan.format,
         shot,
