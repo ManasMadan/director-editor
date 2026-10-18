@@ -20,7 +20,7 @@
  */
 import type { DirectorChatInput, DirectorChatReply, ShotPlan } from "@repo/contracts/api";
 import type { LiveToolCall } from "@repo/contracts/live";
-import { PROVIDER_TIMEOUT_MS } from "@repo/contracts/time";
+import { SECOND_MS } from "@repo/contracts/time";
 import { AppError, describeError } from "@repo/nest-common";
 import * as z from "zod";
 import type { GoogleAuth } from "./google-auth";
@@ -63,8 +63,13 @@ const SLOWER = `Right now you're on the slower line: you can't hear them live. Y
 
 /** Short spoken answers: a sentence or two, with room for a tool call's arguments. */
 const MAX_OUTPUT_TOKENS = 400;
-/** A quick turn matters more than deep thought: Director answers in about a second. */
+/** A quick turn matters more than deep thought: LOW is the least Gemini 3 Flash allows. */
 const THINKING_LEVEL = "LOW";
+/**
+ * How long one answer may take. Warm turns take three to four seconds on Vertex (measured);
+ * the first of a while can take ten, and a late answer is still better than none.
+ */
+const CHAT_TIMEOUT_MS = 20 * SECOND_MS;
 
 const functionCall = z.object({ name: z.string(), args: z.unknown().optional() });
 // Parts are kept as they came (thought signatures included), to hand back in a second request.
@@ -210,7 +215,7 @@ export class DirectorChat {
             thinkingConfig: { thinkingLevel: THINKING_LEVEL },
           },
         }),
-        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+        signal: AbortSignal.timeout(CHAT_TIMEOUT_MS),
       });
     } catch (error) {
       this.log("error", { err: describeError(error) }, "director chat failed");
