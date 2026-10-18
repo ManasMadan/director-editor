@@ -245,6 +245,7 @@ async function startApi(overrides: Partial<LiveOptions> = {}, fake = new FakeLiv
     log,
     now: () => clock,
     recordCallStarted: vi.fn(),
+    recordTurn: vi.fn(),
     context: () => ({ requestId: "call-1" }),
     activity: vi.fn(),
     picks: () => ({ choose: () => Promise.resolve("done") }),
@@ -470,6 +471,36 @@ describe("a live call", () => {
     expect(await browser.message(3)).toEqual({ type: "interrupted" });
     // Its turn is over: the browser starts its next words on a new line.
     expect(await browser.message(4)).toEqual({ type: "turn" });
+  });
+
+  it("records each of Director's turns for analytics: who, the short, tools and the wait, no words", async () => {
+    const recordTurn = vi.fn<LiveOptions["recordTurn"]>();
+    const { fake, browser, tick } = await liveCall({ recordTurn });
+    browser.send({ type: "text", text: "I'm fine shooting inside" });
+    await fake.message(2);
+    tick(800);
+    fake.send({
+      toolCall: { functionCalls: [{ id: "g1", name: "switch_camera", args: { to: "front" } }] },
+    });
+    fake.send({
+      serverContent: {
+        modelTurn: { parts: [{ inlineData: { mimeType: "audio/pcm;rate=24000", data: "BBBB" } }] },
+      },
+    });
+    fake.send({ serverContent: { turnComplete: true } });
+    await vi.waitFor(() => expect(recordTurn).toHaveBeenCalledOnce());
+    expect(recordTurn).toHaveBeenCalledWith({
+      userId: caller.userId,
+      videoId: "dQw4w9WgXcQ",
+      template: readyPlan.plan?.format,
+      shot: 0,
+      input: "text",
+      latencyMs: 800,
+      tools: ["switch_camera"],
+      interrupted: false,
+      spoke: true,
+    });
+    expect(JSON.stringify(recordTurn.mock.calls)).not.toContain("inside");
   });
 
   it("forwards up to twice real time of microphone audio, and hangs up past it", async () => {

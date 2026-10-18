@@ -109,6 +109,13 @@ export function liveCallOptions(deps: {
     now: Date.now,
     recordCallStarted: (userId, videoId) =>
       deps.analytics.record("call_started", { userId, videoId }),
+    recordTurn: ({ userId, videoId, template, ...turn }) =>
+      deps.analytics.record("director_turn", {
+        userId,
+        videoId,
+        templateId: template,
+        detail: { line: "live", ...turn },
+      }),
     context: upgradeContext(env.TRUSTED_PROXIES),
     activity: deps.activity,
   };

@@ -6,6 +6,6 @@ from typing import Annotated, Literal
 from pydantic import Field
 
 type AnalyticsKind = Annotated[
-    Literal["indexed", "take_reviewed", "cut_saved", "published", "call_started"],
+    Literal["indexed", "take_reviewed", "cut_saved", "published", "call_started", "director_turn"],
     Field(..., title="AnalyticsKind"),
 ]

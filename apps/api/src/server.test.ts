@@ -94,11 +94,36 @@ describe("the live call's wiring", () => {
     expect(take).toHaveBeenCalledTimes(1);
   });
 
-  it("records a started call as a call_started analytics event", () => {
+  it("records a started call and each of its turns as analytics events", () => {
     const record = vi.fn();
     const live = options({ analytics: { record } });
     live.recordCallStarted(userId, videoId);
     expect(record).toHaveBeenCalledWith("call_started", { userId, videoId });
+    live.recordTurn({
+      userId,
+      videoId,
+      template: "GRWM",
+      shot: 2,
+      input: "voice",
+      latencyMs: 900,
+      tools: ["mark"],
+      interrupted: false,
+      spoke: true,
+    });
+    expect(record).toHaveBeenCalledWith("director_turn", {
+      userId,
+      videoId,
+      templateId: "GRWM",
+      detail: {
+        line: "live",
+        shot: 2,
+        input: "voice",
+        latencyMs: 900,
+        tools: ["mark"],
+        interrupted: false,
+        spoke: true,
+      },
+    });
   });
 
   it("writes the call's activity through the API's recorder, in the upgrade's own context", () => {
