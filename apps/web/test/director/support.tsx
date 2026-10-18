@@ -223,6 +223,8 @@ export function shotPlan(overrides: Partial<ShotPlan> = {}): ShotPlan {
     audio: "speech",
     durationSeconds: 75,
     shots: [planShot()],
+    assets: [],
+    edits: [],
     ...overrides,
   };
 }

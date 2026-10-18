@@ -138,6 +138,14 @@ class Settings(GeminiSettings):
     director_tokens_per_publish_copy: int = Field(
         default=20_000, ge=2_000, alias="DIRECTOR_TOKENS_PER_PUBLISH_COPY"
     )
+    # The default images of a plan's assets (app/assets.py): the Nano Banana model that
+    # draws them, by its short name, addressed like every other model (VERTEX_LOCATION).
+    # On with Director and MEDIA_BUCKET, where they're kept. A 1K image is about 1,300
+    # output tokens with the model's thinking, and its prompt a few hundred.
+    asset_model: str = Field(default="gemini-nano-banana-2.1", min_length=1, alias="ASSET_MODEL")
+    director_tokens_per_asset: int = Field(
+        default=6_000, ge=2_000, alias="DIRECTOR_TOKENS_PER_ASSET"
+    )
 
     # Product analytics (app/analytics.py): plans indexed and take reviews, streamed into
     # this BigQuery dataset's `events` table in GOOGLE_CLOUD_PROJECT, the same table

@@ -41,7 +41,7 @@ from app.db.models import DirectorAsset, DirectorPlan
 from app.db.session import tenant
 from app.log import log
 from app.realtime import publish_to_org
-from app.schemas import Asset, AssetKind, AspectRatio, ShotPlan
+from app.schemas import AspectRatio, Asset, AssetKind, ShotPlan
 from app.usage import reserve, settle
 
 # Spec'd limits on generated images (Vertex AI prices to be checked before they're
@@ -62,10 +62,10 @@ DRAW_TIMEOUT_MS = 60_000
 KEY_PREFIX = "director-assets"
 _EXTENSIONS = {"image/png": "png", "image/jpeg": "jpg"}
 _GENERIC_PERSON = (
-    "Anyone in it is a generic, anonymous adult, not a likeness of any real or recognisable "
-    "person."
+    "Anyone in it is a generic, anonymous adult, not a likeness of any real or recognisable person."
 )
 _NO_MARKS = "No logos, watermarks or brand names anywhere."
+# What screens showing a plan, its takes or its images are told when one changes.
 CHANGED = DirectorChanged(type="director.changed")
 
 
@@ -200,7 +200,12 @@ class AssetMaker:
         self._per_image = per_image
 
     async def claim(
-        self, session: AsyncSession, org_id: UUID, plan_id: UUID, user_id: UUID | None, plan: ShotPlan
+        self,
+        session: AsyncSession,
+        org_id: UUID,
+        plan_id: UUID,
+        user_id: UUID | None,
+        plan: ShotPlan,
     ) -> int:
         """Queues a default image for each of the plan's stills that the member who
         indexed it still has room for today, inside the caller's transaction (the one
@@ -208,9 +213,7 @@ class AssetMaker:
         service's) counts against nobody's day."""
         assets = default_assets(plan)
         if user_id is not None:
-            made = await session.scalar(
-                select(type_coerce(func.ai.images_today(user_id), Integer))
-            )
+            made = await session.scalar(select(type_coerce(func.ai.images_today(user_id), Integer)))
             assets = assets[: max(IMAGES_PER_MEMBER_PER_DAY - (made or 0), 0)]
         if not assets:
             return 0
@@ -228,7 +231,8 @@ class AssetMaker:
             insert(DirectorAsset)
             .values(rows)
             .on_conflict_do_nothing(
-                index_elements=["plan_id", "asset_id"], index_where=DirectorAsset.origin == "default"
+                index_elements=["plan_id", "asset_id"],
+                index_where=DirectorAsset.origin == "default",
             )
             .returning(DirectorAsset.id)
         )

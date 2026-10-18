@@ -8,6 +8,7 @@
 import type { ServedShotPlan, ShotPlan } from "@repo/contracts/api";
 import { type DirectorSeed, directorSeeds } from "@repo/contracts/director-seeds";
 import type { VideoId } from "@repo/contracts/ids";
+import type { AssetImage } from "./asset-images";
 
 /** One medium of a seed: its key in storage, and the shot it's of (null: the music). */
 export interface SeedMediaKey {
@@ -40,6 +41,37 @@ export function seedMediaKeys(
     ]),
   ];
   return keys.flatMap(({ key, ...at }) => (key ? [{ ...at, key }] : []));
+}
+
+/** The committed seed of `videoId` when its plan has as many shots as `plan`. */
+function sameSeed(videoId: VideoId, plan: ShotPlan, seeds: readonly DirectorSeed[]) {
+  const seed = seeds.find((each) => each.videoId === videoId);
+  return seed && seed.plan.shots.length === plan.shots.length ? seed : undefined;
+}
+
+/**
+ * A seeded template's plan with the committed seed's assets and edits: a seed's are
+ * filled in after its shots (`seeds:assets` in apps/ai), and every workspace's copy gets
+ * them then, with no copy to update. A copy with another number of shots than the seed
+ * (an older plan) keeps its own.
+ */
+export function withSeedAssets(
+  videoId: VideoId,
+  plan: ShotPlan,
+  seeds: readonly DirectorSeed[] = directorSeeds,
+): ShotPlan {
+  const seed = sameSeed(videoId, plan, seeds);
+  return seed ? { ...plan, assets: seed.plan.assets, edits: seed.plan.edits } : plan;
+}
+
+/** A seeded template's asset images: the committed seed's, each ready once it's made. */
+export function seedAssetImages(
+  videoId: VideoId,
+  plan: ShotPlan,
+  seeds: readonly DirectorSeed[] = directorSeeds,
+): AssetImage[] {
+  const made = sameSeed(videoId, plan, seeds)?.media?.assets ?? {};
+  return Object.entries(made).map(([assetId, key]) => ({ assetId, status: "ready", key }));
 }
 
 /**

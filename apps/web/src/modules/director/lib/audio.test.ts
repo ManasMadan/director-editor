@@ -9,6 +9,8 @@ const plan = (audio: ShotPlan["audio"]): ShotPlan => ({
   audio,
   durationSeconds: 1,
   shots: [],
+  assets: [],
+  edits: [],
 });
 
 describe("the audio choice", () => {

@@ -37,7 +37,8 @@ import { aiCaller, callAi } from "../ai";
 import { FilesService } from "../files";
 import { RecordingService } from "../recording";
 import { ShortsService } from "../shorts";
-import { seedMediaKeys, withMediaLinks } from "./seed-media";
+import { type AssetImageRow, planAssetImages, withAssetImages } from "./asset-images";
+import { seedAssetImages, seedMediaKeys, withMediaLinks, withSeedAssets } from "./seed-media";
 import { shotsOf } from "./shots";
 
 // Long enough for the review job's retries (three, minutes apart), no longer.
@@ -75,6 +76,16 @@ const wirePlan = directorPlanSchema.omit({ audio: true, plan: true }).extend({
   plan: shotPlanSchema.nullable(),
   audioStatus: directorPlanSchema.shape.audio.shape.status,
   audioKey: z.string().nullable(),
+  // An AI service from before asset images reports none.
+  assetImages: z
+    .array(
+      z.object({
+        assetId: z.string(),
+        status: z.enum(["pending", "generating", "ready", "failed"]),
+        objectKey: z.string().nullable(),
+      }),
+    )
+    .default([]),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -262,16 +273,40 @@ export class DirectorService {
    * `media` is asked for, to a seeded template's storyboard cards, previews and music.
    */
   private async toPlan(row: unknown, { media }: { media: boolean }): Promise<DirectorPlan> {
-    const { audioStatus, audioKey, plan: shotPlan, ...plan } = wirePlan.parse(row);
+    const { audioStatus, audioKey, assetImages, plan: stored, ...plan } = wirePlan.parse(row);
+    const shotPlan =
+      stored && plan.source === "seed" ? withSeedAssets(plan.videoId, stored) : stored;
     const [url, served] = await Promise.all([
       audioStatus === "ready" && audioKey
         ? this.files.objectUrl(audioKey, AUDIO_READ_EXPIRES_S)
         : null,
-      shotPlan && media && plan.source === "seed"
-        ? this.withSeedMedia(plan.videoId, shotPlan)
-        : shotPlan,
+      shotPlan && media ? this.withMedia(plan, shotPlan, assetImages) : shotPlan,
     ]);
     return { ...plan, plan: served, audio: { status: audioStatus, url } };
+  }
+
+  /**
+   * A plan with links to its media: a seed's storyboard cards, previews and music, and
+   * any plan's asset images (a seed's committed with it, a member's as the AI service
+   * reports them).
+   */
+  private async withMedia(
+    plan: { id: string; videoId: VideoId; source: DirectorPlan["source"] },
+    shotPlan: ShotPlan,
+    rows: readonly AssetImageRow[],
+  ): Promise<ServedShotPlan> {
+    const seed = plan.source === "seed";
+    const images = seed ? seedAssetImages(plan.videoId, shotPlan) : planAssetImages(plan.id, rows);
+    const [served, signed] = await Promise.all([
+      seed ? this.withSeedMedia(plan.videoId, shotPlan) : shotPlan,
+      Promise.all(
+        images.map(async (image) => ({
+          image,
+          url: image.key ? await this.files.objectUrl(image.key, MEDIA_READ_EXPIRES_S) : null,
+        })),
+      ),
+    ]);
+    return { ...served, assets: withAssetImages(served.assets, signed) };
   }
 
   /**

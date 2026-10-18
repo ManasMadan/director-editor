@@ -31,6 +31,7 @@ type Feature = Literal[
     "director-review",
     "director-speech",
     "director-publish",
+    "director-asset",
 ]
 
 

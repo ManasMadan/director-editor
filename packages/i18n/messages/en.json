@@ -575,7 +575,9 @@
     "inOrder": "Film them in this order",
     "kind": {
       "video": "Video",
-      "photo": "Photo"
+      "photo": "Photo",
+      "voiceover": "Voice-over",
+      "asset": "Graphic"
     },
     "seconds": "{seconds, number, ::.#} s",
     "camera": {

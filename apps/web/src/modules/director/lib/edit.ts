@@ -5,7 +5,7 @@
  * reviewed, holds its place for the shot's length. The captions are the shots' scripts
  * moved to where their clips play.
  */
-import type { DirectorTake, Shot } from "@repo/contracts/api";
+import { type DirectorTake, directorTakeKind, type Shot } from "@repo/contracts/api";
 import type { CaptionLine } from "./captions";
 
 type ClipState = "cut" | "missing" | "reviewing";
@@ -40,7 +40,8 @@ export function clipsOf(shots: readonly Shot[], picked: Map<number, DirectorTake
       best && best.bestStartMs !== null && best.bestEndMs !== null
         ? { from: best.bestStartMs / 1000, to: best.bestEndMs / 1000 }
         : { from: 0, to: shot.durationSeconds };
-    const seconds = shot.kind === "video" && state === "cut" ? to - from : shot.durationSeconds;
+    const seconds =
+      directorTakeKind[shot.kind] === "video" && state === "cut" ? to - from : shot.durationSeconds;
     const clip: Clip = { index, shot, take: take ?? null, state, at, seconds, from, to };
     at += seconds;
     return clip;
@@ -61,7 +62,8 @@ export function clipAt(clips: readonly Clip[], seconds: number): Clip | undefine
 /** The caption lines on the edit's clock, cut to their clip. */
 export function editLines(clips: readonly Clip[]): CaptionLine[] {
   return clips.flatMap((clip) => {
-    const from = clip.shot.kind === "video" && clip.state === "cut" ? clip.from : 0;
+    const from =
+      directorTakeKind[clip.shot.kind] === "video" && clip.state === "cut" ? clip.from : 0;
     const end = clip.at + clip.seconds;
     return clip.shot.script.flatMap((line) => {
       const startSeconds = Math.min(end, clip.at + Math.max(0, line.startSeconds - from));

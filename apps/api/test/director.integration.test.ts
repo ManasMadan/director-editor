@@ -147,6 +147,8 @@ interface StandInPlan {
   audioKey: string | null;
   /** The plan the AI service answers with, once ready (PLAN unless a test says). */
   plan?: unknown;
+  /** The default images of its assets, as the AI service reports them. */
+  assetImages?: unknown[];
 }
 const plans: StandInPlan[] = [];
 const takes: {
@@ -183,6 +185,8 @@ function planOut(plan: StandInPlan) {
     model: plan.status === "ready" ? "gemini-test" : null,
     audioStatus: plan.audioKey ? "ready" : "none",
     audioKey: plan.audioKey,
+    // Left out unless a test sets them, as an AI service from before them answers.
+    ...(plan.assetImages && { assetImages: plan.assetImages }),
     createdAt: now,
     updatedAt: now,
   };
@@ -586,6 +590,58 @@ describe("Director's library", () => {
     // cards no list shows.
     const { templates } = await session.rpc.director.library();
     expect(JSON.stringify(templates)).not.toMatch(/Url"|files\//);
+  });
+
+  it("links a plan's asset images on its own page, only from the plan's own folder", async () => {
+    const { session, me } = await signedIn();
+    const org = String(me.activeOrganizationId);
+    const asset = (id: string) => ({
+      id,
+      kind: "image",
+      title: "The chart",
+      role: "Under the speaker, in a split screen",
+      description: "A chart of twelve archetypes.",
+      prompt: 'A flat black-and-white chart titled "12 ARCHETYPES".',
+      sourceStartSeconds: 0,
+      sourceEndSeconds: 9,
+      defaultSource: "create",
+      personalisable: true,
+      ask: null,
+      secondScreen: false,
+      reference: {
+        subject: "Twelve archetypes, a portrait on each row",
+        composition: "Title on top, twelve rows below",
+        style: "Flat infographic",
+        palette: "Black and white",
+        blackAndWhite: true,
+        aspectRatio: "9:8",
+        text: ["12 ARCHETYPES"],
+        mood: "Bold",
+      },
+    });
+    const plan = readyTemplate(org, "AssetShort1", null, {
+      user: me.id,
+      plan: { ...PLAN, assets: [asset("chart"), asset("card"), asset("end-card")] },
+    });
+    plan.assetImages = [
+      { assetId: "chart", status: "ready", objectKey: `director-assets/${plan.id}/chart.png` },
+      // A key that isn't this image's own is never signed.
+      { assetId: "card", status: "ready", objectKey: FOREIGN_KEY },
+      { assetId: "end-card", status: "generating", objectKey: null },
+    ];
+    const one = await session.rpc.director.plan({ videoId: "AssetShort1" });
+    const [chart, card, endCard] = one.plan?.assets ?? [];
+    const link = new URL(String(chart?.image?.url));
+    expect(link.pathname).toContain(`director-assets/${plan.id}/chart.png`);
+    expect(link.searchParams.get("X-Amz-Expires")).toBe("3600");
+    expect(card?.image).toEqual({ status: "failed", url: null });
+    expect(endCard?.image).toEqual({ status: "making", url: null });
+    expect(JSON.stringify(one)).not.toMatch(/files\/|objectKey/);
+    // The library lists the plan with its assets, but leaves their images to its page.
+    const { templates } = await session.rpc.director.library();
+    const listed = templates.find((each) => each.id === plan.id);
+    expect(listed?.plan?.assets.map((each) => each.id)).toEqual(["chart", "card", "end-card"]);
+    expect(listed?.plan?.assets.some((each) => "image" in each)).toBe(false);
   });
 
   it("links no media for any other plan, whatever its stored plan names", async () => {

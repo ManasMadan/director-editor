@@ -230,7 +230,8 @@ def test_a_plan_names_no_storage_path() -> None:
     (the take reviewer's dumps the whole shot)."""
     assert not {"storyboardKey", "previewKey"} & set(Shot.model_fields)
     assert "musicKey" not in ShotPlan.model_fields
-    assert shot_plan().model_dump(mode="json") == PLAN
+    # A plan read from before assets and edits existed gains only their empty lists.
+    assert shot_plan().model_dump(mode="json") == {**PLAN, "assets": [], "edits": []}
 
 
 VIDEO = "22k0fZarxh8"

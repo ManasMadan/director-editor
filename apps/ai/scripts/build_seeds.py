@@ -84,6 +84,10 @@ def _is_unset(value: object) -> bool:
     return value is None
 
 
+def _is_empty(value: dict[str, str]) -> bool:
+    return not value
+
+
 # Unset media is left out of the file rather than written as null.
 _UNSET = Field(default=None, exclude_if=_is_unset)
 
@@ -105,12 +109,18 @@ class SeedMedia(BaseModel):
 
     music: MediaKey | None = _UNSET
     shots: list[SeedShotMedia]
+    # The default image of each of the plan's assets that has one, by the asset's id; left
+    # out of the file while there are none.
+    assets: dict[str, MediaKey] = Field(default_factory=dict[str, MediaKey], exclude_if=_is_empty)
 
 
-def _allowed(video_id: str, media: SeedMedia) -> list[tuple[str | None, set[str]]]:
+def _allowed(
+    video_id: str, plan: ShotPlan, media: SeedMedia
+) -> list[tuple[str | None, set[str]]]:
     """Every key `media` names, each with the only keys it may be for this seed: its own
-    folder, its shot's position, the right kind of file."""
+    folder, its shot's position or its plan's asset, the right kind of file."""
     at = f"seed-media/{video_id}"
+    asset_ids = {asset.id for asset in plan.assets}
     return [
         (media.music, {f"{at}/music.mp3", f"{at}/music.wav"}),
         *[
@@ -120,6 +130,10 @@ def _allowed(video_id: str, media: SeedMedia) -> list[tuple[str | None, set[str]
                 (shot.storyboard, {f"{at}/shot-{index}.png", f"{at}/shot-{index}.jpg"}),
                 (shot.preview, {f"{at}/shot-{index}.mp4"}),
             )
+        ],
+        *[
+            (key, {f"{at}/asset-{name}.png", f"{at}/asset-{name}.jpg"} if name in asset_ids else set())
+            for name, key in media.assets.items()
         ],
     ]
 
@@ -146,7 +160,7 @@ class SeedTemplate(BaseModel):
             return self
         if len(self.media.shots) != len(self.plan.shots):
             raise ValueError("a seed's media has one entry per shot")
-        for key, allowed in _allowed(self.videoId, self.media):
+        for key, allowed in _allowed(self.videoId, self.plan, self.media):
             if key is not None and key not in allowed:
                 raise ValueError(f"{key} isn't this seed's media")
         return self

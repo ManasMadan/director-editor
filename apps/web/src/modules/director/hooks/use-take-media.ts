@@ -1,6 +1,7 @@
 "use client";
 
 import { useFileDownloadUrl } from "@repo/client/api/files/download-url";
+import { directorTakeKind } from "@repo/contracts/api";
 import type { DirectorTakeId } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
 import { useEffect, useRef, useState } from "react";
@@ -27,7 +28,7 @@ async function takeBytes(url: string): Promise<Blob> {
 }
 
 async function load(clip: Clip, blob: Blob, url: string): Promise<TakeMedia> {
-  if (clip.shot.kind === "photo") {
+  if (directorTakeKind[clip.shot.kind] === "photo") {
     return { blob, url, poster: url };
   }
   const [frame] = await videoFrames(url, [(clip.from + clip.to) / 2]);

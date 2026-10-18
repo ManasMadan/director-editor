@@ -1,4 +1,4 @@
-"""Background jobs for the AI service: Director's plans and take reviews (queue
+"""Background jobs for the AI service: Director's plans, their images and take reviews (queue
 `ai-director`, consumed when DIRECTOR_MODEL is set; until then its jobs wait in the
 queue).
 
@@ -23,6 +23,7 @@ from pydantic import TypeAdapter
 from redis.asyncio import Redis
 
 from app.activity import Target, log_activity
+from app.contracts.ai_director_assets_job import AiDirectorAssetsJob
 from app.contracts.ai_director_job_name import AiDirectorJobName
 from app.contracts.ai_director_plan_job import AiDirectorPlanJob
 from app.contracts.ai_director_review_take_job import AiDirectorReviewTakeJob
@@ -45,7 +46,7 @@ from app.telemetry import start_telemetry
 # being skipped as if it had run.
 DIRECTOR_JOB_NAME = TypeAdapter[AiDirectorJobName](AiDirectorJobName)
 
-type AnyJob = AiDirectorPlanJob | AiDirectorReviewTakeJob
+type AnyJob = AiDirectorPlanJob | AiDirectorAssetsJob | AiDirectorReviewTakeJob
 
 
 def _bound(job: JobLike, data: AnyJob) -> AbstractContextManager[None]:
@@ -102,6 +103,10 @@ def director_processor(director: Director) -> Callable[[JobLike], Awaitable[None
                         plan.payload.orgId, plan.payload.planId, _user(plan), final=final
                     ),
                 )
+        elif name == "assets":
+            assets = AiDirectorAssetsJob.model_validate(job.data)
+            with _bound(job, assets):
+                await director.make_assets(assets.payload.orgId, assets.payload.planId, final=final)
         else:
             # The only other job: one added in packages/jobs is a type error here.
             assert_type(name, Literal["review-take"])

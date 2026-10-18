@@ -772,7 +772,7 @@ export const zShotPlan = z.object({
  * DirectorPlanOut
  */
 export const zDirectorPlanOut = z.object({
-    assetImages: z.array(zAssetImageOut).max(12),
+    assetImages: z.array(zAssetImageOut).max(12).optional(),
     audioKey: z.string().nullable(),
     audioStatus: z.enum([
         'ready',

@@ -2138,6 +2138,7 @@
     },
     "/v1/director/plans/{video_id}": {
       "get": {
+        "description": "The workspace's plan for a short, with the default images of its assets.",
         "operationId": "getDirectorPlan",
         "parameters": [
           {

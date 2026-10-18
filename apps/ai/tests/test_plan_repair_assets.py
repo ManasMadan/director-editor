@@ -170,9 +170,7 @@ def test_every_edit_type_becomes_its_own_model() -> None:
     repaired = repair_plan(plan(assets=[asset()], edits=edits), video_seconds=None)
 
     # In order of their start (and end), ties as they came: the match cut starts last.
-    split, inset, full, mark, grade, captions, title, speed, end_card, gap, match = (
-        repaired.edits
-    )
+    split, inset, full, mark, grade, captions, title, speed, end_card, gap, match = repaired.edits
     assert split == LayoutEdit(
         type="layout",
         startSeconds=0,

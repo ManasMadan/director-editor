@@ -9,7 +9,7 @@ Long work (Director's plans and take reviews) runs in app/worker.py, from the
 `ai-director` queue.
 """
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Annotated
@@ -24,7 +24,7 @@ from sqlalchemy import text
 from app.auth import CallerDep
 from app.clipping import Clipper, LocalClipper, RemoteClipper, clip_response
 from app.contracts.error_response import ErrorResponse
-from app.db.models import DirectorCut, DirectorPlan, DirectorTake
+from app.db.models import DirectorAsset, DirectorCut, DirectorPlan, DirectorTake
 from app.db.session import close_engine, engine, open_engine
 from app.director import Director, create_director
 from app.errors import AppError, install_error_handlers
@@ -33,6 +33,7 @@ from app.queues import DirectorQueue
 from app.schemas import (
     VIDEO_ID_PATTERN,
     ClipRequest,
+    AssetImageOut,
     CutPick,
     DirectorCutCreate,
     DirectorCutOut,
@@ -136,7 +137,7 @@ def _speaker() -> Speaker:
 SpeakerDep = Annotated[Speaker, Depends(_speaker)]
 
 
-def _plan_out(plan: DirectorPlan) -> DirectorPlanOut:
+def _plan_out(plan: DirectorPlan, images: Sequence[DirectorAsset] = ()) -> DirectorPlanOut:
     return DirectorPlanOut(
         id=plan.id,
         videoId=plan.video_id,
@@ -148,6 +149,10 @@ def _plan_out(plan: DirectorPlan) -> DirectorPlanOut:
         model=plan.model,
         audioStatus=plan.audio_status,
         audioKey=plan.audio_key,
+        assetImages=[
+            AssetImageOut(assetId=image.asset_id, status=image.status, objectKey=image.object_key)
+            for image in images
+        ],
         createdAt=plan.created_at,
         updatedAt=plan.updated_at,
     )
@@ -239,7 +244,9 @@ async def get_director_plan(
     caller: CallerDep,
     director: DirectorDep,
 ) -> DirectorPlanOut:
-    return _plan_out(await director.plan(caller.org_id, video_id))
+    """The workspace's plan for a short, with the default images of its assets."""
+    plan = await director.plan(caller.org_id, video_id)
+    return _plan_out(plan, await director.asset_images(caller.org_id, plan.id))
 
 
 @app.post("/v1/director/scene-checks", operation_id="checkDirectorScene")

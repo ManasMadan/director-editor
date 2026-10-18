@@ -103,7 +103,9 @@ type AssetKind = Literal[
 type AssetSource = Literal["create", "stock", "upload"]
 # The shapes Nano Banana draws in, and half of a vertical split screen (9:8).
 type AspectRatio = Literal["9:16", "3:4", "4:5", "1:1", "9:8", "5:4", "4:3", "16:9"]
-type EditType = Literal["layout", "overlay", "grade", "text", "transition", "speed", "end-card", "gap"]
+type EditType = Literal[
+    "layout", "overlay", "grade", "text", "transition", "speed", "end-card", "gap"
+]
 type LayoutKind = Literal["full", "split", "picture-in-picture"]
 type Entrance = Literal["cut", "fade", "slide", "pop", "draw"]
 type Mark = Literal["circle", "underline", "arrow", "box", "highlight", "tick", "cross"]
@@ -349,6 +351,7 @@ class EditDraft(BaseModel):
         default=None, max_length=240, description="gap: what the B-roll or cutaway shows"
     )
 
+
 class LayoutEdit(BaseModel):
     """How the frame is shared: the camera full frame (or an asset, for a voice-over), a
     split with the camera on top or at the bottom taking `cameraShare` of the height and
@@ -589,7 +592,9 @@ class DirectorPlanOut(BaseModel):
         description="The original audio's object key in storage, once captured; apps/api "
         "turns it into a short-lived link."
     )
+    # Optional in the contract: an API from before asset images still reads the plan.
     assetImages: list[AssetImageOut] = Field(
+        default_factory=list[AssetImageOut],
         max_length=MAX_ASSETS,
         description="The default images made for the plan's assets, on a plan read on its "
         "own (getDirectorPlan); empty in the library and for a seeded template, whose are "
