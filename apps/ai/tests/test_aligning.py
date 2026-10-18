@@ -1,6 +1,7 @@
 """Lining up a match cut (app/aligning.py, app/aligner.py) on real footage: synthetic
 clips written as MP4 files (tests/match_cut_videos.py), read through ffmpeg and aligned
-with OpenCV, with Gemini's boxes from the local Gemini API (tests/fakes.py)."""
+with OpenCV, with Gemini's boxes from the local Gemini API (tests/fakes.py). The tests
+that run ffmpeg are marked integration, as the clipper's are: the unit run has none."""
 
 import asyncio
 import base64
@@ -139,6 +140,7 @@ def _align(
 # ------------------------------------------------------------------------ acceptance
 
 
+@pytest.mark.integration
 def test_a_wrist_60_px_off_lines_up_within_tolerance(
     clips: Callable[[Placement, Placement], dict[str, tuple[str, bytes]]],
 ) -> None:
@@ -180,6 +182,7 @@ def test_a_wrist_60_px_off_lines_up_within_tolerance(
     assert b"the watch on the left wrist" in sent
 
 
+@pytest.mark.integration
 def test_a_wrist_held_still_in_both_is_cut_where_asked(
     clips: Callable[[Placement, Placement], dict[str, tuple[str, bytes]]],
 ) -> None:
@@ -190,6 +193,7 @@ def test_a_wrist_held_still_in_both_is_cut_where_asked(
     assert result.alignment.offsetBeforePx <= 2
 
 
+@pytest.mark.integration
 def test_an_anchor_gemini_cant_see_is_a_plain_cut(
     clips: Callable[[Placement, Placement], dict[str, tuple[str, bytes]]],
 ) -> None:
@@ -212,6 +216,7 @@ def test_an_anchor_gemini_cant_see_is_a_plain_cut(
     )
 
 
+@pytest.mark.integration
 def test_a_box_on_something_else_is_a_plain_cut(
     clips: Callable[[Placement, Placement], dict[str, tuple[str, bytes]]],
 ) -> None:
@@ -224,6 +229,7 @@ def test_a_box_on_something_else_is_a_plain_cut(
     assert result.alignment.status == "not-found"
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "box",
     [
@@ -245,6 +251,7 @@ def test_a_box_that_isnt_one_is_a_plain_cut(
     assert result.alignment.status == "not-found"
 
 
+@pytest.mark.integration
 def test_gemini_failing_is_upstream_unavailable_with_what_it_used(
     clips: Callable[[Placement, Placement], dict[str, tuple[str, bytes]]],
 ) -> None:
@@ -260,6 +267,7 @@ def test_gemini_failing_is_upstream_unavailable_with_what_it_used(
     assert raised.value.params["service"] == "gemini"
 
 
+@pytest.mark.integration
 def test_a_take_that_cant_be_read_is_upstream_unavailable() -> None:
     with serve_files({}) as storage, pytest.raises(AppError) as raised:
         asyncio.run(read_frames(f"{storage.url}/gone.mp4?sig=secret", "video/mp4", 0, 0.5))
@@ -269,6 +277,7 @@ def test_a_take_that_cant_be_read_is_upstream_unavailable() -> None:
     )
 
 
+@pytest.mark.integration
 def test_frames_are_fitted_to_the_finished_frame(tmp_path: Path) -> None:
     path = tmp_path / "a.mp4"
     write_clip(path, 1, Placement(270, 480), 1.0)
@@ -295,6 +304,7 @@ def test_ffmpeg_reads_a_take_in_the_jail_as_its_type_over_its_url_s_protocol_onl
     assert plain[plain.index("-f") + 1] == "mov"
 
 
+@pytest.mark.integration
 def test_a_take_that_isn_t_its_type_or_isn_t_in_storage_is_never_read(tmp_path: Path) -> None:
     path = tmp_path / "a.mp4"
     write_clip(path, 1, Placement(270, 480), 1.0)
@@ -461,6 +471,7 @@ def cloud_run(
     get_aligner_settings.cache_clear()
 
 
+@pytest.mark.integration
 def test_the_cloud_run_aligner_lines_up_a_cut_for_the_account_that_may_call_it(
     cloud_run: TestClient,
     identity: Identity,
@@ -489,6 +500,7 @@ def test_the_cloud_run_aligner_lines_up_a_cut_for_the_account_that_may_call_it(
     assert AlignResult.model_validate_json(response.content).alignment.status == "aligned"
 
 
+@pytest.mark.integration
 def test_a_read_given_up_on_stops_its_ffmpeg(monkeypatch: pytest.MonkeyPatch) -> None:
     """A read that takes too long, or that's cancelled (the other take's read failed), has
     its ffmpeg killed, not left waiting on storage."""
