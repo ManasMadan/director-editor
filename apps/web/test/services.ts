@@ -71,6 +71,8 @@ export const CAPTCHA = {
 export interface Services {
   databaseUrl: string;
   aiUrl: string;
+  /** The mock Google (packages/fake-google): YouTube and Google sign-in. */
+  googleUrl: string;
   close(): Promise<void>;
 }
 

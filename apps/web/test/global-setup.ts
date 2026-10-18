@@ -146,6 +146,7 @@ async function start(): Promise<Services> {
   return {
     databaseUrl: database.urlFor("postgres"),
     aiUrl: ai.url,
+    googleUrl: google.url,
     async close() {
       await Promise.all(
         children.map(

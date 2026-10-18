@@ -16,6 +16,7 @@ import {
   type PublishCopy,
   type PublishVisibility,
   publishCopySchema,
+  YOUTUBE_UPLOAD_SCOPE,
   youtubeDescription,
   youtubeTitle,
 } from "@repo/contracts/api";
@@ -35,8 +36,6 @@ import { ShortsService } from "../shorts";
 import { PublishRepository } from "./publish.repository";
 import { uploadUrlOf, YouTubeUploadError, YouTubeUploader } from "./youtube-upload";
 
-/** What lets Director upload to a member's YouTube channel. */
-export const YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload";
 // Long enough to start streaming it; the read itself isn't bound by the link's expiry.
 const VIDEO_READ_EXPIRES_S = 10 * MINUTE_S;
 

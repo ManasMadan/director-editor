@@ -886,6 +886,35 @@ declare const messages: {
         "published": "{visibility, select, public {Public on YouTube} unlisted {Unlisted on YouTube} private {Private on YouTube} other {On YouTube}}",
         "failed": "Couldn't publish"
       }
+    },
+    "publish": {
+      "open": "Publish",
+      "watch": "Watch on YouTube",
+      "title": "Publish to YouTube Shorts",
+      "description": "Director wrote a post for your video. Change anything you like, then send it to your channel.",
+      "preview": "Your video: {title}",
+      "writing": "Director is writing your post…",
+      "copyFailed": "Director couldn't write a post this time. Write your own below.",
+      "fields": {
+        "title": "Title",
+        "titleHint": "YouTube shows it as “{title}”.",
+        "description": "Description",
+        "hashtags": "Hashtags",
+        "hashtagsHint": "Single words, separated by spaces. They go at the end of the description, with the credits and a link to the original Short.",
+        "credits": "Credits"
+      },
+      "visibility": {
+        "label": "Who can watch it",
+        "unlisted": "Unlisted",
+        "private": "Private",
+        "public": "Public",
+        "audit": "YouTube keeps videos from apps it hasn't reviewed yet private, whatever you pick. You can change that yourself in YouTube Studio."
+      },
+      "invalid": "YouTube won't take this as it is. Check the title, description, hashtags and credits: no < or >, and hashtags are single words.",
+      "submit": "Publish to YouTube",
+      "uploading": "Sending your video to YouTube…",
+      "published": "It's on YouTube, {visibility, select, private {private: only you can watch it} unlisted {unlisted: anyone with the link can watch it} public {public: anyone can find it} other {}}.",
+      "kept": "You asked for {asked, select, private {private} unlisted {unlisted} public {public} other {}}, but YouTube keeps videos from apps it hasn't reviewed yet private. You can change it in YouTube Studio."
     }
   },
   "library": {

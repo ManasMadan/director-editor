@@ -1,7 +1,9 @@
 /** What publishing makes of a Google account's scopes and of YouTube's refusals. */
+
+import { YOUTUBE_UPLOAD_SCOPE } from "@repo/contracts/api";
 import { AppError } from "@repo/nest-common";
 import { describe, expect, it } from "vitest";
-import { allowsUploads, publishErrorOf, YOUTUBE_UPLOAD_SCOPE } from "./publish.service";
+import { allowsUploads, publishErrorOf } from "./publish.service";
 import { YouTubeUploadError } from "./youtube-upload";
 
 describe("a Google account's scopes", () => {

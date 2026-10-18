@@ -8,6 +8,8 @@
  * test sets for it (`PUT /__fake/library/<orgId>`, the `fakeLibrary` command), and
  * indexing a short adds to it as the real service does: once per member, a short already
  * there answered with its plan.
+ * A cut's YouTube post, and the cut as publishing reads it, are what a test sets
+ * for it (`PUT /__fake/cuts/<cutId>`, the `fakeCut` command).
  */
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage } from "node:http";
@@ -64,6 +66,7 @@ export async function startFakeAi() {
     shorts.set(videoId, found);
     return found;
   };
+  const publishable = new Map<string, FakeCut>();
   const libraries = new Map<string, Library>();
   const library = (orgId: string) => {
     const found = libraries.get(orgId) ?? { templates: [], indexUsed: false };
@@ -90,7 +93,8 @@ export async function startFakeAi() {
     }
     const director =
       directorRoute(route, input, short) ??
-      cutRoute(route, input, callerOf(request), shorts, short);
+      cutRoute(route, input, callerOf(request), shorts, short) ??
+      publishRoute(route, input, publishable);
     if (director) {
       return reply(director.status, director.body);
     }
@@ -272,4 +276,33 @@ function cutRoute(
   }
   const cuts = /^GET \/v1\/director\/plans\/([\w-]{11})\/cuts$/.exec(route);
   return cuts?.[1] ? { status: 200, body: own(short(cuts[1]).cuts) } : null;
+}
+
+/** A cut as a test set it, and the post Gemini writes for it (none: Gemini fails). */
+interface FakeCut {
+  cut: Record<string, unknown>;
+  copy?: Record<string, unknown>;
+}
+
+/** A cut's routes: reading it, and Gemini's YouTube post for it. */
+function publishRoute(
+  route: string,
+  input: Record<string, unknown>,
+  cuts: Map<string, FakeCut>,
+): { status: number; body?: unknown } | null {
+  const set = /^PUT \/__fake\/cuts\/([\w-]+)$/.exec(route);
+  if (set?.[1]) {
+    cuts.set(set[1], input as unknown as FakeCut);
+    return { status: 204 };
+  }
+  const read = /^GET \/v1\/director\/cuts\/([\w-]+)$/.exec(route);
+  if (read?.[1]) {
+    const found = cuts.get(read[1]);
+    return found ? { status: 200, body: found.cut } : failure(404, "DIRECTOR_CUT_NOT_FOUND");
+  }
+  if (route === "POST /v1/director/publish-copy") {
+    const copy = cuts.get(String(input.cutId))?.copy;
+    return copy ? { status: 200, body: copy } : failure(502, "UPSTREAM_UNAVAILABLE");
+  }
+  return null;
 }

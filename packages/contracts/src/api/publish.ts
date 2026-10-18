@@ -26,6 +26,11 @@ const errors = errorsOf(
   "PUBLISH_NO_CHANNEL",
 );
 
+/**
+ * What Director asks Google for to upload to a member's YouTube channel: asked for when
+ * they first publish (better-auth's linkSocial), not at sign-in.
+ */
+export const YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload";
 /** What marks a video as a Short in its title. */
 export const SHORTS_TAG = "#Shorts";
 /** YouTube's longest title, #Shorts included. */
