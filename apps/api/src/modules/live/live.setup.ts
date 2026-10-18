@@ -10,7 +10,13 @@
  * BidiGenerateContentClientContent), in their JSON form.
  */
 import type { Shot, ShotPlan } from "@repo/contracts/api";
-import type { Facing, LiveAdaptation, LiveTakeState, LiveTool } from "@repo/contracts/live";
+import type {
+  Facing,
+  LiveAdaptation,
+  LiveRollState,
+  LiveTakeState,
+  LiveTool,
+} from "@repo/contracts/live";
 import { POINT_AT_DECLARATION } from "./live.marks";
 import { PERSONA } from "./live.persona";
 
@@ -183,6 +189,29 @@ export function quietMessage(nudge: 1 | 2) {
   );
 }
 
+/** Where the roll is: Director marks attempts while it records, and stays out of a pause. */
+export function rollMessage(state: LiveRollState) {
+  switch (state) {
+    case "recording":
+      return note(
+        "[The roll is on: everything is recorded from now until they tap Done, chat included, and there's no shutter. When they start an attempt at the shot, call mark with event start; when it ends, mark end, with the line and a few words on how it went. Stay silent from the start mark to the end mark.]",
+        false,
+      );
+    case "paused":
+      return note(
+        "[They paused: nothing records, and you can't see or hear them until they tap Resume. Never try to resume it.]",
+        false,
+      );
+    case "resumed":
+      return note("[They tapped Resume: the roll is recording again.]", true);
+    case "done":
+      return note(
+        "[They tapped Done: the roll has stopped. Say one warm line about how it went.]",
+        true,
+      );
+  }
+}
+
 /** The member keeps getting cut off: noise in the room, most likely. */
 export function noiseMessage() {
   return note(
@@ -208,6 +237,19 @@ const TOOL_DECLARATIONS: Record<LiveTool, object> = {
       type: "OBJECT",
       properties: { to: { type: "STRING", enum: ["front", "back"] } },
       required: ["to"],
+    },
+  },
+  mark: {
+    description:
+      "While the roll records, mark where an attempt at the shot they're on starts (event start, the moment they begin) and ends (event end, the moment they finish). Never mark chat or setting up.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        event: { type: "STRING", enum: ["start", "end"] },
+        line: { type: "STRING", description: "The line they're saying, if any." },
+        note: { type: "STRING", description: "On end: a few words on how it went." },
+      },
+      required: ["event"],
     },
   },
   adapt_shot: {

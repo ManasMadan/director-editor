@@ -599,7 +599,9 @@ declare const messages: {
       "intro": {
         "title": "Let's shoot this together",
         "first": "Director sees your camera and hears you while you get set, and talks you through each shot. A take records only when you tap the shutter. Your browser asks for the camera and microphone next.",
-        "again": "Director sees and hears you while you get set. A take records only when you tap the shutter."
+        "again": "Director sees and hears you while you get set. A take records only when you tap the shutter.",
+        "rollFirst": "Director records the whole time you're shooting, chat included, so it can find your best moments. Only the clips you use go in your video. Pause any time. Your browser asks for the camera and microphone next.",
+        "rollAgain": "Director records the whole time you're shooting, chat included. Only the clips you use go in your video. Pause any time."
       },
       "start": "Start shooting",
       "starting": "Opening the camera…",
@@ -665,6 +667,21 @@ declare const messages: {
         "orbit": "Circle round",
         "tilt-up": "Tilt up",
         "tilt-down": "Tilt down"
+      },
+      "roll": {
+        "recording": "Recording, {time}",
+        "paused": "Paused",
+        "pause": "Pause recording",
+        "resume": "Resume",
+        "pausedBody": "Nothing's recording, and Director can't see or hear you. Tap Resume (or press Space) when you're ready.",
+        "done": "Done",
+        "saving": "Saving your footage…",
+        "savingBehind": "Saving your footage, {seconds, number} seconds to go…",
+        "leftover": "{seconds, number} seconds of footage didn't upload last time. Sending it now.",
+        "nearLimit": "About three minutes of recording left in this shoot.",
+        "uploadTrouble": "Your footage is waiting to upload. It's kept on this device and sent as soon as it can be.",
+        "shot": "Shot {index, number}: {state, select, take {has a take} tried {attempted} other {to do}}. Go there",
+        "progress": "Shots"
       }
     },
     "review": {

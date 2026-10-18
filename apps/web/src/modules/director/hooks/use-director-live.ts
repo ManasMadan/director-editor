@@ -3,6 +3,7 @@
 import type {
   Facing,
   LiveAdaptation,
+  LiveRollState,
   LiveTakeState,
   LiveToolCall,
   LiveToolResult,
@@ -178,6 +179,21 @@ function useConnect(refs: Refs, setters: Setters) {
   return connect;
 }
 
+/** The screen remounted while Director was wanted: it joins again, picking up the thread. */
+function useRejoin(wanted: boolean, state: LiveState, connect: (resume: boolean) => void) {
+  useEffect(() => {
+    if (wanted && state === "idle") {
+      connect(true);
+    }
+  }, [wanted, state, connect]);
+}
+
+/** Where the roll is: Director hears it, and a pause keeps the member from it. */
+function rollTo(session: LiveControls | null, state: LiveRollState) {
+  session?.mute(state === "paused");
+  session?.roll(state);
+}
+
 /** The member's line goes a while after Director has answered it. */
 function useAnsweredLineFades(captions: Captions, setCaptions: Setters["setCaptions"]) {
   const done = answered(captions);
@@ -220,12 +236,7 @@ export function useDirectorLive({ videoId, shotIndex, video, onTool, adaptations
     { setState, setFailure, setCaptions, setSpeaking, setHearing },
   );
 
-  // The screen remounted while Director was wanted: it joins again, picking up the thread.
-  useEffect(() => {
-    if (wanted && live.state === "idle") {
-      connect(true);
-    }
-  }, [wanted, live.state, connect]);
+  useRejoin(wanted, live.state, connect);
   useLifetime(session, shotIndex, { setState, retry });
   useAnsweredLineFades(live.captions, setCaptions);
 
@@ -244,10 +255,7 @@ export function useDirectorLive({ videoId, shotIndex, video, onTool, adaptations
       setWanted(true);
       connect(false);
     },
-    /**
-     * A typed line for Director, shown as the member's own line; false when Director
-     * isn't there to read it.
-     */
+    /** A typed line, shown as the member's own; false when Director isn't there to read it. */
     say: (text: string) => {
       const sent = session.current?.say(text) ?? false;
       if (sent) {
@@ -261,6 +269,7 @@ export function useDirectorLive({ videoId, shotIndex, video, onTool, adaptations
       setCaptions(withoutMember);
       void session.current?.camera(facing);
     },
+    roll: (state: LiveRollState) => rollTo(session.current, state),
     /** Where the member's take is; from a countdown on, their last line has had its moment. */
     take: (state: LiveTakeState) => {
       if (OVERTAKING.includes(state)) {

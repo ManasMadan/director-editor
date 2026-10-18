@@ -109,7 +109,20 @@ on a laptop), with a top band (the shots, Director, the way out) and a bottom ba
   saying "changed for you", and the teleprompter and the take review use their line. The camera, the
   microphone and Director stay up from shot to shot: moving on changes only what the
   screen shows.
-- **The shutter** (`hooks/use-studio.ts`) is the one way a take starts: a tap counts
+- **The roll** (`lib/roll.ts`, `hooks/use-roll.ts`, `hooks/use-roll-shoot.ts`): with
+  Director on, Start shooting starts one continuous recording, chat included, until Done.
+  The recorder hands over a ten-second slice at a time to the uploader
+  (`useSliceUploader` in packages/client), which keeps it in IndexedDB until it's stored,
+  so a closed tab loses at most the slice in progress and the next visit sends the rest.
+  A flip starts a new part. Director marks each attempt (`mark`, start and end), stamped
+  with the recording's own clock, and the server cuts every marked attempt into a take.
+  The top band shows "REC" and the time with pause beside it, and a progress strip (a
+  take, tried, to do) whose shots can be tapped. Pausing (the button, the tab hidden, or
+  five minutes of footage waiting to upload) stops the recording and what Director sees
+  and hears, greys the picture, and only Resume or Space starts it again. Done stands
+  where the shutter was, and the editor opens once the footage is uploaded.
+- **The shutter** (`hooks/use-studio.ts`) is the baseline when the roll can't run
+  (Director off, or a browser that can't record): a tap counts
   down 3, 2, 1 (a second tap, or Escape, calls it off), then records until it's tapped
   again or a moment past the shot's length. Director is told when the count starts (and
   when it's called off), and its voice is held from the first number to the take's end,

@@ -63,6 +63,11 @@ export type UpstreamMessage = z.infer<typeof upstreamMessageSchema>;
 export const toolArgsSchemas = {
   go_to_shot: z.object({ shot: z.number().int() }),
   switch_camera: z.object({ to: z.enum(["front", "back"]) }),
+  mark: z.object({
+    event: z.enum(["start", "end"]),
+    line: z.string().optional(),
+    note: z.string().optional(),
+  }),
   adapt_shot: z.object({
     shot: z.number().int(),
     where: z.string().optional(),
