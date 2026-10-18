@@ -6,6 +6,7 @@
 import { createServer } from "node:http";
 import type { DirectorChatInput } from "@repo/contracts/api";
 import { type ShotPlan, shotPlanSchema } from "@repo/contracts/api";
+import { videoIdSchema } from "@repo/contracts/ids";
 import { startFakeGoogle } from "@repo/fake-google";
 import { isAppError } from "@repo/nest-common";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -47,7 +48,7 @@ const plan: ShotPlan = shotPlanSchema.parse({
 });
 
 const said = (text: string, more: Partial<DirectorChatInput> = {}): DirectorChatInput => ({
-  videoId: "dQw4w9WgXcQ",
+  videoId: videoIdSchema.parse("dQw4w9WgXcQ"),
   shotIndex: 0,
   turn: { kind: "said", text },
   adaptations: [],

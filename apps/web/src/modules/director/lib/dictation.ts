@@ -7,6 +7,7 @@
  * Browsers stop recognising after a pause or a while; it's started again for as long as
  * it's wanted. Where there's no recogniser (Firefox) or it's refused, the member types.
  */
+import { SECOND_MS } from "@repo/contracts/time";
 
 /** The part of the Web Speech API's SpeechRecognition this uses (TypeScript's DOM lib lacks it). */
 interface Recognizer {
@@ -36,6 +37,9 @@ const REFUSED: readonly SpeechRecognitionErrorCode[] = [
   "audio-capture",
   "language-not-supported",
 ];
+
+/** How long a recogniser that failed for a passing reason waits before it listens again. */
+const RETRY_AFTER_MS = SECOND_MS;
 
 export interface Dictation {
   /** Stops listening for now (Director speaking, a take recording), or starts again. */
@@ -89,15 +93,20 @@ export function startDictation(events: {
       }
     }
   };
+  let failed = false;
   recognizer.onerror = (event) => {
     if (REFUSED.includes(event.error)) {
       over = true;
       events.onDeaf();
+      return;
     }
+    // A passing failure (the network, nothing heard): tried again, after a breath.
+    failed = true;
   };
   recognizer.onend = () => {
     running = false;
-    run();
+    window.setTimeout(run, failed ? RETRY_AFTER_MS : 0);
+    failed = false;
   };
   run();
   return {

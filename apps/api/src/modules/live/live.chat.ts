@@ -73,10 +73,10 @@ const generateResponse = z.object({
   candidates: z
     .array(
       z.object({
-        content: z.looseObject({ parts: z.array(part).optional() }).optional(),
+        content: z.looseObject({ parts: z.array(part).default([]) }).default({ parts: [] }),
       }),
     )
-    .optional(),
+    .default([]),
 });
 type Part = z.infer<typeof part>;
 
@@ -222,6 +222,6 @@ export class DirectorChat {
       this.log("error", { status: response.status, body }, "director chat refused");
       throw new AppError("UPSTREAM_UNAVAILABLE", { params: { service: "gemini" } });
     }
-    return parsed.data.candidates?.[0]?.content?.parts ?? [];
+    return parsed.data.candidates[0]?.content.parts ?? [];
   }
 }
