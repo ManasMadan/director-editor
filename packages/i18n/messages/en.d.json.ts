@@ -585,7 +585,8 @@ declare const messages: {
         "where": "Where",
         "do": "Do",
         "say": "Say",
-        "line": "“{line}”"
+        "line": "“{line}”",
+        "changed": "changed for you"
       },
       "tell": {
         "label": "Tell Director",

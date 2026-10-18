@@ -436,6 +436,7 @@ describe("Director live's hook", () => {
     shotIndex,
     video: { current: cameraVideo() },
     onTool: vi.fn(),
+    adaptations: [],
   });
 
   it("does nothing before Director is there", async () => {

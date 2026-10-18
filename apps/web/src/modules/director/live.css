@@ -87,6 +87,16 @@
   }
 }
 
+/* A row of the shot card Director just changed: it glows once, then settles. */
+@keyframes live-changed {
+  from {
+    background-color: color-mix(in oklch, var(--guide) 35%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
 /* Unlayered, so it wins over Tailwind's utilities (which sit in a layer) without !important. */
 @media (prefers-reduced-motion: reduce) {
   .live-motion,
