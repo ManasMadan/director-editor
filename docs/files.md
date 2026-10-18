@@ -64,6 +64,12 @@ set by the `s3-init` container, in a cluster by the data chart's bucket Job, in
 production the bucket's own CORS configuration), and the web app's CSP must allow
 `STORAGE_ORIGIN`.
 
+Director's spoken guide lines (`director.speak`) are kept under `director/speech/`, shared
+by every workspace. In production the bucket's lifecycle rule deletes them 90 days after
+they were made, so the cache can't grow forever; a line asked for again is simply made
+again. Set it with `gsutil lifecycle set` on the bucket (`age: 90`,
+`matchesPrefix: ["director/speech/"]`), and check it with `gsutil lifecycle get`.
+
 In a cluster, the uploads bucket is on a RustFS server of its own, reached by browsers
 at a host of its own (`storage.uploads.host` in the environment's `data.yaml`, e.g.
 `files.example.com`) through the gateway and Cloudflare. A separate host rather than a
