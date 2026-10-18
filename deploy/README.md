@@ -14,7 +14,8 @@ deploy/
   environments/    values per environment (local, preview, staging, production) and
                    each one's encrypted Secrets (secrets/)
   platform/        cluster add-ons (addons/, values/), our own platform charts
-                   (config/, mail/, jaeger/) and the add-ons' encrypted Secrets (secrets/)
+                   (config/, mail/, jaeger/, alerts/, internal-tools/) and the add-ons'
+                   encrypted Secrets (secrets/)
   argocd/          the root Application, projects, ApplicationSets, and the values
                    Argo CD itself is installed with (argo-cd-values.yaml)
   local/           what kind needs besides the charts (bun run k8s:up)
@@ -77,9 +78,10 @@ internet outside the private ranges: so a request forged to reach something inte
 another environment's namespace, a node or a metadata address goes nowhere. Postgres
 takes connections from its own namespace, CloudNativePG's operator and the metrics
 scraper only, so a preview can't reach staging's database. The mail server takes
-connections on its mail ports only; its management port is reachable from inside its
-pod alone. The data services' own pods and the Jobs (migration, buckets, offsite copy)
-aren't limited in where they connect.
+connections on its mail ports, and on its management port from the gateway's proxies
+only (its web admin, see Internal tools). Each RustFS server's console port (9001) takes
+connections from the gateway's proxies only. The data services' own pods and the Jobs
+(migration, buckets, offsite copy) aren't limited in where they connect.
 
 ## Postgres over TLS
 
@@ -121,9 +123,10 @@ There are two kinds of secret, and each has one home:
 | `external-dns-rfc2136` in `external-dns`, likewise | `host`, `zone`, `tsig-keyname`, `tsig-secret`, `tsig-secret-alg` | `platform/secrets/<env>/` |
 | `github-token` in `argocd`, on the cluster hosting previews | `token` (reads pull requests) | `platform/secrets/<env>/` |
 | `argocd-notifications-secret` in `argocd`, on the cluster hosting previews | `github-appID`, `github-installationID`, `github-privateKey` (the repository's GitHub App, with Pull requests: write: it posts each preview's address) | `platform/secrets/<env>/` |
-| `stalwart` in `mail` | `ADMIN_PASSWORD`, `SMTP_PASSWORD`, `STALWART_WEBHOOK_SECRET`, `dkim.key` (see `platform/mail/values.yaml`) | `platform/secrets/<env>/` |
+| `stalwart` in `mail` | `ADMIN_PASSWORD`, `SMTP_PASSWORD`, `STALWART_WEBHOOK_SECRET`, `dkim.key`, and optionally `RELAY_PASSWORD` and `WEBADMIN_PASSWORD` (see `platform/mail/values.yaml`) | `platform/secrets/<env>/` |
 | `grafana-admin` in `observability`, only on clusters with observability (its namespace exists nowhere else) | `admin-user`, `admin-password` | `platform/secrets/<env>/` |
 | `alertmanager-smtp` in `observability`, likewise | `password` (the mail server's `SMTP_PASSWORD`, which Alertmanager sends alerts with) | `platform/secrets/<env>/` |
+| `internal-tools-auth` in `gateway-system` | `.htpasswd`: one line, `<user>:{SHA}<base64 of the password's SHA-1>` (the one hash Envoy's basic auth takes), the login every internal tool's host asks for first | `platform/secrets/<env>/` |
 
 What each service's Secret holds, at least:
 
@@ -251,8 +254,13 @@ Two RustFS servers per environment (data chart), each with its own root keys:
   endpoint, the worker reads and writes in-cluster, and the web app allows it in its
   Content-Security-Policy (`storage: presign | internal | origin` in the stack values).
   Files are off where there's no ClamAV (kind, previews: `storage: none`).
-- **backups**: Postgres's backups only. No route, a network policy that lets only
-  Postgres in, and keys the application never gets.
+- **backups**: Postgres's backups only. No route of its own, a network policy that lets
+  only Postgres (and the gateway's proxies, on the console's port) in, and keys the
+  application never gets.
+
+Each server also serves RustFS's web console on port 9001 (`storage.<server>.console`,
+on by default), signed in with that server's keys: the internal tools route
+`storage.<zone>` and `backups.<zone>` to them (see Internal tools).
 
 A Job after every sync creates the buckets and sets the CORS rule, so both are
 declared here rather than done by hand.
@@ -377,6 +385,12 @@ recovery-mode server, before the real one starts; the administrator never works 
 server's open ports. Stalwart posts delivery failures to the webhooks service in the
 cluster, signed with `STALWART_WEBHOOK_SECRET`; a changed setting restarts the pod.
 
+With `webAdmin` on (the default) and `WEBADMIN_PASSWORD` in the `stalwart` Secret, the
+plan also makes an administrator, `admin@<email domain>`, for Stalwart's web admin at
+`/admin` on the management port, which the `<release>-admin` Service exposes inside the
+cluster and the internal tools route `mail-admin.<zone>` to. A changed password takes
+effect on the pod's next start (`kubectl -n mail delete pod mail-0`).
+
 Sign-in codes, password resets and invitations all go out this way, so a node that
 can't deliver (outgoing port 25 blocked, or its address on a blocklist) breaks sign-in.
 Where that's the case, set `relay` in `platform/mail/values.yaml`: Stalwart then sends
@@ -387,16 +401,28 @@ passes on DKIM even though SPF names only the mail node.
 ## Observability
 
 Off unless a cluster opts in with the label `director-editor.dev/observability: "true"` on
-its Argo CD Secret. Then the observability ApplicationSet installs Jaeger
-(`platform/jaeger`: traces, kept in memory) and kube-prometheus-stack (Prometheus,
-Grafana, Alertmanager) in `observability`, and the envs and previews ApplicationSets
-set `observability.enabled` in the stack, which points every service's OTLP export at
-them: traces to Jaeger, metrics to Prometheus's OTLP receiver. Neither is public:
+its Argo CD Secret (OpenTofu's `observability`). Then the observability ApplicationSet
+installs, in `observability`, Jaeger (`platform/jaeger`: traces, kept in memory),
+kube-prometheus-stack (Prometheus, Grafana, Alertmanager), Loki (`values/loki.yaml`: one
+process, its data on a local-path volume, 30 days kept) and Alloy (`values/alloy.yaml`),
+and the envs and previews ApplicationSets set `observability.enabled` in the stack,
+which points every service's OTLP export at them: traces to Jaeger, metrics to
+Prometheus's OTLP receiver.
 
-```sh
-kubectl -n observability port-forward svc/jaeger 16686                        # traces
-kubectl -n observability port-forward svc/kube-prometheus-stack-grafana 3000:80   # dashboards
-```
+Logs: Alloy runs on every node and reads the output of that node's pods through the
+Kubernetes API (no host path, no privileges), and sends it to Loki as it is. Each
+stream is labelled `namespace`, `pod`, `container` and `app_kubernetes_io_component`: the
+pod's `app.kubernetes.io/component` label, or its `app.kubernetes.io/name` where it has
+none, which is how the application's services are told apart (`api`, `worker`, `ai`,
+...); Loki's label names can't hold dots or slashes. The services log JSON, so queries
+parse fields at read time: `{namespace="director-editor", app_kubernetes_io_component="api"} | json`.
+
+Grafana has Prometheus, Loki and Jaeger as data sources, with uids `prometheus`, `loki`
+and `jaeger` (dashboards address them by uid). A log line's `traceId` (or the older
+`trace_id`) links to the trace in Jaeger, and a trace's spans link to the lines that
+carry its id, in Grafana and from Jaeger's own page ("Logs in Grafana"). Dashboards are
+ConfigMaps labelled `grafana_dashboard: "1"` in any namespace, filed in the folder their
+`grafana_folder` annotation names.
 
 The alerts add-on (`platform/alerts`) adds what Prometheus scrapes besides the services
 (Postgres, cert-manager, the gateway's proxies, KEDA) and rules on it: WAL archiving
@@ -430,6 +456,35 @@ sees what users see, through Cloudflare, so it can't tell a dead cluster from a 
 gateway. GitHub turns off scheduled workflows in a
 repository with no activity for 60 days; re-enable it from the Actions tab.
 
+## Internal tools
+
+The operators' web tools are on hosts of their own under the cluster's zone
+(`platform/internal-tools`, in every cluster): `argocd.`, `mail-admin.`, `storage.`
+(the uploads server's console) and `backups.` (the backups server's), and with
+observability `grafana.`, `prometheus.`, `alertmanager.` and `jaeger.`. In production
+that's `https://grafana.director.mmadan.in` and so on. With a direct zone they're under
+it, like the files host: OpenTofu's DNS-only wildcard names them and the gateway serves
+them with its own wildcard certificate; without one, external-dns publishes each,
+proxied by Cloudflare.
+
+Every host asks for one shared login first: an Envoy Gateway `SecurityPolicy` with basic
+auth, its users in the `internal-tools-auth` Secret. Nothing else restricts them (no
+address allow-lists), so anyone with the password reaches the tools, and the tools that
+have their own sign-in still ask for it: Argo CD (`admin`, its
+`argocd-initial-admin-secret`), Grafana (the `grafana-admin` Secret), Stalwart's web
+admin (`admin@<email domain>`, `WEBADMIN_PASSWORD`) and RustFS's consoles (each server's
+keys, in the `storage` and `<release>-backups-storage` Secrets). Prometheus,
+Alertmanager and Jaeger have no sign-in of their own. The basic-auth header is removed
+before a request reaches a tool. Two tools call their own API with their own
+Authorization header once signed in, which basic auth would refuse, so those paths are
+left to the tool (`openPaths`): Stalwart's `/jmap` and `/api` (bearer tokens), and on
+the storage hosts everything but the console's page `/rustfs/console` (S3 calls signed
+with the server's keys). RustFS refuses any S3 call not signed with its keys, but it does
+mean the backups server's S3 API answers on the internet behind its keys alone.
+
+To change the shared password: write the new `.htpasswd` line into
+`platform/secrets/<env>/internal-tools-auth.sops.yaml` with `sops`, commit, and release.
+
 ## DNS
 
 OpenTofu's Cloudflare module owns the zone's records for the site, the previews
@@ -446,9 +501,18 @@ OpenTofu installs Argo CD on each cluster with `argocd/argo-cd-values.yaml` and 
 
 - **platform**: every add-on in `platform/addons` on every cluster with an environment:
   operators, the gateway and its certificates (`platform/config`), the mail server, the
-  add-ons' Secrets. They roll out in the order of their `wave` (a step per wave, each
-  once the one before is healthy), so what needs a CRD comes after what installs it.
+  internal tools, the add-ons' Secrets. There's no ordering between them: on a new
+  cluster, what needs a CRD or a namespace another add-on brings fails until that one is
+  up, and its sync is retried with backoff until it succeeds (`retry.limit: -1`).
 - **observability**: `platform/addons/observability` on clusters that opt in.
+
+Every Application these three generate syncs automatically, prunes and self-heals: a
+change made in the cluster by hand is undone within minutes. They deliberately don't use
+Argo CD's progressive syncs (RollingSync): those force `automated.enabled: false` on
+every generated Application, so nothing self-heals, and a step only finishes once each
+of its Applications reports Synced, so one that never does (a chart that renders a field
+the API server drops) holds back every Application after it. Previews still roll out
+data before stack that way; a preview is short-lived and redeploys on every push.
 - **envs**: the data and stack releases on the staging and production clusters, data
   first, and each environment's Secrets with the stack. A merge to master deploys
   staging (CI commits the new image tag); production changes only through a promotion
@@ -496,3 +560,36 @@ CloudNativePG runs its own PostgreSQL 18 image with pgvector, which doesn't star
 own, so compose runs pgvector's image of the same major version. What kind leaves out
 (Argo CD and its sops plugin, cert-manager, backups) is first exercised in
 staging.
+
+## Troubleshooting
+
+**A field stays on a Deployment after the values dropped it** (an environment variable,
+a `valueFrom` next to a new `value`, which then fails the sync with "may not have both").
+The data and stack Applications sync with client-side apply: Argo CD diffs against the
+`kubectl.kubernetes.io/last-applied-configuration` annotation and removes only what was
+in it. A field that got there another way stays: from a sync with the server-side apply
+option (a manual sync with "Server-Side Apply" ticked, which also leaves no annotation for
+the next client-side sync to diff against), or from `kubectl set env`, `kubectl patch` or
+`kubectl edit`. See who owns it, then remove it by hand:
+
+```sh
+kubectl -n director-editor get deploy director-editor-api -o yaml --show-managed-fields
+kubectl -n director-editor set env deploy/director-editor-api S3_BUCKET-   # one variable
+```
+
+A manager other than `argocd-controller` with operation `Update`, or an
+`argocd-controller` entry with operation `Apply`, marks such a field. So: never sync the
+data or stack Applications with the server-side apply option, and change what Argo CD
+manages in git, not with kubectl.
+
+**An Application says OutOfSync forever, right after syncing.** Its chart renders
+something the API server changes or drops: an empty map (`labels: {}`), or a field a CRD
+defaults (an HTTPRoute's `weight`, a backend's `kind`). `argocd app diff <app>` shows it;
+fix the chart or its values so they render what the API server keeps (Kyverno's CRD
+labels in `platform/values/kyverno.yaml` and the defaults written out in
+`platform/internal-tools` are two such fixes).
+
+**Mail is down after a node restart** (`mail-0` at 0/2, its `recovery` container failing
+its startup probe): the chart clears the last provisioning's markers in its `plan` init
+container so a pod restarted in place provisions again; if a release without that runs,
+`kubectl -n mail delete pod mail-0` gives it a fresh scratch volume (the PVC stays).

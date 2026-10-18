@@ -5,7 +5,10 @@ Object storage: RustFS servers (S3 API), one per purpose so each has its own roo
            URLs at the public host (the HTTPRoute below); the services use the
            in-cluster endpoint. Keys in the `storage.uploads.secretName` Secret.
   backups  Postgres's base backups and WAL (on with postgres.backups). Only Postgres
-           reaches it; nothing public, and the application has no key to it.
+           reaches its S3 port; the application has no key to it.
+
+Each server's web console (port 9001, `console`) takes connections from the gateway's
+proxies only: the internal tools route a host to it (deploy/platform/internal-tools).
 
 A Job after every install and upgrade creates each server's bucket, and sets the uploads
 bucket's CORS rule (the site's origins may PUT and GET).
