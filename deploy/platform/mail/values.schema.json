@@ -57,7 +57,10 @@
       "properties": {
         "enabled": { "type": "boolean" },
         "account": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
-        "gatewayNamespaceSelector": { "type": "object", "additionalProperties": { "type": "string" } }
+        "gatewayNamespaceSelector": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
       }
     },
     "tls": {
