@@ -26,6 +26,7 @@ import { useTranslations } from "next-intl";
 import { type FormEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DirectorGate, YouTubeEmbed } from "@/modules/shorts";
 import { DirectorCaptions, DirectorOrb, useLiveFailure } from "../components/director-captions";
+import { MarksLayer } from "../components/marks-layer";
 import {
   CountdownNumber,
   FlipButton,
@@ -42,6 +43,7 @@ import { Teleprompter } from "../components/teleprompter";
 import { useCamera } from "../hooks/use-camera";
 import { type DirectorLive, useDirectorLive } from "../hooks/use-director-live";
 import { useLeaveGuard } from "../hooks/use-leave-guard";
+import { type Marks, useShotMarks } from "../hooks/use-marks";
 import { useMemory } from "../hooks/use-memory";
 import { useWakeLock } from "../hooks/use-screen";
 import { nextPage, type Phase, type StudioShot, shotPage, useStudio } from "../hooks/use-studio";
@@ -379,11 +381,12 @@ type ToolHandler = (id: string, call: LiveToolCall) => void;
 interface ToolScreen extends Pick<Screen, "props" | "studio" | "camera" | "live"> {
   /** Puts Director's change to a shot on the member's version of it. */
   adapt: (change: LiveAdaptation) => void;
+  marks: Marks;
 }
 
 /** What each of Director's tools does on screen, and what came of it. */
 function toolResult(
-  call: LiveToolCall,
+  call: Exclude<LiveToolCall, { name: "point_at" }>,
   { props, camera, adapt }: ToolScreen,
   go: (href: ReturnType<typeof shotPage>) => void,
 ): LiveToolResult {
@@ -418,6 +421,12 @@ function useTools(tools: { current: ToolHandler }, screen: ToolScreen) {
     tools.current = (id, call) => {
       if (screen.studio.phase !== "setup") {
         return screen.live.answer(id, "busy");
+      }
+      // A mark looks at the picture first: Director hears once it's drawn, or not.
+      if (call.name === "point_at") {
+        const { live, marks } = screen;
+        void marks.point(id, call.target, call.label).then((result) => live.answer(id, result));
+        return;
       }
       screen.live.answer(
         id,
@@ -502,12 +511,19 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
   useLayoutEffect(() => {
     guard.current = leaving;
   });
+  const marks = useShotMarks({
+    video: camera.video,
+    facing: camera.facing,
+    shot: index,
+    setup: studio.phase === "setup",
+  });
   useTools(tools, {
     props,
     studio,
     camera,
     live,
     adapt: (change) => setAdaptations((now) => adapted(now, change)),
+    marks,
   });
   const onFlip = useMemberFlip(camera, live);
   const { hold } = live;
@@ -517,7 +533,7 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
   // paints, so nothing Director says once the review shows is dropped as if mid-take.
   useLayoutEffect(() => hold(quiet), [hold, quiet]);
   useWakeLock();
-  return { props, changed: version.changed, camera, live, studio, onFlip, leaving };
+  return { props, changed: version.changed, camera, live, studio, onFlip, leaving, marks };
 }
 
 /** "Leave? This take isn't kept yet.", with Leave and Stay. */
@@ -601,6 +617,13 @@ function ShootScreen(shootProps: ShootProps) {
             camera.facing === "front" && "-scale-x-100",
           )}
         />
+        {started && !blocked ? (
+          <MarksLayer
+            marks={shoot.marks.marks}
+            video={camera.video}
+            mirrored={camera.facing === "front"}
+          />
+        ) : null}
         {started ? null : (
           <StartCard
             first={memory.before.sessions === 0}

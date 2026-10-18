@@ -4,12 +4,7 @@
  * the service refuses, and the plan's shape, so every plan the service returns parses
  * here, field for field and value for value.
  */
-import {
-  zLocated,
-  zLocateRequest,
-  zSceneCheckRequest,
-  zShotPlan,
-} from "@repo/ai-client/schemas";
+import { zLocated, zLocateRequest, zSceneCheckRequest, zShotPlan } from "@repo/ai-client/schemas";
 import {
   DIRECTOR_FRAME_MAX_LENGTH,
   DIRECTOR_FRAME_MIN_LENGTH,

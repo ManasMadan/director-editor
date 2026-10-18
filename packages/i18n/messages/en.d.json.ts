@@ -635,6 +635,7 @@ declare const messages: {
         "send": "Send"
       },
       "quiet": "Director's quiet while you film",
+      "mark": "Director marked {label}",
       "review": {
         "title": "Your take",
         "looping": "Your take, on loop",

@@ -213,6 +213,7 @@ describe("Director's calls", () => {
       "GET /v1/director/library",
       `GET /v1/director/plans/${VIDEO}`,
       "POST /v1/director/scene-checks",
+      "POST /v1/director/locate",
       "POST /v1/director/takes",
       `GET /v1/director/plans/${VIDEO}/takes`,
       "POST /v1/director/cuts",

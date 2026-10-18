@@ -892,7 +892,9 @@ describe("Director's marks on the picture", () => {
     const { fake, browser } = await liveCall();
     fake.send({
       toolCall: {
-        functionCalls: [{ id: "g1", name: "point_at", args: { target: "the lamp", label: "lamp" } }],
+        functionCalls: [
+          { id: "g1", name: "point_at", args: { target: "the lamp", label: "lamp" } },
+        ],
       },
     });
     await browser.message(0);
