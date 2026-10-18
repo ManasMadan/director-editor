@@ -114,9 +114,7 @@ class SeedMedia(BaseModel):
     assets: dict[str, MediaKey] = Field(default_factory=dict[str, MediaKey], exclude_if=_is_empty)
 
 
-def _allowed(
-    video_id: str, plan: ShotPlan, media: SeedMedia
-) -> list[tuple[str | None, set[str]]]:
+def _allowed(video_id: str, plan: ShotPlan, media: SeedMedia) -> list[tuple[str | None, set[str]]]:
     """Every key `media` names, each with the only keys it may be for this seed: its own
     folder, its shot's position or its plan's asset, the right kind of file."""
     at = f"seed-media/{video_id}"
@@ -132,7 +130,12 @@ def _allowed(
             )
         ],
         *[
-            (key, {f"{at}/asset-{name}.png", f"{at}/asset-{name}.jpg"} if name in asset_ids else set())
+            (
+                key,
+                {f"{at}/asset-{name}.png", f"{at}/asset-{name}.jpg"}
+                if name in asset_ids
+                else set(),
+            )
             for name, key in media.assets.items()
         ],
     ]

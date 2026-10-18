@@ -4,8 +4,9 @@
  * is a short on YouTube (ShortsService), that a take's or a cut's file is the caller's,
  * checked and of the right kind (FilesService), whose presigned read it hands the AI
  * service for a take's review, and the short-lived links to a plan's stored audio and to
- * the lines Director speaks (kept in storage, so each is spoken once), and to a seeded
- * template's media (storyboard cards, preview clips, music).
+ * the lines Director speaks (kept in storage, so each is spoken once), and to a
+ * template's media (a seed's storyboard cards, preview clips and music, and any plan's
+ * asset images).
  */
 import { createHash } from "node:crypto";
 import { Injectable } from "@nestjs/common";
