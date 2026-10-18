@@ -25,9 +25,16 @@ from app.session_pass import (
     Refinement,
     SessionFootage,
     SessionPass,
-    create_session_pass,
     pass_prompt,
     reconcile,
+)
+from app.session_recordings import (
+    PartRow,
+    SliceRow,
+    StoredPart,
+    create_session_pass,
+    slice_key,
+    stored_parts,
 )
 from app.settings import Settings
 from app.usage import Reservation
@@ -142,6 +149,7 @@ class Recording:
         self._footage = footage
         self.added: list[NewAttempt] = []
         self.refined: list[Refinement] = []
+        self.finished = False
 
     async def footage(self, org_id: UUID, session_id: UUID) -> SessionFootage | None:
         return self._footage
@@ -151,6 +159,9 @@ class Recording:
 
     async def refine(self, org_id: UUID, session_id: UUID, refinement: Refinement) -> None:
         self.refined.append(refinement)
+
+    async def done(self, session_id: UUID) -> None:
+        self.finished = True
 
 
 class Watching:
@@ -183,6 +194,8 @@ def test_the_pass_adds_what_the_marks_missed_and_re_cuts_what_moved() -> None:
     assert [a.start_ms for a in recording.added] == [5_000]
     assert recording.refined == [Refinement(MARKED, 19_000, 24_000)]
     assert changes.orgs == [ORG]
+    # What it made to watch the footage goes, however the pass ends.
+    assert recording.finished
 
 
 def test_the_pass_leaves_a_session_alone_when_there_s_nothing_to_do() -> None:
@@ -254,17 +267,48 @@ def test_gemini_isn_t_asked_when_the_workspace_has_nothing_left() -> None:
     assert allowance.settled == []
 
 
-def test_the_pass_is_on_with_director() -> None:
+def test_the_pass_is_on_with_director_and_reads_recordings_with_a_bucket() -> None:
     base = {
         "AI_DATABASE_URL": "postgresql://u:p@localhost/db",
         "REDIS_URL": "redis://localhost:6379",
         "AI_SERVICE_SECRET": "s" * 32,
     }
+    director = {"DIRECTOR_MODEL": "gemini-test", "GOOGLE_API_KEY": "test-key"}
     redis = Redis()
     with patch.dict(os.environ, {}, clear=True):
         off = Settings.model_validate(base)
-        on = Settings.model_validate(
-            {**base, "DIRECTOR_MODEL": "gemini-test", "GOOGLE_API_KEY": "test-key"}
-        )
+        on = Settings.model_validate({**base, **director})
+        stored = Settings.model_validate({**base, **director, "MEDIA_BUCKET": "media-bucket"})
     assert create_session_pass(off, redis) is None
-    assert isinstance(create_session_pass(on, redis), SessionPass)
+    for settings in (on, stored):
+        passing = create_session_pass(settings, redis)
+        assert passing is not None
+        the_pass, clips = passing
+        assert isinstance(the_pass, SessionPass)
+        asyncio.run(clips.close())
+
+
+def test_a_part_plays_from_its_first_slice_up_to_the_first_one_missing() -> None:
+
+    parts = [
+        PartRow(index=0, camera="front", content_type="video/webm"),
+        PartRow(index=1, camera="back", content_type="video/mp4"),
+        PartRow(index=2, camera="front", content_type="video/webm"),
+    ]
+    slices = [
+        SliceRow(part_index=0, index=1, start_ms=10_000, duration_ms=10_000),
+        SliceRow(part_index=0, index=0, start_ms=0, duration_ms=10_000),
+        SliceRow(part_index=0, index=3, start_ms=30_000, duration_ms=10_000),
+        # Part 1's first slice never arrived: none of it can be played.
+        SliceRow(part_index=1, index=1, start_ms=10_000, duration_ms=4_000),
+    ]
+    assert stored_parts(parts, slices, SESSION) == [
+        StoredPart(
+            index=0,
+            camera="front",
+            content_type="video/webm",
+            keys=[slice_key(SESSION, 0, 0), slice_key(SESSION, 0, 1)],
+            duration_ms=20_000,
+        )
+    ]
+    assert slice_key(SESSION, 2, 7) == f"recordings/{SESSION}/2/7"

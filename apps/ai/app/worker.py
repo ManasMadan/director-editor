@@ -42,7 +42,8 @@ from app.queues import (
     RunningWorker,
     start_worker,
 )
-from app.session_pass import SessionPass, create_session_pass
+from app.session_pass import SessionPass
+from app.session_recordings import create_session_pass
 from app.settings import get_settings
 from app.telemetry import start_telemetry
 
@@ -186,7 +187,7 @@ async def main() -> None:
     director_queue = DirectorQueue(str(settings.redis_url))
     http = httpx.AsyncClient()
     director = create_director(settings, director_queue, redis, http)
-    session_pass = create_session_pass(settings, redis)
+    passing = create_session_pass(settings, redis)
     # Each job is a model watching a video for tens of seconds: a few at once per worker.
     director_worker: RunningWorker | None = (
         start_worker(
@@ -194,12 +195,12 @@ async def main() -> None:
             director_processor(
                 director,
                 create_creator(settings, director_queue, redis, http),
-                session_pass,
+                passing[0] if passing else None,
             ),
             str(settings.redis_url),
             concurrency=3,
         )
-        if director and session_pass
+        if director and passing
         else None
     )
     stop = asyncio.Event()
@@ -214,6 +215,8 @@ async def main() -> None:
     if director_worker:
         await director_worker.close()
     await director_queue.close()
+    if passing:
+        await passing[1].close()
     await http.aclose()
     await redis.aclose()
     await close_engine()

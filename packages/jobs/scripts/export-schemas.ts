@@ -27,7 +27,7 @@ import * as z from "zod";
 import { jobMeta, queuePrefix, queues } from "../src/queues";
 
 /** The queues Python uses. */
-const shared = ["ai-director"] as const;
+const shared = ["ai-director", "recording"] as const;
 
 /**
  * What Python needs of a queue's options. Strict, so an option added to one of these

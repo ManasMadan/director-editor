@@ -191,8 +191,9 @@ export const queues = {
     },
   },
   /**
-   * Director's continuous recording (apps/api and apps/worker's maintenance produce it,
-   * apps/worker consumes it): an ended attempt whose footage is all uploaded, to cut into
+   * Director's continuous recording (apps/api, apps/worker's maintenance and apps/ai's
+   * post-session pass produce it, apps/worker consumes it): an ended attempt whose footage
+   * is all uploaded, to cut into
    * a take on the clipper. The job id is the attempt's id, so an attempt is cut once
    * however often it's queued. A clipper outage passes: spaced retries, then the attempt
    * fails.

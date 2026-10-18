@@ -25,6 +25,7 @@ from uuid import UUID
 import httpx
 from google.genai.types import MediaResolution
 from psycopg.errors import UniqueViolation
+from pydantic import TypeAdapter
 from pydantic_ai import Agent, BinaryContent
 from pydantic_ai.models import Model
 from pydantic_ai.models.google import GoogleModel, GoogleModelSettings
@@ -33,7 +34,7 @@ from pydantic_ai.providers.google_cloud import GoogleCloudProvider
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RunUsage, UsageLimits
 from redis.asyncio import Redis
-from sqlalchemy import Boolean, func, select, type_coerce, update
+from sqlalchemy import Boolean, func, select, text, type_coerce, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -470,6 +471,32 @@ def _violates(error: IntegrityError, index: str) -> bool:
     """Whether the database refused a write for a duplicate in `index`."""
     cause = error.orig
     return isinstance(cause, UniqueViolation) and cause.diag.constraint_name == index
+
+
+_REASON = TypeAdapter[str | None](str | None)
+
+
+@dataclass(frozen=True)
+class _Found:
+    """A take cut from an attempt the post-session pass found, and the pass's reason."""
+
+    reason: str | None
+
+
+async def _found_by_pass(session: AsyncSession, file_id: UUID) -> _Found | None:
+    """What the post-session pass said of the attempt this file was cut from; None when
+    the file wasn't cut from an attempt the pass found."""
+    row = (
+        await session.execute(
+            text(
+                "SELECT reason FROM app.recording_attempt WHERE file_id = :file AND origin = 'pass'"
+            ),
+            {"file": file_id},
+        )
+    ).first()
+    if row is None:
+        return None
+    return _Found(_REASON.validate_python(row[0]))
 
 
 def _jpeg(image: str) -> bytes:
@@ -968,6 +995,8 @@ class Director:
         if shot.kind != body.kind:
             raise AppError("DIRECTOR_TAKE_KIND_MISMATCH")
         async with tenant(org_id) as session:
+            # A take cut from an attempt the post-session pass found says so, with its reason.
+            found = await _found_by_pass(session, body.fileId)
             # One statement, held by the unique index on file_id: two adds of one file
             # racing each other make one take, and only the one that made it is reviewed.
             made = await session.scalar(
@@ -979,6 +1008,8 @@ class Director:
                     shot_index=body.shotIndex,
                     file_id=body.fileId,
                     kind=body.kind,
+                    origin="shoot" if found is None else "pass",
+                    reason=None if found is None else found.reason,
                     updated_at=func.now(),
                 )
                 .on_conflict_do_nothing(index_elements=[DirectorTake.file_id])
@@ -1119,7 +1150,7 @@ class Director:
                     best_end_ms=end,
                     score=review.score,
                     feedback=review.feedback,
-                    reason=review.reason,
+                    reason=func.coalesce(DirectorTake.reason, review.reason),
                     updated_at=func.now(),
                 )
             )

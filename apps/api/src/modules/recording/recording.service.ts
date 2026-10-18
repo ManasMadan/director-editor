@@ -53,6 +53,12 @@ import { RecordingRepository } from "./recording.repository";
 import { endOf, expiresAt, readyAttempts, toAttempt, toPart, toSession } from "./rules";
 
 export const RECORDING_QUEUE = Symbol("RECORDING_QUEUE");
+export const DIRECTOR_QUEUE = Symbol("DIRECTOR_QUEUE");
+/**
+ * How long after Done the post-session pass starts: the shoot screen may still be sending
+ * the last slices it queued, and the pass goes through what's stored when it runs.
+ */
+const PASS_DELAY_MS = 2 * MINUTE_MS;
 
 // A slow connection on a phone: long enough to send a slice, no longer.
 const SLICE_UPLOAD_EXPIRES_S = 10 * MINUTE_S;
@@ -106,6 +112,7 @@ export class RecordingService {
     private readonly files: FilesService,
     @InjectDatabase() private readonly database: Database,
     @Inject(RECORDING_QUEUE) private readonly queue: Producer<"recording">,
+    @Inject(DIRECTOR_QUEUE) private readonly director: Producer<"ai-director">,
   ) {}
 
   /** Opens a session on a ready plan, unless the member's footage is at its allowance. */
@@ -331,9 +338,9 @@ export class RecordingService {
    */
   async finish(caller: Caller, sessionId: RecordingSessionId): Promise<RecordingSession> {
     await this.find(caller, sessionId);
-    await tenantTx(this.database.write, caller.orgId, async (tx) => {
+    const finished = await tenantTx(this.database.write, caller.orgId, async (tx) => {
       if ((await this.recordings.lockSession(tx, sessionId)) !== "recording") {
-        return;
+        return false;
       }
       const open = await this.recordings.openAttempt(tx, sessionId);
       if (open) {
@@ -344,8 +351,22 @@ export class RecordingService {
         await this.recordings.resume(tx, { sessionId, ...pause }, null);
       }
       await this.recordings.finish(tx, sessionId);
+      return true;
     });
     await this.clipReady(caller, sessionId);
+    if (finished) {
+      // Gone through once: the session's id is the job's.
+      const meta = {
+        requestId: currentContext()?.requestId,
+        userId: caller.userId,
+        orgId: caller.orgId,
+      };
+      await this.director.add(
+        "session-pass",
+        { sessionId, orgId: caller.orgId },
+        { jobId: sessionId, meta, delay: PASS_DELAY_MS },
+      );
+    }
     return toSession(await this.find(caller, sessionId));
   }
 

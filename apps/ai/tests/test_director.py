@@ -51,7 +51,7 @@ from app.schemas import (
     ReviseResult,
     SceneCheck,
 )
-from app.session_pass import create_session_pass
+from app.session_recordings import create_session_pass
 from app.settings import get_settings
 from app.usage import Allowance
 from app.worker import director_processor
@@ -2079,9 +2079,9 @@ def test_the_worker_runs_both_director_jobs(
     plan = index_plan(client, org, user)
     from app.main import services
 
-    the_pass = create_session_pass(get_settings(), services().redis)
-    assert the_pass is not None
-    process = director_processor(director(), session_pass=the_pass)
+    passing = create_session_pass(get_settings(), services().redis)
+    assert passing is not None
+    process = director_processor(director(), session_pass=passing[0])
     activities = Activities()
     monkeypatch.setattr("app.director.log_activity", activities)
     monkeypatch.setattr("app.worker.log_activity", activities)

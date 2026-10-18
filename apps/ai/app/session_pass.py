@@ -7,8 +7,8 @@ the ones marked live; each moved one is cut again.
 The recording itself (its sessions, parts, slices and attempts) belongs to continuous
 recording, so this module reaches it only through two seams: `RecordingSource` reads a
 finished session's footage and its attempts, and `AttemptSink` adds or re-cuts attempts.
-Until the recording tables ship here, `NoRecordings` stands in and the pass does nothing;
-the database-backed pair replaces it in `create_session_pass`, and nothing else changes.
+The database- and storage-backed pair is app/session_recordings.py; without a bucket to
+join footage in (MEDIA_BUCKET), `NoRecordings` stands in and the pass does nothing.
 
 What is new and what moved is decided here, in plain code (`reconcile`), not by the
 model: Gemini only says what it saw, so an answer that repeats a marked attempt never
@@ -25,16 +25,11 @@ from pydantic_ai import Agent, VideoUrl
 from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RunUsage, UsageLimits
-from redis.asyncio import Redis
 
-from app.contracts.realtime_message import DirectorChanged
-from app.director import create_google_model
 from app.errors import AppError
 from app.log import log
-from app.realtime import publish_to_org
 from app.schemas import MAX_SHOT_SECONDS, REASON_MAX_LENGTH, ShotPlan
-from app.settings import Settings
-from app.usage import Reservation, reserve, settle
+from app.usage import Reservation
 
 # Ten minutes of footage at low media resolution is roughly 60 to 100 thousand tokens
 # (the spec's cost table); this leaves room for the plan, the log and the answer.
@@ -50,8 +45,6 @@ MOVED_MS = 500
 # Shorter than this isn't an attempt at anything.
 SHORTEST_MS = 500
 SHOT_MAX_MS = round(MAX_SHOT_SECONDS * 1000)
-
-CHANGED = DirectorChanged(type="director.changed")
 
 RECORDING_INSTRUCTIONS = """\
 You are Director, going back through the whole recording of someone's shoot, after they
@@ -156,6 +149,10 @@ class RecordingSource(Protocol):
         go through (no such session, not finished, or no footage)."""
         ...
 
+    async def done(self, session_id: UUID) -> None:
+        """The pass is over: whatever `footage` made for it can go."""
+        ...
+
 
 class AttemptSink(Protocol):
     async def add(self, org_id: UUID, session_id: UUID, attempt: NewAttempt) -> None:
@@ -174,11 +171,14 @@ class Watcher(Protocol):
 
 
 class NoRecordings:
-    """The stand-in until continuous recording's tables reach this service: no session is
-    ever found, so a pass queued for one ends at once, having changed nothing."""
+    """The stand-in without a bucket to join footage in: no session is ever found, so a
+    pass queued for one ends at once, having changed nothing."""
 
     async def footage(self, org_id: UUID, session_id: UUID) -> SessionFootage | None:
-        log.info("no recording backend yet: nothing to go through", session_id=str(session_id))
+        log.info("no footage to go through here", session_id=str(session_id))
+        return None
+
+    async def done(self, session_id: UUID) -> None:
         return None
 
     async def add(self, org_id: UUID, session_id: UUID, attempt: NewAttempt) -> None:
@@ -325,6 +325,12 @@ class SessionPass:
         """Goes through the session; returns how many attempts it added and re-cut. A
         session with nothing to go through, or a workspace out of allowance, is left as
         the live marks made it: the editor works from those either way."""
+        try:
+            return await self._go_through(org_id, session_id)
+        finally:
+            await self._source.done(session_id)
+
+    async def _go_through(self, org_id: UUID, session_id: UUID) -> tuple[int, int]:
         footage = await self._source.footage(org_id, session_id)
         if footage is None or not footage.parts:
             return 0, 0
@@ -344,26 +350,3 @@ class SessionPass:
             "post-session pass done", session_id=str(session_id), added=len(new), moved=len(moved)
         )
         return len(new), len(moved)
-
-
-def create_session_pass(settings: Settings, redis: Redis) -> SessionPass | None:
-    """The pass, on with Director (DIRECTOR_MODEL). It watches long footage unattended,
-    so it uses the model that indexes shorts (INDEX_MODEL). The recording seams are the
-    stand-in until continuous recording's tables reach this service: then a
-    database-backed source and sink go here."""
-    if not settings.director_model:
-        return None
-    model_name = settings.index_model
-    monthly = settings.monthly_tokens_per_org
-
-    async def reserve_pass(org_id: UUID, user_id: UUID | None, most: int) -> Reservation | None:
-        return await reserve(
-            org_id, user_id, "director-pass", model_name, most=most, monthly=monthly
-        )
-
-    async def changed(org_id: UUID) -> None:
-        await publish_to_org(redis, org_id, CHANGED)
-
-    recordings = NoRecordings()
-    watcher = GeminiWatcher(create_google_model(settings, model_name), reserve_pass, settle)
-    return SessionPass(watcher, recordings, recordings, changed)
