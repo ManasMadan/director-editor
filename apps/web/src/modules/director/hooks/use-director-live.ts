@@ -1,6 +1,12 @@
 "use client";
 
-import type { Facing, LiveTakeState, LiveToolCall, LiveToolResult } from "@repo/contracts/live";
+import type {
+  Facing,
+  LiveAdaptation,
+  LiveTakeState,
+  LiveToolCall,
+  LiveToolResult,
+} from "@repo/contracts/live";
 import { SECOND_MS } from "@repo/contracts/time";
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
@@ -37,6 +43,8 @@ interface Options {
   video: RefObject<HTMLVideoElement | null>;
   /** Director asked for something; answer with `answer(id, result)`. */
   onTool: (id: string, call: LiveToolCall) => void;
+  /** What Director changed in the shots so far, for a fresh connection to know. */
+  adaptations: LiveAdaptation[];
 }
 
 /** What the session hears, kept in the hook's state. */
@@ -94,7 +102,7 @@ interface Refs {
   held: RefObject<boolean>;
   retry: RefObject<number>;
   retried: RefObject<boolean>;
-  latest: RefObject<Pick<Options, "onTool" | "shotIndex">>;
+  latest: RefObject<Pick<Options, "onTool" | "shotIndex" | "adaptations">>;
 }
 
 type Setters = Pick<
@@ -122,6 +130,7 @@ function useConnect(refs: Refs, setters: Setters) {
         shot,
         held: held.current,
         video,
+        adaptations: () => latest.current.adaptations,
         events: {
           onLive: () => {
             retried.current = false;
@@ -193,16 +202,16 @@ function useAnsweredLineFades(captions: Captions, setCaptions: Setters["setCapti
  * seconds later; if that fails too (or for anything else, like the hour's allowance being
  * spent) Director is "unavailable" with the reason, until the member taps to try again.
  */
-export function useDirectorLive({ videoId, shotIndex, video, onTool }: Options) {
+export function useDirectorLive({ videoId, shotIndex, video, onTool, adaptations }: Options) {
   const live = useSessionState();
   const [wanted, setWanted] = useState(false);
   const session = useRef<LiveControls | null>(null);
   const held = useRef(false);
   const retry = useRef(0);
   const retried = useRef(false);
-  const latest = useRef({ onTool, shotIndex });
+  const latest = useRef({ onTool, shotIndex, adaptations });
   useLayoutEffect(() => {
-    latest.current = { onTool, shotIndex };
+    latest.current = { onTool, shotIndex, adaptations };
   });
   const { setState, setFailure, setCaptions, setSpeaking, setHearing } = live;
 

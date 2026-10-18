@@ -97,10 +97,15 @@ on a laptop), with a top band (the shots, Director, the way out) and a bottom ba
   answers; the member's line goes eight seconds after Director has answered it, or at
   once on a flip, a countdown or a take review. Screen readers hear each line once it's
   finished. What the member types in the text box goes to Director as their own words,
-  on the take review too. Director
-  can show another shot (`go_to_shot`) or flip the camera (`switch_camera`), never
+  on the take review too. Director talks like a friend helping shoot a reel: it answers
+  everything, reads the line back when asked, goes with the member's own wording, and
+  nudges once (twice at most) after fifteen quiet seconds. Director
+  can show another shot (`go_to_shot`), flip the camera (`switch_camera`) or change a
+  shot to the member's own idea (`adapt_shot`: "what if I do it with my grandma"), never
   start or stop a take; the screen answers each request with what really happened
-  (done, or refused because a take is under way or the camera is off). The camera, the
+  (done, or refused because a take is under way or the camera is off). A changed shot
+  shows the member's version on the card (`lib/your-version.ts`), its changed rows
+  saying "changed for you", and the teleprompter and the take review use their line. The camera, the
   microphone and Director stay up from shot to shot: moving on changes only what the
   screen shows.
 - **The shutter** (`hooks/use-studio.ts`) is the one way a take starts: a tap counts

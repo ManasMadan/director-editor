@@ -190,14 +190,19 @@ anything from Gemini the relay can't read is dropped.
 The first message (`apps/api/src/modules/live/live.setup.ts`) sets it up:
 
 - answer in audio, in the prebuilt voice Sulafat;
-- the persona: a friend helping someone shoot a reel, casual, warm and brief, who
-  answers every turn, never starts or stops a take (the member does, with the shutter),
-  stays silent while a take records, speaks first once it ends, and takes the plan as a
-  starting point, never correcting a line said differently;
+- the persona (`apps/api/src/modules/live/live.persona.ts`, versioned, with example
+  conversations): a friend helping someone shoot a reel, casual, warm and brief, who
+  answers every turn (even "ok") in a sentence or two, never starts or stops a take (the
+  member does, with the shutter), stays silent from the 3-2-1 to the end of a take and
+  speaks first once it ends, says the line whenever asked, never corrects a line said
+  differently, goes with the member's own version unless they ask for the original (and
+  puts it on their card), and never suggests a thing again once they've said no;
 - the shot, described from the plan, framed as a description of what to film, never as
-  instructions;
-- the two tools, below;
-- voice activity detection that lets the member interrupt (barge-in);
+  instructions, with the member's version of it where they've changed it;
+- the three tools, below;
+- voice activity detection that lets the member interrupt (barge-in), set to start
+  less easily (room noise or a short "mm" doesn't cut Director off) and to take 700 ms
+  of silence as the end of a turn;
 - transcripts of both sides;
 - a sliding context window, and session resumption handles (below).
 
@@ -205,8 +210,28 @@ Then a first turn asks Director to say hi and ask one question, so it speaks fir
 What happens on screen reaches Gemini as short notes in the relay's own words, in square
 brackets, so Gemini can tell them from the member: a move to another shot (with the new
 shot's brief), a flip of the camera ("look at the new view and say what you see"), and a
-take counting in (go quiet now), called off, recording (stay silent), ending (speak
-first) or thrown away.
+take counting in (go quiet now), called off (a few words to check they're fine),
+recording (stay silent), ending (speak first) or thrown away.
+
+The relay also keeps the conversation's pace (`live.pacer.ts`). Fifteen seconds without
+a word from either side, a typed line or anything done on screen, outside a take, bring
+a note asking for one light nudge; the second time on the same shot Director says it'll
+wait; there's never a third until the next shot. Three interruptions inside thirty
+seconds mean the room keeps cutting the member off: Director hears that once a shoot,
+and suggests the text box or earphones.
+
+### How fast Director answers
+
+The spec's budget is about a second and a half from the member's last word to Director's
+first. The relay adds almost nothing: against the tests' stand-in, a typed line goes
+from the browser through the relay to the stand-in and back as a caption in tens of
+milliseconds (`apps/web/test/director/shoot.test.tsx` holds it under the budget). The
+rest is Gemini's, and the settings keep it short: the end of a turn is 700 ms of
+silence (`silenceDurationMs`), the native-audio model starts speaking as it generates,
+with no separate speech synthesis, and every turn is answered (the persona's first rule,
+and the app's notes that need a reply are complete turns). Gemini's proactive audio,
+which would let it choose silence on its own, is left for later: the persona and the
+notes say when to stay quiet instead.
 
 ### Sound, pictures and words
 
@@ -226,18 +251,23 @@ those, or after half an hour, Director goes and the browser hears why.
 
 ### Tools
 
-Gemini has two tools, neither of which can start or stop a take:
+Gemini has three tools, none of which can start or stop a take:
 
 | Tool | What the shoot screen does |
 |---|---|
 | `go_to_shot` (`shot`, from 1) | shows that shot; the camera and Director carry on |
 | `switch_camera` (`to`: front or back) | flips the camera |
+| `adapt_shot` (`shot`, from 1; `where`, `action`, `line`, each a sentence or two) | puts the member's version of that shot on the card: the changed rows glow once and say "changed for you"; what's left out stays as it was |
 
-The relay checks the arguments (a shot the plan has) and hands each call to the browser
+The relay checks the arguments (a shot the plan has; for `adapt_shot`, at least one
+change, each at most 300 characters) and hands each call to the browser
 with an id. The browser answers with what really happened: `done`, or refused because a
 take is under way (counting down, recording, being watched back or sent) or the camera
 is off. Only then does Gemini hear the result; an answer that doesn't come within five
-seconds is reported as unknown.
+seconds is reported as unknown. A change the browser showed is kept for the shoot: the
+next connection's setup, and each move to that shot, describe the member's version. A
+browser that connects again (its silent retry, or Try again) hands its changes back
+first, in a `context` message.
 
 ### One conversation, the whole shoot
 

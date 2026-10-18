@@ -6,6 +6,7 @@
  * the browser's and the app's own.
  */
 import { useSearchParams } from "next/navigation";
+import { flushSync } from "react-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, userEvent } from "vitest/browser";
 import { ShootPage } from "@/modules/director";
@@ -336,6 +337,47 @@ describe("a shoot with Director", () => {
   });
 });
 
+describe("talking it through with Director", () => {
+  it("answers a typed line at once, and reads the member's line when asked", async () => {
+    canvasCamera();
+    const { page } = await openShoot({ shots: [walkIn, smile] });
+    await startShooting(page);
+    // Through the relay and back: the app's own part of the time to an answer.
+    const sent = performance.now();
+    await tell(page, "ok I'm going", "You said: ok I'm going");
+    expect(performance.now() - sent).toBeLessThan(1500);
+    await tell(page, "can you say my line again?", `It's: "Morning. Coffee first."`);
+  });
+
+  it("puts the member's twist on the card, says so, and keeps it for the shoot", async () => {
+    canvasCamera();
+    const { page } = await openShoot({ shots: [walkIn, smile] });
+    await startShooting(page);
+    await send(page, "what if I do this one with my grandma instead?");
+    await expect
+      .element(page.getByText(line("Ooh, I love that. Let's put it on your card.")))
+      .toBeVisible();
+    const card = page.getByRole("region", { name: "Shot 1" });
+    await expect.element(card.getByText("You and your grandma do it together")).toBeVisible();
+    await expect.element(card.getByText("changed for you")).toBeVisible();
+    // Only the row that changed says so.
+    expect(card.getByText("changed for you").elements()).toHaveLength(1);
+    await expect.element(page.getByText(line("There you go."))).toBeVisible();
+    expect((await commands.liveTurns(liveFrom))[0]?.toolResponses).toEqual([{ result: "done" }]);
+    // Their line is the original's still, and Director moves on and back with the change kept.
+    await tell(page, "say my line", `It's: "Morning. Coffee first."`);
+    await send(page, "go to shot 2");
+    await expect.element(page.getByRole("heading", { name: "Shot 2 · Smile" })).toBeVisible();
+    await send(page, "go to shot 1");
+    await expect.element(card.getByText("You and your grandma do it together")).toBeVisible();
+    await expect
+      .poll(turns)
+      .toContainEqual(
+        expect.stringContaining('- What they do: "You and your grandma do it together"'),
+      );
+  });
+});
+
 describe("leaving the shoot", () => {
   it("leaves at once with nothing at stake", async () => {
     canvasCamera();
@@ -358,6 +400,8 @@ describe("leaving the shoot", () => {
     const dialog = page.getByRole("alertdialog", { name: "Leave?" });
     await expect.element(dialog).toBeVisible();
     await expect.element(dialog.getByText("This take isn't kept yet.")).toBeVisible();
+    // Focus starts on Stay: Enter doesn't leave by accident.
+    await expect.element(dialog.getByRole("button", { name: "Stay" })).toHaveFocus();
     // The recording stopped at once: the take is safe behind the question.
     await userEvent.click(dialog.getByRole("button", { name: "Stay" }));
     await expect.element(page.getByLabelText("Your take, on loop")).toBeVisible();
@@ -384,6 +428,45 @@ describe("leaving the shoot", () => {
     expect(page.getByText("REC").query()).toBeNull();
     await userEvent.click(page.getByRole("link", { name: "Leave the shoot" }));
     await expect.poll(currentUrl).toBe(`/director/${videoId}`);
+  });
+});
+
+describe("leaving the shoot, right after going again", () => {
+  it("puts the new take's history entry on only once the old one's pop has landed", async () => {
+    // What happens to history: the guard's own back, the pop it causes, and the new
+    // take's entry. Listening before the page does, so the pop is logged before the
+    // guard acts on it.
+    const log: string[] = [];
+    const popped = () => log.push("pop");
+    window.addEventListener("popstate", popped);
+    canvasCamera();
+    const { page } = await openShoot({ shots: [walkIn, smile] });
+    await startShooting(page);
+    await userEvent.click(page.getByRole("button", { name: "Record a take" }));
+    await userEvent.click(page.getByRole("button", { name: "Stop recording" }), {
+      timeout: 6_000,
+    });
+    await expect.element(page.getByRole("button", { name: "Go again" })).toBeVisible();
+    const push = window.history.pushState.bind(window.history);
+    const back = window.history.back.bind(window.history);
+    vi.spyOn(window.history, "pushState").mockImplementation((...args) => {
+      log.push("push");
+      push(...args);
+    });
+    vi.spyOn(window.history, "back").mockImplementation(() => {
+      log.push("back");
+      back();
+    });
+    log.length = 0;
+    // Go again, and the shutter straight after in the same task, before the pop lands.
+    const again = page.getByRole("button", { name: "Go again" }).element();
+    flushSync(() => (again as HTMLButtonElement).click());
+    (page.getByRole("button", { name: "Record a take" }).element() as HTMLButtonElement).click();
+    await expect.element(page.getByRole("button", { name: "Cancel the countdown" })).toBeVisible();
+    // Pushed before the pop, the entry would be popped with it, and back would leave
+    // without asking; pushed after, it's there for back to pop and ask.
+    await expect.poll(() => log).toEqual(["back", "pop", "push"]);
+    window.removeEventListener("popstate", popped);
   });
 });
 

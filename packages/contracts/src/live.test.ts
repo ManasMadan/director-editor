@@ -38,6 +38,26 @@ describe("what the browser sends", () => {
   });
 });
 
+describe("the member's version of a shot", () => {
+  it("changes where, what or the line, each bounded, and travels back as context", () => {
+    const adapted = { shot: 1, action: "Grandma does the nod, you react" };
+    expect(liveClientMessage.parse({ type: "context", adaptations: [adapted] })).toEqual({
+      type: "context",
+      adaptations: [adapted],
+    });
+    const tool = { type: "tool", id: "1", call: { name: "adapt_shot", ...adapted } };
+    expect(liveServerMessage.parse(tool)).toEqual(tool);
+    const long = { shot: 0, line: "x".repeat(301) };
+    expect(liveClientMessage.safeParse({ type: "context", adaptations: [long] }).success).toBe(
+      false,
+    );
+    expect(
+      liveClientMessage.safeParse({ type: "context", adaptations: [{ shot: 0, where: " " }] })
+        .success,
+    ).toBe(false);
+  });
+});
+
 describe("what the browser hears", () => {
   it("hears when Director's turn is over", () => {
     expect(liveServerMessage.parse({ type: "turn" })).toEqual({ type: "turn" });

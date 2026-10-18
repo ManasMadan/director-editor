@@ -20,12 +20,15 @@
 import { DIRECTOR_MAX_SHOTS, type ShotPlan } from "@repo/contracts/api";
 import { ERROR_CODES, type ErrorCode } from "@repo/contracts/errors";
 import {
+  LIVE_ADAPTATION_MAX_LENGTH,
   LIVE_TOOLS,
+  type LiveAdaptation,
   type LiveClientMessage,
   type LiveServerMessage,
   type LiveTool,
   type LiveToolCall,
   type LiveToolResult,
+  liveAdaptation,
   liveClientMessage,
 } from "@repo/contracts/live";
 import { PROVIDER_TIMEOUT_MS, SECOND_MS } from "@repo/contracts/time";
@@ -39,13 +42,17 @@ import {
   type UpstreamMessage,
   upstreamMessageSchema,
 } from "./live.messages";
+import { Pacer } from "./live.pacer";
 import {
   cameraMessage,
   catchUpMessage,
   greetingMessage,
+  noiseMessage,
+  quietMessage,
   resumedMessage,
   shotMessage,
   takeMessage,
+  versionMessage,
 } from "./live.setup";
 
 /** How the relay reports what went wrong, for the service's log. */
@@ -60,10 +67,10 @@ export interface RelayOptions {
   url: string;
   auth: GoogleAuth;
   /**
-   * The first message on an upstream connection, for the shot the member is on; `handle`
-   * resumes the conversation a previous connection had.
+   * The first message on an upstream connection, for the shot the member is on and their
+   * version of it; `handle` resumes the conversation a previous connection had.
    */
-  setup: (shot: number, handle: string | null) => object;
+  setup: (shot: number, handle: string | null, adaptation?: LiveAdaptation) => object;
   /** The plan Director directs, and the shot it starts on. */
   plan: ShotPlan;
   shot: number;
@@ -111,7 +118,8 @@ const RECENT_LINES = 8;
 const RECENT_LINE_LENGTH = 300;
 
 /** What Gemini hears for each of the browser's answers to a tool call. */
-const TOOL_RESPONSES: Record<LiveToolResult, object> = {
+const TOOL_RESPONSES: Record<LiveToolResult | "unknown", object> = {
+  unknown: { result: "unknown", why: "The app didn't answer." },
   done: { result: "done" },
   busy: {
     result: "refused",
@@ -152,12 +160,16 @@ interface Line {
   retired: boolean;
   /** It picked up a previous connection's conversation from a handle. */
   resumed: boolean;
+  /** The member's version of its shot that its setup described, if any. */
+  briefed: LiveAdaptation | undefined;
   setupTimer: NodeJS.Timeout | undefined;
 }
 
 /** A tool call the browser hasn't answered yet. */
 interface Pending {
   line: Line;
+  /** The member's version of a shot, applied once the browser has shown it. */
+  adaptation?: LiveAdaptation;
   /** Gemini's own id for the call, which its answer must carry. */
   geminiId: string | undefined;
   name: LiveTool;
@@ -206,6 +218,9 @@ export class LiveRelay {
   private startedAt: number | null = null;
   /** The shot the browser is on, which Gemini directs. */
   private shot: number;
+  /** The member's version of each shot they changed, by shot. */
+  private readonly adaptations = new Map<number, LiveAdaptation>();
+  private readonly pacer: Pacer;
 
   constructor(
     private readonly client: WebSocket,
@@ -217,6 +232,13 @@ export class LiveRelay {
     this.turns = new SlidingBudget(TEXT_TURNS, TEXT_WINDOW_MS, options.now);
     this.moves = new SlidingBudget(SHOT_MOVES, TEXT_WINDOW_MS, options.now);
     this.notes = new SlidingBudget(NOTES, TEXT_WINDOW_MS, options.now);
+    this.pacer = new Pacer(
+      {
+        onQuiet: (nudge) => this.tell(quietMessage(nudge)),
+        onNoise: () => this.tell(noiseMessage()),
+      },
+      options.now,
+    );
     client.on("message", (data, isBinary) => this.fromClient(data, isBinary));
     client.on("close", () => this.end(null));
   }
@@ -250,13 +272,15 @@ export class LiveRelay {
       ready: false,
       retired: false,
       resumed: false,
+      briefed: undefined,
       setupTimer: undefined,
     };
     this[as] = line;
     socket.on("open", () => {
       line.shot = this.shot;
       line.resumed = this.handle !== null;
-      send(line, this.options.setup(line.shot, this.handle));
+      line.briefed = this.adaptations.get(line.shot);
+      send(line, this.options.setup(line.shot, this.handle, line.briefed));
       line.setupTimer = setTimeout(() => {
         this.options.log("error", {}, "live setup never completed");
         this.end("UPSTREAM_UNAVAILABLE");
@@ -306,10 +330,21 @@ export class LiveRelay {
       case "shot":
         return this.moveTo(message.shot);
       case "tool_result":
-        return this.answerTool(message.id, TOOL_RESPONSES[message.result]);
+        return this.answerTool(message.id, message.result);
+      case "context":
+        for (const adaptation of message.adaptations) {
+          // A shot with nothing changed is the original: there's no version to describe.
+          if (adaptation.where || adaptation.action || adaptation.line) {
+            this.adaptations.set(adaptation.shot, adaptation);
+          }
+        }
+        return;
       case "camera":
+        this.pacer.heard();
         return this.note(cameraMessage(message.facing));
       case "take":
+        // From the 3-2-1 to the take's end, quiet is the point.
+        this.pacer.take(message.state === "countdown" || message.state === "recording");
         return this.note(takeMessage(message.state, this.shot));
       default:
         return this.forward(message);
@@ -336,10 +371,19 @@ export class LiveRelay {
       return this.end("DIRECTOR_CALL_TOO_FAST");
     }
     this.shot = index;
+    this.pacer.newShot();
     const line = this.ready;
     if (line) {
       line.shot = index;
-      send(line, shotMessage(this.options.plan, index));
+      send(line, shotMessage(this.options.plan, index, this.adaptations.get(index)));
+    }
+  }
+
+  /** A note of the app's own pacing (quiet, noise): it isn't the browser's to spend. */
+  private tell(message: object) {
+    const line = this.ready;
+    if (line) {
+      send(line, message);
     }
   }
 
@@ -384,6 +428,7 @@ export class LiveRelay {
         if (!this.turns.spend(1)) {
           return this.end("DIRECTOR_CALL_TOO_FAST");
         }
+        this.pacer.heard();
         return send(line, {
           clientContent: {
             turns: [{ role: "user", parts: [{ text: message.text }] }],
@@ -435,19 +480,26 @@ export class LiveRelay {
     clearTimeout(line.setupTimer);
     line.ready = true;
     const moved = line.shot !== this.shot;
+    line.shot = this.shot;
+    const adaptation = this.adaptations.get(this.shot);
+    // The member's version arrived after the setup went (the browser sends it as it joins):
+    // Director knows it before it says anything.
+    if (!moved && adaptation && adaptation !== line.briefed) {
+      send(line, versionMessage(adaptation));
+    }
     if (line === this.next) {
       this.takeOver(line);
     } else {
       this.startedAt = this.options.now();
       this.options.onCallStarted();
+      this.pacer.heard();
       if (!moved) {
         send(line, this.options.resumed ? resumedMessage(this.shot) : greetingMessage(this.shot));
       }
     }
     // The member moved on while this connection got ready: it opens on the shot they're on.
     if (moved) {
-      line.shot = this.shot;
-      send(line, shotMessage(this.options.plan, this.shot));
+      send(line, shotMessage(this.options.plan, this.shot, adaptation));
     }
     clearTimeout(this.rotateTimer);
     this.rotateTimer = setTimeout(() => this.rotate(), this.options.rotateAfterMs);
@@ -485,6 +537,7 @@ export class LiveRelay {
     }
     if (content.interrupted) {
       this.toClient({ type: "interrupted" });
+      this.pacer.interrupted();
     }
     if (content.turnComplete) {
       this.toClient({ type: "turn" });
@@ -493,6 +546,7 @@ export class LiveRelay {
 
   private transcript(who: "you" | "director", text: string) {
     this.toClient({ type: "transcript", who, text });
+    this.pacer.heard();
     const last = this.recent.at(-1);
     if (last?.who === who) {
       last.text = (last.text + text).slice(-RECENT_LINE_LENGTH);
@@ -531,11 +585,9 @@ export class LiveRelay {
     }
     this.toolIds += 1;
     const id = `tool-${this.toolIds}`;
-    const timer = setTimeout(
-      () => this.answerTool(id, { result: "unknown", why: "The app didn't answer." }),
-      TOOL_ANSWER_MS,
-    );
-    this.pending.set(id, { line, geminiId: call.id, name, timer });
+    const timer = setTimeout(() => this.answerTool(id, "unknown"), TOOL_ANSWER_MS);
+    const adaptation = browserCall.call.name === "adapt_shot" ? browserCall.call : undefined;
+    this.pending.set(id, { line, geminiId: call.id, name, timer, adaptation });
     this.toClient({ type: "tool", id, call: browserCall.call });
   }
 
@@ -565,18 +617,59 @@ export class LiveRelay {
         }
         return { call: { name, to: args.data.to } };
       }
+      case "adapt_shot":
+        return this.adaptCall(raw);
     }
   }
 
-  /** Tells Gemini what came of a tool call, once; a late or unknown answer is ignored. */
-  private answerTool(id: string, response: object) {
+  /**
+   * The member's version of a shot, as Gemini put it: a shot the plan has, and at least
+   * one of where, what and the line, each a sentence or two (the contract's bounds).
+   */
+  private adaptCall(raw: unknown): { call: LiveToolCall } | { response: object } {
+    const args = toolArgsSchemas.adapt_shot.safeParse(raw ?? {});
+    if (!args.success) {
+      return { response: { error: "shot must be a whole number, the rest text" } };
+    }
+    const { shot, where, action, line } = args.data;
+    const count = this.options.plan.shots.length;
+    if (shot < 1 || shot > count) {
+      return {
+        response: {
+          result: "not_found",
+          why: `There's no shot ${shot}: they go from 1 to ${count}.`,
+        },
+      };
+    }
+    const adaptation = liveAdaptation.safeParse({ shot: shot - 1, where, action, line });
+    if (!adaptation.success) {
+      const error = `each of where, action and line is one to ${LIVE_ADAPTATION_MAX_LENGTH} characters`;
+      return { response: { error } };
+    }
+    const { data } = adaptation;
+    if (!(data.where || data.action || data.line)) {
+      return { response: { error: "say what changed: where, action or line" } };
+    }
+    return { call: { name: "adapt_shot", ...data } };
+  }
+
+  /**
+   * Tells Gemini what came of a tool call, once; a late or unknown answer is ignored. A
+   * version of a shot the browser showed is kept, for the next time Gemini hears of it.
+   */
+  private answerTool(id: string, result: LiveToolResult | "unknown") {
     const pending = this.pending.get(id);
     if (!pending) {
       return;
     }
     this.pending.delete(id);
     clearTimeout(pending.timer);
-    const { line, geminiId, name } = pending;
+    const { line, geminiId, name, adaptation } = pending;
+    if (adaptation && result === "done") {
+      const { shot } = adaptation;
+      this.adaptations.set(shot, { ...this.adaptations.get(shot), ...adaptation });
+    }
+    const response = TOOL_RESPONSES[result];
     if (!line.retired && line.socket.readyState === WebSocket.OPEN) {
       send(line, { toolResponse: { functionResponses: [{ id: geminiId, name, response }] } });
     }
@@ -594,6 +687,7 @@ export class LiveRelay {
       return;
     }
     this.ended = true;
+    this.pacer.stop();
     clearTimeout(this.timer);
     clearTimeout(this.rotateTimer);
     for (const line of [this.current, this.next]) {

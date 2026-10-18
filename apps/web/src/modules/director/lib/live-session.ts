@@ -11,6 +11,7 @@
 import type { ErrorCode } from "@repo/contracts/errors";
 import type {
   Facing,
+  LiveAdaptation,
   LiveClientMessage,
   LiveTakeState,
   LiveToolCall,
@@ -199,17 +200,23 @@ interface Target {
   url: string;
   video: RefObject<HTMLVideoElement | null>;
   events: LiveEvents;
+  /** What the shoot has changed so far: a fresh connection hears it first. */
+  adaptations: () => LiveAdaptation[];
 }
 
 function connect(
   session: Session,
-  { url, video, events }: Target,
+  { url, video, events, adaptations }: Target,
   finish: (failure: LiveFailure) => void,
 ) {
   const socket = new WebSocket(url);
   socket.onopen = () => {
     session.live = socket;
     events.onLive();
+    const changed = adaptations();
+    if (changed.length > 0) {
+      send(socket, { type: "context", adaptations: changed });
+    }
     tellShot(session);
     session.microphone?.listen((pcm) => send(socket, { type: "audio", pcm16: encodePcm16(pcm) }));
     startFrames(session, socket, video);

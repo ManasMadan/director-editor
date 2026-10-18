@@ -6,6 +6,9 @@ import { SwitchCamera, X } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { timecode } from "../lib/track";
+import type { ChangedRow } from "../lib/your-version";
+
+const NO_CHANGES: ReadonlySet<ChangedRow> = new Set<ChangedRow>();
 
 /** Frosted glass on the dark stage: the shoot screen's one material. */
 export const GLASS =
@@ -84,29 +87,51 @@ export function LeaveLink({
   );
 }
 
-/** What to do in this shot, as the plan has it: where, what, and the line to say. */
-export function ShotCard({ shot, index }: { shot: Shot; index: number }) {
+/**
+ * What to do in this shot, as the member has it: where, what, and the line to say. A row
+ * Director changed for them glows once and says so.
+ */
+export function ShotCard({
+  shot,
+  index,
+  changed = NO_CHANGES,
+}: {
+  shot: Shot;
+  index: number;
+  changed?: ReadonlySet<ChangedRow>;
+}) {
   const t = useTranslations("director.shoot.card");
   const what = shot.steps[0]?.instruction ?? shot.pose.description;
   const line = shot.script.map((said) => said.text).join(" ");
-  const rows = [
-    { label: t("where"), text: shot.scene },
-    { label: t("do"), text: what },
-    ...(line ? [{ label: t("say"), text: t("line", { line }) }] : []),
+  const rows: { id: ChangedRow; text: string }[] = [
+    { id: "where", text: shot.scene },
+    { id: "do", text: what },
+    ...(line ? [{ id: "say" as const, text: t("line", { line }) }] : []),
   ];
   return (
     <section
       aria-label={t("label", { index: index + 1 })}
-      className={cn("rounded-2xl px-3.5 py-2.5 text-sm", GLASS)}
+      className={cn("live-motion rounded-2xl px-3.5 py-2.5 text-sm", GLASS)}
     >
       <h2 className="truncate text-[15px] font-semibold">
         {t("title", { index: index + 1, title: shot.title })}
       </h2>
       <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
         {rows.map((row) => (
-          <div key={row.label} className="contents">
-            <dt className="text-studio-foreground/65">{row.label}</dt>
-            <dd className="line-clamp-2">{row.text}</dd>
+          <div key={row.id} className="contents">
+            <dt className="text-studio-foreground/65">{t(row.id)}</dt>
+            {changed.has(row.id) ? (
+              // Keyed on the text, so a further change glows again.
+              <dd
+                key={row.text}
+                className="-mx-1 animate-[live-changed_1.6s_ease-out_both] rounded-md px-1"
+              >
+                <span className="line-clamp-2">{row.text}</span>
+                <span className="block text-xs text-guide">{t("changed")}</span>
+              </dd>
+            ) : (
+              <dd className="line-clamp-2">{row.text}</dd>
+            )}
           </div>
         ))}
       </dl>

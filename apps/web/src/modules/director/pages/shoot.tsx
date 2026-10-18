@@ -5,7 +5,7 @@ import { useApiErrorMessage } from "@repo/client";
 import { useDirectorPlanQuery } from "@repo/client/api/director/plan";
 import { useSystemInfoQuery } from "@repo/client/api/system/info";
 import type { Shot, ShotPlan } from "@repo/contracts/api";
-import type { LiveToolCall } from "@repo/contracts/live";
+import type { LiveAdaptation, LiveToolCall, LiveToolResult } from "@repo/contracts/live";
 import { required } from "@repo/contracts/objects";
 import {
   AlertDialog,
@@ -47,6 +47,14 @@ import { useWakeLock } from "../hooks/use-screen";
 import { nextPage, type Phase, type StudioShot, shotPage, useStudio } from "../hooks/use-studio";
 import { type AudioMode, parseAudio } from "../lib/audio";
 import { activeStep } from "../lib/timeline";
+import {
+  type Adaptations,
+  adaptationList,
+  adapted,
+  type ChangedRow,
+  NO_ADAPTATIONS,
+  yourVersion,
+} from "../lib/your-version";
 
 type Camera = ReturnType<typeof useCamera>;
 type Studio = ReturnType<typeof useStudio>;
@@ -310,6 +318,8 @@ function RecordingFoot({ shot, studio, voice }: { shot: Shot; studio: Studio; vo
 
 interface Screen {
   props: StudioShot;
+  /** The card's rows Director changed for the member. */
+  changed: ReadonlySet<ChangedRow>;
   studio: Studio;
   camera: Camera;
   live: DirectorLive;
@@ -319,7 +329,7 @@ interface Screen {
 }
 
 /** Everything over the picture once the shoot has started, in a top and a bottom band. */
-function Overlay({ props, studio, camera, live, liveOn, onFlip, onLeave }: Screen) {
+function Overlay({ props, changed, studio, camera, live, liveOn, onFlip, onLeave }: Screen) {
   const t = useTranslations("director.shoot");
   const { shot, index, count, videoId, audio } = props;
   const recording = studio.phase === "recording";
@@ -338,7 +348,7 @@ function Overlay({ props, studio, camera, live, liveOn, onFlip, onLeave }: Scree
             <LeaveLink videoId={videoId} onClick={onLeave} />
           </div>
         </div>
-        {setup ? <ShotCard shot={shot} index={index} /> : null}
+        {setup ? <ShotCard shot={shot} index={index} changed={changed} /> : null}
         {setup ? <LiveNotice live={live} liveOn={liveOn} /> : null}
       </div>
       <CountdownNumber seconds={studio.countdown} />
@@ -364,34 +374,55 @@ function Overlay({ props, studio, camera, live, liveOn, onFlip, onLeave }: Scree
   );
 }
 
-/**
- * Director's tool calls, done the way the member's own taps are, and answered with what
- * really happened: nothing changes shot or camera while a take is under way.
- */
 type ToolHandler = (id: string, call: LiveToolCall) => void;
 
-function useTools(
-  tools: { current: ToolHandler },
-  screen: Omit<Screen, "liveOn" | "onFlip" | "onLeave">,
-) {
-  const router = useRouter();
-  useLayoutEffect(() => {
-    const { props, studio, camera, live } = screen;
-    tools.current = (id, call) => {
-      if (studio.phase !== "setup") {
-        return live.answer(id, "busy");
+interface ToolScreen extends Pick<Screen, "props" | "studio" | "camera" | "live"> {
+  /** Puts Director's change to a shot on the member's version of it. */
+  adapt: (change: LiveAdaptation) => void;
+}
+
+/** What each of Director's tools does on screen, and what came of it. */
+function toolResult(
+  call: LiveToolCall,
+  { props, camera, adapt }: ToolScreen,
+  go: (href: ReturnType<typeof shotPage>) => void,
+): LiveToolResult {
+  switch (call.name) {
+    case "go_to_shot":
+      if (call.shot !== props.index) {
+        go(shotPage(props.videoId, call.shot, props.audio, props.retake));
       }
-      if (call.name === "go_to_shot") {
-        if (call.shot !== props.index) {
-          router.push(shotPage(props.videoId, call.shot, props.audio, props.retake));
-        }
-        return live.answer(id, "done");
-      }
+      return "done";
+    case "adapt_shot": {
+      const { name: _, ...change } = call;
+      adapt(change);
+      return "done";
+    }
+    case "switch_camera":
       if (camera.state !== "live") {
-        return live.answer(id, "no_camera");
+        return "no_camera";
       }
       camera.face(call.to);
-      live.answer(id, "done");
+      return "done";
+  }
+}
+
+/**
+ * Director's tool calls, done the way the member's own taps are, and answered with what
+ * really happened: nothing changes the shot, the card or the camera while a take is
+ * under way.
+ */
+function useTools(tools: { current: ToolHandler }, screen: ToolScreen) {
+  const router = useRouter();
+  useLayoutEffect(() => {
+    tools.current = (id, call) => {
+      if (screen.studio.phase !== "setup") {
+        return screen.live.answer(id, "busy");
+      }
+      screen.live.answer(
+        id,
+        toolResult(call, screen, (href) => router.push(href)),
+      );
     };
   });
 }
@@ -436,9 +467,12 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
   const camera = useCamera(audio === "voice");
   // Moving on after a kept take goes through the leave guard (made below, from the take).
   const guard = useRef<Pick<ReturnType<typeof useLeaveGuard>, "go">>({ go: () => undefined });
+  // The member's version of each shot Director changed, for this shoot.
+  const [adaptations, setAdaptations] = useState<Adaptations>(NO_ADAPTATIONS);
+  const version = yourVersion(required(plan.shots[index], "the shot"), adaptations[index]);
   const props: StudioShot = {
     videoId,
-    shot: required(plan.shots[index], "the shot"),
+    shot: version.shot,
     index,
     count: plan.shots.length,
     audio,
@@ -450,6 +484,7 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
     shotIndex: index,
     video: camera.video,
     onTool: (id, call) => tools.current(id, call),
+    adaptations: adaptationList(adaptations),
   });
   const studio = useStudio(props, camera, {
     onCountdown: () => live.take("countdown"),
@@ -467,7 +502,13 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
   useLayoutEffect(() => {
     guard.current = leaving;
   });
-  useTools(tools, { props, studio, camera, live });
+  useTools(tools, {
+    props,
+    studio,
+    camera,
+    live,
+    adapt: (change) => setAdaptations((now) => adapted(now, change)),
+  });
   const onFlip = useMemberFlip(camera, live);
   const { hold } = live;
   const quiet = studio.phase === "countdown" || studio.phase === "recording";
@@ -476,22 +517,24 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
   // paints, so nothing Director says once the review shows is dropped as if mid-take.
   useLayoutEffect(() => hold(quiet), [hold, quiet]);
   useWakeLock();
-  return { props, camera, live, studio, onFlip, leaving };
+  return { props, changed: version.changed, camera, live, studio, onFlip, leaving };
 }
 
 /** "Leave? This take isn't kept yet.", with Leave and Stay. */
 function LeaveDialog({ leaving }: { leaving: ReturnType<typeof useLeaveGuard> }) {
   const t = useTranslations("director.shoot.leaving");
+  // Focus starts on Stay, so Enter on a laptop never leaves by accident.
+  const stay = useRef<HTMLButtonElement>(null);
   return (
     // Only ever closed from inside (Stay, Escape, a tap outside): each of those means stay.
     <AlertDialog open={leaving.asking} onOpenChange={() => leaving.stay()}>
-      <AlertDialogContent>
+      <AlertDialogContent initialFocus={stay}>
         <AlertDialogHeader>
           <AlertDialogTitle>{t("title")}</AlertDialogTitle>
           <AlertDialogDescription>{t("body")}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{t("stay")}</AlertDialogCancel>
+          <AlertDialogCancel ref={stay}>{t("stay")}</AlertDialogCancel>
           <Button variant="destructive" onClick={leaving.confirm}>
             {t("leave")}
           </Button>
@@ -568,6 +611,7 @@ function ShootScreen(shootProps: ShootProps) {
         {started && !blocked && !reviewing ? (
           <Overlay
             props={shoot.props}
+            changed={shoot.changed}
             studio={studio}
             camera={camera}
             live={live}

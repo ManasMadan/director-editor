@@ -74,28 +74,36 @@ export function DirectorOrb({ level, className }: { level: () => number; classNa
 
 /**
  * One line of the conversation, for the eye: Director's beside its orb, the member's on
- * the right. Screen readers hear the lines from the announcement below instead.
+ * the right. Screen readers hear the lines from the announcement below instead. An older
+ * line dims its words only, never its bubble: the glass keeps them at 4.5:1 or better
+ * over a bright camera picture.
  */
 function Line({ line, older, level }: { line: Caption; older: boolean; level: () => number }) {
   if (line.who === "director") {
     return (
       <div
         className={cn(
-          "flex animate-[live-rise_300ms_ease-out_both] items-start gap-2.5 rounded-3xl px-3.5 py-3 transition-opacity duration-300",
+          "flex animate-[live-rise_300ms_ease-out_both] items-start gap-2.5 rounded-3xl px-3.5 py-3",
           GLASS,
-          older && "opacity-60",
         )}
       >
         <DirectorOrb level={level} className="mt-0.5 size-7" />
-        <p className="text-[15px] leading-snug font-semibold text-balance">{line.text.trim()}</p>
+        <p
+          className={cn(
+            "text-[15px] leading-snug font-semibold text-balance transition-colors duration-300",
+            older && "text-studio-foreground/80",
+          )}
+        >
+          {line.text.trim()}
+        </p>
       </div>
     );
   }
   return (
     <p
       className={cn(
-        "ml-auto max-w-[85%] animate-[live-rise_250ms_ease-out_both] rounded-2xl rounded-br-md bg-studio-foreground/90 px-3 py-1.5 text-sm font-medium text-studio transition-opacity duration-300",
-        older && "opacity-60",
+        "ml-auto max-w-[85%] animate-[live-rise_250ms_ease-out_both] rounded-2xl rounded-br-md bg-studio-foreground/90 px-3 py-1.5 text-sm font-medium text-studio transition-colors duration-300",
+        older && "text-studio/75",
       )}
     >
       {line.text.trim()}
