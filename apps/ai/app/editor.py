@@ -16,6 +16,8 @@ from uuid import UUID
 
 from app.db.models import DirectorTake
 from app.schemas import (
+    MAX_EDITOR_ACTIONS,
+    MAX_EDITOR_CHOICES,
     EditorAction,
     EditorChoice,
     EditorDraft,
@@ -204,14 +206,14 @@ def reply_of(draft: EditorDraft, shot_count: int, takes: Sequence[DirectorTake])
         action
         for action in (_action(item, shot_count, takes) for item in draft.actions)
         if action is not None and changes
-    ]
+    ][:MAX_EDITOR_ACTIONS]
     choices = [
         EditorChoice(
             shotIndex=choice.shot - 1, takeId=take_id, atSeconds=choice.atSeconds, note=choice.note
         )
         for choice in draft.choices
         if (take_id := _take_id(takes, choice.shot, choice.take)) is not None
-    ]
+    ][:MAX_EDITOR_CHOICES]
     return EditorReply(
         heard=draft.heard, outcome=draft.outcome, say=draft.say, actions=actions, choices=choices
     )

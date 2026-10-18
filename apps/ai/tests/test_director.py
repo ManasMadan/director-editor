@@ -239,6 +239,13 @@ REVIEW: dict[str, object] = {
     "score": 82,
     "feedback": "Great framing; hold the last pose a beat longer.",
     "reason": "The cleanest delivery, and you held the smile.",
+    "index": {
+        "visible": "A woman in a blue jumper at a kitchen counter, smiling at the camera.",
+        "things": ["blue jumper", "kitchen counter"],
+        "transcript": [{"text": "Tip", "startSeconds": 1.3, "endSeconds": 1.6}],
+        "moments": [{"kind": "smile", "atSeconds": 4.2, "note": "big smile at the camera"}],
+        "quality": {"sharpness": "sharp", "shake": "steady", "exposure": "good", "audio": "clear"},
+    },
 }
 
 _TAKES = TypeAdapter(list[DirectorTakeOut])
@@ -663,7 +670,8 @@ def test_the_short_s_audio_is_captured_while_the_plan_is_written(
         "ready",
         f"audio/{VIDEO}.m4a",
     )
-    [(_, sent)] = storage.received
+    # Only the upload: the client also reads the bucket itself.
+    [sent] = [sent for path, sent in storage.received if path.startswith("/upload/")]
     assert b'"name": "audio/dQw4w9WgXcQ.m4a"' in sent
     assert b"original audio" in sent
 
@@ -1611,9 +1619,11 @@ def test_a_locate_turns_gemini_s_box_into_fractions_of_the_frame(
 @pytest.mark.parametrize(
     "answer",
     [
-        {"found": False, "label": "a fridge", "box_2d": None},
-        # Found, but with no box, or one too thin to be a thing: never drawn.
-        {"found": True, "label": "a fridge", "box_2d": None},
+        {"found": False, "label": "a fridge", "box_2d": []},
+        # Found, but with no box, one that isn't four numbers, or one too thin to be a
+        # thing: never drawn.
+        {"found": True, "label": "a fridge", "box_2d": []},
+        {"found": True, "label": "a fridge", "box_2d": [100, 100, 600]},
         {"found": True, "label": "a fridge", "box_2d": [100, 100, 105, 600]},
         {"found": True, "label": "a fridge", "box_2d": [600, 100, 100, 600]},
     ],
@@ -1673,6 +1683,8 @@ def test_a_take_is_reviewed_and_keeps_its_best_part(
     )
     assert reviewed.feedback == REVIEW["feedback"]
     assert reviewed.reason == REVIEW["reason"]
+    [(stored,)] = as_org(org, "SELECT take_index FROM ai.director_take WHERE id = %s", (take.id,))
+    assert stored == REVIEW["index"]
     assert (reviewed.chosen, reviewed.origin) == (False, "shoot")
     assert b'"mime_type": "video/webm"' in gemini[0].received[-1][1]
     assert usage(org, "director-review") == 4_000
@@ -1864,7 +1876,9 @@ def test_a_member_chooses_a_take_over_director_s_pick_and_can_go_back(
     _ = ready_plan(client, org, user)
     first = add_take(client, org, user, "http://storage/1")
     second = add_take(client, org, user, "http://storage/2")
-    other_shot = add_take(client, org, user, "http://storage/3", shot=1)
+    other_shot = add_take(
+        client, org, user, "http://storage/3", shot=1, kind="photo", content_type="image/jpeg"
+    )
     events = subscribe(f"realtime:org:{org}")
     assert choose(client, org, user, 0, second.id).status_code == 204
     chosen = {take.id: take.chosen for take in takes_of(client, org, user)}
