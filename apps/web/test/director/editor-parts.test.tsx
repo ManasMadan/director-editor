@@ -33,6 +33,9 @@ function directorTake(overrides: Partial<DirectorTake> = {}): DirectorTake {
     bestEndMs: null,
     score: null,
     feedback: null,
+    reason: null,
+    chosen: false,
+    origin: "shoot",
     createdAt: new Date(filmed * 1000),
     ...overrides,
   };
@@ -51,6 +54,7 @@ function boardShot(
     index,
     takes: [...takes].reverse(),
     pickedTakeId: picked?.id ?? null,
+    chosenTakeId: null,
     needsRetake,
   };
 }

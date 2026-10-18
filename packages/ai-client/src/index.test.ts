@@ -37,6 +37,9 @@ const take = {
   bestEndMs: null,
   score: null,
   feedback: null,
+  reason: null,
+  chosen: false,
+  origin: "shoot",
   createdAt: "2026-01-01T00:00:00Z",
 };
 const cut = {
@@ -158,6 +161,7 @@ describe("Director's calls", () => {
         "/v1/director/locate": [200, located],
         "/v1/director/takes": [201, take],
         [`/v1/director/plans/${VIDEO}/takes`]: [200, [take]],
+        [`/v1/director/plans/${VIDEO}/choices`]: [204, undefined],
         "/v1/director/library": [200, { templates: [plan], indexUsed: true }],
         "/v1/director/cuts": request.method === "POST" ? [201, cut] : [200, [cut]],
         [`/v1/director/plans/${VIDEO}/cuts`]: [200, [cut]],
@@ -192,6 +196,9 @@ describe("Director's calls", () => {
     ).resolves.toEqual(take);
     await expect(director.listTakes(caller, VIDEO)).resolves.toEqual([take]);
     await expect(
+      director.chooseTake(caller, VIDEO, { shotIndex: 0, takeId: take.id }),
+    ).resolves.toBeUndefined();
+    await expect(
       director.createCut(caller, {
         videoId: VIDEO,
         title: cut.title,
@@ -216,6 +223,7 @@ describe("Director's calls", () => {
       "POST /v1/director/locate",
       "POST /v1/director/takes",
       `GET /v1/director/plans/${VIDEO}/takes`,
+      `POST /v1/director/plans/${VIDEO}/choices`,
       "POST /v1/director/cuts",
       `GET /v1/director/plans/${VIDEO}/cuts`,
       "GET /v1/director/cuts",

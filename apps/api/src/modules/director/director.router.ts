@@ -33,6 +33,9 @@ export const directorRouter = ({ inOrg }: Procedures, director: DirectorService)
   shots: inOrg.director.shots.handler(({ context, input }) =>
     director.shots(context.userId, context.orgId, input.videoId),
   ),
+  chooseTake: inOrg.director.chooseTake.handler(({ context, input }) =>
+    director.chooseTake(context.userId, context.orgId, input),
+  ),
   cuts: inOrg.director.cuts.handler(({ context, input }) =>
     director.cuts(context.userId, context.orgId, input.videoId),
   ),

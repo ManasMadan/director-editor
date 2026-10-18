@@ -66,6 +66,9 @@ const take = (
   bestEndMs: null,
   score: null,
   feedback: null,
+  reason: null,
+  chosen: false,
+  origin: "shoot",
   createdAt: new Date(createdAt),
 });
 
@@ -262,6 +265,7 @@ describe("the takes, shot by shot", () => {
     index,
     takes,
     pickedTakeId: null,
+    chosenTakeId: null,
     needsRetake: false,
   });
 

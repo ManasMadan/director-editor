@@ -39,6 +39,7 @@ import { toHeaders } from "../../http-context";
 import type { OrgCaller } from "../../rpc/procedures";
 import type { GoogleAuth } from "./google-auth";
 import { CLIENT_MAX_PAYLOAD_BYTES } from "./live.messages";
+import type { LivePicks } from "./live.picks";
 import { type CallEnd, closeWithError, type LiveLog, LiveRelay } from "./live.relay";
 import { type LiveModel, liveUrl, setupMessage } from "./live.setup";
 
@@ -69,6 +70,11 @@ export interface LiveOptions {
   /** Who is calling, as `inOrg` resolves it; throws an AppError when no one may. */
   caller(headers: Headers): Promise<OrgCaller>;
   plan(caller: OrgCaller, videoId: VideoId): Promise<DirectorPlan>;
+  /**
+   * Where the member's "use the second one" goes: their takes of the short since the
+   * shoot began (`since`), numbered per shot in the order filmed.
+   */
+  picks(caller: OrgCaller, videoId: VideoId, since: Date): LivePicks;
   /**
    * Spends one of the caller's connections for the hour (a demo guest's against its own,
    * smaller limit); throws RATE_LIMITED past it.
@@ -159,7 +165,7 @@ function refuseCall(log: LiveLog, client: WebSocket, error: unknown) {
 function relayFor(
   client: WebSocket,
   upstream: LiveUpstream,
-  call: { plan: ShotPlan; shot: number; resumed: boolean; userId: UserId; videoId: VideoId },
+  call: { plan: ShotPlan; shot: number; resumed: boolean; caller: OrgCaller; videoId: VideoId },
   options: LiveOptions,
 ) {
   return new LiveRelay(client, {
@@ -177,8 +183,9 @@ function relayFor(
     log: options.log,
     // Called from Gemini's socket, outside the call's request context: bound back to it,
     // so the line names the caller and the request.
+    picks: options.picks(call.caller, call.videoId, new Date(options.now())),
     onCallStarted: AsyncResource.bind(() => {
-      options.recordCallStarted(call.userId, call.videoId);
+      options.recordCallStarted(call.caller.userId, call.videoId);
       options.activity({ activity: "director.call_started", target: callTarget(call) });
     }),
   });
@@ -293,7 +300,7 @@ export function mountLive(fastify: FastifyInstance, options: LiveOptions) {
           plan,
           shot: query.data.shot,
           resumed: query.data.resume === "1",
-          userId: caller.userId,
+          caller,
           videoId: query.data.videoId,
         },
         options,

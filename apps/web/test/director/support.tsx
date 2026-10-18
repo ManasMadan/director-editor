@@ -248,6 +248,9 @@ export function take(overrides: Partial<Omit<DirectorTake, "createdAt">> & { fil
     bestEndMs: null,
     score: null,
     feedback: null,
+    reason: null,
+    chosen: false,
+    origin: "shoot",
     createdAt: new Date().toISOString(),
     ...overrides,
   };

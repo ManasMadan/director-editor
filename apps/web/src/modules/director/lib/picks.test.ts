@@ -18,6 +18,9 @@ function take(n: number, shotIndex = 0, score: number | null = null): DirectorTa
     bestEndMs: null,
     score,
     feedback: null,
+    reason: null,
+    chosen: false,
+    origin: "shoot",
     createdAt: new Date(n * 1000),
   };
 }
@@ -28,6 +31,7 @@ function shot(index: number, takes: DirectorTake[], picked: DirectorTake | null 
     index,
     takes: [...takes].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
     pickedTakeId: picked?.id ?? null,
+    chosenTakeId: null,
     needsRetake: false,
   } satisfies DirectorShot;
 }

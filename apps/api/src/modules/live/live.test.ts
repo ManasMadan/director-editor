@@ -35,6 +35,7 @@ import {
 import { CLIENT_MAX_PAYLOAD_BYTES } from "./live.messages";
 import { QUIET_MS } from "./live.pacer";
 import { PERSONA, PERSONA_VERSION } from "./live.persona";
+import type { LivePicks } from "./live.picks";
 import { systemInstruction } from "./live.setup";
 
 /**
@@ -246,6 +247,7 @@ async function startApi(overrides: Partial<LiveOptions> = {}, fake = new FakeLiv
     recordCallStarted: vi.fn(),
     context: () => ({ requestId: "call-1" }),
     activity: vi.fn(),
+    picks: () => ({ choose: () => Promise.resolve("done") }),
     ...overrides,
   });
   app.get("/plain", () => Promise.resolve("plain answer"));
@@ -344,7 +346,12 @@ describe("a live call", () => {
     }
     expect(PERSONA_VERSION).toBe(4);
     const tools = setup.tools as { functionDeclarations: { name: string }[] }[];
-    expect(tools[0]?.functionDeclarations.map((tool) => tool.name)).toEqual([...LIVE_TOOLS]);
+    expect(tools[0]?.functionDeclarations.map((tool) => tool.name)).toEqual([
+      ...LIVE_TOOLS,
+      "rate",
+    ]);
+    // It rates each attempt and says when one's the new best.
+    expect(text).toContain("call rate with your score and a short reason");
     // Director speaks first: hello, and one question.
     expect(JSON.stringify(await fake.message(1))).toContain("They just tapped Start shooting");
     expect(await fake.message(1)).toMatchObject({ clientContent: { turnComplete: true } });
@@ -782,6 +789,49 @@ describe("Director's tool calls", () => {
     browser.send({ type: "tool_result", id: "tool-99", result: "no_camera" });
     browser.send({ type: "text", text: "next" });
     expect(await fake.message(4)).toMatchObject({ clientContent: { turnComplete: true } });
+  });
+
+  it("rates an attempt itself, and makes the member's pick their choice through the API", async () => {
+    const choose = vi.fn<LivePicks["choose"]>(() => Promise.resolve("done"));
+    const picks = vi.fn<LiveOptions["picks"]>(() => ({ choose }));
+    const { fake, browser } = await liveCall({ picks });
+    browser.send({ type: "take", state: "recorded" });
+    browser.send({ type: "take", state: "recorded" });
+    await fake.message(3);
+    fake.send({
+      toolCall: {
+        functionCalls: [
+          { id: "g1", name: "rate", args: { take: 1, score: 70, reason: "Nice and warm." } },
+          { id: "g2", name: "rate", args: { score: 85, reason: "The cleanest delivery." } },
+          { id: "g3", name: "rate", args: { take: 1, use: true } },
+        ],
+      },
+    });
+    expect(await fake.message(4)).toEqual(
+      toolResponse("g1", "rate", { result: "done", new_best: true, best_take: 1 }),
+    );
+    expect(await fake.message(5)).toEqual(
+      toolResponse("g2", "rate", { result: "done", new_best: true, best_take: 2 }),
+    );
+    expect(await fake.message(6)).toEqual(
+      toolResponse("g3", "rate", { result: "done", chosen: true, take: 1 }),
+    );
+    // The browser has nothing to do for it.
+    expect(browser.received).toEqual([]);
+    expect(picks).toHaveBeenCalledWith(caller, "dQw4w9WgXcQ", new Date(0));
+    expect(choose).toHaveBeenCalledWith(0, 1);
+  });
+
+  it("tells Director when saving the member's pick fails, and logs why", async () => {
+    const choose = vi.fn<LivePicks["choose"]>(() => Promise.reject(new Error("AI down")));
+    const { fake, log } = await liveCall({ picks: () => ({ choose }) });
+    fake.send({
+      toolCall: { functionCalls: [{ id: "g1", name: "rate", args: { take: 2, use: true } }] },
+    });
+    expect(await fake.message(2)).toEqual(
+      toolResponse("g1", "rate", { result: "failed", why: "It couldn't be saved just now." }),
+    );
+    expect(log).toHaveBeenCalledWith("error", expect.anything(), "rating a take failed");
   });
 
   it("says the camera's off when the browser can't switch it", async () => {

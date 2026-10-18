@@ -35,6 +35,9 @@ const take = (n: number, kind: DirectorTake["kind"] = "video"): DirectorTake => 
   bestEndMs: null,
   score: 80,
   feedback: null,
+  reason: null,
+  chosen: false,
+  origin: "shoot",
   createdAt: new Date(0),
 });
 

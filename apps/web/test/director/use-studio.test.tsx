@@ -73,6 +73,9 @@ function director({ refuse = false } = {}) {
           bestEndMs: null,
           score: null,
           feedback: null,
+          reason: null,
+          chosen: false,
+          origin: "shoot",
           createdAt: new Date(0),
         };
       }),

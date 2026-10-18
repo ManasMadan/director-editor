@@ -6,6 +6,7 @@
  * this is where those two closures are proven to delegate to the right thing.
  */
 import type { IncomingMessage } from "node:http";
+import { directorTakeSchema } from "@repo/contracts/api";
 import { orgIdSchema, userIdSchema, videoIdSchema } from "@repo/contracts/ids";
 import { describe, expect, it, vi } from "vitest";
 import { liveCallOptions } from "./server";
@@ -23,10 +24,12 @@ const caller = {
   sharedDemo: false,
 };
 
+const notNeeded = vi.fn(() => Promise.reject(new Error("not needed")));
+
 function options(overrides: Partial<Parameters<typeof liveCallOptions>[0]> = {}) {
   return liveCallOptions({
     caller: () => Promise.resolve(caller),
-    director: { planOf: vi.fn(() => Promise.reject(new Error("not needed"))) },
+    director: { planOf: notNeeded, takes: notNeeded, chooseTake: notNeeded },
     analytics: { record: vi.fn() },
     calls: { take: vi.fn(() => Promise.resolve()) },
     guestCalls: { take: vi.fn(() => Promise.resolve()) },
@@ -39,9 +42,45 @@ function options(overrides: Partial<Parameters<typeof liveCallOptions>[0]> = {})
 describe("the live call's wiring", () => {
   it("asks the director service for the caller's plan in their workspace, without its media", async () => {
     const planOf = vi.fn(() => Promise.reject(new Error("not needed")));
-    const live = options({ director: { planOf } });
+    const live = options({ director: { planOf, takes: notNeeded, chooseTake: notNeeded } });
     await expect(live.plan(caller, videoId)).rejects.toThrow("not needed");
     expect(planOf).toHaveBeenCalledWith(userId, orgId, videoId);
+  });
+
+  it("makes the member's pick the take of this shoot they named, by its number in the shot", async () => {
+    const since = new Date(10_000);
+    const of = (n: number, shotIndex: number, at: number) =>
+      directorTakeSchema.parse({
+        id: `0b9f5c1e-3f4a-4c55-8f0e-2a6d1c7e9b${String(n).padStart(2, "0")}`,
+        shotIndex,
+        fileId: "0b9f5c1e-3f4a-4c55-8f0e-2a6d1c7e9b99",
+        kind: "video",
+        status: "ready",
+        error: null,
+        bestStartMs: null,
+        bestEndMs: null,
+        score: null,
+        feedback: null,
+        reason: null,
+        chosen: false,
+        origin: "shoot",
+        createdAt: new Date(at),
+      });
+    // Newest first, as the API lists them: one from an earlier shoot, one of another shot.
+    const takes = [of(4, 0, 13_000), of(3, 1, 12_500), of(2, 0, 12_000), of(1, 0, 9_000)];
+    const chooseTake = vi.fn(() => Promise.resolve([]));
+    const live = options({
+      director: { planOf: notNeeded, takes: vi.fn(() => Promise.resolve(takes)), chooseTake },
+    });
+    const picks = live.picks(caller, videoId, since);
+    await expect(picks.choose(0, 2)).resolves.toBe("done");
+    expect(chooseTake).toHaveBeenCalledWith(userId, orgId, {
+      videoId,
+      shotIndex: 0,
+      takeId: takes[0]?.id,
+    });
+    await expect(picks.choose(0, 3)).resolves.toBe("not_found");
+    expect(chooseTake).toHaveBeenCalledTimes(1);
   });
 
   it("spends the caller's call against the rate limiter, a demo guest's against its own", async () => {

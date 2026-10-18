@@ -3,7 +3,9 @@
  * collects every attempt; the one picked for it is the best-scored (the newest of a tie),
  * and the shot needs a retake while that one scored below DIRECTOR_RETAKE_BELOW. A shot
  * with no scored take yet has nothing picked and asks for no retake: it's still waiting
- * for its first take or its review.
+ * for its first take or its review. A take the member chose while shooting ("use the
+ * second one") is the shot's choice, which plays over Director's pick; Director's pick
+ * still shows, with its reason, so the member sees both.
  */
 import { DIRECTOR_RETAKE_BELOW, type DirectorShot, type DirectorTake } from "@repo/contracts/api";
 
@@ -32,6 +34,8 @@ export function shotsOf(shotCount: number, takes: DirectorTake[]): DirectorShot[
       index,
       takes: ofShot,
       pickedTakeId: pick === null ? null : pick.id,
+      // The AI service keeps one choice a shot; `find` takes the first all the same.
+      chosenTakeId: ofShot.find((take) => take.chosen)?.id ?? null,
       needsRetake: pick !== null && pick.score < DIRECTOR_RETAKE_BELOW,
     };
   });

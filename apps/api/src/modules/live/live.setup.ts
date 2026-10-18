@@ -29,6 +29,7 @@ import {
 
 import { POINT_AT_DECLARATION } from "./live.marks";
 import { PERSONA } from "./live.persona";
+import { PICKS_PERSONA, RATE_DECLARATION } from "./live.picks";
 
 // A warm, natural voice from the Live API's prebuilt set, the slower line's too.
 const VOICE = LIVE_VOICE;
@@ -456,8 +457,12 @@ export function setupMessage(
         responseModalities: ["AUDIO"],
         speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: VOICE } } },
       },
-      systemInstruction: { parts: [{ text: systemInstruction(plan, index, version) }] },
-      tools: [{ functionDeclarations }],
+      // Live alone rates attempts (the relay answers `rate` itself, live.picks.ts); the
+      // slower line shares the rest of the instruction and the other tools.
+      systemInstruction: {
+        parts: [{ text: `${systemInstruction(plan, index, version)}\n\n${PICKS_PERSONA}` }],
+      },
+      tools: [{ functionDeclarations: [...functionDeclarations, RATE_DECLARATION] }],
       // The model hears when the member starts talking and stops to listen (barge-in).
       // Low start-of-speech sensitivity keeps room noise and a short "mm" from cutting
       // Director off; 700 ms of silence ends the member's turn, which leaves the model

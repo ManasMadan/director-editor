@@ -20,6 +20,7 @@ import {
   brainstormDirectorTemplate,
   checkDirectorScene,
   chooseDirectorAsset,
+  chooseDirectorTake,
   clipDirectorAttempt,
   createDirectorCut,
   createDirectorTake,
@@ -57,6 +58,7 @@ import type {
   ReviseRequest,
   SceneCheckRequest,
   SpeechRequest,
+  TakeChoice,
 } from "./generated/types.gen";
 import { zErrorResponse } from "./generated/zod.gen";
 
@@ -218,6 +220,12 @@ function directorCalls(forCall: ClientFor) {
     async listTakes(caller: AiCaller, videoId: string) {
       return unwrap(
         listDirectorTakes({ client: await forCall(caller), path: { video_id: videoId } }),
+      );
+    },
+    /** The member's choice of take for a shot, or none to go back to Director's pick. */
+    async chooseTake(caller: AiCaller, videoId: string, body: TakeChoice): Promise<void> {
+      await settle(
+        chooseDirectorTake({ client: await forCall(caller), path: { video_id: videoId }, body }),
       );
     },
     async createCut(caller: AiCaller, body: DirectorCutCreate) {
