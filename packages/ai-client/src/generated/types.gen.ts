@@ -796,6 +796,10 @@ export type DirectorTakeOut = {
      */
     bestStartMs: number | null;
     /**
+     * Chosen
+     */
+    chosen: boolean;
+    /**
      * Createdat
      */
     createdAt: string;
@@ -819,6 +823,14 @@ export type DirectorTakeOut = {
      * Kind
      */
     kind: 'video' | 'photo';
+    /**
+     * Origin
+     */
+    origin: 'shoot' | 'pass';
+    /**
+     * Reason
+     */
+    reason: string | null;
     /**
      * Score
      */
@@ -1739,6 +1751,23 @@ export type StoryboardOut = {
 };
 
 /**
+ * TakeChoice
+ *
+ * The member's choice of take for a shot ("use the second one"), or none, to go back
+ * to Director's pick.
+ */
+export type TakeChoice = {
+    /**
+     * Shotindex
+     */
+    shotIndex: number;
+    /**
+     * Takeid
+     */
+    takeId: string | null;
+};
+
+/**
  * TargetPose
  */
 export type TargetPose = {
@@ -2530,6 +2559,46 @@ export type AddDirectorAssetResponses = {
 };
 
 export type AddDirectorAssetResponse = AddDirectorAssetResponses[keyof AddDirectorAssetResponses];
+
+export type ChooseDirectorTakeData = {
+    body: TakeChoice;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path: {
+        /**
+         * Video Id
+         */
+        video_id: string;
+    };
+    query?: never;
+    url: '/v1/director/plans/{video_id}/choices';
+};
+
+export type ChooseDirectorTakeErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type ChooseDirectorTakeError = ChooseDirectorTakeErrors[keyof ChooseDirectorTakeErrors];
+
+export type ChooseDirectorTakeResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type ChooseDirectorTakeResponse = ChooseDirectorTakeResponses[keyof ChooseDirectorTakeResponses];
 
 export type ListDirectorCutsData = {
     body?: never;

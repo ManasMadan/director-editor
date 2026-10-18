@@ -194,6 +194,26 @@ function templateCalls(forCall: ClientFor) {
   };
 }
 
+/** A member's takes, and their choice of take for a shot (apps/ai/app/director.py). */
+function takeCalls(forCall: ClientFor) {
+  return {
+    async createTake(caller: AiCaller, body: DirectorTakeCreate) {
+      return unwrap(createDirectorTake({ client: await forCall(caller), body }));
+    },
+    async listTakes(caller: AiCaller, videoId: string) {
+      return unwrap(
+        listDirectorTakes({ client: await forCall(caller), path: { video_id: videoId } }),
+      );
+    },
+    /** The member's choice of take for a shot, or none to go back to Director's pick. */
+    async chooseTake(caller: AiCaller, videoId: string, body: TakeChoice): Promise<void> {
+      await settle(
+        chooseDirectorTake({ client: await forCall(caller), path: { video_id: videoId }, body }),
+      );
+    },
+  };
+}
+
 /** Director's calls (apps/ai/app/director.py), each on a client made for that call. */
 function directorCalls(forCall: ClientFor) {
   return {
@@ -213,20 +233,6 @@ function directorCalls(forCall: ClientFor) {
     },
     async locate(caller: AiCaller, body: LocateRequest) {
       return unwrap(locateDirectorTarget({ client: await forCall(caller), body }));
-    },
-    async createTake(caller: AiCaller, body: DirectorTakeCreate) {
-      return unwrap(createDirectorTake({ client: await forCall(caller), body }));
-    },
-    async listTakes(caller: AiCaller, videoId: string) {
-      return unwrap(
-        listDirectorTakes({ client: await forCall(caller), path: { video_id: videoId } }),
-      );
-    },
-    /** The member's choice of take for a shot, or none to go back to Director's pick. */
-    async chooseTake(caller: AiCaller, videoId: string, body: TakeChoice): Promise<void> {
-      await settle(
-        chooseDirectorTake({ client: await forCall(caller), path: { video_id: videoId }, body }),
-      );
     },
     async createCut(caller: AiCaller, body: DirectorCutCreate) {
       return unwrap(createDirectorCut({ client: await forCall(caller), body }));
@@ -306,6 +312,11 @@ export function createAiClient(options: { baseUrl: string; secret: string; timeo
 
   /** Director's calls, as `ai.director.index(...)`. */
   return {
-    director: Object.assign(directorCalls(forCall), assetCalls(forCall), templateCalls(forCall)),
+    director: Object.assign(
+      directorCalls(forCall),
+      takeCalls(forCall),
+      assetCalls(forCall),
+      templateCalls(forCall),
+    ),
   };
 }

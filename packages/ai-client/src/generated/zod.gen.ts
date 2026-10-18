@@ -305,12 +305,15 @@ export const zDirectorTakeCreate = z.object({
 export const zDirectorTakeOut = z.object({
     bestEndMs: z.int().nullable(),
     bestStartMs: z.int().nullable(),
+    chosen: z.boolean(),
     createdAt: z.iso.datetime(),
     error: z.string().nullable(),
     feedback: z.string().nullable(),
     fileId: z.uuid(),
     id: z.uuid(),
     kind: z.enum(['video', 'photo']),
+    origin: z.enum(['shoot', 'pass']),
+    reason: z.string().nullable(),
     score: z.int().nullable(),
     shotIndex: z.int(),
     status: z.enum([
@@ -902,6 +905,17 @@ export const zStoryboardOut = z.object({
 });
 
 /**
+ * TakeChoice
+ *
+ * The member's choice of take for a shot ("use the second one"), or none, to go back
+ * to Director's pick.
+ */
+export const zTakeChoice = z.object({
+    shotIndex: z.int().gte(0).lt(12),
+    takeId: z.uuid().nullable()
+});
+
+/**
  * TargetPose
  */
 export const zTargetPose = z.object({
@@ -1337,6 +1351,22 @@ export const zAddDirectorAssetPath = z.object({
  * Successful Response
  */
 export const zAddDirectorAssetResponse = zAssetCandidateOut;
+
+export const zChooseDirectorTakeBody = zTakeChoice;
+
+export const zChooseDirectorTakeHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+export const zChooseDirectorTakePath = z.object({
+    video_id: z.string().regex(/^[A-Za-z0-9_-]{11}$/)
+});
+
+/**
+ * Successful Response
+ */
+export const zChooseDirectorTakeResponse = z.void();
 
 export const zListDirectorCutsHeaders = z.object({
     authorization: z.string().nullish(),
