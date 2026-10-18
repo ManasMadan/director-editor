@@ -144,13 +144,14 @@ async def index_short(
 
     `drafted`, when given, is handed the plan exactly as Gemini answered it, before
     `repair_plan` touches it; it changes nothing about the run. The indexing evaluation
-    (apps/ai/evals/index_shorts.py) uses it to show what repair had to fix."""
+    (apps/ai/evals/index_shorts.py) uses it to show what repair had to fix. It runs once
+    the planner has answered, outside the retry, so an error it raises (or one repair
+    raises) goes straight to the caller rather than being taken for the planner failing."""
     messages = [youtube_video(video_id), "Write the shot plan for this short."]
     last_error: Exception | None = None
     for attempt in range(PLANNER_RETRIES + 1):
         try:
             result = await planner.run(messages, usage=usage, usage_limits=usage_limits)
-            return _repaired(result.output, drafted), planner_name
         except Exception as error:
             last_error = error
             if _falls_back_to_the_other_model(error):
@@ -159,6 +160,8 @@ async def index_short(
                 raise
             if attempt < PLANNER_RETRIES:
                 await asyncio.sleep(PLANNER_RETRY_BACKOFF_SECONDS * (attempt + 1))
+        else:
+            return _repaired(result.output, drafted), planner_name
     log.warning(
         "falling back to the index fallback model", video_id=video_id, error=str(last_error)
     )

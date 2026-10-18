@@ -11,16 +11,67 @@ from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
+from pydantic_ai.messages import ModelMessage, ModelResponse
+from pydantic_ai.models import ModelRequestParameters
+from pydantic_ai.models.test import TestModel
+from pydantic_ai.settings import ModelSettings
+from pydantic_ai.usage import RunUsage, UsageLimits
 
 from app.auth import verify
-from app.director import create_director_model, create_index_model
+from app.director import create_director_model, create_index_model, create_planner_agent
 from app.errors import AppError
-from app.indexing import youtube_video
-from app.schemas import MAX_PLAN_TOKENS, IndexRequest
+from app.indexing import index_short, youtube_video
+from app.schemas import MAX_PLAN_TOKENS, IndexRequest, ShotPlanDraft
 from app.settings import IndexerSettings, Settings
 from tests.tokens import SECRET, service_token
 
 USER, ORG = uuid4(), uuid4()
+
+PLAN_DRAFT: dict[str, object] = {
+    "title": "A plan",
+    "format": "GRWM",
+    "summary": "A summary.",
+    "audio": "none",
+    "durationSeconds": 4,
+    "shots": [
+        {
+            "kind": "video",
+            "title": "A shot",
+            "purpose": "Shows something.",
+            "sourceStartSeconds": 0,
+            "sourceEndSeconds": 4,
+            "durationSeconds": 4,
+            "camera": "back",
+            "scene": "Anywhere with light",
+            "sceneLandmark": None,
+            "framing": {
+                "shotSize": "full-body",
+                "subject": {"x": 0.25, "y": 0.1, "width": 0.5, "height": 0.85},
+                "note": "Head to toe, centered.",
+            },
+            "phoneAngle": {"pitch": 0, "roll": 0, "tolerance": 8, "height": "chest"},
+            "pose": {"description": "Standing, arms relaxed.", "keypoints": []},
+            "steps": [{"atSeconds": 0, "instruction": "Do it.", "cameraMove": "static"}],
+            "script": [],
+        }
+    ],
+}
+
+
+class CountingTestModel(TestModel):
+    """pydantic-ai's offline model, answering with its output arguments, that counts the
+    runs it answers."""
+
+    runs = 0
+
+    async def request(
+        self,
+        messages: list[ModelMessage],
+        model_settings: ModelSettings | None,
+        model_request_parameters: ModelRequestParameters,
+    ) -> ModelResponse:
+        self.runs += 1
+        return await super().request(messages, model_settings, model_request_parameters)
 
 
 def test_a_valid_token_names_the_user_and_organization() -> None:
@@ -323,3 +374,29 @@ def test_the_service_boots_from_the_example_with_its_empty_values() -> None:
         assert settings.google_base_url is None
     finally:
         get_settings.cache_clear()
+
+
+async def test_a_drafted_callback_that_raises_is_not_retried_as_the_planner_failing() -> None:
+    """`drafted` runs once the planner has answered, outside the retry: an error from it
+    (even one that looks like an outage) is the caller's own, and doesn't send the same
+    video to Gemini again or on to the fallback model."""
+    planner = CountingTestModel(custom_output_args=PLAN_DRAFT)
+    fallback = CountingTestModel(custom_output_args=PLAN_DRAFT)
+    calls: list[ShotPlanDraft] = []
+
+    def drafted(draft: ShotPlanDraft) -> None:
+        calls.append(draft)
+        raise TimeoutError("the caller's own bookkeeping timed out")
+
+    with patch("app.indexing.PLANNER_RETRY_BACKOFF_SECONDS", 0), pytest.raises(TimeoutError):
+        await index_short(
+            create_planner_agent(planner),
+            "planner",
+            create_planner_agent(fallback),
+            "fallback",
+            "22k0fZarxh8",
+            RunUsage(),
+            UsageLimits(),
+            drafted=drafted,
+        )
+    assert (len(calls), planner.runs, fallback.runs) == (1, 1, 0)
