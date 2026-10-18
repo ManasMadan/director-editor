@@ -177,7 +177,9 @@ iOS asks before a page may read the tilt: the level shows a button for that.
   failures), queue `ai-director` (`plan`, `review-take`) in `packages/jobs`.
 - Seed templates: `packages/contracts/src/director-seeds.json`, the 6 seed Shorts
   (`apps/ai/app/seeds/seeds.json`) indexed for real on Vertex AI and committed. Rebuild it
-  with `bun run --filter @repo/ai seeds:build` whenever the plan schema changes. It sits in
+  with `bun run --filter @repo/ai seeds:build` whenever the plan schema changes (and check
+  indexing still works on Shorts beyond the seeds with `bun run --filter @repo/ai
+  evals:index`, `apps/ai/evals/`). It sits in
   `packages/contracts` because the AI service writes it and the API reads it (services never
   import each other); `src/director-seeds.ts` parses it against the plan's contract when the
   API loads. Every workspace gets its own copy of the 6 the moment it's created

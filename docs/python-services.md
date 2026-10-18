@@ -98,8 +98,9 @@ follows the foreign keys into `auth` and drags those tables in too. The service 
 | `bun run --cwd apps/ai worker` | the queue worker alone |
 | `bun run --cwd apps/ai test` | pytest without the integration tests (part of `bun run test`) |
 | `bun run --cwd apps/ai test:integration` | the tests that need Postgres and Redis (part of `bun run test:integration`) |
-| `bun run --cwd apps/ai coverage` | every test, failing below 100% of lines and branches of `app/` and `scripts/` (`pyproject.toml`; nothing is excluded) |
+| `bun run --cwd apps/ai coverage` | every test, failing below 100% of lines and branches of `app/`, `scripts/` and `evals/` (`pyproject.toml`; nothing is excluded) |
 | `bun run --cwd apps/ai seeds:build` | re-indexes the 6 seed Shorts on Vertex AI into `packages/contracts/src/director-seeds.json` (after a plan schema change; commit the file) |
+| `bun run --cwd apps/ai evals:index` | indexes the 12 Shorts of `evals/shorts.json` (the 6 seeds and 6 hard cases) on Vertex AI and prints, per Short, its shots, whether it has a script and a pose, what repair changed, the model and the time; exits non-zero unless every Short's every shot has a scene, framing, phone angle and a step |
 | `bun run --cwd apps/ai check-types` | basedpyright, strict, with `Any` refused (tests included) |
 | `bun run --cwd apps/ai lint` | ruff check and format check, and deptry (unused, missing or transitive-only dependencies) |
 
