@@ -10,6 +10,10 @@ import { expect, expectAccessible, test } from "./support";
 
 const DEMO_EMAIL = "demo@director.mmadan.in";
 
+// One worker for the file, so the account is made once: two workers' first runs at once
+// would both try to create it.
+test.describe.configure({ mode: "serial" });
+
 test.beforeAll(() => {
   // Safe to run again, against `bun dev`'s database too: it keeps what was done with the
   // account.
