@@ -14,7 +14,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from google.auth.credentials import AnonymousCredentials, Credentials
+from google.auth.credentials import Credentials
 from google.genai import errors as genai_errors
 from google.oauth2.credentials import Credentials as UserCredentials
 from pydantic import BaseModel
@@ -34,6 +34,7 @@ from scripts.seed_media import (
     PREVIEW_LOCATION,
     PREVIEW_MODEL,
     STORYBOARD_MODEL,
+    GcloudToken,
     Job,
     Media,
     VertexMediaModels,
@@ -510,19 +511,41 @@ def storage_client(uploaded: Uploaded, clients: list[tuple[str, Credentials]]) -
     return Client
 
 
-async def test_gcs_upload_writes_the_object_with_its_type(
-    monkeypatch: pytest.MonkeyPatch,
+def counting_token(tmp_path: Path) -> tuple[list[str], Callable[[], int]]:
+    """A stand-in for gcloud that counts how often it's asked for a token."""
+    asked = tmp_path / "asked"
+    script = (
+        "import pathlib, sys; p = pathlib.Path(sys.argv[1]); "
+        "p.write_text((p.read_text() if p.exists() else '') + 'x'); print('ya29.test')"
+    )
+    return [
+        sys.executable,
+        "-c",
+        script,
+        str(asked),
+    ], lambda: len(asked.read_text()) if asked.exists() else 0
+
+
+async def test_gcs_upload_asks_gcloud_for_a_token_and_writes_the_object_with_its_type(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     uploaded: Uploaded = []
     clients: list[tuple[str, Credentials]] = []
     monkeypatch.setattr(seed_media.storage, "Client", storage_client(uploaded, clients))
-    credentials = AnonymousCredentials()
-    upload = gcs_upload("seed-bucket", credentials, VERTEX_PROJECT)
+    command, asked = counting_token(tmp_path)
+    token = GcloudToken(command)
+    upload = gcs_upload("seed-bucket", token, VERTEX_PROJECT)
 
     await upload("seed-media/x/shot-0.png", b"png", "image/png")
+    await upload("seed-media/x/shot-1.png", b"png", "image/png")
 
-    assert clients == [(VERTEX_PROJECT, credentials)]
-    assert uploaded == [("seed-bucket", "seed-media/x/shot-0.png", b"png", "image/png")]
+    assert clients == [(VERTEX_PROJECT, token.credentials)]
+    assert uploaded == [
+        ("seed-bucket", "seed-media/x/shot-0.png", b"png", "image/png"),
+        ("seed-bucket", "seed-media/x/shot-1.png", b"png", "image/png"),
+    ]
+    # Fresh for each upload: a run outlasts one token.
+    assert asked() == 2
 
 
 # ------------------------------------------------------------- Vertex AI's media models
@@ -547,16 +570,45 @@ def settings_for(**env: str) -> Settings:
         return Settings.model_validate({**_env(), **env})
 
 
-async def models_at(fake: Fake) -> VertexMediaModels:
+async def models_at(fake: Fake, token_command: list[str] = PRINTS_A_TOKEN) -> VertexMediaModels:
     models, _ = await connect_vertex(
         settings_for(GOOGLE_BASE_URL=fake.url),
         "seed-bucket",
         poll_seconds=0,
         retry_seconds=0,
-        token_command=PRINTS_A_TOKEN,
+        token_command=token_command,
     )
     assert isinstance(models, VertexMediaModels)
     return models
+
+
+EXPIRED = gemini_error(401, "UNAUTHENTICATED", "Request had invalid authentication credentials.")
+
+
+@pytest.mark.integration
+async def test_an_expired_token_is_renewed_and_the_call_tried_again(
+    vertex: Vertex, tmp_path: Path
+) -> None:
+    fake, handlers = vertex
+    path = vertex_path("global", STORYBOARD_MODEL, "generateContent")
+    handlers[path] = _in_turn(EXPIRED, vertex_inline("image/png", b"\x89PNG"))
+    command, asked = counting_token(tmp_path)
+    models = await models_at(fake, command)
+    before = asked()
+
+    assert await models.storyboard("a card") == (b"\x89PNG", "image/png")
+    # Once before the call, and again after Google said the token had expired.
+    assert asked() - before == 2
+    assert [received for received, _ in fake.received].count(path) == 2
+
+
+@pytest.mark.integration
+async def test_a_token_refused_twice_fails_the_medium(vertex: Vertex) -> None:
+    fake, handlers = vertex
+    handlers[vertex_path("global", MUSIC_MODEL, "generateContent")] = EXPIRED
+
+    with pytest.raises(genai_errors.ClientError, match="UNAUTHENTICATED"):
+        await (await models_at(fake)).music("a track")
 
 
 class _Request(BaseModel):

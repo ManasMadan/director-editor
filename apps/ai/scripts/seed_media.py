@@ -43,7 +43,6 @@ from pathlib import Path
 from typing import Literal, Protocol
 
 from google import genai
-from google.auth.credentials import Credentials
 from google.cloud import storage  # pyright: ignore[reportMissingTypeStubs]  # no stubs shipped
 from google.genai import errors as genai_errors
 from google.genai.types import (
@@ -332,9 +331,11 @@ class VertexMediaModels:
         self,
         images: genai.Client,
         videos: genai.Client,
+        refresh: Callable[[], Awaitable[None]],
         poll_seconds: float = POLL_SECONDS,
         retry_seconds: float = QUOTA_RETRY_SECONDS,
     ) -> None:
+        self._refresh = refresh
         # Held for the whole run: google-genai closes a client's connections as soon as
         # nothing holds the client, and its `models` alone doesn't.
         self._images = images
@@ -344,14 +345,20 @@ class VertexMediaModels:
         self._retry_seconds = retry_seconds
 
     async def _retried[T](self, call: Callable[[], Awaitable[T]]) -> T:
-        """`call`, tried again after a wait while Vertex answers 429: a model's quota per
-        minute is spent (Veo's is a few requests), which a wait fixes. Any other refusal,
+        """`call`, with a fresh token, tried again once with another when Vertex answers
+        401 (it expired during a long wait), and after a wait while it answers 429 (a
+        model's quota per minute is spent; Veo's is a few requests). Any other refusal,
         or a quota still spent after `QUOTA_ATTEMPTS`, fails at once."""
-        attempt, wait = 1, self._retry_seconds
+        await self._refresh()
+        attempt, wait, renewed = 1, self._retry_seconds, False
         while True:
             try:
                 return await call()
             except genai_errors.ClientError as error:
+                if error.code == HTTPStatus.UNAUTHORIZED and not renewed:
+                    await self._refresh()
+                    renewed = True
+                    continue
                 if error.code != HTTPStatus.TOO_MANY_REQUESTS or attempt == QUOTA_ATTEMPTS:
                     raise
                 log.info("quota spent, waiting", attempt=attempt, seconds=wait)
@@ -424,8 +431,22 @@ async def access_token(command: Sequence[str] = GCLOUD_TOKEN) -> str:
     return stdout.decode().strip()
 
 
-def gcs_upload(bucket: str, credentials: Credentials, project: str) -> Upload:
-    client = storage.Client(project=project, credentials=credentials)
+class GcloudToken:
+    """The signed-in gcloud account as credentials for Google's clients. Its token is
+    asked of gcloud again before each call and upload, and whenever Google answers 401:
+    one lasts an hour, and a run with quota waits takes longer. gcloud hands back the
+    token it has cached until that one nears its end, so asking is cheap."""
+
+    def __init__(self, command: Sequence[str] = GCLOUD_TOKEN) -> None:
+        self._command = command
+        self.credentials = UserCredentials(None)
+
+    async def refresh(self) -> None:
+        self.credentials.token = await access_token(self._command)
+
+
+def gcs_upload(bucket: str, token: GcloudToken, project: str) -> Upload:
+    client = storage.Client(project=project, credentials=token.credentials)
 
     def put(key: str, data: bytes, content_type: str) -> None:
         client.bucket(bucket).blob(key).upload_from_string(  # pyright: ignore[reportUnknownMemberType]  # untyped client
@@ -433,6 +454,7 @@ def gcs_upload(bucket: str, credentials: Credentials, project: str) -> Upload:
         )
 
     async def upload(key: str, data: bytes, content_type: str) -> None:
+        await token.refresh()
         await asyncio.to_thread(put, key, data, content_type)
 
     return upload
@@ -451,8 +473,10 @@ async def connect_vertex(
             "GOOGLE_CLOUD_PROJECT must name the project whose Vertex AI and bucket to use"
         )
     # The signed-in gcloud account, which needs no key file and no extra login on a
-    # developer's machine; its token lasts an hour, and a run takes minutes.
-    credentials = UserCredentials(await access_token(token_command))
+    # developer's machine. Its first token before the clients are built: an empty one
+    # would have them try to renew it themselves, which these credentials can't.
+    token = GcloudToken(token_command)
+    await token.refresh()
     # GOOGLE_BASE_URL is another endpoint for Google's APIs (a gateway, or a test's
     # stand-in), as for every other Gemini call.
     http_options = (
@@ -464,14 +488,18 @@ async def connect_vertex(
             vertexai=True,
             project=project,
             location=location,
-            credentials=credentials,
+            credentials=token.credentials,
             http_options=http_options,
         )
 
     models = VertexMediaModels(
-        client(settings.vertex_location), client(PREVIEW_LOCATION), poll_seconds, retry_seconds
+        client(settings.vertex_location),
+        client(PREVIEW_LOCATION),
+        token.refresh,
+        poll_seconds,
+        retry_seconds,
     )
-    return models, gcs_upload(bucket, credentials, project)
+    return models, gcs_upload(bucket, token, project)
 
 
 # ---------------------------------------------------------------------------- the command
