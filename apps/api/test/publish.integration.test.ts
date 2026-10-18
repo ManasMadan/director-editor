@@ -3,7 +3,7 @@
  *
  * Google is packages/fake-google: its sign-in (OAuth with OpenID Connect) and YouTube's
  * resumable upload. better-auth calls Google's own hosts, so a test sends exactly those
- * requests to the fake (`throughFakeGoogle`), the way password-breach.integration.test.ts
+ * requests to the fake (`throughFakeGoogle` in the harness), the way password-breach.integration.test.ts
  * stands in for Have I Been Pwned; the API reaches YouTube through YOUTUBE_API_URL. The
  * AI service is a stand-in answering cuts from the database as apps/ai does (as app_ai,
  * under row-level security), and a cut's video sits in the local object storage.
@@ -22,12 +22,14 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { quotaDay } from "../src/modules/publish/quota-day";
 import {
   createSession,
+  googleConsent,
   type Harness,
   LOCAL_STORAGE,
   newEmail,
   newPassword,
   startApi,
   takeOtp,
+  throughFakeGoogle,
 } from "./harness";
 
 const SECRET = `test-ai-secret-${randomUUID()}`;
@@ -51,22 +53,6 @@ const storage = new S3Storage({
   secretAccessKey: LOCAL_STORAGE.S3_SECRET_ACCESS_KEY,
   forcePathStyle: true,
 });
-
-/** Google's hosts that better-auth calls itself, and where the fake answers each. */
-const GOOGLE_HOSTS: Record<string, string> = {
-  "https://oauth2.googleapis.com/token": "/token",
-  "https://www.googleapis.com/oauth2/v3/certs": "/oauth2/v3/certs",
-};
-
-/** Sends better-auth's requests for Google's hosts to the fake; every other goes out. */
-function throughFakeGoogle() {
-  const real = globalThis.fetch;
-  vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
-    const url = input instanceof Request ? input.url : String(input);
-    const path = GOOGLE_HOSTS[url.split("?")[0] ?? ""];
-    return path ? real(`${google.url}${path}`, init) : real(input, init);
-  });
-}
 
 async function sql<T extends pg.QueryResultRow>(query: string, params: unknown[] = []) {
   const client = new pg.Client({ connectionString: harness.testDb.urlFor("postgres") });
@@ -200,34 +186,9 @@ afterEach(() => vi.restoreAllMocks());
 
 type Session = ReturnType<typeof createSession>;
 
-/**
- * Goes through Google's consent the way a browser does: from where better-auth sends it
- * (`started`, the fake's authorization endpoint at Google's address), back to the API's
- * callback with the code, which better-auth trades at the fake's token endpoint.
- */
-async function consent(session: Session, started: { status: number; body: { url: string } }) {
-  expect(started.status, JSON.stringify(started.body)).toBe(200);
-  const authorize = new URL(started.body.url);
-  expect(authorize.origin).toBe("https://accounts.google.com");
-  const atFake = await fetch(`${google.url}${authorize.pathname}${authorize.search}`, {
-    redirect: "manual",
-  });
-  const back = new URL(atFake.headers.get("location") ?? "");
-  throughFakeGoogle();
-  const cookie = [...session.cookies()].map(([name, value]) => `${name}=${value}`).join("; ");
-  const callback = await fetch(`${harness.baseUrl}${back.pathname}${back.search}`, {
-    redirect: "manual",
-    headers: { cookie, "x-forwarded-for": session.ip },
-  });
-  vi.restoreAllMocks();
-  const cookies = session.cookies();
-  for (const set of callback.headers.getSetCookie()) {
-    const [name = "", ...value] = (set.split(";")[0] ?? "").split("=");
-    cookies.set(name, value.join("="));
-  }
-  session.useCookies(cookies);
-  return callback;
-}
+/** Google's consent, through the fake (googleConsent in the harness). */
+const consent = (session: Session, started: { status: number; body: { url: string } }) =>
+  googleConsent(harness, google.url, session, started);
 
 /** Someone who signs in with Google only (no password). */
 async function signInWithGoogle(email = newEmail()) {
@@ -455,7 +416,7 @@ describe("publishing a cut", { tags: ["files"] }, () => {
       [me.id],
     );
     const { cutId } = await aCut(me);
-    throughFakeGoogle();
+    throughFakeGoogle(google.url);
     const cut = await session.rpc.publish.upload(publishInput(cutId));
     expect(cut.publish.status).toBe("published");
   });
