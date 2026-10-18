@@ -175,6 +175,13 @@ export const queues = {
         orgId: orgIdSchema,
         sourceUrl: z.url(),
       }),
+      /**
+       * The post-session pass: once a shoot's recording session is done, Gemini watches
+       * all of it to find attempts the live marks missed and edges that were off. Queued
+       * when the session finishes, with the session's id as the job id, so a session is
+       * gone through once.
+       */
+      "session-pass": z.object({ sessionId: z.uuid(), orgId: orgIdSchema }),
     },
     options: {
       attempts: 3,

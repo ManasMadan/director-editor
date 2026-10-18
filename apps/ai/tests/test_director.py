@@ -51,6 +51,7 @@ from app.schemas import (
     ReviseResult,
     SceneCheck,
 )
+from app.session_pass import create_session_pass
 from app.settings import get_settings
 from app.usage import Allowance
 from app.worker import director_processor
@@ -246,6 +247,7 @@ REVIEW: dict[str, object] = {
     "bestEndSeconds": 4.5,
     "score": 82,
     "feedback": "Great framing; hold the last pose a beat longer.",
+    "reason": "The cleanest delivery, and you held the smile.",
 }
 
 _TAKES = TypeAdapter(list[DirectorTakeOut])
@@ -1739,6 +1741,8 @@ def test_a_take_is_reviewed_and_keeps_its_best_part(
         82,
     )
     assert reviewed.feedback == REVIEW["feedback"]
+    assert reviewed.reason == REVIEW["reason"]
+    assert (reviewed.chosen, reviewed.origin) == (False, "shoot")
     assert b'"mime_type": "video/webm"' in gemini[0].received[-1][1]
     assert usage(org, "director-review") == 4_000
     assert {"type": "director.changed"} in published(events)
@@ -1912,6 +1916,47 @@ def test_a_member_only_sees_their_own_takes(client: TestClient) -> None:
     assert len(takes_of(client, org, user)) == 1
 
 
+def choose(
+    client: TestClient, org: UUID, user: UUID, shot: int, take_id: UUID | None
+) -> httpx.Response:
+    return client.post(
+        f"/v1/director/plans/{VIDEO}/choices",
+        json={"shotIndex": shot, "takeId": None if take_id is None else str(take_id)},
+        headers=headers(org, user),
+    )
+
+
+def test_a_member_chooses_a_take_over_director_s_pick_and_can_go_back(
+    client: TestClient,
+) -> None:
+    org, user = new_org()
+    _ = ready_plan(client, org, user)
+    first = add_take(client, org, user, "http://storage/1")
+    second = add_take(client, org, user, "http://storage/2")
+    other_shot = add_take(client, org, user, "http://storage/3", shot=1)
+    events = subscribe(f"realtime:org:{org}")
+    assert choose(client, org, user, 0, second.id).status_code == 204
+    chosen = {take.id: take.chosen for take in takes_of(client, org, user)}
+    assert chosen == {first.id: False, second.id: True, other_shot.id: False}
+    assert {"type": "director.changed"} in published(events)
+    # One choice a shot: choosing another moves it.
+    assert choose(client, org, user, 0, first.id).status_code == 204
+    chosen = {take.id: take.chosen for take in takes_of(client, org, user)}
+    assert chosen == {first.id: True, second.id: False, other_shot.id: False}
+    # No take: back to Director's pick.
+    assert choose(client, org, user, 0, None).status_code == 204
+    assert not any(take.chosen for take in takes_of(client, org, user))
+
+
+def test_a_member_can_only_choose_their_own_take_of_that_shot(client: TestClient) -> None:
+    org, user = new_org()
+    _ = ready_plan(client, org, user)
+    take = add_take(client, org, user, "http://storage/1")
+    assert error_of(choose(client, org, user, 1, take.id)).code == "DIRECTOR_TAKE_NOT_FOUND"
+    assert error_of(choose(client, org, user, 0, uuid4())).code == "DIRECTOR_TAKE_NOT_FOUND"
+    assert not takes_of(client, org, user)[0].chosen
+
+
 def test_a_take_that_isn_t_in_storage_fails_without_a_retry(client: TestClient) -> None:
     org, user = new_org()
     _ = ready_plan(client, org, user)
@@ -2032,7 +2077,11 @@ def test_the_worker_runs_both_director_jobs(
 ) -> None:
     org, user = new_org()
     plan = index_plan(client, org, user)
-    process = director_processor(director())
+    from app.main import services
+
+    the_pass = create_session_pass(get_settings(), services().redis)
+    assert the_pass is not None
+    process = director_processor(director(), session_pass=the_pass)
     activities = Activities()
     monkeypatch.setattr("app.director.log_activity", activities)
     monkeypatch.setattr("app.worker.log_activity", activities)
@@ -2088,6 +2137,19 @@ def test_the_worker_runs_both_director_jobs(
         "score": REVIEW["score"],
         "inputTokens": 900,
         "outputTokens": 100,
+    }
+    # A post-session pass: with no recording backend yet, it goes through nothing.
+    session_id = uuid4()
+    session: JobLike = Job(
+        "session-pass",
+        {"meta": {"orgId": str(org)}, "payload": {"sessionId": str(session_id), "orgId": str(org)}},
+    )
+    on_app_loop(client, lambda: process(session))
+    assert activities.named("job.finished")[-1][0]["target"] == {
+        "queue": "ai-director",
+        "job": "session-pass",
+        "jobId": "job-1",
+        "attempt": 1,
     }
     with pytest.raises(ValidationError):
         on_app_loop(client, lambda: process(Job("unknown", {})))

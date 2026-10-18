@@ -1,6 +1,6 @@
-"""Background jobs for the AI service: Director's plans, their images and take reviews (queue
-`ai-director`, consumed when DIRECTOR_MODEL is set; until then its jobs wait in the
-queue).
+"""Background jobs for the AI service: Director's plans, their images, take reviews and
+post-session passes (queue `ai-director`, consumed when DIRECTOR_MODEL is set; until then
+its jobs wait in the queue).
 
 Run with `bun run worker` (apps/ai). Jobs are validated against the shared contract
 before they're processed, and restore the request id, workspace and user they were
@@ -29,6 +29,7 @@ from app.contracts.ai_director_job_name import AiDirectorJobName
 from app.contracts.ai_director_plan_job import AiDirectorPlanJob
 from app.contracts.ai_director_review_take_job import AiDirectorReviewTakeJob
 from app.create import Creator, create_creator
+from app.contracts.ai_director_session_pass_job import AiDirectorSessionPassJob
 from app.db.session import close_engine, open_engine
 from app.director import Director, create_director
 from app.heartbeat import beat
@@ -41,6 +42,7 @@ from app.queues import (
     RunningWorker,
     start_worker,
 )
+from app.session_pass import SessionPass, create_session_pass
 from app.settings import get_settings
 from app.telemetry import start_telemetry
 
@@ -49,7 +51,11 @@ from app.telemetry import start_telemetry
 DIRECTOR_JOB_NAME = TypeAdapter[AiDirectorJobName](AiDirectorJobName)
 
 type AnyJob = (
-    AiDirectorPlanJob | AiDirectorAssetsJob | AiDirectorCreatePlanJob | AiDirectorReviewTakeJob
+    AiDirectorPlanJob
+    | AiDirectorAssetsJob
+    | AiDirectorCreatePlanJob
+    | AiDirectorReviewTakeJob
+    | AiDirectorSessionPassJob
 )
 
 
@@ -91,7 +97,9 @@ async def run_job(job: JobLike, final: bool, work: Callable[[], Awaitable[None]]
 
 
 def director_processor(
-    director: Director, creator: Creator | None = None
+    director: Director,
+    creator: Creator | None = None,
+    session_pass: SessionPass | None = None,
 ) -> Callable[[JobLike], Awaitable[None]]:
     """Runs one `ai-director` job; on its last attempt, a failure is final."""
     attempts = SETTINGS[DIRECTOR].options.attempts
@@ -137,9 +145,7 @@ def director_processor(
                         final=final,
                     ),
                 )
-        else:
-            # The only other job: one added in packages/jobs is a type error here.
-            assert_type(name, Literal["review-take"])
+        elif name == "review-take":
             take = AiDirectorReviewTakeJob.model_validate(job.data)
             with _bound(job, take):
                 await run_job(
@@ -153,6 +159,20 @@ def director_processor(
                         final=final,
                     ),
                 )
+        else:
+            # The only other job: one added in packages/jobs is a type error here.
+            assert_type(name, Literal["session-pass"])
+            session = AiDirectorSessionPassJob.model_validate(job.data)
+            if session_pass is None:
+                # Built from the same settings as Director, so never missing beside it.
+                raise RuntimeError("a session-pass job without the pass")
+            passing = session_pass
+
+            async def go_through() -> None:
+                _ = await passing.run(session.payload.orgId, session.payload.sessionId)
+
+            with _bound(job, session):
+                await run_job(job, final, go_through)
 
     return process
 
@@ -166,15 +186,20 @@ async def main() -> None:
     director_queue = DirectorQueue(str(settings.redis_url))
     http = httpx.AsyncClient()
     director = create_director(settings, director_queue, redis, http)
+    session_pass = create_session_pass(settings, redis)
     # Each job is a model watching a video for tens of seconds: a few at once per worker.
     director_worker: RunningWorker | None = (
         start_worker(
             DIRECTOR,
-            director_processor(director, create_creator(settings, director_queue, redis, http)),
+            director_processor(
+                director,
+                create_creator(settings, director_queue, redis, http),
+                session_pass,
+            ),
             str(settings.redis_url),
             concurrency=3,
         )
-        if director
+        if director and session_pass
         else None
     )
     stop = asyncio.Event()
