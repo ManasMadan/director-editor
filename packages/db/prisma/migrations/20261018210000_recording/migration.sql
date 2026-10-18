@@ -320,8 +320,8 @@ CREATE POLICY owner_functions ON app.recording_slice TO migrator USING (true) WI
 CREATE POLICY owner_functions ON app.recording_attempt TO migrator USING (true) WITH CHECK (true);
 CREATE POLICY owner_functions ON app.recording_pause TO migrator USING (true) WITH CHECK (true);
 -- A DELETE with a WHERE reads the rows it deletes, so the owner needs both.
-CREATE POLICY owner_functions_read ON files.file FOR SELECT TO migrator USING (true);
-CREATE POLICY owner_functions ON files.file FOR DELETE TO migrator USING (true);
+CREATE POLICY recording_functions_read ON files.file FOR SELECT TO migrator USING (true);
+CREATE POLICY recording_functions ON files.file FOR DELETE TO migrator USING (true);
 
 REVOKE EXECUTE ON FUNCTION
   app.queue_recording_slice_deletion(),
