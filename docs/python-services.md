@@ -50,7 +50,7 @@ settles (the process died) keeps its reservation.
 
 ## The worker
 
-`app/worker.py` consumes `ai-director` (`plan` and `review-take` jobs) once
+`app/worker.py` consumes `ai-director` (`plan`, `review-take` and `session-pass` jobs) once
 `DIRECTOR_MODEL` is set, validating each against its own generated model
 (`app/contracts/ai_director_<job>_job.py`) and binding the request id it was queued with
 to its logs. The models ignore fields they don't know, so

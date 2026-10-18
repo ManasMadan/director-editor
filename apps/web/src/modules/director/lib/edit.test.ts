@@ -33,6 +33,9 @@ function take(shotIndex: number, overrides: Partial<DirectorTake> = {}): Directo
     bestEndMs: null,
     score: null,
     feedback: null,
+    reason: null,
+    chosen: false,
+    origin: "shoot",
     createdAt: new Date(),
     ...overrides,
   };

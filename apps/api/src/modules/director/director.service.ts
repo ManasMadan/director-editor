@@ -281,6 +281,24 @@ export class DirectorService {
     return shotsOf(plan.plan.shots.length, takes);
   }
 
+  /**
+   * The member's choice of take for a shot, over Director's pick (or none, to go back to
+   * it); answers with every shot as it is now.
+   */
+  async chooseTake(
+    userId: UserId,
+    orgId: OrgId,
+    input: { videoId: VideoId; shotIndex: number; takeId: DirectorTakeId | null },
+  ): Promise<DirectorShot[]> {
+    await callAi((ai) =>
+      ai.director.chooseTake(aiCaller(userId, orgId), input.videoId, {
+        shotIndex: input.shotIndex,
+        takeId: input.takeId,
+      }),
+    );
+    return this.shots(userId, orgId, input.videoId);
+  }
+
   async cuts(userId: UserId, orgId: OrgId, videoId: VideoId): Promise<DirectorCut[]> {
     const rows = await callAi((ai) => ai.director.listCuts(aiCaller(userId, orgId), videoId));
     return rows.map(toCut);

@@ -68,7 +68,7 @@ lets it in (`deploy/charts/data/templates/valkey.yaml`).
 | `events-audit` | `event` | the outbox relay | worker (audit log) |
 | `events-notifications` | `event` | the outbox relay | notifications (security alerts, and suppressing an address that hard-bounced) |
 | `files` | `process` | api (upload completed) | worker |
-| `ai-director` | `plan`, `review-take` | ai (FastAPI and its worker) | ai worker (Python) |
+| `ai-director` | `plan`, `assets`, `review-take`, `session-pass` | ai (FastAPI and its worker) | ai worker (Python) |
 | `recording` | `clip` | api (an ended attempt whose footage is all stored), worker (sessions whose footage stopped coming: left open, or finished with a part never closed or a slice missing), both through `createProducer`, so with the queue's retries | worker (through the AI service's clipper) |
 | `maintenance` | `outbox-retention`, `audit-partitions`, `session-retention`, `files-cleanup`, `demo-retention`, `recording-retention` | worker (job schedulers) | worker |
 

@@ -462,6 +462,15 @@ export const directorTakeSchema = z.object({
   bestEndMs: z.number().int().positive().nullable(),
   score: z.number().int().min(0).max(100).nullable(),
   feedback: z.string().nullable(),
+  /** Why it would or wouldn't be the one to use, in a line: shown under Director's pick. */
+  reason: z.string().nullable(),
+  /** The member chose it for its shot ("use the second one"): it beats Director's pick. */
+  chosen: z.boolean(),
+  /**
+   * An attempt marked while shooting (or a take filmed), or one the post-session pass
+   * found in the whole recording after Done, such as a line said while rehearsing.
+   */
+  origin: z.enum(["shoot", "pass"]),
   createdAt: z.date(),
 });
 export type DirectorTake = z.infer<typeof directorTakeSchema>;
@@ -476,8 +485,10 @@ const shotIndex = z
 const directorShotSchema = z.object({
   index: shotIndex,
   takes: z.array(directorTakeSchema),
-  /** The best-scored take (the newest of a tie); null until one is scored. */
+  /** Director's pick: the best-scored take (the newest of a tie); null until one is scored. */
   pickedTakeId: directorTakeIdSchema.nullable(),
+  /** The take the member chose for the shot while shooting, over Director's pick. */
+  chosenTakeId: directorTakeIdSchema.nullable(),
   /** The picked take scored below DIRECTOR_RETAKE_BELOW. */
   needsRetake: z.boolean(),
 });
@@ -653,6 +664,15 @@ export const directorContract = {
    */
   shots: route("GET", "/director/{videoId}/shots", "Your takes, shot by shot")
     .input(z.object({ videoId: videoIdSchema }))
+    .output(z.array(directorShotSchema)),
+  /**
+   * Chooses one of the caller's takes for its shot, over Director's pick, or (with no
+   * take) goes back to Director's pick (DIRECTOR_TAKE_NOT_FOUND unless it's the caller's
+   * take of that shot). Answers with every shot, as `shots` does.
+   */
+  chooseTake: route("POST", "/director/{videoId}/choices", "Choose a take for a shot")
+    .meta({ rateLimit: EVERYDAY_WRITES })
+    .input(z.object({ videoId: videoIdSchema, shotIndex, takeId: directorTakeIdSchema.nullable() }))
     .output(z.array(directorShotSchema)),
   /** The caller's cuts of a short, newest first. */
   cuts: route("GET", "/director/{videoId}/cuts", "Your cuts of a short")

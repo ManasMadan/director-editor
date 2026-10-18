@@ -69,6 +69,7 @@ from app.schemas import (
     ShotPlan,
     SpeechRequest,
     StoryboardOut,
+    TakeChoice,
 )
 from app.settings import get_settings
 from app.speech import Speaker, create_speaker
@@ -228,6 +229,9 @@ def _take_out(take: DirectorTake) -> DirectorTakeOut:
         bestEndMs=take.best_end_ms,
         score=take.score,
         feedback=take.feedback,
+        reason=take.reason,
+        chosen=take.chosen_at is not None,
+        origin=take.origin,
         createdAt=take.created_at,
     )
 
@@ -337,6 +341,20 @@ async def list_director_takes(
 ) -> list[DirectorTakeOut]:
     """The caller's takes for the short's plan, newest first."""
     return [_take_out(t) for t in await director.takes(caller.org_id, caller.user_id, video_id)]
+
+
+@app.post(
+    "/v1/director/plans/{video_id}/choices", operation_id="chooseDirectorTake", status_code=204
+)
+async def choose_director_take(
+    video_id: Annotated[str, Path(pattern=VIDEO_ID_PATTERN)],
+    body: TakeChoice,
+    caller: CallerDep,
+    director: DirectorDep,
+) -> None:
+    """The caller's choice of take for a shot, over Director's pick; no take goes back to
+    Director's pick."""
+    await director.choose(caller.org_id, caller.user_id, video_id, body)
 
 
 @app.post("/v1/director/cuts", operation_id="createDirectorCut", status_code=201)

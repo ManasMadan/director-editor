@@ -2,6 +2,7 @@
  * Builds the API application: Nest modules, better-auth under /api/auth, and the oRPC
  * router under /rpc and /api/v1. main.ts starts it; integration tests build it in-process.
  */
+import type { VideoId } from "@repo/contracts/ids";
 import { HOUR_S } from "@repo/contracts/time";
 import {
   createRateLimiter,
@@ -21,8 +22,14 @@ import { upgradeContext } from "./http-context";
 import { AnalyticsService } from "./modules/analytics";
 import { DirectorService } from "./modules/director";
 import { FilesService, mountFileContent } from "./modules/files";
-import { createGoogleAuth, type LiveOptions, liveUpstream, mountLive } from "./modules/live";
-import { createProcedures, orgCallerFor } from "./rpc/procedures";
+import {
+  createGoogleAuth,
+  type LiveOptions,
+  type LivePicks,
+  liveUpstream,
+  mountLive,
+} from "./modules/live";
+import { createProcedures, type OrgCaller, orgCallerFor } from "./rpc/procedures";
 import { createRouter } from "./rpc/router";
 import { mountRpc } from "./rpc/rpc.routes";
 
@@ -73,7 +80,7 @@ export function createApiServer() {
  */
 export function liveCallOptions(deps: {
   caller: ReturnType<typeof orgCallerFor>;
-  director: Pick<DirectorService, "planOf">;
+  director: Pick<DirectorService, "planOf" | "takes" | "chooseTake">;
   analytics: Pick<AnalyticsService, "record">;
   // Only the one method this needs, so a test gives a plain stand-in, not a real limiter.
   calls: { take(userId: string): Promise<void> };
@@ -86,6 +93,7 @@ export function liveCallOptions(deps: {
     allowedOrigins: [env.WEB_URL],
     caller: deps.caller,
     plan: (caller, videoId) => deps.director.planOf(caller.userId, caller.orgId, videoId),
+    picks: (caller, videoId, since) => shootPicks(deps.director, caller, videoId, since),
     spendCallLimit: async ({ userId, guest }) => {
       await (guest ? deps.guestCalls : deps.calls).take(userId);
     },
@@ -103,6 +111,36 @@ export function liveCallOptions(deps: {
       deps.analytics.record("call_started", { userId, videoId }),
     context: upgradeContext(env.TRUSTED_PROXIES),
     activity: deps.activity,
+  };
+}
+
+/**
+ * The member's "use the second one" while shooting: the second of this shoot's takes of
+ * the shot, in the order filmed, becomes their choice for it. A take recorded but not yet
+ * saved (still uploading) isn't found yet; Director is told to ask again in a moment.
+ */
+function shootPicks(
+  director: Pick<DirectorService, "takes" | "chooseTake">,
+  caller: OrgCaller,
+  videoId: VideoId,
+  since: Date,
+): LivePicks {
+  return {
+    async choose(shot, take) {
+      const takes = await director.takes(caller.userId, caller.orgId, videoId);
+      const found = takes
+        .filter((each) => each.shotIndex === shot && each.createdAt >= since)
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[take - 1];
+      if (!found) {
+        return "not_found";
+      }
+      await director.chooseTake(caller.userId, caller.orgId, {
+        videoId,
+        shotIndex: shot,
+        takeId: found.id,
+      });
+      return "done";
+    },
   };
 }
 

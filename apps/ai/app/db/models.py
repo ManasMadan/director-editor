@@ -28,6 +28,7 @@ from app.schemas import (
     PlanStatus,
     PublishStatus,
     TakeKind,
+    TakeOrigin,
     TakeStatus,
     Visibility,
 )
@@ -143,6 +144,11 @@ class DirectorTake(Base):
     best_end_ms: Mapped[int | None] = mapped_column(Integer)
     score: Mapped[int | None] = mapped_column(Integer)
     feedback: Mapped[str | None] = mapped_column(Text)
+    reason: Mapped[str | None] = mapped_column(Text)
+    chosen_at: Mapped[datetime.datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True, precision=3)
+    )
+    origin: Mapped[TakeOrigin] = mapped_column(Text, server_default=text("'shoot'::text"))
     created_at: Mapped[datetime.datetime] = _now()
     updated_at: Mapped[datetime.datetime] = mapped_column(TIMESTAMP(timezone=True, precision=3))
 

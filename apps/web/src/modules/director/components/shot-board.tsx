@@ -6,15 +6,16 @@ import type { DirectorTakeId } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
 import { GeminiShimmer } from "@repo/ui/components/gemini-loader";
 import { cn } from "@repo/ui/lib/utils";
-import { Camera, ChevronLeft, ChevronRight, Clapperboard, SparkleIcon } from "lucide-react";
+import { Camera, ChevronLeft, ChevronRight, Clapperboard } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { type ReactNode, useEffect, useId, useRef } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { shotPage } from "../hooks/use-studio";
 import type { MediaState } from "../hooks/use-take-media";
 import type { Clip } from "../lib/edit";
-import { type Picks, stepPick, takeNumber, takesInOrder } from "../lib/picks";
+import { type Picks, picksFirst, stepPick, takeNumber } from "../lib/picks";
 import { columnWidth } from "../lib/track";
+import { PickBadges } from "./directors-picks";
 
 /** A shot's camera screen, to film it (again). */
 type ShotPage = ReturnType<typeof shotPage>;
@@ -29,23 +30,6 @@ interface ColumnProps {
   retakeHref: ShotPage;
   onPick: (shotIndex: number, takeId: DirectorTakeId) => void;
   onSeek: (clip: Clip) => void;
-}
-
-/** Director's four-point sparkle in the aurora's colours: Gemini picked this one. */
-function PickSparkle({ className }: { className?: string }) {
-  const gradient = useId();
-  return (
-    <svg aria-hidden viewBox="0 0 24 24" className={className}>
-      <defs>
-        <linearGradient id={gradient} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="var(--aurora-1)" />
-          <stop offset="50%" stopColor="var(--aurora-2)" />
-          <stop offset="100%" stopColor="var(--aurora-3)" />
-        </linearGradient>
-      </defs>
-      <SparkleIcon fill={`url(#${gradient})`} stroke="none" />
-    </svg>
-  );
 }
 
 /** The shot's number, title and length, over a bar that fills as the clock plays it. */
@@ -171,12 +155,7 @@ function TakeCard({
           {t("take", { number: takeNumber(shot, take.id) })}
         </span>
         <ReviewLine take={take} />
-        {picked ? (
-          <span className="flex items-center gap-1 text-xs font-medium">
-            <PickSparkle className="size-3.5 shrink-0" />
-            {t("directorsPick")}
-          </span>
-        ) : null}
+        <PickBadges shot={shot} take={take} />
         {showFeedback && take.feedback ? (
           <span className="font-[family-name:var(--font-hand)] text-sm leading-snug text-studio-foreground/85">
             {take.feedback}
@@ -274,7 +253,7 @@ function ShotColumn({
           aria-label={t("editor.takesOf", { index: clip.index + 1 })}
           className="flex snap-y snap-mandatory flex-col gap-1.5"
         >
-          {takesInOrder(shot).map((take) => (
+          {picksFirst(shot).map((take) => (
             <TakeCard
               key={take.id}
               shot={shot}
@@ -332,6 +311,13 @@ export function ShotBoard({
 }) {
   const t = useTranslations("director.editor");
   const columns = useRef(new Map<number, HTMLFieldSetElement>());
+  // What the last swap was, for screen readers: "Swapped in take 3 for shot 1".
+  const [swapped, setSwapped] = useState("");
+  const pick = (shotIndex: number, takeId: DirectorTakeId) => {
+    const shot = required(shots[shotIndex], "the shot picked");
+    setSwapped(t("swapped", { number: takeNumber(shot, takeId), index: shotIndex + 1 }));
+    onPick(shotIndex, takeId);
+  };
   const active = (clips.find((clip) => time < clip.at + clip.seconds) ?? clips.at(-1))?.index;
 
   // While it plays, the shot playing comes into view (not while the member looks around).
@@ -365,10 +351,13 @@ export function ShotBoard({
           picks={picks}
           progress={Math.min(1, Math.max(0, (time - clip.at) / clip.seconds))}
           retakeHref={shotHref(clip.index)}
-          onPick={onPick}
+          onPick={pick}
           onSeek={onSeek}
         />
       ))}
+      <p className="sr-only" aria-live="polite">
+        {swapped}
+      </p>
     </section>
   );
 }

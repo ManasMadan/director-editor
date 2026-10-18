@@ -43,6 +43,7 @@ import {
   upstreamMessageSchema,
 } from "./live.messages";
 import { Pacer } from "./live.pacer";
+import { type LivePicks, RATE_TOOL, rate, ShotTally } from "./live.picks";
 import {
   adaptationOf,
   briefOf,
@@ -92,6 +93,8 @@ export interface RelayOptions {
   log: LiveLog;
   /** Called once, when Gemini's first setup completes and Director truly starts (analytics). */
   onCallStarted: () => void;
+  /** Where "use the second one" makes a take the member's choice (live.picks.ts). */
+  picks: LivePicks;
 }
 
 /** 16 kHz, 16-bit mono: what a microphone sends in real time. */
@@ -227,6 +230,8 @@ export class LiveRelay {
   /** The member's version of the plan, as the browser last sent it (and Director changed it). */
   private version: YourVersion = EMPTY_VERSION;
   private readonly pacer: Pacer;
+  /** The shoot's attempts and Director's ratings of them, for `rate`. */
+  private readonly tally = new ShotTally();
 
   constructor(
     private readonly client: WebSocket,
@@ -351,6 +356,7 @@ export class LiveRelay {
       case "take":
         // From the 3-2-1 to the take's end, quiet is the point.
         this.pacer.take(message.state === "countdown" || message.state === "recording");
+        this.tally.onTake(message.state, this.shot);
         return this.note(takeMessage(message.state, this.shot));
       case "roll":
         // Paused, nobody's there to nudge; and Done is the end of it.
@@ -584,6 +590,9 @@ export class LiveRelay {
       send(line, {
         toolResponse: { functionResponses: [{ id: call.id, name: call.name, response }] },
       });
+    if (call.name === RATE_TOOL) {
+      return this.rate(call.args, answerNow);
+    }
     if (!name) {
       this.options.log("warn", { tool: call.name }, "unknown live tool call");
       return answerNow({ error: "unknown tool" });
@@ -601,10 +610,23 @@ export class LiveRelay {
     // An attempt under way: no nudges while it runs, as with a take.
     if (browserCall.call.name === "mark") {
       this.pacer.take(browserCall.call.event === "start");
+      // An attempt that ended is one more of this shot, for `rate`'s numbering.
+      if (browserCall.call.event === "end") {
+        this.tally.onTake("recorded", this.shot);
+      }
     }
     const adaptation = browserCall.call.name === "adapt_shot" ? browserCall.call : undefined;
     this.pending.set(id, { line, geminiId: call.id, name, timer, adaptation });
     this.toClient({ type: "tool", id, call: browserCall.call });
+  }
+
+  /** Director rated an attempt, or the member said which to use: answered once it's done. */
+  private rate(args: unknown, answer: (response: object) => void) {
+    const { plan, picks } = this.options;
+    rate(args, this.shot, plan.shots.length, this.tally, picks).then(answer, (error: unknown) => {
+      this.options.log("error", { err: describeError(error) }, "rating a take failed");
+      answer({ result: "failed", why: "It couldn't be saved just now." });
+    });
   }
 
   /**

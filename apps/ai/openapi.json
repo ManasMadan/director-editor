@@ -1438,6 +1438,10 @@
             ],
             "title": "Beststartms"
           },
+          "chosen": {
+            "title": "Chosen",
+            "type": "boolean"
+          },
           "createdAt": {
             "format": "date-time",
             "title": "Createdat",
@@ -1483,6 +1487,25 @@
             "title": "Kind",
             "type": "string"
           },
+          "origin": {
+            "enum": [
+              "shoot",
+              "pass"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
           "score": {
             "anyOf": [
               {
@@ -1520,6 +1543,9 @@
           "bestEndMs",
           "score",
           "feedback",
+          "reason",
+          "chosen",
+          "origin",
           "createdAt"
         ],
         "title": "DirectorTakeOut",
@@ -3306,6 +3332,36 @@
         "title": "StoryboardOut",
         "type": "object"
       },
+      "TakeChoice": {
+        "additionalProperties": false,
+        "description": "The member's choice of take for a shot (\"use the second one\"), or none, to go back\nto Director's pick.",
+        "properties": {
+          "shotIndex": {
+            "exclusiveMaximum": 12.0,
+            "minimum": 0.0,
+            "title": "Shotindex",
+            "type": "integer"
+          },
+          "takeId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Takeid"
+          }
+        },
+        "required": [
+          "shotIndex",
+          "takeId"
+        ],
+        "title": "TakeChoice",
+        "type": "object"
+      },
       "TargetPose": {
         "properties": {
           "description": {
@@ -4845,6 +4901,82 @@
           }
         },
         "summary": "Add Director Asset"
+      }
+    },
+    "/v1/director/plans/{video_id}/choices": {
+      "post": {
+        "description": "The caller's choice of take for a shot, over Director's pick; no take goes back to\nDirector's pick.",
+        "operationId": "chooseDirectorTake",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "video_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{11}$",
+              "title": "Video Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TakeChoice"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Choose Director Take"
       }
     },
     "/v1/director/plans/{video_id}/cuts": {

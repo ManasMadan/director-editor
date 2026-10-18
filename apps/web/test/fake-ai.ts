@@ -272,6 +272,9 @@ function directorRoute(
       bestEndMs: null,
       score: null,
       feedback: null,
+      reason: null,
+      chosen: false,
+      origin: "shoot",
       createdAt: now(),
     };
     short(String(input.videoId)).takes.unshift(take);

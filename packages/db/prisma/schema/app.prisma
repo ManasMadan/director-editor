@@ -175,6 +175,10 @@ model RecordingAttempt {
   takeId      String?          @map("take_id") @db.Uuid
   /// Why it couldn't be cut (an error code).
   error       String?
+  /// shoot (marked live) | pass (found by the post-session pass in the whole recording)
+  origin      String           @default("shoot")
+  /// The pass's one line on why it's worth a take; the take cut from it shows it.
+  reason      String?
   createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
   session     RecordingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)

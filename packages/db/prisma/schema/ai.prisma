@@ -106,6 +106,15 @@ model DirectorTake {
   /// 0 to 100: how closely the take follows the shot.
   score        Int?
   feedback     String?
+  /// Why this take is (or isn't) the one to use, in a line: "the cleanest delivery, and
+  /// you held the smile". What the editor shows under Director's pick.
+  reason       String?
+  /// When the member chose this take for its shot ("use the second one", said or typed
+  /// while shooting): the shot's latest choice beats Director's pick.
+  chosenAt     DateTime?          @map("chosen_at") @db.Timestamptz(3)
+  /// shoot (an attempt marked while shooting, or a take filmed) | pass (found in the
+  /// whole recording after Done, such as a great line said while rehearsing)
+  origin       String             @default("shoot")
   createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
   organization Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)

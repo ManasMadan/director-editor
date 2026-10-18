@@ -365,7 +365,9 @@ def test_a_best_part_under_a_millisecond_is_no_part() -> None:
     from app.schemas import TakeReview
 
     def review(start: float, end: float) -> TakeReview:
-        return TakeReview(bestStartSeconds=start, bestEndSeconds=end, score=50, feedback="Fine.")
+        return TakeReview(
+            bestStartSeconds=start, bestEndSeconds=end, score=50, feedback="Fine.", reason="Steady."
+        )
 
     assert best_range(review(1.0002, 1.0004), "video") == (None, None)
     assert best_range(review(1.0, 2.5), "video") == (1000, 2500)

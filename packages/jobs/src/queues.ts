@@ -175,6 +175,13 @@ export const queues = {
         orgId: orgIdSchema,
         sourceUrl: z.url(),
       }),
+      /**
+       * The post-session pass: once a shoot's recording session is done, Gemini watches
+       * all of it to find attempts the live marks missed and edges that were off. Queued
+       * when the session finishes, with the session's id as the job id, so a session is
+       * gone through once.
+       */
+      "session-pass": z.object({ sessionId: z.uuid(), orgId: orgIdSchema }),
     },
     options: {
       attempts: 3,
@@ -184,8 +191,9 @@ export const queues = {
     },
   },
   /**
-   * Director's continuous recording (apps/api and apps/worker's maintenance produce it,
-   * apps/worker consumes it): an ended attempt whose footage is all uploaded, to cut into
+   * Director's continuous recording (apps/api, apps/worker's maintenance and apps/ai's
+   * post-session pass produce it, apps/worker consumes it): an ended attempt whose footage
+   * is all uploaded, to cut into
    * a take on the clipper. The job id is the attempt's id, so an attempt is cut once
    * however often it's queued. A clipper outage passes: spaced retries, then the attempt
    * fails.

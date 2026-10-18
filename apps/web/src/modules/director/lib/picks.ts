@@ -1,8 +1,10 @@
 /**
  * Which take of each shot goes into the video. Director picks the best-scored take (the
- * API's `pickedTakeId`); until a take is scored, the newest plays. The member can pick
- * any other take of the shot instead, stepping through them in the order they filmed
- * them, and their pick is what a saved cut records.
+ * API's `pickedTakeId`); until a take is scored, the newest plays. The member's own
+ * choice beats it: one they made while shooting ("use the second one", the API's
+ * `chosenTakeId`), and over that one they make here, with a tap on any take of the shot
+ * or stepping through them in the order they filmed them. What plays is what a saved cut
+ * records.
  */
 import type { DirectorCut, DirectorShot, DirectorTake } from "@repo/contracts/api";
 import type { DirectorTakeId } from "@repo/contracts/ids";
@@ -23,7 +25,42 @@ export function takeNumber(shot: DirectorShot, takeId: DirectorTakeId): number {
 function pickedTake(shot: DirectorShot, picks: Picks): DirectorTake | undefined {
   const find = (takeId: DirectorTakeId | null | undefined) =>
     shot.takes.find((take) => take.id === takeId);
-  return find(picks[shot.index]) ?? find(shot.pickedTakeId) ?? shot.takes[0];
+  return (
+    find(picks[shot.index]) ?? find(shot.chosenTakeId) ?? find(shot.pickedTakeId) ?? shot.takes[0]
+  );
+}
+
+/**
+ * The shot's takes as the editor lists them: the member's choice from the shoot first,
+ * then Director's pick, then the rest in the order filmed. Every attempt is there, so
+ * one tap swaps to any of them.
+ */
+export function picksFirst(shot: DirectorShot): DirectorTake[] {
+  const rank = (take: DirectorTake) => {
+    if (take.id === shot.chosenTakeId) {
+      return 0;
+    }
+    return take.id === shot.pickedTakeId ? 1 : 2;
+  };
+  // sort is stable: within a rank, the filmed order stands.
+  return takesInOrder(shot).sort((a, b) => rank(a) - rank(b));
+}
+
+/** Director's pick for every shot that has one: "Go back to Director's picks". */
+export function directorsPicks(shots: readonly DirectorShot[]): Picks {
+  return Object.fromEntries(
+    shots.flatMap((shot) => (shot.pickedTakeId ? [[shot.index, shot.pickedTakeId]] : [])),
+  );
+}
+
+/** Whether any shot plays something other than Director's pick (one that has a pick). */
+export function awayFromDirectorsPicks(
+  shots: readonly DirectorShot[],
+  played: ReadonlyMap<number, DirectorTake>,
+): boolean {
+  return shots.some(
+    (shot) => shot.pickedTakeId !== null && played.get(shot.index)?.id !== shot.pickedTakeId,
+  );
 }
 
 /** The take each filmed shot plays, by shot index. */

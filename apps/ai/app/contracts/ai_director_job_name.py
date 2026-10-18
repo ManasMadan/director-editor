@@ -6,5 +6,6 @@ from typing import Annotated, Literal
 from pydantic import Field
 
 type AiDirectorJobName = Annotated[
-    Literal["plan", "assets", "create-plan", "review-take"], Field(..., title="AiDirectorJobName")
+    Literal["plan", "assets", "create-plan", "review-take", "session-pass"],
+    Field(..., title="AiDirectorJobName"),
 ]

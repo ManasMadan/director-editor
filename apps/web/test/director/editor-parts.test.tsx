@@ -4,6 +4,7 @@ import { type DirectorTakeId, directorTakeIdSchema, fileIdSchema } from "@repo/c
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
+import { BackToPicks } from "@/modules/director/components/directors-picks";
 import { EditPlayer } from "@/modules/director/components/edit-player";
 import { SoundPanel, StylePicker } from "@/modules/director/components/edit-tools";
 import { ShotBoard } from "@/modules/director/components/shot-board";
@@ -33,6 +34,9 @@ function directorTake(overrides: Partial<DirectorTake> = {}): DirectorTake {
     bestEndMs: null,
     score: null,
     feedback: null,
+    reason: null,
+    chosen: false,
+    origin: "shoot",
     createdAt: new Date(filmed * 1000),
     ...overrides,
   };
@@ -44,13 +48,15 @@ function boardShot(
   takes: DirectorTake[],
   {
     picked = null,
+    chosen = null,
     needsRetake = false,
-  }: { picked?: DirectorTake | null; needsRetake?: boolean } = {},
+  }: { picked?: DirectorTake | null; chosen?: DirectorTake | null; needsRetake?: boolean } = {},
 ): DirectorShot {
   return {
     index,
     takes: [...takes].reverse(),
     pickedTakeId: picked?.id ?? null,
+    chosenTakeId: chosen?.id ?? null,
     needsRetake,
   };
 }
@@ -169,6 +175,38 @@ describe("the board of shots", () => {
     await expect.element(walkIn.getByRole("radio", { name: /Take 1/ })).toBeChecked();
     await expect.element(page.getByText("Lovely light, keep the smile.")).toBeVisible();
     expect(page.getByText("Too dark.").query()).toBeNull();
+  });
+
+  it("shows every attempt, the member's choice first, then Director's pick with its reason", async () => {
+    const attempts = [
+      directorTake({ score: 60 }),
+      directorTake({ score: 70 }),
+      directorTake({ score: 95, reason: "The cleanest delivery, and you held the smile." }),
+      directorTake({ score: 50, origin: "pass" }),
+    ];
+    const [, chosen, best] = attempts;
+    const { page, onPick } = await board({
+      listed: [
+        boardShot(0, attempts, { picked: best, chosen }),
+        boardShot(1, [look], { picked: look }),
+        boardShot(2, []),
+      ],
+    });
+    const walkIn = page.getByRole("radiogroup", { name: "Takes of shot 1" });
+    const tiles = walkIn.getByRole("radio").elements();
+    expect(tiles.map((take) => take.closest("label")?.textContent)).toEqual([
+      "Take 270/100Your pick",
+      "Take 395/100Director's pickThe cleanest delivery, and you held the smile.",
+      "Take 160/100",
+      "Take 450/100Found in your footage",
+    ]);
+    // The member's choice plays; one tap swaps to Director's pick, and says so.
+    await expect.element(walkIn.getByRole("radio", { name: /Take 2/ })).toBeChecked();
+    await userEvent.click(walkIn.getByText("Take 3", { exact: true }));
+    expect(onPick).toHaveBeenLastCalledWith(0, best?.id);
+    await expect
+      .element(page.getByText("Swapped in take 3 for shot 1"))
+      .toHaveAttribute("aria-live", "polite");
   });
 
   it("puts Director's note on a shot whose best take scored too low, with a retake", async () => {
@@ -472,5 +510,33 @@ describe("the edit player", () => {
     update({ time: 1.6 });
     await expect.element(page.getByRole("status", { name: "Loading this take…" })).toBeVisible();
     expect(page.getByText("isn't filmed yet", { exact: false }).query()).toBeNull();
+  });
+});
+
+describe("going back to Director's picks", () => {
+  const [best, other] = [directorTake({ score: 90 }), directorTake({ score: 40 })];
+  const listed = [boardShot(0, [best, other], { picked: best })];
+
+  function Picking({ start, onReset }: { start: Picks; onReset: (picks: Picks) => void }) {
+    const [picks, setPicks] = useState(start);
+    return (
+      <BackToPicks
+        shots={listed}
+        picks={picks}
+        onReset={(reset) => {
+          onReset(reset);
+          setPicks(reset);
+        }}
+      />
+    );
+  }
+
+  it("is offered once a shot plays something else, and puts every pick back", async () => {
+    const onReset = vi.fn();
+    const page = await renderPage(<Picking start={{ 0: other.id }} onReset={onReset} />);
+    await userEvent.click(page.getByRole("button", { name: "Go back to Director's picks" }));
+    expect(onReset).toHaveBeenCalledWith({ 0: best.id });
+    // On Director's picks, there's nothing to go back to.
+    expect(page.getByRole("button").query()).toBeNull();
   });
 });

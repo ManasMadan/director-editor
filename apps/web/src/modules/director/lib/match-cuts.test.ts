@@ -44,6 +44,9 @@ const take = (shotIndex: number, bestStartMs: number, bestEndMs: number): Direct
   bestEndMs,
   score: 80,
   feedback: null,
+  reason: null,
+  chosen: false,
+  origin: "shoot",
   createdAt: new Date(),
 });
 

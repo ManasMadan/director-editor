@@ -8,6 +8,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from "node:net";
 import { ORPCError } from "@orpc/client";
 import { directorSeeds } from "@repo/contracts/director-seeds";
+import { directorTakeIdSchema } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
 import { jwtVerify } from "jose";
 import pg from "pg";
@@ -160,6 +161,7 @@ const takes: {
   fileId: string;
   kind: string;
   score: number | null;
+  chosen?: boolean;
   createdAt: string;
 }[] = [];
 const cuts: {
@@ -228,6 +230,32 @@ async function caller(request: IncomingMessage) {
   }
 }
 
+/** The member's choice of take for a shot, as apps/ai keeps it: one a shot. */
+function choicesRoute(
+  route: string,
+  who: { org: string; user: string },
+  body: Record<string, unknown>,
+) {
+  const match = /^POST \/v1\/director\/plans\/([\w-]{11})\/choices$/.exec(route);
+  if (!match) {
+    return null;
+  }
+  const mine = takes.filter(
+    (t) =>
+      t.org === who.org &&
+      t.user === who.user &&
+      t.videoId === match[1] &&
+      t.shotIndex === body.shotIndex,
+  );
+  if (body.takeId !== null && !mine.some((t) => t.id === body.takeId)) {
+    return failure(404, "DIRECTOR_TAKE_NOT_FOUND");
+  }
+  for (const take of mine) {
+    take.chosen = take.id === body.takeId;
+  }
+  return { status: 204, body: undefined };
+}
+
 /** The AI service's Director routes, per organization, as apps/ai answers them. */
 async function aiRoute(request: IncomingMessage, response: ServerResponse) {
   const who = await caller(request);
@@ -246,7 +274,10 @@ async function aiRoute(request: IncomingMessage, response: ServerResponse) {
       data: { params: {}, requestId: "r" },
     });
   const find = (videoId: string) => plans.find((p) => p.org === who.org && p.videoId === videoId);
-  const answer = libraryRoute(route, who, body) ?? directorCutRoute(route, who, body);
+  const answer =
+    libraryRoute(route, who, body) ??
+    directorCutRoute(route, who, body) ??
+    choicesRoute(route, who, body);
   if (answer) {
     return send(response, answer.status, answer.body);
   }
@@ -316,6 +347,9 @@ function takeOut(take: (typeof takes)[number]) {
     bestEndMs: null,
     score: take.score,
     feedback: null,
+    reason: take.score === null ? null : "The cleanest delivery.",
+    chosen: take.chosen ?? false,
+    origin: "shoot",
     createdAt: take.createdAt,
   };
 }
@@ -899,6 +933,33 @@ describe("Director's shots and cuts", () => {
     await expectError(
       session.rpc.director.shots({ videoId: "ShotsShort1" }),
       "DIRECTOR_PLAN_NOT_READY",
+    );
+  });
+
+  it("lets the member choose a take over Director's pick, and go back to it", async () => {
+    const { session, me } = await signedIn();
+    const org = String(me.activeOrganizationId);
+    readyTemplate(org, "ShotsShort1");
+    const best = scoredTake(org, me.id, 90, "2026-10-18T10:00:00Z");
+    const second = scoredTake(org, me.id, 70, "2026-10-18T10:01:00Z");
+    const [shot] = await session.rpc.director.chooseTake({
+      videoId: "ShotsShort1",
+      shotIndex: 0,
+      takeId: second.id,
+    });
+    expect(shot).toMatchObject({ pickedTakeId: best.id, chosenTakeId: second.id });
+    expect(shot?.takes.find((take) => take.id === best.id)?.reason).toBe("The cleanest delivery.");
+    await expect(
+      session.rpc.director.chooseTake({ videoId: "ShotsShort1", shotIndex: 0, takeId: null }),
+    ).resolves.toMatchObject([{ pickedTakeId: best.id, chosenTakeId: null }]);
+    // Someone else's take, or none at all, isn't the member's to choose.
+    await expectError(
+      session.rpc.director.chooseTake({
+        videoId: "ShotsShort1",
+        shotIndex: 0,
+        takeId: directorTakeIdSchema.parse(randomUUID()),
+      }),
+      "DIRECTOR_TAKE_NOT_FOUND",
     );
   });
 

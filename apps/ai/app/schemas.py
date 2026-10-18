@@ -596,6 +596,9 @@ TakeKind = Literal["video", "photo"]
 # A default asset image: queued with the plan, being drawn, stored, or given up on
 # (director_asset_status_check).
 AssetImageStatus = Literal["pending", "generating", "ready", "failed"]
+# How a take came to be: an attempt marked while shooting (or a take filmed), or one the
+# post-session pass found in the whole recording after Done.
+TakeOrigin = Literal["shoot", "pass"]
 PublishStatus = Literal["none", "uploading", "published", "failed"]
 # YouTube's privacy statuses, as a cut was published.
 Visibility = Literal["private", "unlisted", "public"]
@@ -893,6 +896,10 @@ class DirectorTakeCreate(BaseModel):
     )
 
 
+# A pick's reason: one line under a tile in the editor.
+REASON_MAX_LENGTH = 160
+
+
 class TakeReview(BaseModel):
     """Gemini's review of one take: the model's output type."""
 
@@ -903,6 +910,14 @@ class TakeReview(BaseModel):
     score: int = Field(ge=0, le=100, description="How closely the take follows the shot.")
     feedback: str = Field(
         min_length=1, max_length=300, description="What worked, and the one thing to fix."
+    )
+    reason: str = Field(
+        min_length=1,
+        max_length=REASON_MAX_LENGTH,
+        description=(
+            "Why this take would or wouldn't be the one to use, in a short, specific line "
+            'about what you saw or heard: "the cleanest delivery, and you held the smile".'
+        ),
     )
 
 
@@ -917,6 +932,9 @@ class DirectorTakeOut(BaseModel):
     bestEndMs: int | None
     score: int | None
     feedback: str | None
+    reason: str | None
+    chosen: bool
+    origin: TakeOrigin
     createdAt: datetime
 
 
@@ -928,6 +946,16 @@ class CutPick(BaseModel):
     shotIndex: int = Field(ge=0, lt=MAX_SHOTS)
     # A JSON string, so not strict (strict wants a UUID object, which JSON can't carry).
     takeId: UUID = Field(strict=False)
+
+
+class TakeChoice(BaseModel):
+    """The member's choice of take for a shot ("use the second one"), or none, to go back
+    to Director's pick."""
+
+    model_config = REQUEST
+
+    shotIndex: int = Field(ge=0, lt=MAX_SHOTS)
+    takeId: UUID | None = Field(strict=False)
 
 
 class DirectorCutCreate(BaseModel):

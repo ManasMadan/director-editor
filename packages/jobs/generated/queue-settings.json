@@ -15,5 +15,22 @@
         "age": 604800
       }
     }
+  },
+  "recording": {
+    "prefix": "{recording}",
+    "options": {
+      "attempts": 5,
+      "backoff": {
+        "type": "exponential",
+        "delay": 10000,
+        "jitter": 0.5
+      },
+      "removeOnComplete": {
+        "age": 86400
+      },
+      "removeOnFail": {
+        "age": 604800
+      }
+    }
   }
 }

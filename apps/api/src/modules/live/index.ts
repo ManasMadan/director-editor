@@ -3,3 +3,4 @@
 export { createGoogleAuth } from "./google-auth";
 export { chatUpstream, DirectorChat } from "./live.chat";
 export { type LiveOptions, liveUpstream, mountLive } from "./live.gateway";
+export type { LivePicks } from "./live.picks";
