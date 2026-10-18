@@ -13,7 +13,7 @@
  * timer (up to 30s) and then try once more.
  */
 import type { RealtimeMessage } from "@repo/contracts/realtime";
-import { useQueryClient } from "@tanstack/react-query";
+import { partialMatchKey, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { errorCode } from "./errors";
 import { useApi } from "./provider";
@@ -127,12 +127,21 @@ export function useRealtime(
 export function useLiveUpdates(activeOrganizationId: string | null | undefined) {
   const { api } = useApi();
   const queryClient = useQueryClient();
+  // Director's queries, but not its match cut alignments: each is a model call against
+  // the member's budget and rate limit, and its answer depends only on the takes and cut
+  // points it was asked about, which no news changes. Asked again, the cut could also
+  // move under the member while they watch.
+  const directorNews = () =>
+    queryClient.invalidateQueries({
+      queryKey: api.director.key(),
+      predicate: (query) => !partialMatchKey(query.queryKey, api.director.alignMatchCut.key()),
+    });
   const refetch = {
     "files.changed": () => queryClient.invalidateQueries({ queryKey: api.files.key() }),
     // A plan, its takes and cuts, and its asset slots' images (the picker's).
     "director.changed": async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: api.director.key() }),
+        directorNews(),
         queryClient.invalidateQueries({ queryKey: api.assets.key() }),
       ]);
     },
@@ -140,7 +149,7 @@ export function useLiveUpdates(activeOrganizationId: string | null | undefined) 
     "recording.changed": async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: api.recording.key() }),
-        queryClient.invalidateQueries({ queryKey: api.director.key() }),
+        directorNews(),
       ]);
     },
   } satisfies Record<RealtimeMessage["type"], () => Promise<void>>;

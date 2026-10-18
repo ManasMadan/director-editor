@@ -1,9 +1,35 @@
 import { ORPCError } from "@orpc/client";
+import type { MatchCutAlignment, MatchCutAsk } from "@repo/contracts/api";
+import { directorTakeIdSchema, videoIdSchema } from "@repo/contracts/ids";
 import type { RealtimeMessage } from "@repo/contracts/realtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn, until } from "../test/stand-in";
+import { useMatchCutAlignments } from "./api/director/match-cuts";
+import { useDirectorShotsQuery } from "./api/director/shots";
 import { useFileQuery } from "./api/files/get";
 import { useLiveUpdates, useRealtime } from "./realtime";
+
+const ask: MatchCutAsk = {
+  videoId: videoIdSchema.parse("dQw4w9WgXcQ"),
+  anchor: "the watch",
+  outgoing: { takeId: directorTakeIdSchema.parse(id(1)), atMs: 1500 },
+  incoming: { takeId: directorTakeIdSchema.parse(id(2)), atMs: 0 },
+};
+const alignment: MatchCutAlignment = {
+  status: "aligned",
+  outgoingEndMs: 1433,
+  incomingStartMs: 66,
+  transform: { x: -40, y: 12, scale: 0.97, rotation: -1.5 },
+  offsetBeforePx: 61,
+  offsetPx: 2.1,
+  scaleDiff: 0.01,
+  rotationDiff: 0.2,
+  cropPercent: 6,
+  withinTolerance: true,
+  anchor: { x: 0.5, y: 0.4 },
+  outgoingFrame: null,
+  incomingFrame: null,
+};
 
 /**
  * What each stream the client opens does, in order: send its messages and end, fail with
@@ -166,6 +192,46 @@ describe("useLiveUpdates", () => {
     await until(() => {
       expect(count("files/get")).toBe(3);
     });
+    unmount();
+  });
+
+  it("never asks a match cut's alignment again on Director's news", async () => {
+    // Each answer is a model call against the member's budget, and the same takes and
+    // cut points give the same answer: a nudge about the plan changes neither.
+    let aligned = 0;
+    let delivered = 0;
+    const api = standIn((os) => ({
+      realtime: {
+        subscribe: os.realtime.subscribe.handler(async function* ({ signal }) {
+          // Once the cut is lined up: Director's news, then the stream stays open.
+          await until(() => expect(aligned).toBe(1));
+          for (const type of ["director.changed", "recording.changed"] as const) {
+            yield { type };
+            delivered += 1;
+          }
+          await new Promise((resolve) => signal?.addEventListener("abort", resolve));
+        }),
+      },
+      director: {
+        alignMatchCut: os.director.alignMatchCut.handler(() => {
+          aligned += 1;
+          return alignment;
+        }),
+        shots: os.director.shots.handler(() => []),
+      },
+    }));
+    const asks = [ask];
+    const { unmount } = renderHook(() => {
+      useLiveUpdates(id(9));
+      useMatchCutAlignments(asks);
+      useDirectorShotsQuery("dQw4w9WgXcQ", true);
+    }, api);
+    await until(() => expect(delivered).toBe(2));
+    // The shots did refetch on the news: the alignment didn't.
+    await until(() =>
+      expect(api.calls.filter((call) => call === "director/shots")).toHaveLength(3),
+    );
+    expect(aligned).toBe(1);
     unmount();
   });
 });
