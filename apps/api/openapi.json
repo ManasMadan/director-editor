@@ -9973,6 +9973,13 @@
                                                 "type": "string"
                                               }
                                             },
+                                            "brands": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              },
+                                              "default": []
+                                            },
                                             "mood": {
                                               "type": "string"
                                             }
@@ -12472,6 +12479,13 @@
                                           "type": "string"
                                         }
                                       },
+                                      "brands": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "default": []
+                                      },
                                       "mood": {
                                         "type": "string"
                                       }
@@ -14953,6 +14967,13 @@
                                         "items": {
                                           "type": "string"
                                         }
+                                      },
+                                      "brands": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "default": []
                                       },
                                       "mood": {
                                         "type": "string"

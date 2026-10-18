@@ -52,6 +52,7 @@ POSE: dict[str, object] = {"description": "Standing, arms relaxed.", "keypoints"
 
 PLAN_SHOT: dict[str, object] = {
     "kind": "video",
+    "mode": "on-camera",
     "title": "A shot",
     "purpose": "Shows something.",
     "sourceStartSeconds": 0,
@@ -73,6 +74,8 @@ PLAN: dict[str, object] = {
     "audio": "none",
     "durationSeconds": 4,
     "shots": [PLAN_SHOT],
+    "assets": [],
+    "edits": [],
 }
 FALLBACK_MODEL = "gemini-fallback-test"
 FALLBACK_PATH = f"/v1beta/models/{FALLBACK_MODEL}:generateContent"

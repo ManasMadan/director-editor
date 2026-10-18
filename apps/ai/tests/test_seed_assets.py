@@ -100,6 +100,23 @@ async def test_only_the_seeds_named_are_indexed_and_drawn_images_follow_their_as
     assert templates[1].plan.assets == []
 
 
+async def test_an_image_drawn_for_an_asset_that_now_looks_different_is_dropped() -> None:
+    older = SeedTemplate.model_validate(
+        {
+            **seed().model_dump(),
+            "plan": {
+                **seed().plan.model_dump(),
+                "assets": [asset(id="chart", prompt="A pie chart, in colour.")],
+            },
+            "media": {"shots": [{}], "assets": {"chart": f"{AT}/asset-chart.png"}},
+        }
+    )
+    index, _ = indexes()
+    await fill_in([older], index, lambda _written: None)
+    assert older.media is not None
+    assert older.media.assets == {}
+
+
 def _env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AI_SERVICE_SECRET", SECRET)
     monkeypatch.setenv("AI_DATABASE_URL", "postgresql://u:p@localhost:5432/db")

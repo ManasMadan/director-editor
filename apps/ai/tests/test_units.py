@@ -33,9 +33,12 @@ PLAN_DRAFT: dict[str, object] = {
     "summary": "A summary.",
     "audio": "none",
     "durationSeconds": 4,
+    "assets": [],
+    "edits": [],
     "shots": [
         {
             "kind": "video",
+            "mode": "on-camera",
             "title": "A shot",
             "purpose": "Shows something.",
             "sourceStartSeconds": 0,

@@ -218,6 +218,11 @@ const assetSchema = z.object({
     aspectRatio: z.enum(["9:16", "3:4", "4:5", "1:1", "9:8", "5:4", "4:3", "16:9"]),
     /** Every line of text on it, word for word. */
     text: z.array(z.string()),
+    /**
+     * The original's own branding on it (brand names, handles, the creator's name): never
+     * drawn into the member's version. A plan written before it reads with none.
+     */
+    brands: z.array(z.string()).default([]),
     mood: z.string(),
   }),
 });

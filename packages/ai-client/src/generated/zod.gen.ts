@@ -48,6 +48,7 @@ export const zAssetKind = z.enum([
 export const zAssetReference = z.object({
     aspectRatio: zAspectRatio,
     blackAndWhite: z.boolean(),
+    brands: z.array(z.string().min(1).max(80)).max(12).optional(),
     composition: z.string().min(1).max(300),
     mood: z.string().min(1).max(160),
     palette: z.string().min(1).max(200),
@@ -102,12 +103,6 @@ export const zCameraMove = z.enum([
     'orbit',
     'tilt-up',
     'tilt-down'
-]);
-
-export const zCaptionStyle = z.enum([
-    'word-by-word',
-    'line',
-    'boxed'
 ]);
 
 /**
@@ -243,13 +238,6 @@ export const zDirectorTakeOut = z.object({
     ])
 });
 
-export const zEasing = z.enum([
-    'linear',
-    'ease-in',
-    'ease-out',
-    'ease-in-out'
-]);
-
 /**
  * EndCardEdit
  */
@@ -260,14 +248,6 @@ export const zEndCardEdit = z.object({
     text: z.string().min(1).max(240).nullable(),
     type: z.literal('end-card')
 });
-
-export const zEntrance = z.enum([
-    'cut',
-    'fade',
-    'slide',
-    'pop',
-    'draw'
-]);
 
 /**
  * ErrorCode
@@ -394,29 +374,25 @@ export const zGapEdit = z.object({
     type: z.literal('gap')
 });
 
-export const zGrade = z.enum([
-    'black-and-white',
-    'warm',
-    'cool',
-    'high-contrast',
-    'vintage',
-    'vivid'
-]);
-
-export const zGradeTarget = z.enum([
-    'all',
-    'camera',
-    'assets'
-]);
-
 /**
  * GradeEdit
  */
 export const zGradeEdit = z.object({
     endSeconds: z.number().gte(0.1).lte(180),
-    grade: zGrade,
+    grade: z.enum([
+        'black-and-white',
+        'warm',
+        'cool',
+        'high-contrast',
+        'vintage',
+        'vivid'
+    ]),
     startSeconds: z.number().gte(0).lte(180),
-    target: zGradeTarget,
+    target: z.enum([
+        'all',
+        'camera',
+        'assets'
+    ]),
     type: z.literal('grade')
 });
 
@@ -452,12 +428,6 @@ export const zKeypoint = z.object({
     y: z.number().gte(0).lte(1)
 });
 
-export const zLayoutKind = z.enum([
-    'full',
-    'split',
-    'picture-in-picture'
-]);
-
 /**
  * LayoutEdit
  *
@@ -472,20 +442,14 @@ export const zLayoutEdit = z.object({
     cameraShare: z.number().gte(0.2).lte(0.8).nullable(),
     endSeconds: z.number().gte(0.1).lte(180),
     inset: z.enum(['camera', 'asset']).nullable(),
-    layout: zLayoutKind,
+    layout: z.enum([
+        'full',
+        'split',
+        'picture-in-picture'
+    ]),
     startSeconds: z.number().gte(0).lte(180),
     type: z.literal('layout')
 });
-
-export const zMark = z.enum([
-    'circle',
-    'underline',
-    'arrow',
-    'box',
-    'highlight',
-    'tick',
-    'cross'
-]);
 
 /**
  * OverlayEdit
@@ -497,9 +461,29 @@ export const zOverlayEdit = z.object({
     box: zBox,
     color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable(),
     endSeconds: z.number().gte(0.1).lte(180),
-    entry: zEntrance,
-    exit: zEntrance,
-    mark: zMark.nullable(),
+    entry: z.enum([
+        'cut',
+        'fade',
+        'slide',
+        'pop',
+        'draw'
+    ]),
+    exit: z.enum([
+        'cut',
+        'fade',
+        'slide',
+        'pop',
+        'draw'
+    ]),
+    mark: z.enum([
+        'circle',
+        'underline',
+        'arrow',
+        'box',
+        'highlight',
+        'tick',
+        'cross'
+    ]).nullable(),
     startSeconds: z.number().gte(0).lte(180),
     type: z.literal('overlay')
 });
@@ -648,7 +632,12 @@ export const zSpeechRequest = z.object({
  * SpeedEdit
  */
 export const zSpeedEdit = z.object({
-    easing: zEasing,
+    easing: z.enum([
+        'linear',
+        'ease-in',
+        'ease-out',
+        'ease-in-out'
+    ]),
     endSeconds: z.number().gte(0.1).lte(180),
     fromRate: z.number().gte(0.1).lte(8),
     startSeconds: z.number().gte(0).lte(180),
@@ -685,47 +674,37 @@ export const zShot = z.object({
     title: z.string().min(1).max(80)
 });
 
-export const zTextPosition = z.enum([
-    'top',
-    'middle',
-    'bottom',
-    'between-halves'
-]);
-
-export const zTextStyle = z.enum([
-    'title',
-    'lower-third',
-    'captions',
-    'label',
-    'callout'
-]);
-
 /**
  * TextEdit
  *
  * Words on screen. Captions carry no text of their own: they're the member's words.
  */
 export const zTextEdit = z.object({
-    captionStyle: zCaptionStyle.nullable(),
+    captionStyle: z.enum([
+        'word-by-word',
+        'line',
+        'boxed'
+    ]).nullable(),
     color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable(),
     endSeconds: z.number().gte(0.1).lte(180),
     highlightColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable(),
-    position: zTextPosition,
+    position: z.enum([
+        'top',
+        'middle',
+        'bottom',
+        'between-halves'
+    ]),
     startSeconds: z.number().gte(0).lte(180),
-    style: zTextStyle,
+    style: z.enum([
+        'title',
+        'lower-third',
+        'captions',
+        'label',
+        'callout'
+    ]),
     text: z.string().min(1).max(240).nullable(),
     type: z.literal('text')
 });
-
-export const zTransitionKind = z.enum([
-    'cut',
-    'match-cut',
-    'whip',
-    'fade',
-    'zoom',
-    'spin',
-    'glitch'
-]);
 
 /**
  * TransitionEdit
@@ -736,7 +715,15 @@ export const zTransitionEdit = z.object({
     anchor: z.string().min(1).max(120).nullable(),
     endSeconds: z.number().gte(0.1).lte(180),
     startSeconds: z.number().gte(0).lte(180),
-    transition: zTransitionKind,
+    transition: z.enum([
+        'cut',
+        'match-cut',
+        'whip',
+        'fade',
+        'zoom',
+        'spin',
+        'glitch'
+    ]),
     type: z.literal('transition')
 });
 

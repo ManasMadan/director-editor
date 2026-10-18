@@ -18,6 +18,8 @@ Off without MEDIA_BUCKET: there would be nowhere to keep them.
 """
 
 import asyncio
+import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -35,6 +37,7 @@ from sqlalchemy import Integer, func, select, type_coerce, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.activity import Target, log_activity, outcome_of
 from app.contracts.error_response import ErrorCode
 from app.contracts.realtime_message import DirectorChanged
 from app.db.models import DirectorAsset, DirectorPlan
@@ -65,6 +68,15 @@ _GENERIC_PERSON = (
     "Anyone in it is a generic, anonymous adult, not a likeness of any real or recognisable person."
 )
 _NO_MARKS = "No logos, watermarks or brand names anywhere."
+# What stands where the original's branding was, in a default image.
+PLACEHOLDER_NAME = "Your Name"
+PLACEHOLDER_HANDLE = "@yourname"
+PLACEHOLDER_WEBSITE = "yourwebsite.com"
+_HANDLE = re.compile(r"(?<![\w.])@[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*")
+_WEB_ADDRESS = re.compile(
+    r"\b(?:https?://\S+|www\.\S+|[A-Za-z0-9-]+\.(?:com|in|io|org|net|co|app|ai|me|tv)\b)",
+    re.IGNORECASE,
+)
 # What screens showing a plan, its takes or its images are told when one changes.
 CHANGED = DirectorChanged(type="director.changed")
 
@@ -76,18 +88,44 @@ def default_assets(plan: ShotPlan) -> list[Asset]:
 
 
 def image_prompt(asset: Asset) -> str:
-    """What Nano Banana is asked for: the asset's own prompt, held to its reference (the
-    look, any text spelt exactly as the original has it), and never anyone's likeness."""
+    """What Nano Banana is asked for: the asset's own prompt, held to its reference's look
+    and its text, and never anyone's likeness or the original's branding. A brand, a
+    handle, a website or the creator's name (the planner lists them in
+    `reference.brands`, and handles and web addresses are caught whatever it lists) is
+    the original creator's own: the member's version carries a neutral placeholder there,
+    for them to make it theirs (spec 7.4)."""
     reference = asset.reference
+    unbranded = _unbranding(reference.brands)
     lines = [
-        asset.prompt,
+        unbranded(asset.prompt),
         f"Style: {reference.style}. Palette: {reference.palette}.",
-        f"Composition: {reference.composition}",
+        f"Composition: {unbranded(reference.composition)}",
     ]
     if reference.blackAndWhite:
         lines.append("Black and white only, no colour.")
-    lines += [f'The text "{text}", spelt exactly like that.' for text in reference.text]
+    lines += [f'The text "{unbranded(text)}", spelt exactly like that.' for text in reference.text]
     return "\n".join([*lines, _GENERIC_PERSON, _NO_MARKS])
+
+
+def _unbranding(brands: list[str]) -> Callable[[str], str]:
+    """What takes the original's branding out of a piece of the prompt: each of `brands`
+    (whatever its case), any handle and any web address, each replaced with a placeholder."""
+    names = sorted({brand.strip() for brand in brands if brand.strip()}, key=len, reverse=True)
+    brand = (
+        re.compile("|".join(re.escape(name) for name in names), re.IGNORECASE) if names else None
+    )
+
+    def unbranded(text: str) -> str:
+        text = _WEB_ADDRESS.sub(PLACEHOLDER_WEBSITE, text)
+        text = _HANDLE.sub(PLACEHOLDER_HANDLE, text)
+        return brand.sub(PLACEHOLDER_NAME, text) if brand else text
+
+    return unbranded
+
+
+def images_lock_key(user_id: UUID) -> str:
+    """The advisory lock a member's image claims take turns on."""
+    return f"ai.director-images:{user_id}"
 
 
 def drawn_aspect_ratio(asset: Asset) -> str:
@@ -218,6 +256,13 @@ class AssetMaker:
         service's) counts against nobody's day."""
         assets = default_assets(plan)
         if user_id is not None:
+            # The member's claims take turns, so two at once can't both read the same
+            # count and pass the day's limit together; the lock is the transaction's.
+            await session.execute(
+                select(
+                    func.pg_advisory_xact_lock(func.hashtextextended(images_lock_key(user_id), 0))
+                )
+            )
             made = await session.scalar(select(type_coerce(func.ai.images_today(user_id), Integer)))
             assets = assets[: max(IMAGES_PER_MEMBER_PER_DAY - (made or 0), 0)]
         if not assets:
@@ -251,6 +296,8 @@ class AssetMaker:
             await publish_to_org(self._redis, org_id, CHANGED)
 
     async def _jobs(self, org_id: UUID, plan_id: UUID) -> list[_Job]:
+        """The plan's images still to draw. One whose asset the saved plan no longer has
+        (claimed for a plan that was then indexed again) is failed, never drawn."""
         async with tenant(org_id) as session:
             plan = await session.get(DirectorPlan, plan_id)
             rows = await session.scalars(
@@ -263,11 +310,19 @@ class AssetMaker:
                 .order_by(DirectorAsset.id)
             )
             pending = list(rows)
-        if plan is None or plan.plan is None:
+        if plan is None or plan.status != "ready" or plan.plan is None:
             return []
-        # Claimed from this plan's own assets, and a ready plan is never rewritten.
         assets = {asset.id: asset for asset in ShotPlan.model_validate(plan.plan).assets}
-        return [_Job(row.id, row.user_id, assets[row.asset_id]) for row in pending]
+        jobs: list[_Job] = []
+        for row in pending:
+            asset = assets.get(row.asset_id)
+            if asset is None:
+                await self._fail(
+                    org_id, plan_id, row.id, row.asset_id, row.user_id, "VALIDATION_FAILED"
+                )
+            else:
+                jobs.append(_Job(row.id, row.user_id, asset))
+        return jobs
 
     async def _draw(self, org_id: UUID, plan_id: UUID, job: _Job, *, final: bool) -> None:
         await self._set(org_id, job.row_id, status="generating")
@@ -284,7 +339,9 @@ class AssetMaker:
         if reservation is None or reservation.tokens < self._per_image:
             if reservation is not None:
                 await settle(reservation, 0, 0)
-            await self._fail(org_id, job.row_id, "AI_BUDGET_EXCEEDED")
+            await self._fail(
+                org_id, plan_id, job.row_id, job.asset.id, job.user_id, "AI_BUDGET_EXCEEDED"
+            )
             return
         used = (0, 0)
         try:
@@ -295,7 +352,15 @@ class AssetMaker:
         except Exception as error:
             log.exception("drawing an asset failed", plan_id=str(plan_id), asset=job.asset.id)
             if final or not worth_retrying(error):
-                await self._fail(org_id, job.row_id, "UPSTREAM_UNAVAILABLE")
+                await self._fail(
+                    org_id,
+                    plan_id,
+                    job.row_id,
+                    job.asset.id,
+                    job.user_id,
+                    "UPSTREAM_UNAVAILABLE",
+                    used,
+                )
                 return
             await self._set(org_id, job.row_id, status="pending")
             raise AssetsInterrupted(plan_id) from None
@@ -304,9 +369,39 @@ class AssetMaker:
         await self._set(
             org_id, job.row_id, status="ready", object_key=key, model=self._artist.model_name
         )
+        log_activity(
+            "director.asset_drawn",
+            target=self._target(plan_id, job.asset.id, used),
+            user_id=job.user_id,
+        )
 
-    async def _fail(self, org_id: UUID, row_id: UUID, code: ErrorCode) -> None:
+    async def _fail(
+        self,
+        org_id: UUID,
+        plan_id: UUID,
+        row_id: UUID,
+        asset_id: str,
+        user_id: UUID | None,
+        code: ErrorCode,
+        used: tuple[int, int] = (0, 0),
+    ) -> None:
         await self._set(org_id, row_id, status="failed", error=code)
+        log_activity(
+            "director.asset_drawn",
+            outcome=outcome_of(code),
+            reason=code,
+            target=self._target(plan_id, asset_id, used),
+            user_id=user_id,
+        )
+
+    def _target(self, plan_id: UUID, asset_id: str, used: tuple[int, int]) -> Target:
+        return {
+            "planId": str(plan_id),
+            "assetId": asset_id,
+            "model": self._artist.model_name,
+            "inputTokens": used[0],
+            "outputTokens": used[1],
+        }
 
     async def _set(self, org_id: UUID, row_id: UUID, **values: str) -> None:
         async with tenant(org_id) as session:

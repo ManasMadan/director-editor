@@ -10,6 +10,7 @@ from app.schemas import (
     MAX_ASSET_TEXT_LINES,
     MAX_ASSETS,
     MAX_EDITS,
+    EditDraft,
     EndCardEdit,
     GapEdit,
     GradeEdit,
@@ -31,6 +32,7 @@ REFERENCE: dict[str, object] = {
     "blackAndWhite": True,
     "aspectRatio": "9:8",
     "text": ["12 MALE ARCHETYPES"],
+    "brands": [],
     "mood": "Bold, curious",
 }
 
@@ -58,7 +60,13 @@ BOX: dict[str, object] = {"x": 0.1, "y": 0.5, "width": 0.8, "height": 0.4}
 
 
 def edit(kind: str, **fields: object) -> dict[str, object]:
-    return {"type": kind, "startSeconds": 0, "endSeconds": 8, **fields}
+    """An edit as the planner writes it: every field it doesn't set null, and a `box`
+    given as the four numbers the draft carries."""
+    unused: dict[str, object] = {field: None for field in EditDraft.model_fields}
+    box = fields.pop("box", None)
+    if isinstance(box, dict):
+        unused |= {f"box{side[0].upper()}{side[1:]}": value for side, value in box.items()}
+    return {**unused, "type": kind, "startSeconds": 0, "endSeconds": 8, **fields}
 
 
 def plan(

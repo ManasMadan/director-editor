@@ -106,7 +106,13 @@ def director_processor(director: Director) -> Callable[[JobLike], Awaitable[None
         elif name == "assets":
             assets = AiDirectorAssetsJob.model_validate(job.data)
             with _bound(job, assets):
-                await director.make_assets(assets.payload.orgId, assets.payload.planId, final=final)
+                await run_job(
+                    job,
+                    final,
+                    lambda: director.make_assets(
+                        assets.payload.orgId, assets.payload.planId, final=final
+                    ),
+                )
         else:
             # The only other job: one added in packages/jobs is a type error here.
             assert_type(name, Literal["review-take"])

@@ -35,6 +35,9 @@ export const ACTIVITIES = [
   "director.index_requested",
   // The AI worker finished watching a short: ok, failed, or refused (out of budget).
   "director.indexed",
+  // The AI worker drew the default image of one of a plan's assets: ok, failed, or
+  // refused (out of budget).
+  "director.asset_drawn",
   "director.plan_opened",
   "director.call_started",
   "director.call_ended",

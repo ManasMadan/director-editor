@@ -4,6 +4,7 @@ protocols (tests/fakes.py): what indexing claims within the limits, the job that
 and stores them, how a plan serves them, every way a drawing can fail, the token ledger,
 and tenancy."""
 
+import asyncio
 from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -13,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 from psycopg.types.json import Jsonb
 
-from app.assets import MAX_DEFAULT_ASSETS, AssetsInterrupted
+from app.assets import MAX_DEFAULT_ASSETS, AssetsInterrupted, images_lock_key
 from app.plan_repair import repair_plan
 from app.schemas import ShotPlanDraft
 from app.settings import get_settings
@@ -37,6 +38,7 @@ from tests.fakes import (
 from tests.support import (
     ENV,
     as_org,
+    migrator,
     new_org,
     on_app_loop,
     published,
@@ -47,6 +49,7 @@ from tests.support import (
 from tests.test_director import (
     PLAN,
     VIDEO,
+    Activities,
     Job,
     director,
     fake_yt_dlp,
@@ -56,6 +59,7 @@ from tests.test_director import (
     spend_the_month,
     usage,
 )
+from tests.test_plan_repair_assets import edit
 
 pytestmark = pytest.mark.integration
 
@@ -78,6 +82,7 @@ def asset(asset_id: str, kind: str = "image", ratio: str = "9:8") -> dict[str, o
             "blackAndWhite": True,
             "aspectRatio": ratio,
             "text": ["12 MALE ARCHETYPES"],
+            "brands": [],
             "mood": "Bold",
         },
         "prompt": 'A flat black-and-white infographic titled "12 MALE ARCHETYPES".',
@@ -101,16 +106,15 @@ ASSET_PLAN: dict[str, object] = {
         asset("end-card", kind="end-card", ratio="9:16"),
     ],
     "edits": [
-        {
-            "type": "layout",
-            "startSeconds": 0,
-            "endSeconds": 10,
-            "layout": "split",
-            "assetId": "chart",
-            "cameraOn": "top",
-            "cameraShare": 0.5,
-        },
-        {"type": "text", "startSeconds": 0, "endSeconds": 10, "style": "captions"},
+        edit(
+            "layout",
+            endSeconds=10,
+            layout="split",
+            assetId="chart",
+            cameraOn="top",
+            cameraShare=0.5,
+        ),
+        edit("text", endSeconds=10, style="captions"),
     ],
 }
 STILLS = ["chart", "card", "end-card"]
@@ -435,16 +439,141 @@ def test_another_workspace_never_sees_a_plan_s_images(client: TestClient) -> Non
     assert len(on_app_loop(client, lambda: director().asset_images(org, plan_id))) == len(STILLS)
 
 
-def test_the_worker_runs_the_assets_job(client: TestClient) -> None:
+def test_the_worker_runs_the_assets_job_and_logs_each_image_and_the_job(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     org, user = new_org()
     plan_id = indexed(client, org, user)
+    activities = Activities()
+    monkeypatch.setattr("app.assets.log_activity", activities)
+    monkeypatch.setattr("app.worker.log_activity", activities)
     process = director_processor(director())
-    job = Job(
-        "assets",
-        {"meta": {"orgId": str(org)}, "payload": {"planId": str(plan_id), "orgId": str(org)}},
-    )
+    meta = {"requestId": "req-1", "userId": str(user), "orgId": str(org)}
+    job = Job("assets", {"meta": meta, "payload": {"planId": str(plan_id), "orgId": str(org)}})
     on_app_loop(client, lambda: process(job))
     assert [row[1] for row in images(org, plan_id)] == ["ready"] * len(STILLS)
+    # An activity line per image, for the member it counts against, with what it used.
+    drawn = activities.named("director.asset_drawn")
+    assert [(fields["target"], fields["user_id"]) for fields, _ in drawn] == [
+        (
+            {
+                "planId": str(plan_id),
+                "assetId": name,
+                "model": ASSET_MODEL,
+                "inputTokens": 300,
+                "outputTokens": 1_290,
+            },
+            user,
+        )
+        for name in STILLS
+    ]
+    # And the job's own line, like every other job's.
+    [(finished, bound)] = activities.named("job.finished")
+    assert finished["target"] == {
+        "queue": "ai-director",
+        "job": "assets",
+        "jobId": "job-1",
+        "attempt": 1,
+    }
+    assert bound == str(user)
+
+
+def test_a_failed_image_s_activity_says_why(
+    client: TestClient,
+    google: tuple[Fake, dict[str, Callable[[bytes], Reply]]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    org, user = new_org()
+    plan_id = indexed(client, org, user)
+    activities = Activities()
+    monkeypatch.setattr("app.assets.log_activity", activities)
+    google[1][ASSET_PATH] = vertex_text_only
+    make(client, org, plan_id)
+    spend_the_month(org)
+    as_org(org, "UPDATE ai.director_asset SET status = 'pending' WHERE plan_id = %s", (plan_id,))
+    make(client, org, plan_id)
+    outcomes = [
+        (fields["outcome"], fields["reason"])
+        for fields, _ in activities.named("director.asset_drawn")
+    ]
+    assert outcomes == [("failed", "UPSTREAM_UNAVAILABLE")] * len(STILLS) + [
+        ("refused", "AI_BUDGET_EXCEEDED")
+    ] * len(STILLS)
+
+
+def test_an_image_whose_asset_the_plan_no_longer_has_is_failed_not_drawn(
+    client: TestClient, google: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    org, user = new_org()
+    plan_id = indexed(client, org, user)
+    # The plan indexed again with other assets, after its first images were claimed.
+    stored = repair_plan(ShotPlanDraft.model_validate({**ASSET_PLAN, "assets": []}), None)
+    as_org(
+        org,
+        "UPDATE ai.director_plan SET plan = %s WHERE id = %s",
+        (Jsonb(stored.model_dump(mode="json")), plan_id),
+    )
+    make(client, org, plan_id)
+    assert images(org, plan_id) == [(name, "failed", None, "VALIDATION_FAILED") for name in STILLS]
+    assert drawings(google[0]) == []
+
+
+def test_a_plan_not_ready_has_nothing_drawn_yet(
+    client: TestClient, google: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    org, user = new_org()
+    plan_id = indexed(client, org, user)
+    as_org(org, "UPDATE ai.director_plan SET status = 'pending' WHERE id = %s", (plan_id,))
+    make(client, org, plan_id)
+    assert [row[1] for row in images(org, plan_id)] == ["pending"] * len(STILLS)
+    assert drawings(google[0]) == []
+
+
+def test_a_member_s_claims_take_turns_on_their_own_lock(client: TestClient) -> None:
+    """Held by one claim's transaction, the member's lock keeps another from reading the
+    day's count until the first has written its rows."""
+    org, user = new_org()
+    with migrator() as db, db.transaction():
+        db.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (images_lock_key(user),)
+        )
+        plan = index_plan(client, org, user)
+
+        async def analyze() -> None:
+            await asyncio.wait_for(director().analyze(org, plan.id, user), timeout=1)
+
+        with pytest.raises(TimeoutError):
+            on_app_loop(client, analyze)
+    assert images(org, plan.id) == []
+    plan_id = indexed(client, org, user)
+    assert len(images(org, plan_id)) == len(STILLS)
+
+
+def test_the_original_s_branding_never_reaches_the_drawing(
+    client: TestClient, google: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    branded = asset("end-card", kind="end-card", ratio="9:16")
+    reference = branded["reference"]
+    assert isinstance(reference, dict)
+    branded |= {
+        "prompt": 'A black end card with "Mesa School" and "Apply Now" in purple.',
+        "reference": {
+            **reference,
+            "text": ["MESA SCHOOL", "Apply now at mesaschool.co", "@mesa.school"],
+            "brands": ["Mesa School"],
+        },
+    }
+    google[1][GEMINI_PATH] = gemini_output({**ASSET_PLAN, "assets": [branded]})
+    org, user = new_org()
+    make(client, org, indexed(client, org, user))
+    [drawing] = drawings(google[0])
+    sent = drawing.decode().lower()
+    assert "mesa" not in sent
+    assert "your name" in sent
+    assert "yourwebsite.com" in sent
+    assert "@yourname" in sent
+    # The rest of its words still go as they are.
+    assert "apply now" in sent
 
 
 def test_a_stored_plan_with_assets_and_edits_reads_back_whole(client: TestClient) -> None:

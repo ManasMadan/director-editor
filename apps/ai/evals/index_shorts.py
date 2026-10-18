@@ -9,10 +9,10 @@ says for each one whether the plan is usable. Run from the repo root:
 That runs `python -m evals.index_shorts --live` from apps/ai with the repo's .env loaded
 (apps/ai/package.json), like scripts/build_seeds.py. `--live` is required: every run
 spends real tokens on every Short, so it never starts by accident. `--only <videoId>`
-(repeatable) re-runs just those. It needs the same settings as indexing in the app
-(INDEX_MODEL, INDEX_FALLBACK_MODEL, and Vertex AI's GOOGLE_* settings), and each Short
-gets the app's own budget, DIRECTOR_TOKENS_PER_PLAN, so one that is too long for the app
-fails here too.
+(repeatable) re-runs just those, and `--save <dir>` writes each plan there. It needs the
+same settings as indexing in the app (INDEX_MODEL, INDEX_FALLBACK_MODEL, and Vertex AI's
+GOOGLE_* settings), and each Short gets the app's own budget, DIRECTOR_TOKENS_PER_PLAN,
+so one that is too long for the app fails here too.
 
 The bar: every Short indexes, every shot of its plan has a scene, a framing, a phone
 angle and at least one step, every asset has a prompt and a reference to make it from,
@@ -42,6 +42,7 @@ from app.indexing import index_short
 from app.log import configure_logging, log
 from app.schemas import (
     VIDEO_ID_PATTERN,
+    CaptionStyle,
     LayoutEdit,
     LayoutKind,
     ShotMode,
@@ -58,16 +59,25 @@ USAGE_ERROR = 2
 
 
 class Expectation(BaseModel):
-    """What a Short's plan must have beyond filmable shots, from looking at the Short:
-    a layout edit of this kind, at least this many stills to make (an image, a card, an end
-    card), a shot in each of these modes, captions, a B-roll gap, an end card."""
+    """What a Short's plan must have beyond filmable shots, from looking at the Short (spec
+    7.5's acceptance, as far as a plan can show it): a layout edit of this kind, split in
+    halves (each 50% +/- 5% of the height); at least this many stills to make, one of
+    them describing each of `stillText` (in its subject or its text); a shot in each of
+    these modes, and none on camera when `voiceOnly`; captions, in this style and on a
+    split's seam; lower thirds; a B-roll gap; an end card."""
 
     model_config = ConfigDict(strict=True, extra="forbid")
 
     layout: LayoutKind | None = None
+    halves: bool = False
     stills: int = Field(default=0, ge=0)
+    stillText: list[str] = Field(default_factory=list[str])
     modes: list[ShotMode] = Field(default_factory=list[ShotMode])
+    voiceOnly: bool = False
     captions: bool = False
+    captionStyle: CaptionStyle | None = None
+    captionsBetweenHalves: bool = False
+    lowerThirds: bool = False
     gaps: bool = False
     endCard: bool = False
 
@@ -168,23 +178,87 @@ def judge(plan: ShotPlan, expect: Expectation | None = None) -> list[str]:
 
 def _missing(plan: ShotPlan, expect: Expectation) -> list[str]:
     """What `expect` asks of the plan that it hasn't."""
-    edits = {edit.type for edit in plan.edits}
-    layouts = {edit.layout for edit in plan.edits if isinstance(edit, LayoutEdit)}
-    captions = any(isinstance(edit, TextEdit) and edit.style == "captions" for edit in plan.edits)
+    return [
+        problem
+        for met, problem in [
+            *_layout_checks(plan, expect),
+            *_still_checks(plan, expect),
+            *_shot_checks(plan, expect),
+            *_text_checks(plan, expect),
+            *_ending_checks(plan, expect),
+        ]
+        if not met
+    ]
+
+
+type Check = tuple[bool, str]
+
+
+def _layout_checks(plan: ShotPlan, expect: Expectation) -> list[Check]:
+    layouts = [edit for edit in plan.edits if isinstance(edit, LayoutEdit)]
+    halves = any(
+        edit.layout == "split"
+        and edit.cameraShare is not None
+        and abs(edit.cameraShare - 0.5) <= 0.05
+        for edit in layouts
+    )
+    return [
+        (
+            expect.layout is None or any(edit.layout == expect.layout for edit in layouts),
+            f"no {expect.layout} layout",
+        ),
+        (halves or not expect.halves, "no split in halves"),
+    ]
+
+
+def _still_checks(plan: ShotPlan, expect: Expectation) -> list[Check]:
     stills = [asset for asset in plan.assets if asset.kind in STILL_KINDS]
-    end_card = "end-card" in edits or any(asset.kind == "end-card" for asset in plan.assets)
-    checks = [
-        (expect.layout is None or expect.layout in layouts, f"no {expect.layout} layout"),
+    described = [
+        " ".join([asset.reference.subject, *asset.reference.text]).lower() for asset in stills
+    ]
+    return [
         (len(stills) >= expect.stills, f"{len(stills)} of {expect.stills} stills to make"),
+        *[
+            (any(word.lower() in each for each in described), f"no still describing {word}")
+            for word in expect.stillText
+        ],
+    ]
+
+
+def _shot_checks(plan: ShotPlan, expect: Expectation) -> list[Check]:
+    on_camera = any(shot.mode == "on-camera" for shot in plan.shots)
+    return [
         *[
             (any(shot.mode == mode for shot in plan.shots), f"no {mode} shot")
             for mode in expect.modes
         ],
-        (captions or not expect.captions, "no captions"),
+        (not (expect.voiceOnly and on_camera), "a shot on camera"),
+    ]
+
+
+def _text_checks(plan: ShotPlan, expect: Expectation) -> list[Check]:
+    texts = [edit for edit in plan.edits if isinstance(edit, TextEdit)]
+    captions = [edit for edit in texts if edit.style == "captions"]
+    styled = any(edit.captionStyle == expect.captionStyle for edit in captions)
+    between = any(edit.position == "between-halves" for edit in captions)
+    return [
+        (bool(captions) or not expect.captions, "no captions"),
+        (expect.captionStyle is None or styled, f"no {expect.captionStyle} captions"),
+        (between or not expect.captionsBetweenHalves, "no captions between the halves"),
+        (
+            any(edit.style == "lower-third" for edit in texts) or not expect.lowerThirds,
+            "no lower thirds",
+        ),
+    ]
+
+
+def _ending_checks(plan: ShotPlan, expect: Expectation) -> list[Check]:
+    edits = {edit.type for edit in plan.edits}
+    end_card = "end-card" in edits or any(asset.kind == "end-card" for asset in plan.assets)
+    return [
         ("gap" in edits or not expect.gaps, "no B-roll gap"),
         (end_card or not expect.endCard, "no end card"),
     ]
-    return [problem for met, problem in checks if not met]
 
 
 def repaired_fields(draft: ShotPlanDraft, plan: ShotPlan) -> list[str]:
@@ -289,12 +363,27 @@ def summary(results: list[ShortResult]) -> str:
     )
 
 
-async def run_eval(shorts: list[EvalShort], index: Indexer, clock: Clock) -> int:
+async def run_eval(
+    shorts: list[EvalShort], index: Indexer, clock: Clock, save: Path | None = None
+) -> int:
     """Evaluates `shorts`, prints the summary, and answers the command's exit status: 0
-    only when there was something to evaluate and every Short passed."""
+    only when there was something to evaluate and every Short passed. With `save`, each
+    plan is also written there as `<videoId>.json`, to read what Gemini made of it."""
     results = await evaluate(shorts, index, clock)
     log.info(summary(results))
+    if save is not None:
+        save_plans(results, save)
     return 0 if results and all(result.passed for result in results) else 1
+
+
+def save_plans(results: list[ShortResult], save: Path) -> None:
+    """Each Short's plan as `<videoId>.json` in `save` (a Short with none has no file)."""
+    save.mkdir(parents=True, exist_ok=True)
+    for result in results:
+        if result.plan is not None:
+            (save / f"{result.short.videoId}.json").write_text(
+                result.plan.model_dump_json(indent=2)
+            )
 
 
 def settings_indexer(settings: Settings) -> Indexer:
@@ -326,6 +415,7 @@ class Arguments(argparse.Namespace):
     live: bool
     only: list[str]
     shorts: Path
+    save: Path | None
 
 
 def _arguments(argv: list[str]) -> Arguments:
@@ -333,6 +423,7 @@ def _arguments(argv: list[str]) -> Arguments:
     parser.add_argument("--live", action="store_true", help="Index on Vertex AI for real.")
     parser.add_argument("--only", action="append", default=[], help="Just this video id.")
     parser.add_argument("--shorts", type=Path, default=SHORTS_PATH, help="The Shorts' file.")
+    parser.add_argument("--save", type=Path, default=None, help="Write each plan here.")
     return parser.parse_args(argv, namespace=Arguments())
 
 
@@ -349,7 +440,7 @@ async def main(argv: list[str]) -> int:
             log.error("not in the Shorts' file", video_ids=sorted(unknown))
             return USAGE_ERROR
         shorts = [short for short in shorts if short.videoId in arguments.only]
-    return await run_eval(shorts, settings_indexer(get_settings()), time.monotonic)
+    return await run_eval(shorts, settings_indexer(get_settings()), time.monotonic, arguments.save)
 
 
 if __name__ == "__main__":

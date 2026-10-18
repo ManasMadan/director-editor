@@ -112,9 +112,12 @@ PLAN: dict[str, object] = {
     "summary": "An outfit built piece by piece, then the full look.",
     "audio": "speech-and-music",
     "durationSeconds": 12,
+    "assets": [],
+    "edits": [],
     "shots": [
         {
             "kind": "video",
+            "mode": "on-camera",
             "title": "The top",
             "purpose": "Shows the first piece.",
             "sourceStartSeconds": 0,
@@ -134,6 +137,7 @@ PLAN: dict[str, object] = {
         },
         {
             "kind": "photo",
+            "mode": "on-camera",
             "title": "The full look",
             "purpose": "The finished outfit, still.",
             "sourceStartSeconds": 10,
@@ -157,9 +161,12 @@ NO_PERSON_PLAN: dict[str, object] = {
     "summary": "A quick pasta, from pan to plate.",
     "audio": "music",
     "durationSeconds": 6,
+    "assets": [],
+    "edits": [],
     "shots": [
         {
             "kind": "video",
+            "mode": "on-camera",
             "title": "The pan",
             "purpose": "setup: the ingredients go in, simple and inviting",
             "sourceStartSeconds": 0,
@@ -189,9 +196,12 @@ NO_SPEECH_PLAN: dict[str, object] = {
     "summary": "Three on-screen tips, no voice at all.",
     "audio": "none",
     "durationSeconds": 6,
+    "assets": [],
+    "edits": [],
     "shots": [
         {
             "kind": "video",
+            "mode": "on-camera",
             "title": "Tip one",
             "purpose": "hook: the first tip, on screen only",
             "sourceStartSeconds": 0,

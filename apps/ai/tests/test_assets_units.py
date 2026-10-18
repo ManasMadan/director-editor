@@ -43,6 +43,37 @@ def test_a_colour_asset_with_no_text_is_asked_for_as_it_is() -> None:
     assert "Palette: Orange on white." in prompt
 
 
+def test_the_original_s_branding_is_replaced_with_a_placeholder_everywhere() -> None:
+    reference = {
+        **REFERENCE,
+        "composition": "The be10X logo on top, a headline under it",
+        "text": ["BE10X", "Claude Automation Expert", "Follow @be10x.official", "be10x.in"],
+        "brands": ["be10X", "  "],
+    }
+    prompt = image_prompt(
+        an_asset(
+            reference=reference,
+            prompt='A white card with the "be10X" logo and "Claude Automation Expert".',
+        )
+    )
+    assert "be10x" not in prompt.lower()
+    assert '"Your Name" logo' in prompt
+    assert "The Your Name logo on top" in prompt
+    assert 'The text "Your Name", spelt exactly like that.' in prompt
+    assert 'The text "Follow @yourname", spelt exactly like that.' in prompt
+    assert 'The text "yourwebsite.com", spelt exactly like that.' in prompt
+    # Words that aren't the original's branding stay as they are.
+    assert 'The text "Claude Automation Expert", spelt exactly like that.' in prompt
+
+
+def test_a_handle_or_web_address_is_caught_even_when_the_planner_lists_no_brands() -> None:
+    reference = {**REFERENCE, "text": ["Apply at https://mesa.school/apply", "www.mesa.school"]}
+    prompt = image_prompt(an_asset(reference=reference, prompt="An end card, @mesaschool."))
+    assert "mesa" not in prompt.lower()
+    assert prompt.count("yourwebsite.com") == 2
+    assert "An end card, @yourname." in prompt
+
+
 def test_half_a_split_screen_is_drawn_in_the_nearest_shape_nano_banana_has() -> None:
     assert drawn_aspect_ratio(an_asset()) == "5:4"
     assert drawn_aspect_ratio(an_asset(reference={**REFERENCE, "aspectRatio": "9:16"})) == "9:16"

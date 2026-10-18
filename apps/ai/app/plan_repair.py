@@ -27,6 +27,8 @@ import math
 import re
 from collections.abc import Callable
 
+from pydantic import TypeAdapter
+
 from app.schemas import (
     COLOR_PATTERN,
     MAX_ASSET_ID,
@@ -40,6 +42,7 @@ from app.schemas import (
     MAX_SHOT_STEPS,
     MAX_SHOTS,
     AssetDraft,
+    Box,
     EditDraft,
     EditType,
     ScriptLine,
@@ -55,6 +58,7 @@ MIN_SHOT_SOURCE_SECONDS = 0.3
 # ScriptLine.endSeconds must be at least this (its own Field constraint); a clamped line
 # shorter than it said nothing worth keeping.
 MIN_SCRIPT_LINE_SECONDS = 0.1
+_BOX: TypeAdapter[Box | None] = TypeAdapter(Box | None)
 
 
 def repair_plan(plan: ShotPlanDraft, video_seconds: float | None) -> ShotPlan:
@@ -119,7 +123,7 @@ def with_assets_and_edits(plan: ShotPlan, source: ShotPlan) -> ShotPlan:
     assets, renamed = _repair_assets(
         [AssetDraft.model_validate(asset.model_dump()) for asset in source.assets], end
     )
-    edits = [EditDraft.model_validate(edit.model_dump()) for edit in source.edits]
+    edits = [_draft_of(edit.model_dump(mode="json")) for edit in source.edits]
     return ShotPlan.model_validate(
         {
             **plan.model_dump(mode="json"),
@@ -127,6 +131,16 @@ def with_assets_and_edits(plan: ShotPlan, source: ShotPlan) -> ShotPlan:
             "edits": _repair_edits(edits, renamed, end),
         }
     )
+
+
+def _draft_of(edit: dict[str, object]) -> EditDraft:
+    """A stored edit as the planner's flat draft: its fields, its box as four numbers, and
+    null for every field its type doesn't use."""
+    unused: dict[str, object] = {field: None for field in EditDraft.model_fields}
+    box = _BOX.validate_python(edit.pop("box", None))
+    if box is not None:
+        unused |= {"boxX": box.x, "boxY": box.y, "boxWidth": box.width, "boxHeight": box.height}
+    return EditDraft.model_validate({**unused, **edit})
 
 
 def _clamp_source(shot: ShotDraft, ceiling: float) -> ShotDraft:
@@ -280,6 +294,8 @@ def _synthesized_step(shot: ShotDraft) -> ShotStep:
 # length of a quick one when Gemini gives it none (a cut is an instant).
 MIN_EDIT_SECONDS = 0.1
 TRANSITION_SECONDS = 0.3
+# Box.width and Box.height's own floor.
+MIN_BOX = 0.01
 _COLOR = re.compile(COLOR_PATTERN)
 _WORD = re.compile(r"[a-z0-9]+")
 # What a repaired asset or edit is before ShotPlan validates it.
@@ -320,10 +336,10 @@ def _repair_assets(drafts: list[AssetDraft], end: float) -> tuple[list[Fields], 
         used.add(asset_id)
         renamed.setdefault(draft.id, asset_id)
         start, stop = _span(draft.sourceStartSeconds, draft.sourceEndSeconds, end)
-        lines = [line.strip()[:200] for line in draft.reference.text if line.strip()]
         reference = {
             **draft.reference.model_dump(mode="json"),
-            "text": lines[:MAX_ASSET_TEXT_LINES],
+            "text": _lines(draft.reference.text, 200),
+            "brands": _lines(draft.reference.brands, 80),
         }
         assets.append(
             {
@@ -336,6 +352,11 @@ def _repair_assets(drafts: list[AssetDraft], end: float) -> tuple[list[Fields], 
             }
         )
     return assets, renamed
+
+
+def _lines(lines: list[str], longest: int) -> list[str]:
+    """The non-blank `lines`, each cut to `longest`, at most `MAX_ASSET_TEXT_LINES`."""
+    return [line.strip()[:longest] for line in lines if line.strip()][:MAX_ASSET_TEXT_LINES]
 
 
 def _slug(text: str) -> str:
@@ -389,8 +410,24 @@ def _edit_timing(draft: EditDraft, end: float) -> tuple[float, float] | None:
     return start, min(start + TRANSITION_SECONDS, end)
 
 
+def _box(draft: EditDraft) -> Fields | None:
+    """The edit's box (four numbers in the draft), held inside the frame; None when any
+    of them is missing."""
+    x, y, width, height = draft.boxX, draft.boxY, draft.boxWidth, draft.boxHeight
+    if x is None or y is None or width is None or height is None:
+        return None
+    left, top = _clamp(x, 0, 1), _clamp(y, 0, 1)
+    return {
+        "x": left,
+        "y": top,
+        "width": _clamp(width, MIN_BOX, 1),
+        "height": _clamp(height, MIN_BOX, 1),
+    }
+
+
 def _layout(draft: EditDraft, asset_of: AssetOf) -> Fields | None:
-    if draft.layout is None or (draft.layout == "picture-in-picture" and draft.box is None):
+    box = _box(draft)
+    if draft.layout is None or (draft.layout == "picture-in-picture" and box is None):
         return None
     split = draft.layout == "split"
     inset = draft.layout == "picture-in-picture"
@@ -400,20 +437,21 @@ def _layout(draft: EditDraft, asset_of: AssetOf) -> Fields | None:
         "assetId": asset_of(draft.assetId),
         "cameraOn": (draft.cameraOn or "top") if split else None,
         "cameraShare": share if split else None,
-        "box": draft.box.model_dump() if inset and draft.box else None,
+        "box": box if inset else None,
         "inset": (draft.inset or "camera") if inset else None,
     }
 
 
 def _overlay(draft: EditDraft, asset_of: AssetOf) -> Fields | None:
     asset_id = asset_of(draft.assetId)
-    if draft.box is None or (asset_id is None and draft.mark is None):
+    box = _box(draft)
+    if box is None or (asset_id is None and draft.mark is None):
         return None
     return {
         "assetId": asset_id,
         "mark": draft.mark,
         "color": _color(draft.color),
-        "box": draft.box.model_dump(),
+        "box": box,
         "entry": draft.entry or "cut",
         "exit": draft.exit or "cut",
     }

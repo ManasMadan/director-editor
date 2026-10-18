@@ -30,6 +30,7 @@ const asset = (id: string): Asset => ({
     blackAndWhite: true,
     aspectRatio: "9:8",
     text: ["12 ARCHETYPES"],
+    brands: [],
     mood: "Bold",
   },
 });

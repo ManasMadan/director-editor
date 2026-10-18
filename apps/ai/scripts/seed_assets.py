@@ -21,8 +21,10 @@ import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
+from app.assets import drawn_aspect_ratio, image_prompt
 from app.log import configure_logging, log
 from app.plan_repair import with_assets_and_edits
+from app.schemas import Asset
 from app.settings import Settings, get_settings
 from scripts.build_seeds import (
     TEMPLATES_PATH,
@@ -45,15 +47,21 @@ async def fill_in(
 ) -> None:
     """Gives each seed (each of `only`, when it names any) the assets and edits a new
     index of its Short finds, saving after each one. An image already drawn for an asset
-    the new plan no longer has is dropped with it."""
+    the new plan no longer has, or whose look changed, is dropped."""
     for template in templates:
         if only and template.videoId not in only:
             continue
         log.info("indexing seed again", video_id=template.videoId)
         indexed, model = await index(template.videoId)
+        drawn_for = {asset.id: _look(asset) for asset in template.plan.assets}
         template.plan = with_assets_and_edits(template.plan, indexed)
         if template.media is not None:
-            kept = {asset.id for asset in template.plan.assets}
+            # An image is kept only for an asset that still looks the way it was drawn.
+            kept = {
+                asset.id
+                for asset in template.plan.assets
+                if drawn_for.get(asset.id) == _look(asset)
+            }
             template.media.assets = {
                 asset_id: key for asset_id, key in template.media.assets.items() if asset_id in kept
             }
@@ -65,6 +73,12 @@ async def fill_in(
             assets=len(template.plan.assets),
             edits=len(template.plan.edits),
         )
+
+
+def _look(asset: Asset) -> str:
+    """What an asset's image is drawn from (app/assets.py's image_prompt): when it
+    changes, an image drawn before shows the wrong thing."""
+    return image_prompt(asset) + drawn_aspect_ratio(asset)
 
 
 class _Arguments(argparse.Namespace):

@@ -110,16 +110,19 @@ type AspectRatio = Literal["9:16", "3:4", "4:5", "1:1", "9:8", "5:4", "4:3", "16
 type EditType = Literal[
     "layout", "overlay", "grade", "text", "transition", "speed", "end-card", "gap"
 ]
-type LayoutKind = Literal["full", "split", "picture-in-picture"]
-type Entrance = Literal["cut", "fade", "slide", "pop", "draw"]
-type Mark = Literal["circle", "underline", "arrow", "box", "highlight", "tick", "cross"]
-type Grade = Literal["black-and-white", "warm", "cool", "high-contrast", "vintage", "vivid"]
-type GradeTarget = Literal["all", "camera", "assets"]
-type TextStyle = Literal["title", "lower-third", "captions", "label", "callout"]
-type TextPosition = Literal["top", "middle", "bottom", "between-halves"]
-type CaptionStyle = Literal["word-by-word", "line", "boxed"]
-type TransitionKind = Literal["cut", "match-cut", "whip", "fade", "zoom", "spin", "glitch"]
-type Easing = Literal["linear", "ease-in", "ease-out", "ease-in-out"]
+# The edits' enums are plain aliases, not `type` statements, so a schema inlines them:
+# a nullable one is then `anyOf: [{enum}, {null}]`, the shape Vertex AI has always been
+# sent, rather than a `$ref` inside an `anyOf` (tests/test_planner_schema.py).
+LayoutKind = Literal["full", "split", "picture-in-picture"]
+Entrance = Literal["cut", "fade", "slide", "pop", "draw"]
+Mark = Literal["circle", "underline", "arrow", "box", "highlight", "tick", "cross"]
+Grade = Literal["black-and-white", "warm", "cool", "high-contrast", "vintage", "vivid"]
+GradeTarget = Literal["all", "camera", "assets"]
+TextStyle = Literal["title", "lower-third", "captions", "label", "callout"]
+TextPosition = Literal["top", "middle", "bottom", "between-halves"]
+CaptionStyle = Literal["word-by-word", "line", "boxed"]
+TransitionKind = Literal["cut", "match-cut", "whip", "fade", "zoom", "spin", "glitch"]
+Easing = Literal["linear", "ease-in", "ease-out", "ease-in-out"]
 
 
 class Box(BaseModel):
@@ -227,9 +230,12 @@ class Shot(BaseModel):
 # Banana makes the default from (app/assets.py) and what the Create tab starts from.
 
 
+# The drafts' docstrings go to Gemini as their schema's description, so they say what
+# the thing is and nothing else; why each differs from its stored model is here instead.
+# AssetReferenceDraft's `text` and `brands` carry no length bound (see the module
+# comment): `repair_plan` trims them.
 class AssetReferenceDraft(BaseModel):
-    """`AssetReference` as the planner answers with it: `text` carries no length bound
-    (see the module comment); `repair_plan` trims it to `MAX_ASSET_TEXT_LINES`."""
+    """The original's piece, described precisely enough to recreate its look."""
 
     subject: str = Field(min_length=1, max_length=300, description="What it shows.")
     composition: str = Field(
@@ -248,6 +254,10 @@ class AssetReferenceDraft(BaseModel):
     text: list[str] = Field(
         description="Every line of text on it, word for word; empty when there is none."
     )
+    brands: list[str] = Field(
+        description="Every brand, product or company name, logo text, handle, website, and "
+        "the creator's or channel's own name on it, each as written; empty when none."
+    )
     mood: str = Field(min_length=1, max_length=160)
 
 
@@ -257,6 +267,11 @@ class AssetReference(AssetReferenceDraft):
     text: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(
         max_length=MAX_ASSET_TEXT_LINES,
         description="Every line of text on it, word for word; empty when there is none.",
+    )
+    # The original's own branding: never drawn into the member's version (app/assets.py).
+    # A plan written before it reads with none.
+    brands: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(
+        default_factory=list[str], max_length=MAX_ASSET_TEXT_LINES
     )
 
 
@@ -300,9 +315,10 @@ class _AssetFields(BaseModel):
     secondScreen: bool = Field(description="The original shows it on another screen in shot.")
 
 
+# `repair_plan` makes an AssetDraft's id one the pattern allows (and unique), fits its
+# timing into the Short, and trims its text.
 class AssetDraft(_AssetFields):
-    """An asset as the planner answers with it: `repair_plan` makes its id one the
-    pattern allows (and unique), fits its timing into the Short, and trims its text."""
+    """Something the Short shows that the viewer can't film themselves."""
 
     reference: AssetReferenceDraft
 
@@ -313,51 +329,54 @@ class Asset(_AssetFields):
     reference: AssetReference
 
 
+# An EditDraft is one flat shape for every edit type: `repair_plan` turns it into its
+# type's own model (`Edit`), keeps it inside the Short and in order, and drops one it
+# can't make whole. Every field is required and nullable with no default, and the box is
+# four numbers rather than a nested object, so the schema Vertex AI is sent keeps to
+# what it has always accepted from this service (`sceneLandmark`'s shape) and stays
+# small (tests/test_planner_schema.py).
 class EditDraft(BaseModel):
-    """An edit as the planner answers with it: one flat shape for every type, each field
-    used by the types its description names, and null otherwise. `repair_plan` turns it
-    into its type's own model (`Edit`), with what a type needs and nothing else, keeps it
-    inside the Short and in order, and drops one it can't make whole."""
+    """One edit: fill only the fields its type uses (each field names its types), null
+    the rest."""
 
     type: EditType
     startSeconds: float = Field(ge=0, le=MAX_SHORT_SECONDS, description="In the original.")
     endSeconds: float = Field(ge=0, le=MAX_SHORT_SECONDS)
-    layout: LayoutKind | None = Field(default=None, description="layout")
-    assetId: str | None = Field(
-        default=None, max_length=MAX_ASSET_ID, description="layout, overlay, end-card"
-    )
+    layout: LayoutKind | None = Field(description="layout")
+    assetId: str | None = Field(max_length=MAX_ASSET_ID, description="layout, overlay, end-card")
     cameraOn: Literal["top", "bottom"] | None = Field(
-        default=None, description="layout: split, where the camera picture goes"
+        description="layout: split, where the camera picture goes"
     )
     cameraShare: float | None = Field(
-        default=None, description="layout: split, the camera's share of the height (0.5: half)"
+        description="layout: split, the camera's share of the height (0.5: half)"
     )
-    box: Box | None = Field(default=None, description="layout: picture-in-picture; overlay")
+    boxX: float | None = Field(
+        description="layout: picture-in-picture; overlay: the box's left edge (0 to 1)"
+    )
+    boxY: float | None = Field(description="its top edge (0 to 1)")
+    boxWidth: float | None = Field(description="its width (0 to 1)")
+    boxHeight: float | None = Field(description="its height (0 to 1)")
     inset: Literal["camera", "asset"] | None = Field(
-        default=None, description="layout: picture-in-picture, what sits in the box"
+        description="layout: picture-in-picture, what sits in the box"
     )
-    mark: Mark | None = Field(default=None, description="overlay, when it's not an asset")
-    color: str | None = Field(default=None, description='overlay, text: "#RRGGBB"')
-    entry: Entrance | None = Field(default=None, description="overlay")
-    exit: Entrance | None = Field(default=None, description="overlay")
-    grade: Grade | None = Field(default=None, description="grade")
-    target: GradeTarget | None = Field(default=None, description="grade")
-    style: TextStyle | None = Field(default=None, description="text")
-    text: str | None = Field(
-        default=None, max_length=240, description="text (null for captions), end-card"
-    )
-    position: TextPosition | None = Field(default=None, description="text")
-    captionStyle: CaptionStyle | None = Field(default=None, description="text: captions")
-    highlightColor: str | None = Field(default=None, description='text: "#RRGGBB"')
-    transition: TransitionKind | None = Field(default=None, description="transition")
-    anchor: str | None = Field(
-        default=None, max_length=120, description="transition: a match cut's anchor"
-    )
-    fromRate: float | None = Field(default=None, description="speed: 1 is normal speed")
-    toRate: float | None = Field(default=None, description="speed")
-    easing: Easing | None = Field(default=None, description="speed")
+    mark: Mark | None = Field(description="overlay, when it's not an asset")
+    color: str | None = Field(description='overlay, text: "#RRGGBB"')
+    entry: Entrance | None = Field(description="overlay")
+    exit: Entrance | None = Field(description="overlay")
+    grade: Grade | None = Field(description="grade")
+    target: GradeTarget | None = Field(description="grade")
+    style: TextStyle | None = Field(description="text")
+    text: str | None = Field(max_length=240, description="text (null for captions), end-card")
+    position: TextPosition | None = Field(description="text")
+    captionStyle: CaptionStyle | None = Field(description="text: captions")
+    highlightColor: str | None = Field(description='text: "#RRGGBB"')
+    transition: TransitionKind | None = Field(description="transition")
+    anchor: str | None = Field(max_length=120, description="transition: a match cut's anchor")
+    fromRate: float | None = Field(description="speed: 1 is normal speed")
+    toRate: float | None = Field(description="speed")
+    easing: Easing | None = Field(description="speed")
     description: str | None = Field(
-        default=None, max_length=240, description="gap: what the B-roll or cutaway shows"
+        max_length=240, description="gap: what the B-roll or cutaway shows"
     )
 
 
@@ -498,7 +517,6 @@ class ShotDraft(BaseModel):
 
     kind: ShotKind
     mode: ShotMode = Field(
-        default="on-camera",
         description="on-camera: the viewer films it; voice-over: only their voice is used; "
         "asset: nothing is filmed, an asset takes its place.",
     )
@@ -543,16 +561,13 @@ class ShotPlanDraft(BaseModel):
     audio: Literal["speech", "music", "speech-and-music", "none"]
     durationSeconds: float = Field(ge=0.5, le=MAX_SHORT_SECONDS)
     shots: list[ShotDraft]
-    # Not required, so an answer that leaves them out (as a plan written before them did)
-    # is still a plan rather than a retry; the instructions ask for them every time.
+    # Required, with no default, like every draft field (EditDraft's docstring says why).
     assets: list[AssetDraft] = Field(
-        default_factory=list[AssetDraft],
         description="What the Short shows that the viewer can't film themselves; empty when "
-        "there's nothing.",
+        "there's nothing."
     )
     edits: list[EditDraft] = Field(
-        default_factory=list[EditDraft],
-        description="The editing over the footage, in order; empty when there's none.",
+        description="The editing over the footage, in order; empty when there's none."
     )
 
 

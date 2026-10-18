@@ -17,6 +17,7 @@ type ActivityName = Annotated[
         "api.called",
         "director.index_requested",
         "director.indexed",
+        "director.asset_drawn",
         "director.plan_opened",
         "director.call_started",
         "director.call_ended",

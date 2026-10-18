@@ -89,7 +89,15 @@
     "channel": "Test Library",
     "kind": "split-screen-chart",
     "why": "The speaker on top and a static archetypes chart underneath for the whole talk, word-by-word captions between the halves, then an end card: the chart is an asset to recreate, not to film.",
-    "expect": { "layout": "split", "stills": 1, "captions": true, "endCard": true }
+    "expect": {
+      "layout": "split",
+      "halves": true,
+      "stills": 1,
+      "stillText": ["archetype"],
+      "captions": true,
+      "captionsBetweenHalves": true,
+      "endCard": true
+    }
   },
   {
     "videoId": "kM_NHn_MT3Q",
@@ -97,7 +105,14 @@
     "channel": "be10X",
     "kind": "split-screen-card",
     "why": "A split screen the whole way: the speaker on top, a headline card underneath, boxed captions between them.",
-    "expect": { "layout": "split", "stills": 1, "captions": true }
+    "expect": {
+      "layout": "split",
+      "halves": true,
+      "stills": 1,
+      "stillText": ["crore"],
+      "captions": true,
+      "captionStyle": "boxed"
+    }
   },
   {
     "videoId": "IFBBmwsGpUw",
@@ -105,7 +120,13 @@
     "channel": "be10X",
     "kind": "voiceover-infographic",
     "why": "A full-frame infographic drawn on as a voice-over talks: nothing for the viewer to film but their voice, and the image to recreate.",
-    "expect": { "stills": 1, "modes": ["voice-over"], "captions": true }
+    "expect": {
+      "stills": 1,
+      "stillText": ["2026"],
+      "modes": ["voice-over"],
+      "voiceOnly": true,
+      "captions": true
+    }
   },
   {
     "videoId": "b5G8cbgh7K0",
@@ -113,6 +134,6 @@
     "channel": "Mesa School",
     "kind": "interview-broll",
     "why": "An interview from two angles cut with B-roll under lower thirds, highlighted captions and an end card: the B-roll moments are gaps to fill.",
-    "expect": { "gaps": true, "captions": true, "endCard": true }
+    "expect": { "gaps": true, "captions": true, "lowerThirds": true, "endCard": true }
   }
 ]

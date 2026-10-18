@@ -77,6 +77,7 @@ OTHER = "152Jy2c3XSM"
 
 PERSON_SHOT: dict[str, object] = {
     "kind": "video",
+    "mode": "on-camera",
     "title": "Intro in the Market",
     "purpose": "hook: introduce the observation, curious and friendly",
     "sourceStartSeconds": 0,

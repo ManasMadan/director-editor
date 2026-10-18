@@ -47,6 +47,7 @@ FRAMING: dict[str, object] = {
 STEP: dict[str, object] = {"atSeconds": 0, "instruction": "Do it.", "cameraMove": "static"}
 SHOT: dict[str, object] = {
     "kind": "video",
+    "mode": "on-camera",
     "title": "A shot",
     "purpose": "Shows something.",
     "sourceStartSeconds": 0,
@@ -68,6 +69,8 @@ PLAN: dict[str, object] = {
     "audio": "none",
     "durationSeconds": 4,
     "shots": [SHOT],
+    "assets": [],
+    "edits": [],
 }
 SCRIPT_LINE: dict[str, object] = {"startSeconds": 0, "endSeconds": 2, "text": "Hi."}
 KEYPOINT: dict[str, object] = {"name": "nose", "x": 0.5, "y": 0.2}
@@ -145,9 +148,20 @@ def test_shorts_json_has_the_6_seeds_6_hard_cases_and_4_that_need_more() -> None
     # are; the rest expect only filmable shots.
     expected = {short.videoId: short.expect for short in shorts[12:]}
     assert expected["OvRozQobeuI"] == Expectation(
-        layout="split", stills=1, captions=True, endCard=True
+        layout="split",
+        halves=True,
+        stills=1,
+        stillText=["archetype"],
+        captions=True,
+        captionsBetweenHalves=True,
+        endCard=True,
     )
-    assert expected["IFBBmwsGpUw"].modes == ["voice-over"]
+    assert expected["kM_NHn_MT3Q"].captionStyle == "boxed"
+    assert (expected["IFBBmwsGpUw"].modes, expected["IFBBmwsGpUw"].voiceOnly) == (
+        ["voice-over"],
+        True,
+    )
+    assert expected["b5G8cbgh7K0"].lowerThirds
     assert all(short.expect == Expectation() for short in shorts[:12])
 
 
@@ -233,18 +247,47 @@ CAPTIONS: dict[str, object] = {
     "highlightColor": None,
 }
 EVERYTHING = Expectation(
-    layout="split", stills=1, modes=["voice-over"], captions=True, gaps=True, endCard=True
+    layout="split",
+    halves=True,
+    stills=1,
+    stillText=["Archetypes"],
+    modes=["voice-over"],
+    voiceOnly=True,
+    captions=True,
+    captionStyle="word-by-word",
+    captionsBetweenHalves=True,
+    lowerThirds=True,
+    gaps=True,
+    endCard=True,
 )
 
 
 def test_judge_names_what_a_short_expects_that_its_plan_hasn_t() -> None:
     assert judge(ShotPlan.model_validate(PLAN), EVERYTHING) == [
         "no split layout",
+        "no split in halves",
         "0 of 1 stills to make",
+        "no still describing Archetypes",
         "no voice-over shot",
+        "a shot on camera",
         "no captions",
+        "no word-by-word captions",
+        "no captions between the halves",
+        "no lower thirds",
         "no B-roll gap",
         "no end card",
+    ]
+
+
+def test_judge_names_a_split_that_isn_t_halves_and_captions_off_the_seam() -> None:
+    lopsided = {**SPLIT, "cameraShare": 0.7}
+    boxed = {**CAPTIONS, "captionStyle": "boxed", "position": "bottom"}
+    plan = plan_with(edits=[lopsided, boxed])
+    expect = Expectation(halves=True, captionStyle="word-by-word", captionsBetweenHalves=True)
+    assert judge(ShotPlan.model_validate(plan), expect) == [
+        "no split in halves",
+        "no word-by-word captions",
+        "no captions between the halves",
     ]
 
 
@@ -255,6 +298,16 @@ def test_judge_passes_a_plan_with_everything_its_short_expects() -> None:
         edits=[
             SPLIT,
             CAPTIONS,
+            {
+                "type": "text",
+                **TIMED,
+                "style": "lower-third",
+                "text": "3 years of practice",
+                "position": "bottom",
+                "captionStyle": None,
+                "color": None,
+                "highlightColor": None,
+            },
             {"type": "gap", **TIMED, "description": "B-roll of a hall"},
             {"type": "end-card", **TIMED, "assetId": None, "text": "Apply now"},
         ],
@@ -447,6 +500,19 @@ async def test_run_eval_exits_zero_only_when_every_short_passes() -> None:
     assert await run_eval([SHORT, OTHER], good, ticking(0, 1, 1, 2)) == 0
     assert await run_eval([SHORT, OTHER], bad, ticking(0, 1, 1, 2)) == 1
     assert await run_eval([], good, ticking()) == 1
+
+
+async def test_run_eval_saves_each_plan_it_got(tmp_path: Path) -> None:
+    async def some(video_id: str) -> Indexed:
+        if video_id == OTHER.videoId:
+            raise RuntimeError("no")
+        return indexed()
+
+    saved = tmp_path / "plans"
+    assert await run_eval([SHORT, OTHER], some, ticking(0, 1, 1, 2), saved) == 1
+    assert sorted(path.name for path in saved.iterdir()) == [f"{SHORT.videoId}.json"]
+    written = (saved / f"{SHORT.videoId}.json").read_text()
+    assert ShotPlan.model_validate_json(written) == indexed().plan
 
 
 # ---------------------------------------------------------------------- the command

@@ -52,6 +52,7 @@ POSE: dict[str, object] = {"description": "Standing, arms relaxed.", "keypoints"
 def shot(**overrides: object) -> dict[str, object]:
     base: dict[str, object] = {
         "kind": "video",
+        "mode": "on-camera",
         "title": "A shot",
         "purpose": "Shows something.",
         "sourceStartSeconds": 0,
@@ -81,6 +82,8 @@ def plan(*shots: dict[str, object], duration: float = 10) -> ShotPlanDraft:
             "audio": "none",
             "durationSeconds": duration,
             "shots": list(shots),
+            "assets": [],
+            "edits": [],
         }
     )
 

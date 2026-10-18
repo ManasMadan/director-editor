@@ -628,6 +628,8 @@ describe("Director's library", () => {
       // A key that isn't this image's own is never signed.
       { assetId: "card", status: "ready", objectKey: FOREIGN_KEY },
       { assetId: "end-card", status: "generating", objectKey: null },
+      // An image of an asset the plan no longer has is neither signed nor served.
+      { assetId: "gone", status: "ready", objectKey: `director-assets/${plan.id}/gone.png` },
     ];
     const one = await session.rpc.director.plan({ videoId: "AssetShort1" });
     const [chart, card, endCard] = one.plan?.assets ?? [];
@@ -637,6 +639,7 @@ describe("Director's library", () => {
     expect(card?.image).toEqual({ status: "failed", url: null });
     expect(endCard?.image).toEqual({ status: "making", url: null });
     expect(JSON.stringify(one)).not.toMatch(/files\/|objectKey/);
+    expect(JSON.stringify(one)).not.toContain("gone.png");
     // The library lists the plan with its assets, but leaves their images to its page.
     const { templates } = await session.rpc.director.library();
     const listed = templates.find((each) => each.id === plan.id);

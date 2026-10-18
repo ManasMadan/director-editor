@@ -297,7 +297,10 @@ export class DirectorService {
     rows: readonly AssetImageRow[],
   ): Promise<ServedShotPlan> {
     const seed = plan.source === "seed";
-    const images = seed ? seedAssetImages(plan.videoId, shotPlan) : planAssetImages(plan.id, rows);
+    const made = seed ? seedAssetImages(plan.videoId, shotPlan) : planAssetImages(plan.id, rows);
+    // Only the plan's own assets' images are served, so only theirs are signed.
+    const ids = new Set(shotPlan.assets.map((asset) => asset.id));
+    const images = made.filter((image) => ids.has(image.assetId));
     const [served, signed] = await Promise.all([
       seed ? this.withSeedMedia(plan.videoId, shotPlan) : shotPlan,
       Promise.all(
