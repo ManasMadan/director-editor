@@ -46,6 +46,19 @@ describe("features off", () => {
     });
   });
 
+  it("limits sign-in attempts at the demo account's address like any other without a demo account", async () => {
+    const attempt = () =>
+      createSession(harness).auth("/sign-in/email", {
+        email: "demo@director.mmadan.in",
+        password: newPassword(),
+      });
+    // 10 attempts per account in 15 minutes (account-limits.ts), each from its own address.
+    for (let tries = 0; tries < 10; tries++) {
+      expect((await attempt()).status).toBe(401);
+    }
+    expect((await attempt()).status).toBe(429);
+  });
+
   it("answers FEATURE_DISABLED for uploads", async () => {
     const session = await signedIn();
     await expectError(

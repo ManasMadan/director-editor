@@ -9,7 +9,7 @@ import { orgIdSchema } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
 import { realtimeChannel } from "@repo/contracts/realtime";
 import { queuePrefix } from "@repo/jobs";
-import { AppError, S3Storage } from "@repo/nest-common";
+import { AppError, DATABASE, type Database, S3Storage } from "@repo/nest-common";
 import { eventually } from "@repo/testing/eventually";
 import { totp } from "@repo/testing/totp";
 import { Queue } from "bullmq";
@@ -235,12 +235,28 @@ describe("profile settings", () => {
 });
 
 describe("an account without a workspace", () => {
+  it("can't delete its personal workspace", async () => {
+    const { session } = await signedInUser();
+    const { activeOrganizationId } = await session.rpc.user.me();
+    const refused = await session.auth<{ code: string }>("/organization/delete", {
+      organizationId: activeOrganizationId,
+    });
+    expect(refused.status).toBe(403);
+    expect(refused.body.code).toBe("FORBIDDEN");
+    expect(
+      await harness.app
+        .get<Database>(DATABASE)
+        .write.organization.count({ where: { id: activeOrganizationId ?? "" } }),
+    ).toBe(1);
+  });
+
   it("can still sign in, and is told to pick one for workspace data", async () => {
     const { session, email, password } = await signedInUser();
     const { activeOrganizationId } = await session.rpc.user.me();
-    expect(
-      (await session.auth("/organization/delete", { organizationId: activeOrganizationId })).status,
-    ).toBe(200);
+    // Only the database can lose it now: the API refuses to delete a personal workspace.
+    await harness.app
+      .get<Database>(DATABASE)
+      .write.organization.delete({ where: { id: activeOrganizationId ?? "" } });
     await session.auth("/sign-out");
     expect((await session.auth("/sign-in/email", { email, password })).status).toBe(200);
     expect((await session.rpc.user.me()).activeOrganizationId).toBeNull();

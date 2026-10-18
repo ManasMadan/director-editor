@@ -5,6 +5,8 @@
  * account can't be changed or locked by whoever signs in to it.
  */
 import { directorSeeds } from "@repo/contracts/director-seeds";
+import { userIdSchema } from "@repo/contracts/ids";
+import { factories } from "@repo/db/testing";
 import { DATABASE, type Database } from "@repo/nest-common";
 import pg from "pg";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -211,6 +213,33 @@ describe("the demo account command", () => {
     expect((await session.auth("/revoke-other-sessions")).status).toBe(403);
   });
 
+  it("run again, puts back the account's and its workspace's names", async () => {
+    const { id, orgId } = await demoAccount();
+    await database.write.user.update({ where: { id }, data: { name: "Defaced" } });
+    await database.write.organization.update({ where: { id: orgId }, data: { name: "Defaced" } });
+    await command(ENTRY, {}, ["--force"]);
+    expect(
+      await database.write.user.findUniqueOrThrow({ where: { id }, select: { name: true } }),
+    ).toEqual({ name: "Director Demo" });
+    expect(
+      await database.write.organization.findUniqueOrThrow({
+        where: { id: orgId },
+        select: { name: true },
+      }),
+    ).toEqual({ name: "Director Demo" });
+  });
+
+  it("with --reset leaves a workspace it shares with someone else", async () => {
+    const { id } = await demoAccount();
+    const someone = await factories(database.write).userWithWorkspace();
+    await factories(database.write).member(someone.org.id, userIdSchema.parse(id));
+    await command(ENTRY, {}, ["--force", "--reset"]);
+    expect(await database.write.organization.count({ where: { id: someone.org.id } })).toBe(1);
+    expect(await database.write.member.count({ where: { organizationId: someone.org.id } })).toBe(
+      1,
+    );
+  });
+
   it("gives back a password sign-in to a demo account that lost it", async () => {
     const { id } = await demoAccount();
     await database.write.account.deleteMany({ where: { userId: id, providerId: "credential" } });
@@ -245,20 +274,65 @@ describe("signing in to the demo account", () => {
 });
 
 describe("what the demo account can't do", () => {
-  it.each([
-    ["/change-password", { currentPassword: DEMO.password, newPassword: newPassword() }],
-    ["/delete-user", { password: DEMO.password }],
-    ["/two-factor/enable", { password: DEMO.password }],
-    ["/revoke-other-sessions", {}],
-    ["/revoke-sessions", {}],
-  ])("%s answers DEMO_ACCOUNT_LOCKED", async (path, body) => {
+  const bodies: [string, (organizationId: string) => object][] = [
+    ["/change-password", () => ({ currentPassword: DEMO.password, newPassword: newPassword() })],
+    ["/delete-user", () => ({ password: DEMO.password })],
+    ["/two-factor/enable", () => ({ password: DEMO.password })],
+    ["/link-social", () => ({ provider: "google", callbackURL: process.env.WEB_URL })],
+    ["/revoke-session", () => ({ token: "another-judges-session" })],
+    ["/revoke-other-sessions", () => ({})],
+    ["/revoke-sessions", () => ({})],
+    ["/organization/delete", (organizationId) => ({ organizationId })],
+    ["/organization/update", (organizationId) => ({ organizationId, data: { name: "Defaced" } })],
+    ["/organization/leave", (organizationId) => ({ organizationId })],
+    ["/organization/create", () => ({ name: "Another", slug: `another-${newPassword()}` })],
+  ];
+  it.each(bodies)("%s answers DEMO_ACCOUNT_LOCKED", async (path, body) => {
+    const before = await demoAccount();
     const session = await signedInAsDemo();
-    const answer = await session.auth<{ code: string }>(path, body);
+    const answer = await session.auth<{ code: string }>(path, body(before.orgId));
     expect(answer.status).toBe(403);
     expect(answer.body.code).toBe("DEMO_ACCOUNT_LOCKED");
-    // Still the same account, still signed in.
+    // Still the same account and workspace, still signed in.
     await signedInAsDemo();
-    expect(await session.rpc.user.me()).toMatchObject({ email: DEMO.email });
+    expect(await session.rpc.user.me()).toMatchObject({
+      email: DEMO.email,
+      activeOrganizationId: before.orgId,
+    });
+    expect(
+      await database.write.organization.findUniqueOrThrow({
+        where: { id: before.orgId },
+        select: { name: true },
+      }),
+    ).toEqual({ name: "Director Demo" });
+    expect(await database.write.member.count({ where: { userId: before.id } })).toBe(1);
+  });
+
+  it("can't rename itself or change its picture, but keeps its own time zone", async () => {
+    const session = await signedInAsDemo();
+    const renamed = await session.auth<{ code: string }>("/update-user", { name: "Defaced" });
+    expect(renamed.status).toBe(403);
+    expect(renamed.body.code).toBe("DEMO_ACCOUNT_LOCKED");
+    await expect(session.rpc.user.setAvatar({ fileId: null })).rejects.toMatchObject({
+      code: "DEMO_ACCOUNT_LOCKED",
+    });
+    expect(
+      (await session.auth("/update-user", { timezone: "Asia/Tokyo", locale: "en" })).status,
+    ).toBe(200);
+    expect(await session.rpc.user.me()).toMatchObject({
+      name: "Director Demo",
+      timezone: "Asia/Tokyo",
+    });
+  });
+
+  it("sees only its own device: never the other people signed in to it", async () => {
+    const elsewhere = await signedInAsDemo();
+    const session = await signedInAsDemo();
+    const current = await session.authGet<{ session: { id: string } }>("/get-session");
+    const listed = await session.authGet<{ id: string }[]>("/list-sessions");
+    expect(listed.map((row) => row.id)).toEqual([current.session.id]);
+    const theirs = await elsewhere.authGet<{ session: { id: string } }>("/get-session");
+    expect(theirs.session.id).not.toBe(current.session.id);
   });
 
   it("is never something sign-up or a profile edit can claim", async () => {

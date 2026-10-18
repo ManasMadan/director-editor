@@ -14,7 +14,6 @@ import { fieldOf } from "@repo/contracts/objects";
 import { HOUR_S } from "@repo/contracts/time";
 import { createRateLimiter, type Redis } from "@repo/nest-common";
 import { APIError } from "better-auth/api";
-import { DEMO_EMAIL } from "./demo";
 
 const QUARTER_HOUR = 15 * 60;
 
@@ -24,21 +23,17 @@ interface Limit {
   windowSeconds: number;
   /** What identifies the account in the request. */
   by: "email" | "second factor";
-  /** Accounts left out: the demo account's sign-in (see ACCOUNT_LIMITS). */
-  exempt?: readonly string[];
+  /** Leaves out the demo account, while there is one (see ACCOUNT_LIMITS). */
+  exemptsDemo?: true;
 }
 
 /** better-auth paths and their limits. */
 export const ACCOUNT_LIMITS: Record<string, Limit> = {
-  // Not Director's shared demo account: its password is public (the sign-in page shows
-  // it), so there's nothing to guess, and everyone trying Director signs in to it, so a
-  // per-account limit would let anyone lock them all out. The per-address limit stays.
-  "/sign-in/email": {
-    points: 10,
-    windowSeconds: QUARTER_HOUR,
-    by: "email",
-    exempt: [DEMO_EMAIL],
-  },
+  // Not Director's shared demo account while the API offers it (DEMO_PASSWORD set): its
+  // password is public then (the sign-in page shows it), so there's nothing to guess, and
+  // everyone trying Director signs in to it, so a per-account limit would let anyone lock
+  // them all out. The per-address limit stays. Without DEMO_PASSWORD, it's any address.
+  "/sign-in/email": { points: 10, windowSeconds: QUARTER_HOUR, by: "email", exemptsDemo: true },
   "/email-otp/send-verification-otp": { points: 5, windowSeconds: QUARTER_HOUR, by: "email" },
   "/forget-password/email-otp": { points: 5, windowSeconds: QUARTER_HOUR, by: "email" },
   "/email-otp/reset-password": { points: 10, windowSeconds: QUARTER_HOUR, by: "email" },
@@ -65,7 +60,12 @@ export interface LimitedRequest {
  * The account a request is about, or undefined when there's none to limit: it names none
  * (it then fails validation), or the limit leaves it out.
  */
-export function accountKey(limit: Limit, request: LimitedRequest): string | undefined {
+export function accountKey(
+  limit: Limit,
+  request: LimitedRequest,
+  /** The demo account's address, when the API offers it. */
+  demoEmail?: string,
+): string | undefined {
   if (limit.by === "second factor") {
     return request.secondFactor
       ? createHash("sha256").update(request.secondFactor).digest("hex")
@@ -73,11 +73,14 @@ export function accountKey(limit: Limit, request: LimitedRequest): string | unde
   }
   const email = fieldOf(request.body, "email");
   const key = typeof email === "string" ? email.trim().toLowerCase() : "";
-  return key && !limit.exempt?.includes(key) ? key : undefined;
+  return key && !(limit.exemptsDemo && key === demoEmail) ? key : undefined;
 }
 
-/** Consumes the request's account limit; throws 429 (RATE_LIMITED to clients) past it. */
-export function createAccountLimits(redis: Redis) {
+/**
+ * Consumes the request's account limit; throws 429 (RATE_LIMITED to clients) past it.
+ * `demoEmail` is the demo account's address while the API offers it.
+ */
+export function createAccountLimits(redis: Redis, demoEmail?: string) {
   const limiters = new Map(
     Object.entries(ACCOUNT_LIMITS).map(([path, limit]) => [
       path,
@@ -97,7 +100,7 @@ export function createAccountLimits(redis: Redis) {
     if (!entry) {
       return;
     }
-    const key = accountKey(entry.limit, request);
+    const key = accountKey(entry.limit, request, demoEmail);
     if (!key) {
       return;
     }

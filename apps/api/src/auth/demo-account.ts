@@ -110,7 +110,7 @@ async function updateDemoAccount(
   const { internalAdapter, password: hasher } = await auth.$context;
   // better-auth also rewrites the user its sessions hold in Redis, so one signed in
   // before the flag was set has it from the next request on.
-  await internalAdapter.updateUser(userId, { emailVerified: true, demo: true });
+  await internalAdapter.updateUser(userId, { name: DEMO_NAME, emailVerified: true, demo: true });
   const hash = await hasher.hash(password);
   if (await internalAdapter.findCredentialAccount(userId)) {
     await internalAdapter.updatePassword(userId, hash);
@@ -123,6 +123,8 @@ async function updateDemoAccount(
     });
   }
   const orgId = await personalWorkspace(database, userId);
+  // The name it was made with: nobody signed in to it can rename it, but the database can.
+  await database.write.organization.update({ where: { id: orgId }, data: { name: DEMO_NAME } });
   return tenantTx(database.write, orgId, (tx) => copySeedTemplates(tx, orgId));
 }
 
@@ -138,15 +140,16 @@ async function personalWorkspace(database: Database, userId: UserId): Promise<Or
 }
 
 /**
- * Deletes the account and the workspaces it's in (a workspace has one member, so they're
- * its alone), and with them everything made there: tenant tables cascade from
- * auth.organization. Signs its sessions out first, from Redis too.
+ * Deletes the account and the workspaces it alone is in (as account deletion does), and
+ * with them everything made there: tenant tables cascade from auth.organization. A
+ * workspace it shares only loses its membership, with the account. Signs its sessions
+ * out first, from Redis too.
  */
 async function deleteDemoAccount({ auth, database }: Dependencies, userId: UserId) {
   const { internalAdapter } = await auth.$context;
   await transaction(database.write, async (tx) => {
     const workspaces = await tx.organization.findMany({
-      where: { members: { some: { userId } } },
+      where: { members: { some: { userId }, every: { userId } } },
       select: { id: true },
     });
     await tx.organization.deleteMany({ where: { id: { in: workspaces.map(({ id }) => id) } } });

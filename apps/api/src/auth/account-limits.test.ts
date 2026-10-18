@@ -27,16 +27,14 @@ describe("the account a limited request is about", () => {
     expect(key).not.toContain("signed");
   });
 
-  it("is missing for the demo account's sign-in, whose password is public", () => {
+  it("is missing for the demo account's sign-in while there is one, whose password is public then", () => {
     if (!signIn) {
       throw new Error("sign-in is limited");
     }
-    expect(
-      accountKey(signIn, {
-        path: "/sign-in/email",
-        body: { email: ` ${DEMO_EMAIL.toUpperCase()}` },
-      }),
-    ).toBeUndefined();
+    const request = { path: "/sign-in/email", body: { email: ` ${DEMO_EMAIL.toUpperCase()}` } };
+    expect(accountKey(signIn, request, DEMO_EMAIL)).toBeUndefined();
+    // Without a demo account it's an address like any other.
+    expect(accountKey(signIn, request)).toBe(DEMO_EMAIL);
   });
 
   it("is missing when the request names no account (it then fails validation)", () => {

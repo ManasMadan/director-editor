@@ -14,6 +14,7 @@ import type { Redis } from "ioredis";
 import type { Env } from "../env";
 import { type EventOrigin, emitEvent } from "../outbox";
 import { createAccountLimits, createEmailLimits } from "./account-limits";
+import { DEMO_EMAIL } from "./demo";
 import type { RemovedMember } from "./ids";
 import type { Memberships } from "./memberships";
 
@@ -58,7 +59,10 @@ export function authContext(dependencies: Omit<AuthDependencies, "database">): A
     transaction(db, (tx) => emitEvent(tx, name, key, payload, origin));
   return {
     ...dependencies,
-    accountLimits: createAccountLimits(redis),
+    accountLimits: createAccountLimits(
+      redis,
+      dependencies.env.DEMO_PASSWORD ? DEMO_EMAIL : undefined,
+    ),
     emailLimits: createEmailLimits(redis),
     record,
     // The request context holds the session's id as a plain string (it's logged).

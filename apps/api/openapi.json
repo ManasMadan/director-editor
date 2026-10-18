@@ -2151,6 +2151,34 @@
                       "type": "object",
                       "properties": {
                         "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "DEMO_ACCOUNT_LOCKED"
+                        },
+                        "status": {
+                          "const": 403
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "DEMO_ACCOUNT_LOCKED"
+                        },
+                        "data": {
+                          "$ref": "#/components/schemas/ErrorData"
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
                           "const": false
                         },
                         "code": {
@@ -3161,6 +3189,34 @@
                         "message": {
                           "type": "string",
                           "default": "Forbidden"
+                        },
+                        "data": {
+                          "$ref": "#/components/schemas/ErrorData"
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "DEMO_ACCOUNT_LOCKED"
+                        },
+                        "status": {
+                          "const": 403
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "DEMO_ACCOUNT_LOCKED"
                         },
                         "data": {
                           "$ref": "#/components/schemas/ErrorData"

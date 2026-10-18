@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { refuseForDemo } from "./demo";
 import { demoCommand } from "./demo-account";
 
 describe("what director:demo-account is asked to do", () => {
@@ -24,16 +23,5 @@ describe("what director:demo-account is asked to do", () => {
     expect(demoCommand(["--force", "-f"], "production", "a-demo-password")).toEqual({
       refused: "Unknown option -f. Options: --force, --reset.",
     });
-  });
-});
-
-describe("the demo account's locked endpoints", () => {
-  it("refuse its session and let anyone else's through", () => {
-    expect(() => refuseForDemo({ id: "u", demo: true })).toThrow(
-      expect.objectContaining({ body: expect.objectContaining({ code: "DEMO_ACCOUNT_LOCKED" }) }),
-    );
-    expect(() => refuseForDemo({ id: "u", demo: false })).not.toThrow();
-    expect(() => refuseForDemo({ id: "u" })).not.toThrow();
-    expect(() => refuseForDemo(undefined)).not.toThrow();
   });
 });
