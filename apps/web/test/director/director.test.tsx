@@ -2,13 +2,27 @@
  * A template's page: the original and its storyboard, how each shot is filmed and what's
  * filmed of it, and the button to start; before that, Gemini at work or why it failed.
  */
+import { directorSeeds } from "@repo/contracts/director-seeds";
 import { fileIdSchema } from "@repo/contracts/ids";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, userEvent } from "vitest/browser";
 import { DirectorPage } from "@/modules/director";
 import { currentUrl, renderPage } from "../render";
 import { signUp } from "../users";
-import { newVideoId, planShot, readyPlan, shotPlan, take } from "./support";
+import {
+  newVideoId,
+  photo,
+  planShot,
+  readyPlan,
+  recordVideo,
+  shotPlan,
+  silentWav,
+  take,
+} from "./support";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const fileId = () => fileIdSchema.parse(crypto.randomUUID());
 const hero = () => document.querySelector("iframe") as HTMLIFrameElement;
@@ -167,7 +181,6 @@ describe("Director's page for a ready plan", () => {
       const page = await showPlan(videoId);
       await userEvent.click(page.getByRole("button", { name: "Watch shot 2: The look" }).first());
       expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior });
-      vi.restoreAllMocks();
     },
   );
 
@@ -285,5 +298,187 @@ describe("Director's page before the plan is ready", () => {
     await userEvent.click(page.getByRole("button", { name: "Try again" }));
     await expect.poll(() => commands.failedRequests("/rpc/director/plan")).toBeGreaterThan(tried);
     expect(await commands.answeredRequests("/rpc/director/index")).toBe(0);
+  });
+});
+
+/** A blob's bytes as base64, for `serveRequests`. */
+async function base64(blob: Blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  return btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
+}
+
+/**
+ * Storage's answers for a seed's media, which the local stack doesn't hold: a picture for
+ * every storyboard card, a clip for every preview and a track for the music.
+ */
+async function serveSeedMedia() {
+  const [picture, clip, track] = await Promise.all([
+    photo(),
+    recordVideo(1),
+    fetch(silentWav(2)).then((response) => response.blob()),
+  ]);
+  await commands.serveRequests(String.raw`/seed-media/.+\.png\?`, {
+    contentType: "image/jpeg",
+    base64: await base64(picture),
+  });
+  await commands.serveRequests(String.raw`/seed-media/.+\.mp4\?`, {
+    contentType: "video/webm",
+    base64: await base64(clip),
+  });
+  await commands.serveRequests(String.raw`/seed-media/.+/music\.mp3\?`, {
+    contentType: "audio/wav",
+    base64: await base64(track),
+  });
+}
+
+describe("a seeded template's media", () => {
+  const seed = directorSeeds.find(({ videoId }) => videoId === "_HonL1arbaA");
+  if (!seed) {
+    throw new Error("the seed this test reads is gone");
+  }
+  const [first, second] = seed.plan.shots;
+  const seeded = (source: "seed" | "user" = "seed") =>
+    commands.fakeDirector(seed.videoId, { plan: { status: "ready", source, plan: seed.plan } });
+  const altOf = (shot = first) => `Storyboard for ${shot?.title}: ${shot?.scene}`;
+  const card = (shot = first) =>
+    [...document.querySelectorAll("img")].find((image) => image.alt === altOf(shot)) ?? null;
+  const videos = () => [...document.querySelectorAll("video")];
+  // The music plays from an Audio of its own, outside the page: found by what it plays.
+  const played = () => vi.spyOn(HTMLMediaElement.prototype, "play");
+  let play: ReturnType<typeof played>;
+  beforeEach(() => {
+    play = played();
+  });
+  const soundtrack = () =>
+    play.mock.contexts
+      .filter((media) => media instanceof HTMLMediaElement)
+      .find((media) => media.src.includes("/music.mp3"));
+  const planReads = () => commands.answeredRequests("/rpc/director/plan");
+  const sketches = (page: Awaited<ReturnType<typeof showPlan>>) =>
+    page.getByRole("img", { name: /where you stand in the picture/ }).elements().length;
+
+  it("shows each shot's Nano Banana storyboard, plays its Veo preview in place, and the Lyria soundtrack", async () => {
+    await serveSeedMedia();
+    await seeded();
+    const page = await showPlan(seed.videoId);
+
+    // Every shot's card shows its storyboard, loaded lazily, with nothing playing yet.
+    await expect.element(page.getByAltText(altOf())).toBeVisible();
+    expect(card()?.getAttribute("loading")).toBe("lazy");
+    expect(card()?.src).toContain(`seed-media/${seed.videoId}/shot-0.png`);
+    card()?.scrollIntoView();
+    await expect.poll(() => card()?.naturalWidth).toBeGreaterThan(0);
+    expect(page.getByText("Storyboard by Nano Banana").elements()).toHaveLength(
+      seed.plan.shots.length,
+    );
+    expect(videos()).toEqual([]);
+
+    // Tapped, the shot's preview plays in its place: muted, looping, inline.
+    await userEvent.click(page.getByRole("button", { name: "Play the Veo preview of shot 1" }));
+    await expect.poll(() => videos().length).toBe(1);
+    const [clip] = videos();
+    expect(clip?.src).toContain(`seed-media/${seed.videoId}/shot-0.mp4`);
+    expect(clip?.muted).toBe(true);
+    expect(clip?.loop).toBe(true);
+    expect(clip?.playsInline).toBe(true);
+    await expect.poll(() => clip?.paused).toBe(false);
+    await expect.element(page.getByText("Preview made with Veo")).toBeVisible();
+    expect(card()).toBeNull();
+
+    // One at a time: the next shot's preview stops this one.
+    await userEvent.click(page.getByRole("button", { name: "Play the Veo preview of shot 2" }));
+    await expect
+      .poll(() => videos().map((video) => video.src))
+      .toEqual([expect.stringContaining(`seed-media/${seed.videoId}/shot-1.mp4`)]);
+    expect(card()).not.toBeNull();
+    await userEvent.click(page.getByRole("button", { name: "Pause the preview of shot 2" }));
+    expect(videos()).toEqual([]);
+    expect(card(second)).not.toBeNull();
+
+    // The seed's music, on a player of its own, loaded only once it's played.
+    await expect.element(page.getByText("Soundtrack, made with Lyria")).toBeVisible();
+    expect(await commands.answeredRequests("/music.mp3")).toBe(0);
+    await userEvent.click(page.getByRole("button", { name: "Play the soundtrack" }));
+    expect(soundtrack()?.src).toContain(`seed-media/${seed.videoId}/music.mp3`);
+    await expect.poll(() => soundtrack()?.paused).toBe(false);
+    await userEvent.click(page.getByRole("button", { name: "Pause the soundtrack" }));
+    await expect.poll(() => soundtrack()?.paused).toBe(true);
+    await expect.element(page.getByRole("button", { name: "Play the soundtrack" })).toBeVisible();
+    // Nothing failed, so the plan was read once.
+    expect(await planReads()).toBe(1);
+  });
+
+  it("shows no media on a member's own plan, even of the same Short", async () => {
+    await serveSeedMedia();
+    await seeded("user");
+    const page = await showPlan(seed.videoId);
+    await expect.element(page.getByRole("heading", { level: 3, name: first?.title })).toBeVisible();
+    expect(card()).toBeNull();
+    expect(page.getByText("Storyboard by Nano Banana").query()).toBeNull();
+    expect(page.getByText("Soundtrack, made with Lyria").query()).toBeNull();
+    expect(page.getByRole("button", { name: /Veo preview/ }).query()).toBeNull();
+    // The cards look as they always have: the framing sketch where a storyboard would be.
+    expect(sketches(page)).toBe(seed.plan.shots.length);
+  });
+
+  it("reads the plan again once for links that ran out, then leaves out what still fails", async () => {
+    await serveSeedMedia();
+    await commands.failRequests(".mp4?", { status: 403 });
+    await commands.failRequests("music.mp3?", { status: 403 });
+    await seeded();
+    const page = await showPlan(seed.videoId);
+    const play = page.getByRole("button", { name: "Play the Veo preview of shot 1" });
+    await userEvent.click(play);
+    // The clip's link failed: the plan is read again for fresh links, and the card is back.
+    await expect.poll(planReads).toBe(2);
+    await expect.element(play).toBeVisible();
+    expect(card()).not.toBeNull();
+    // Failing again so soon, it isn't read a third time: the clip is left out.
+    await userEvent.click(play);
+    await expect
+      .element(page.getByRole("button", { name: /preview of shot 1$/ }))
+      .not.toBeInTheDocument();
+    expect(card()).not.toBeNull();
+    await userEvent.click(page.getByRole("button", { name: "Play the soundtrack" }));
+    await expect.element(page.getByText("Soundtrack, made with Lyria")).not.toBeInTheDocument();
+    expect(await planReads()).toBe(2);
+  });
+
+  it("never shows a broken storyboard: one that won't load gives way to the framing sketch", async () => {
+    // A seed of its own: a link signed in the same second as another test's is the same
+    // link, and the browser would show the picture it kept from then.
+    const other = directorSeeds.find(({ videoId }) => videoId === "WvGUjw7OwZo");
+    if (!other) {
+      throw new Error("the seed this test reads is gone");
+    }
+    await commands.failRequests("/seed-media/", { status: 403 });
+    await commands.fakeDirector(other.videoId, {
+      plan: { status: "ready", source: "seed", plan: other.plan },
+    });
+    const page = await showPlan(other.videoId);
+    // Each card loads as it comes near the screen.
+    const scrolledThrough = () => {
+      for (const image of document.querySelectorAll("img")) {
+        image.scrollIntoView();
+      }
+    };
+    await expect
+      .element(page.getByRole("heading", { level: 3, name: other.plan.shots[0]?.title }))
+      .toBeVisible();
+    await expect
+      .poll(() => {
+        scrolledThrough();
+        return planReads();
+      })
+      .toBe(2);
+    await expect
+      .poll(() => {
+        scrolledThrough();
+        return other.plan.shots.filter((shot) => card(shot)).length;
+      })
+      .toBe(0);
+    expect(page.getByText("Storyboard by Nano Banana").query()).toBeNull();
+    expect(sketches(page)).toBe(other.plan.shots.length);
+    expect(await planReads()).toBe(2);
   });
 });

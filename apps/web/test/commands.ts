@@ -36,6 +36,7 @@ const startTest: BrowserCommand<[]> = async ({ page, context }) => {
   await page.setExtraHTTPHeaders({ "x-forwarded-for": ip });
   turnstileModes.set(page, "fake");
   failing.set(page, []);
+  serving.set(page, []);
   if (!navigations.has(page)) {
     await page.route("https://challenges.cloudflare.com/turnstile/**", async (route) => {
       // Held: answered once the test picks another mode (a slow network, under control).
@@ -59,19 +60,9 @@ const startTest: BrowserCommand<[]> = async ({ page, context }) => {
         !url.searchParams.has("sessionId"),
       (route) => {
         const request = route.request();
-        const failure = failing.get(page)?.find(({ part }) => request.url().includes(part));
-        if (failure) {
-          failure.hits += 1;
-          if (!failure.status) {
-            return route.abort();
-          }
-          return failure.body === undefined
-            ? route.fulfill({ status: failure.status, body: "" })
-            : route.fulfill({
-                status: failure.status,
-                contentType: "application/json",
-                body: JSON.stringify(failure.body),
-              });
+        const answered = answerAsSet(page, route);
+        if (answered !== null) {
+          return answered;
         }
         if (!request.isNavigationRequest() || request.frame() === page.mainFrame()) {
           return route.fallback();
@@ -96,6 +87,36 @@ const startTest: BrowserCommand<[]> = async ({ page, context }) => {
   finished.set(page, []);
 };
 
+/**
+ * Answers a request the test set an answer for: failing (`failRequests`), or with bytes
+ * (`serveRequests`). Null for any other.
+ */
+function answerAsSet(page: Page, route: Route): Promise<void> | null {
+  const url = route.request().url();
+  const failure = failing.get(page)?.find(({ part }) => url.includes(part));
+  if (failure) {
+    failure.hits += 1;
+    if (!failure.status) {
+      return route.abort();
+    }
+    return failure.body === undefined
+      ? route.fulfill({ status: failure.status, body: "" })
+      : route.fulfill({
+          status: failure.status,
+          contentType: "application/json",
+          body: JSON.stringify(failure.body),
+        });
+  }
+  const served = serving.get(page)?.find(({ pattern }) => pattern.test(url));
+  return served
+    ? route.fulfill({
+        status: 200,
+        contentType: served.contentType,
+        body: Buffer.from(served.base64, "base64"),
+      })
+    : null;
+}
+
 /** The page's requests sent since its test started, and those answered, by URL. */
 const started = new WeakMap<Page, WeakSet<Request>>();
 const finished = new WeakMap<Page, string[]>();
@@ -110,6 +131,9 @@ const failing = new WeakMap<
   Page,
   { part: string; status?: number; body?: unknown; hits: number }[]
 >();
+
+/** What the page's requests to matching URLs are answered with instead (`serveRequests`). */
+const serving = new WeakMap<Page, { pattern: RegExp; contentType: string; base64: string }[]>();
 
 /** Sends these headers with the page's requests for the rest of the test (an app version, say). */
 const requestHeaders: BrowserCommand<[headers: Record<string, string>]> = async (
@@ -129,6 +153,17 @@ const failRequests: BrowserCommand<
   [part: string, options?: { status?: number; body?: unknown }]
 > = ({ page }, part, options = {}) => {
   failing.get(page)?.push({ part, ...options, hits: 0 });
+};
+
+/**
+ * Answers the page's requests to URLs matching `pattern` (a RegExp's source) with these
+ * bytes for the rest of the test: a file in storage the local stack doesn't have (a seed
+ * template's generated media). A request `failRequests` also matches fails instead.
+ */
+const serveRequests: BrowserCommand<
+  [pattern: string, file: { contentType: string; base64: string }]
+> = ({ page }, pattern, file) => {
+  serving.get(page)?.push({ pattern: new RegExp(pattern), ...file });
 };
 
 const failedRequests: BrowserCommand<[part: string]> = ({ page }, part) =>
@@ -466,6 +501,7 @@ export const commands = {
   requestHeaders,
   failRequests,
   failedRequests,
+  serveRequests,
   totp,
   startTest,
   hardNavigations,
@@ -509,6 +545,7 @@ declare module "vitest/browser" {
     requestHeaders(headers: Record<string, string>): Promise<void>;
     failRequests(part: string, options?: { status?: number; body?: unknown }): Promise<void>;
     failedRequests(part: string): Promise<number>;
+    serveRequests(pattern: string, file: { contentType: string; base64: string }): Promise<void>;
     totp(secret: string): Promise<string>;
     hardNavigations(): Promise<string[]>;
     takeNotification<T = Record<string, unknown>>(template: string, address: string): Promise<T>;

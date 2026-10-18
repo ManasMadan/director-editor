@@ -644,7 +644,15 @@ declare const messages: {
       "filmed": "Filmed",
       "scored": "Filmed, {score, number}/100",
       "needsRetake": "Needs a retake ({score, number}/100)",
-      "reviewing": "Director is reviewing your take"
+      "reviewing": "Director is reviewing your take",
+      "storyboardAlt": "Storyboard for {title}: {scene}",
+      "storyboardBy": "Storyboard by Nano Banana",
+      "previewBy": "Preview made with Veo",
+      "playPreview": "Play the Veo preview of shot {index, number}",
+      "pausePreview": "Pause the preview of shot {index, number}",
+      "soundtrack": "Soundtrack, made with Lyria",
+      "playSoundtrack": "Play the soundtrack",
+      "pauseSoundtrack": "Pause the soundtrack"
     },
     "editor": {
       "title": "Edit your video",
