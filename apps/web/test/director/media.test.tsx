@@ -108,6 +108,13 @@ describe("My media", () => {
     const card = (title: string) =>
       page.getByRole("listitem").filter({ has: page.getByText(title, { exact: true }) });
     await expect.element(card("Dance off").getByText("Couldn't publish")).toBeVisible();
+    // A failed one may be published again; one on its way or up already may not.
+    await expect
+      .element(card("Dance off").getByRole("button", { name: "Publish", exact: true }))
+      .toBeVisible();
+    expect(
+      card("Take two").getByRole("button", { name: "Publish", exact: true }).query(),
+    ).toBeNull();
     await expect.element(card("Take two").getByText("Publishing…")).toBeVisible();
     await expect.element(card("Public one").getByText("Public on YouTube")).toBeVisible();
     await expect.element(card("Unlisted one").getByText("Unlisted on YouTube")).toBeVisible();

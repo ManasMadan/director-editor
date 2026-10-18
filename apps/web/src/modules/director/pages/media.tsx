@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { DirectorGate } from "@/modules/shorts";
+import { PublishButton } from "../components/publish-sheet";
 import { useObjectUrl } from "../hooks/use-object-url";
 import { webVtt } from "../lib/captions";
 import { cutsByTemplate, templateThumbnail } from "../lib/cuts";
@@ -149,6 +150,9 @@ function CutCard({ cut }: { cut: DirectorCut }) {
           {format.dateTime(cut.createdAt, { dateStyle: "medium", timeStyle: "short" })}
         </p>
         <PublishChip publish={cut.publish} />
+        <div>
+          <PublishButton cut={cut} />
+        </div>
       </div>
     </li>
   );

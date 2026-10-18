@@ -914,7 +914,8 @@ declare const messages: {
       "submit": "Publish to YouTube",
       "uploading": "Sending your video to YouTube…",
       "published": "It's on YouTube, {visibility, select, private {private: only you can watch it} unlisted {unlisted: anyone with the link can watch it} public {public: anyone can find it} other {}}.",
-      "kept": "You asked for {asked, select, private {private} unlisted {unlisted} public {public} other {}}, but YouTube keeps videos from apps it hasn't reviewed yet private. You can change it in YouTube Studio."
+      "kept": "You asked for {asked, select, private {private} unlisted {unlisted} public {public} other {}}, but YouTube keeps videos from apps it hasn't reviewed yet private. You can change it in YouTube Studio.",
+      "underWay": "This video is already on its way to YouTube. It shows up in My media once it's there."
     }
   },
   "library": {

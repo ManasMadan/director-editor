@@ -180,9 +180,29 @@ function DraftForm({ initial, onSubmit }: { initial: Draft; onSubmit: (draft: Dr
   );
 }
 
-/** Where the cut went: on YouTube, with the privacy YouTube actually gave it. */
+function WatchLink({ youtubeVideoId, size }: { youtubeVideoId: string; size?: "sm" }) {
+  const t = useTranslations("director.publish");
+  return (
+    <a
+      href={youtubeShortUrl(youtubeVideoId)}
+      target="_blank"
+      rel="noreferrer"
+      className={buttonVariants({ variant: "outline", size })}
+    >
+      {t("watch")}
+    </a>
+  );
+}
+
+/**
+ * Where the cut went: on YouTube, with the privacy YouTube actually gave it, or on its
+ * way there from another publish of it (another tab, a double click).
+ */
 function Published({ cut, asked }: { cut: DirectorCut; asked: PublishVisibility }) {
   const t = useTranslations("director.publish");
+  if (cut.publish.status !== "published") {
+    return <p aria-live="polite">{t("underWay")}</p>;
+  }
   const visibility = required(cut.publish.visibility, "a published cut's visibility");
   const youtubeVideoId = required(cut.publish.youtubeVideoId, "a published cut's video");
   return (
@@ -192,14 +212,7 @@ function Published({ cut, asked }: { cut: DirectorCut; asked: PublishVisibility 
         {t("published", { visibility })}
       </p>
       {visibility !== asked ? <p className="text-sm">{t("kept", { asked })}</p> : null}
-      <a
-        href={youtubeShortUrl(youtubeVideoId)}
-        target="_blank"
-        rel="noreferrer"
-        className={buttonVariants({ variant: "outline" })}
-      >
-        {t("watch")}
-      </a>
+      <WatchLink youtubeVideoId={youtubeVideoId} />
     </div>
   );
 }
@@ -297,18 +310,13 @@ export function PublishButton({ cut }: { cut: DirectorCut }) {
   const returning = useSearchParams().get("publish") === cut.id;
   const [resumed] = useState(() => (returning ? unstash(cut) : null));
   const [open, setOpen] = useState(returning);
-  const { youtubeVideoId } = cut.publish;
-  if (cut.publish.status === "published" && youtubeVideoId) {
-    return (
-      <a
-        href={youtubeShortUrl(youtubeVideoId)}
-        target="_blank"
-        rel="noreferrer"
-        className={buttonVariants({ variant: "outline", size: "sm" })}
-      >
-        {t("watch")}
-      </a>
-    );
+  const { status, youtubeVideoId } = cut.publish;
+  if (status === "published") {
+    return youtubeVideoId ? <WatchLink youtubeVideoId={youtubeVideoId} size="sm" /> : null;
+  }
+  // On its way to YouTube already: its chip says so.
+  if (status === "uploading") {
+    return null;
   }
   return (
     <>

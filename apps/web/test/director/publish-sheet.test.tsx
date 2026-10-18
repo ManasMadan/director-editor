@@ -181,6 +181,33 @@ describe("publishing a cut", { tags: ["files"] }, () => {
       .toBeVisible();
   });
 
+  it("says when another publish of it is already under way", async () => {
+    const { cut, user } = await aCut();
+    await commands.linkYouTube(user.id, user.email);
+    await open(cut);
+    // Another tab started publishing it a moment ago.
+    await commands.sql("UPDATE ai.director_cut SET publish_status = 'uploading' WHERE id = $1", [
+      cut.id,
+    ]);
+    await userEvent.click(publishButton());
+    await expect
+      .element(page.getByText("This video is already on its way to YouTube.", { exact: false }))
+      .toBeVisible();
+  });
+
+  it("offers nothing while it's on its way, or published with nowhere to link", async () => {
+    const { cut } = await aCut({ stored: false });
+    for (const publish of [
+      { status: "uploading" as const, youtubeVideoId: null, visibility: null },
+      { status: "published" as const, youtubeVideoId: null, visibility: null },
+    ]) {
+      cleanup();
+      const view = await renderPage(<PublishButton cut={{ ...cut, publish }} />);
+      expect(view.getByRole("button").query(), publish.status).toBeNull();
+      expect(view.getByRole("link").query(), publish.status).toBeNull();
+    }
+  });
+
   it("links a published cut to YouTube instead", async () => {
     const { cut } = await aCut({ stored: false });
     await renderPage(
