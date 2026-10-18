@@ -1,6 +1,6 @@
-"""The committed apps/ai/app/seeds/templates.json (task-2.2.5-brief.md): every one of
-the 6 seeds from seeds.json, indexed for real with Gemini and committed so every new
-workspace starts with the same library (task 2.2.2 copies these rows at sign-up). This
+"""The committed packages/contracts/src/director-seeds.json: every one of the 6 seeds
+from seeds.json, indexed for real with Gemini and committed so every new workspace
+starts with the same library (apps/api copies these rows when a workspace is created). This
 only checks the file that's checked in, not scripts/build_seeds.py's logic (see
 test_build_seeds.py for that): it's what keeps the committed file honest when the plan
 schema changes under it.
