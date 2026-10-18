@@ -35,6 +35,7 @@ import {
   RecIndicator,
   RollProgress,
   SavingFootage,
+  UploadNotice,
 } from "../components/roll-parts";
 import {
   CountdownNumber,
@@ -355,6 +356,23 @@ function Controls({
   );
 }
 
+/**
+ * What the roll's upload needs the member to know while it records: footage dropped for
+ * good and why (REC would otherwise keep ticking over nothing), footage waiting for a
+ * connection, and the shoot's 20 minutes nearly up.
+ */
+function RollUpload({ roll }: { roll: RollShoot }) {
+  const errorMessage = useApiErrorMessage();
+  const { upload } = roll;
+  return (
+    <UploadNotice
+      lost={upload.lost === null ? null : errorMessage(upload.lost)}
+      waiting={upload.error !== null}
+      nearLimit={roll.nearLimit}
+    />
+  );
+}
+
 /** The top band's left: the roll's indicator and progress strip, or the shot's progress. */
 function TopLeft({ props, studio, roll }: Pick<Screen, "props" | "studio" | "roll">) {
   if (roll.rolling) {
@@ -434,6 +452,7 @@ function Overlay(screen: Screen) {
           </div>
         </div>
         <SlowerLine live={live} />
+        {roll.rolling ? <RollUpload roll={roll} /> : null}
         {setup ? (
           <ShotCard shot={shot} index={index} changed={changed} onRestore={screen.onRestore} />
         ) : null}
@@ -917,7 +936,11 @@ function ShootScreen(shootProps: ShootProps) {
           />
         ) : null}
         {roll.phase === "finishing" || roll.phase === "done" ? (
-          <SavingFootage behindMs={roll.upload.behindMs} />
+          <SavingFootage
+            behindMs={roll.upload.behindMs}
+            waiting={roll.upload.error !== null}
+            editor={roll.editor}
+          />
         ) : null}
         <Review shoot={shoot} />
         <LeaveDialog leaving={shoot.leaving} />

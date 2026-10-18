@@ -688,6 +688,7 @@ declare const messages: {
         "done": "Done",
         "saving": "Saving your footage…",
         "savingBehind": "Saving your footage, {seconds, number} seconds to go…",
+        "openEditor": "Open the editor now. Your footage keeps uploading there.",
         "leftover": "{seconds, number} seconds of footage didn't upload last time. Sending it now.",
         "nearLimit": "About three minutes of recording left in this shoot.",
         "uploadTrouble": "Your footage is waiting to upload. It's kept on this device and sent as soon as it can be.",

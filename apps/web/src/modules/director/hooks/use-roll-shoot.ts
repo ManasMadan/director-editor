@@ -1,11 +1,12 @@
 "use client";
 
-import { useRecordingSessionQuery } from "@repo/client/api/recording/session";
+import { nearRecordingLimit, useRecordingSessionQuery } from "@repo/client/api/recording/session";
 import type { LiveToolCall, LiveToolResult } from "@repo/contracts/live";
+import { RECORDING_WARN_MS } from "@repo/contracts/recording";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { wakeLiveAudio } from "../lib/live-audio";
-import { shotStates } from "../lib/roll";
+import { type Roll, shotStates } from "../lib/roll";
 import type { useCamera } from "./use-camera";
 import type { DirectorLive } from "./use-director-live";
 import { useRoll } from "./use-roll";
@@ -46,6 +47,32 @@ function useAutoPause(pause: () => void, full: boolean) {
   }, []);
 }
 
+interface Latest {
+  current: Pick<Options, "props" | "camera" | "live">;
+}
+
+/**
+ * The roll starts with the camera's first picture, and each new picture after (a flip,
+ * the camera reopened) records in a part of its own.
+ */
+function useRollCamera(roll: Roll, stream: MediaStream | null, wanted: boolean, latest: Latest) {
+  const recorded = useRef<MediaStream | null>(null);
+  useEffect(() => {
+    const now = latest.current;
+    if (wanted && stream && roll.phase === "off") {
+      recorded.current = stream;
+      void roll.start(now.props.videoId, stream, now.camera.facing).then((started) => {
+        if (started) {
+          latest.current.live.roll("recording");
+        }
+      });
+    } else if (stream && recorded.current && stream !== recorded.current) {
+      recorded.current = stream;
+      void roll.flip(stream, now.camera.facing);
+    }
+  }, [wanted, stream, roll, latest]);
+}
+
 /**
  * The roll on the shoot screen, wired to the camera and Director: it starts with the
  * camera's first picture, starts a new part on each flip, tells Director where it is
@@ -59,24 +86,7 @@ export function useRollShoot({ props, camera, live, wanted }: Options) {
   useLayoutEffect(() => {
     latest.current = { props, camera, live };
   });
-  const { stream } = camera;
-  const recorded = useRef<MediaStream | null>(null);
-
-  useEffect(() => {
-    const now = latest.current;
-    if (wanted && stream && roll.phase === "off") {
-      recorded.current = stream;
-      void roll.start(now.props.videoId, stream, now.camera.facing).then((started) => {
-        if (started) {
-          latest.current.live.roll("recording");
-        }
-      });
-    } else if (stream && recorded.current && stream !== recorded.current) {
-      // The camera flipped (or reopened): its picture records in a part of its own.
-      recorded.current = stream;
-      void roll.flip(stream, now.camera.facing);
-    }
-  }, [wanted, stream, roll]);
+  useRollCamera(roll, camera.stream, wanted, latest);
 
   // Director (re)joined while the roll goes on: it hears where it is.
   useEffect(() => {
@@ -93,16 +103,25 @@ export function useRollShoot({ props, camera, live, wanted }: Options) {
   };
   useAutoPause(pause, upload.full);
 
+  // Where Done leads: the editor, as the last shot's take would.
+  const editor = nextPage({ ...props, index: props.count - 1 });
   useEffect(() => {
     if (phase === "done" && upload.pending === 0) {
-      const { props: now } = latest.current;
-      router.push(nextPage({ ...now, index: now.count - 1 }));
+      router.push(editor);
     }
-  }, [phase, upload.pending, router]);
+  }, [phase, upload.pending, router, editor]);
 
   const session = useRecordingSessionQuery(roll.currentSession());
   return {
     phase,
+    editor,
+    /**
+     * The shoot is past 17 of its 20 minutes: as recorded here, or as the server has
+     * counted what's uploaded.
+     */
+    nearLimit:
+      elapsedMs >= RECORDING_WARN_MS ||
+      (session.data !== undefined && nearRecordingLimit(session.data)),
     /** The roll is the way this shoot records (not the shutter). */
     rolling:
       phase === "recording" || phase === "paused" || phase === "finishing" || phase === "done",

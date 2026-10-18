@@ -121,6 +121,8 @@ export function useRoll() {
       pending: uploader.pending,
       behindMs: uploader.behindMs,
       error: uploader.error,
+      /** A refusal that dropped footage for good, for its message. */
+      lost: uploader.lost,
       /** The queue holds five minutes already: the screen pauses until it catches up. */
       full: uploader.full,
     },

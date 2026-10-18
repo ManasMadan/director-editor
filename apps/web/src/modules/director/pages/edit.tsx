@@ -8,6 +8,7 @@ import { useDirectorPlanQuery } from "@repo/client/api/director/plan";
 import { useSaveCutMutation } from "@repo/client/api/director/save-cut";
 import { useDirectorShotsQuery } from "@repo/client/api/director/shots";
 import { useYourVersionQuery } from "@repo/client/api/director/your-version";
+import { useSliceUploader } from "@repo/client/api/recording/upload-slices";
 import type {
   AssetSlot,
   DirectorCut,
@@ -980,6 +981,9 @@ function Edit({
   const ready = plan.data?.status === "ready" ? plan.data.plan : null;
   const shots = useDirectorShotsQuery(videoId, ready !== null);
   const version = useYourVersionQuery(videoId);
+  // The shoot's footage still on this device (the member opened the editor without
+  // waiting after Done) goes on uploading here; its takes appear as they're cut.
+  useSliceUploader();
   if (plan.isError) {
     return (
       <div className="flex h-dvh flex-col items-center justify-center gap-4 p-8 text-center">
