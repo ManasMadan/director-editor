@@ -10,10 +10,10 @@ describe("server pages", () => {
     expect(html).toContain('href="/"');
   });
 
-  it("offers signed-in visitors of the home page their library", async () => {
+  it("offers signed-in visitors of the home page Director, and others the demo", async () => {
     request.cookies.set("better-auth.session_token", "x");
     expect(await renderHtml(await Home())).toContain('href="/library"');
     request.cookies.clear();
-    expect(await renderHtml(await Home())).toContain('href="/sign-up"');
+    expect(await renderHtml(await Home())).toContain('href="/sign-in?demo=1"');
   });
 });

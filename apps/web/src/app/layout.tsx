@@ -7,7 +7,7 @@ import { headers } from "next/headers";
 import { getLocale, getMessages, getTimeZone, getTranslations } from "next-intl/server";
 import type { ReactNode } from "react";
 import { textDirection } from "@/i18n/request";
-import { LiveUpdates, PreferenceSync, SiteChrome, SiteHeader } from "@/modules/shell";
+import { LiveUpdates, PreferenceSync, SiteChrome, SiteFooter, SiteHeader } from "@/modules/shell";
 import { Providers } from "./providers";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -45,7 +45,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         <Providers locale={locale} timeZone={timeZone} messages={messages} nonce={nonce}>
           <PreferenceSync timeZone={timeZone} />
           <LiveUpdates />
-          <SiteChrome header={<SiteHeader />}>{children}</SiteChrome>
+          <SiteChrome header={<SiteHeader />} footer={<SiteFooter />}>
+            {children}
+          </SiteChrome>
         </Providers>
       </body>
     </html>

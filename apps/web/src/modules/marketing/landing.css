@@ -1,0 +1,121 @@
+/*
+ * The landing's one orchestrated moment, the x-ray: Gemini's scan passes down the Short,
+ * the plan's JSON prints line by line, and the phone draws the first shot's guides as the
+ * panel lights up the field each one comes from; then the shots deal out below. It plays
+ * once on load, in CSS alone (no client JavaScript), and each element waits for its
+ * moment through an inline `animation-delay`.
+ *
+ * Every element's resting style is its final state, so with reduced motion (or before the
+ * animation starts in a browser without it) the page shows the finished x-ray, still.
+ */
+
+/* The director's marker hand, as on Director Live's doodles (self-hosted, @fontsource). */
+.xray-note {
+  font-family: "Gochi Hand", "Marker Felt", "Comic Sans MS", cursive;
+}
+
+/* Parked below the frame (which clips it) unless it's sweeping. */
+.xray-scan {
+  transform: translateY(100%);
+}
+
+/* The "Original" label gives way to the shot's: hidden once the x-ray is done. */
+.xray-out {
+  opacity: 0;
+}
+
+/*
+ * The plan is taller than its panel: it rests scrolled to its end, and while it prints it
+ * scrolls there from its top, like a terminal following its output. Moving `top` from 0
+ * to 100% while translating by its own height from 0 to -100% lands its bottom on the
+ * panel's, whatever either height turns out to be.
+ */
+.xray-follow {
+  top: 100%;
+  transform: translateY(-100%);
+}
+
+@keyframes xray-follow {
+  from {
+    top: 0;
+    transform: translateY(0);
+  }
+  to {
+    top: 100%;
+    transform: translateY(-100%);
+  }
+}
+
+@keyframes xray-scan {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes xray-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.375rem) scale(0.97);
+  }
+}
+
+@keyframes xray-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes xray-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* A JSON line lights up while the phone draws the field it holds, then settles. */
+@keyframes xray-mark {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  25%,
+  60% {
+    background-color: color-mix(in oklch, var(--aurora-2) 30%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .xray-scan {
+    animation: xray-scan 1.8s cubic-bezier(0.45, 0, 0.2, 1) 0.2s both;
+  }
+
+  .xray-in {
+    animation: xray-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  /* Follows the fields the phone draws: past the framing, through the pose and lines. */
+  .xray-follow {
+    animation: xray-follow 1.6s ease-in-out 1.7s both;
+  }
+
+  .xray-draw {
+    stroke-dasharray: 1;
+    animation: xray-draw 0.8s ease-out both;
+  }
+
+  .xray-out {
+    animation: xray-out 0.3s ease-in both;
+  }
+
+  .xray-mark {
+    animation: xray-mark 1.4s ease-in-out both;
+  }
+}

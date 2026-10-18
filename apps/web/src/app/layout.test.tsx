@@ -31,6 +31,10 @@ describe("the root layout", () => {
     expect(html).toContain("--font-geist-sans");
     expect(html).toContain("<main");
     expect(html).toContain("page content");
+    // The site's footer is the page's own landmark, after the main content, not inside it.
+    expect(html).toMatch(/<\/main><footer[^>]*>.*<nav aria-label="Legal"/s);
+    expect(html).toContain('href="/terms"');
+    expect(html).toContain('href="/privacy"');
     // next-themes' inline script runs under the proxy's CSP nonce.
     expect(html).toContain('nonce="abc123"');
   });
