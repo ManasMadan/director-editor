@@ -35,11 +35,25 @@ declare const messages: {
   },
   "home": {
     "title": "<line>Watch any Short.</line> <line>Shoot your own.</line>",
-    "subtitle": "Pick a Short you love. Gemini breaks it into shots, then directs you through filming each one on your phone, live. Cut your takes together and post your version to YouTube.",
-    "cta": "Try the demo",
+    "subtitle": "A friend on your phone helps you film it, shot by shot.",
+    "cta": "Try it now, no sign-up",
     "ctaSignedIn": "Open Director",
     "how": "See how it works",
+    "hero": {
+      "director": "Director:",
+      "you": "You:",
+      "ask": "Let's start at the market. Ready when you are!",
+      "answer": "I'm fine inside",
+      "adapt": "Inside it is! Your window light looks great.",
+      "cardBefore": "Where: the market",
+      "cardAfter": "Where: by your window",
+      "rec": "REC 01:12",
+      "pause": "Pause the conversation",
+      "caption": "Director on your phone: it asks for the market, you'd rather stay in, and the shot moves to your window."
+    },
     "xray": {
+      "title": "How Director reads a Short",
+      "body": "Gemini watches the Short once and writes a plan for every shot: the framing, the pose, how to hold the phone and what to say.",
       "caption": "The plan Gemini 4 Argon wrote for “{title}”: {shots, plural, one {# shot} other {# shots}}, each with its framing, pose, camera move and lines.",
       "original": "Original",
       "file": "plan.json",
@@ -50,16 +64,16 @@ declare const messages: {
     "steps": {
       "title": "From watching to posting, in three steps",
       "index": {
-        "title": "Index",
-        "body": "Paste a Short's link. Gemini 4 Argon watches it and writes the plan: every shot's framing, pose, camera move and lines."
+        "title": "Pick a Short",
+        "body": "Start from one that's ready to shoot, or paste the link of a Short you love. Gemini works out every shot."
       },
       "shoot": {
-        "title": "Shoot with Gemini",
-        "body": "Film each shot with Gemini Live beside you. It sees your camera, hears you, and talks you through where to stand and what to say."
+        "title": "Shoot it with Director",
+        "body": "The camera opens on you and Director talks you through each shot: where to stand, how to hold the phone, what to say. Say it your own way."
       },
       "publish": {
-        "title": "Publish",
-        "body": "Line your takes up on the timeline, add captions and post your version to YouTube Shorts."
+        "title": "Post it to YouTube Shorts",
+        "body": "Director picks your best takes and writes the post, credits included, for your channel."
       }
     },
     "proof": {
@@ -108,9 +122,13 @@ declare const messages: {
         "name": "Cloud Run",
         "use": "Runs the indexer, where Gemini watches each Short."
       },
+      "computeEngine": {
+        "name": "Compute Engine",
+        "use": "Runs Director's API, its line to Gemini Live and the job queues."
+      },
       "bigquery": {
         "name": "BigQuery",
-        "use": "Logs each Short Director indexes, each shoot Director joins and every take review's score."
+        "use": "Logs each Short Director indexes, each shoot it directs and every take review's score."
       },
       "youtube": {
         "name": "YouTube Data API",
@@ -814,6 +832,10 @@ declare const messages: {
     "intro": "Gemini has broken each of these Shorts into shots. Pick one and it directs you through every shot, right from your phone.",
     "loading": "Loading your library…",
     "templates": "Templates",
+    "quickStart": {
+      "label": "Quick start",
+      "body": "Just you, talking to the camera. Works indoors."
+    },
     "count": "{count, plural, one {# Short} other {# Shorts}}",
     "empty": "Nothing here yet. Paste a Shorts link above and Gemini will turn it into a template.",
     "card": {
