@@ -20,6 +20,7 @@ from pydantic_ai.exceptions import UsageLimitExceeded
 from app.schemas import ShotPlan
 from app.settings import Settings, get_settings
 from scripts.build_seeds import (
+    APP_ROOT,
     TEMPLATES_PATH,
     SeedSource,
     SeedTemplate,
@@ -172,7 +173,7 @@ async def test_build_templates_indexes_every_seed_in_order() -> None:
 
 async def test_build_templates_lets_a_failed_seed_s_error_propagate() -> None:
     """A seed Gemini can't index at all (after the retry and the fallback both fail)
-    stops the whole run rather than writing a templates.json missing one of the 6: every
+    stops the whole run rather than writing a seed file missing one of the 6: every
     seed must end up in it (task-2.2.5-brief.md)."""
     seeds = [SeedSource(videoId="22k0fZarxh8")]
 
@@ -286,12 +287,12 @@ async def test_main_writes_every_seed_s_template(
 
 
 @pytest.mark.integration
-def test_the_command_leaves_templates_json_alone_when_a_seed_cant_be_indexed(
+def test_the_command_leaves_the_seed_templates_alone_when_a_seed_cant_be_indexed(
     gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]],
 ) -> None:
     """`python -m scripts.build_seeds` (what `bun run --filter @repo/ai seeds:build`
     runs, from apps/ai) indexes the real seeds.json; when a seed can't be indexed at all
-    it fails without touching the committed templates.json, since a file missing one of
+    it fails without touching the committed director-seeds.json, since a file missing one of
     the 6 is worse than the one already there. Both models refuse here, so nothing this
     test does can overwrite it."""
     gemini[1][GEMINI_PATH] = MODEL_REFUSED
@@ -301,7 +302,7 @@ def test_the_command_leaves_templates_json_alone_when_a_seed_cant_be_indexed(
     try:
         run = subprocess.run(
             [sys.executable, "-m", "scripts.build_seeds"],
-            cwd=TEMPLATES_PATH.parents[2],
+            cwd=APP_ROOT,
             env={**os.environ, **gemini_env(gemini[0].url)},
             capture_output=True,
             text=True,

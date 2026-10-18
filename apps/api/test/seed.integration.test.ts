@@ -197,6 +197,24 @@ describe("the re-encryption command", () => {
   });
 });
 
+describe("Director's seed backfill command", () => {
+  it("says how many workspaces it checked and what it copied, and a second run copies nothing", async () => {
+    // A workspace made without the seeds, as every one was before they were copied at
+    // creation.
+    await factories(harness.app.get<Database>(DATABASE).write).userWithWorkspace();
+    const first = await command("../src/director-seed-workspaces");
+    expect(first.lines).toEqual([
+      expect.stringMatching(
+        /^Checked \d+ workspaces: copied [1-9]\d* seeded templates into [1-9]\d* of them\.$/,
+      ),
+    ]);
+    const again = await command("../src/director-seed-workspaces");
+    expect(again.lines).toEqual([
+      expect.stringMatching(/^Checked \d+ workspaces: copied 0 seeded templates into 0 of them\.$/),
+    ]);
+  });
+});
+
 describe("the server's entry points", () => {
   it("start the API listening, with telemetry off without an endpoint", async () => {
     await command("../src/telemetry", { OTEL_EXPORTER_OTLP_ENDPOINT: undefined });

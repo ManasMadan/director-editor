@@ -11,6 +11,7 @@ import {
   WORKSPACE_MEMBER_LIMIT,
 } from "@repo/contracts/auth";
 import { DAY_S, MINUTE_S } from "@repo/contracts/time";
+import { transaction } from "@repo/db";
 import { jobMetaFromContext } from "@repo/nest-common";
 import { APIError } from "better-auth/api";
 import { captcha } from "better-auth/plugins";
@@ -18,6 +19,8 @@ import { emailOTP } from "better-auth/plugins/email-otp";
 import { type OrganizationOptions, organization } from "better-auth/plugins/organization";
 import type { Env } from "../env";
 import { features } from "../features";
+import { copySeedTemplates } from "../modules/director/seeds.repository";
+import { emitEvent } from "../outbox";
 import { type AuthContext } from "./auth-context";
 import { membershipOf, orgIdOf, userIdOf } from "./ids";
 import { orgAccess, orgRoles } from "./org-access";
@@ -121,15 +124,22 @@ function workspaceHooks({
     // someone's own, on the consent page too.
     beforeCreateOrganization: async ({ organization: org }) => refusePersonal(org),
     beforeUpdateOrganization: async ({ organization: org }) => refusePersonal(org),
+    // A team's library starts with Director's seeded templates, like a personal one's.
+    // better-auth has already written the workspace, so they're copied together with its
+    // audit event; should that fail, the seed backfill copies them later.
     afterCreateOrganization: async ({ organization: org, user }) => {
       const [orgId, userId] = [orgIdOf(org), userIdOf(user)];
       await memberships.forget(orgId, userId);
-      await record(
-        "org.created.v1",
-        orgId,
-        { organizationId: orgId, name: org.name },
-        { actorId: userId, orgId },
-      );
+      await transaction(db, async (tx) => {
+        await copySeedTemplates(tx, orgId);
+        await emitEvent(
+          tx,
+          "org.created.v1",
+          orgId,
+          { organizationId: orgId, name: org.name },
+          { actorId: userId, orgId },
+        );
+      });
     },
     beforeDeleteOrganization: async ({ organization: org }) => {
       await memberships.forgetOrganization(orgIdOf(org));

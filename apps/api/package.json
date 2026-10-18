@@ -16,6 +16,7 @@
     "seed": "LOG_LEVEL=warn node --env-file-if-exists=../../.env --enable-source-maps dist/seed.mjs",
     "secrets:reencrypt": "node --env-file-if-exists=../../.env --enable-source-maps dist/reencrypt.mjs",
     "load:users": "LOG_LEVEL=warn node --env-file-if-exists=../../.env --enable-source-maps dist/load-users.mjs",
+    "director:seed-workspaces": "node --env-file-if-exists=../../.env --enable-source-maps dist/director-seed-workspaces.mjs",
     "coverage": "vitest run --coverage"
   },
   "dependencies": {

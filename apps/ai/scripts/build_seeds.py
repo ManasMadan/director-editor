@@ -1,5 +1,5 @@
-"""Builds apps/ai/app/seeds/templates.json: the plan every one of the 6 seed Shorts
-(app/seeds/seeds.json) gets, indexed for real with Gemini on Vertex AI, the same way the
+"""Builds packages/contracts/src/director-seeds.json: the plan every one of the 6 seed
+Shorts (app/seeds/seeds.json) gets, indexed for real with Gemini on Vertex AI, the same way the
 plan job indexes a member's own short (`app.director.index_short`). Run from the repo
 root whenever the plan schema changes:
 
@@ -33,9 +33,12 @@ from app.log import configure_logging, log
 from app.schemas import VIDEO_ID_PATTERN, ShotPlan
 from app.settings import Settings, get_settings
 
-_APP_ROOT = Path(__file__).resolve().parents[1]
-SEEDS_PATH = _APP_ROOT / "app" / "seeds" / "seeds.json"
-TEMPLATES_PATH = _APP_ROOT / "app" / "seeds" / "templates.json"
+APP_ROOT = Path(__file__).resolve().parents[1]
+SEEDS_PATH = APP_ROOT / "app" / "seeds" / "seeds.json"
+# In packages/contracts, not here: apps/api copies these templates into every new
+# workspace, bundled into its build, and services never import each other's files. The
+# contracts package parses it against the plan's contract when the API loads it.
+TEMPLATES_PATH = APP_ROOT.parents[1] / "packages" / "contracts" / "src" / "director-seeds.json"
 
 # Indexes a video id into its repaired plan and the name of whichever model wrote it
 # (index_short's own return). A function, not index_short itself, so a test can inject a
@@ -53,9 +56,9 @@ class SeedSource(BaseModel):
 
 
 class SeedTemplate(BaseModel):
-    """One entry of templates.json: a seed's repaired plan, the model that actually wrote
-    it, and the Cloud Storage key of its original audio. Task 2.2.2 copies these into
-    every new workspace's director_plan rows (source='seed')."""
+    """One entry of director-seeds.json: a seed's repaired plan, the model that actually wrote
+    it, and the Cloud Storage key of its original audio. apps/api copies these into every
+    new workspace's director_plan rows (source='seed')."""
 
     model_config = ConfigDict(strict=True, extra="forbid")
 
@@ -87,11 +90,11 @@ async def build_entry(seed: SeedSource, index: Indexer) -> SeedTemplate:
 
 async def build_templates(seeds: list[SeedSource], index: Indexer) -> list[SeedTemplate]:
     """Every seed's template, indexed one at a time and in order (seeds.json's own
-    order, so re-running leaves templates.json's diff minimal) rather than concurrently:
+    order, so re-running leaves the file's diff minimal) rather than concurrently:
     there are only 6, and indexing each one already retries and falls back on its own, so
     nothing is gained by racing them against the same Vertex AI project's quota. A seed
     `index` can't index at all (its retries and its fallback both fail) stops the whole
-    run: every seed must end up in templates.json, so a partial file is worse than none."""
+    run: every seed must end up in the file, so a partial file is worse than none."""
     templates: list[SeedTemplate] = []
     for seed in seeds:
         log.info("indexing seed", video_id=seed.videoId)
@@ -112,7 +115,7 @@ def settings_indexer(settings: Settings) -> Indexer:
     same way `Director`'s are, from INDEX_MODEL and INDEX_FALLBACK_MODEL through
     `create_index_model` and `create_planner_agent`), and a token budget of its own
     (DIRECTOR_TOKENS_PER_PLAN) rather than a workspace's reservation, since building
-    templates.json isn't a workspace's plan."""
+    the seed templates isn't a workspace's plan."""
     planner = create_planner_agent(create_index_model(settings, settings.index_model))
     fallback = create_planner_agent(create_index_model(settings, settings.index_fallback_model))
 

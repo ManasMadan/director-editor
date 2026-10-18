@@ -16,7 +16,8 @@ TypeScript client is `packages/ai-client`.
   `bun run --filter @repo/ai test:integration`
 - After changing routes, models or `packages/jobs`: `bun run gen`
 - After changing the plan schema (`ShotPlan`): `bun run --filter @repo/ai seeds:build`
-  re-indexes the 6 seed Shorts on Vertex AI into `app/seeds/templates.json` (commit it)
+  re-indexes the 6 seed Shorts on Vertex AI into `packages/contracts/src/director-seeds.json`
+  (commit it; the API copies it into every new workspace)
 
 ## Where things are
 

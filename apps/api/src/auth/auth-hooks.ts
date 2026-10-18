@@ -12,6 +12,7 @@ import { transaction } from "@repo/db";
 import { isLocale, isTimeZone, negotiateLocale } from "@repo/i18n";
 import type { BetterAuthOptions } from "better-auth";
 import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from "better-auth/api";
+import { copySeedTemplates } from "../modules/director/seeds.repository";
 import { requestNotification } from "../notifications";
 import { emitAnyEvent, emitEvent } from "../outbox";
 import type { AuthContext } from "./auth-context";
@@ -150,7 +151,8 @@ function userHooks({ db, record }: AuthContext): DatabaseHooks["user"] {
     create: {
       before: async (user, ctx) => ({ data: newUserFields(user, ctx) }),
       // Every user gets a personal workspace, so tenant-scoped features work from the
-      // first sign-in, for solo users and teams alike.
+      // first sign-in, for solo users and teams alike. Its library starts with Director's
+      // seeded templates, in the same transaction: no workspace exists without them.
       after: async (user) => {
         const userId = userIdOf(user);
         await transaction(db, async (tx) => {
@@ -163,6 +165,7 @@ function userHooks({ db, record }: AuthContext): DatabaseHooks["user"] {
             },
           });
           const orgId = orgIdOf(org);
+          await copySeedTemplates(tx, orgId);
           const origin = { actorId: userId, orgId };
           await emitEvent(tx, "auth.signed_up.v1", userId, { userId }, origin);
           await emitEvent(

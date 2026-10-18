@@ -6,7 +6,16 @@ import { randomUUID } from "node:crypto";
 import { type OrgId, orgIdSchema, type UserId, userIdSchema } from "@repo/contracts/ids";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, expectTypeOf, it } from "vitest";
-import { createDb, type Db, tenantTx, type userTx, withTenant, withUser } from "../src";
+import {
+  createDb,
+  type Db,
+  enterTenant,
+  tenantTx,
+  transaction,
+  type userTx,
+  withTenant,
+  withUser,
+} from "../src";
 import { createTestDatabase, type TestDatabase } from "../src/testing";
 
 let testDb: TestDatabase;
@@ -69,6 +78,15 @@ describe("row-level security", () => {
 
   it("shows nothing when no tenant is set", async () => {
     expect(await api.shortReaction.count()).toBe(0);
+  });
+
+  it("scopes the rest of a transaction to the workspace it enters", async () => {
+    const counts = await transaction(api, async (tx) => {
+      const before = await tx.shortReaction.count();
+      await enterTenant(tx, orgA);
+      return [before, await tx.shortReaction.count()];
+    });
+    expect(counts).toEqual([0, 1]);
   });
 
   it("rejects writing a row into another tenant", async () => {
@@ -207,7 +225,7 @@ describe("least privilege", () => {
     });
   });
 
-  it("lets the API read Director's cuts and nothing else of the AI service's", async () => {
+  it("lets the API read Director's cuts but not change them", async () => {
     await asRole("app_api", async (client) => {
       await expect(client.query("SELECT id FROM ai.director_cut")).resolves.toMatchObject({
         rowCount: 0,
@@ -216,6 +234,48 @@ describe("least privilege", () => {
         client.query("UPDATE ai.director_cut SET publish_status = 'published' WHERE false"),
       ).rejects.toThrow(/permission denied/);
       await expect(client.query("SELECT id FROM ai.director_plan")).rejects.toThrow(
+        /permission denied/,
+      );
+    });
+  });
+
+  it("lets the API copy seeded templates into a workspace, and write no other plan", async () => {
+    const seed = (orgId: OrgId) => ({
+      orgId,
+      videoId: "Seed_Short1",
+      source: "seed",
+      status: "ready",
+      stage: "ready",
+      plan: { title: "Seed" },
+      model: "seed-model",
+      audioStatus: "ready",
+      audioKey: "seed-audio/Seed_Short1.m4a",
+    });
+    const copy = (data: ReturnType<typeof seed>) =>
+      tenantTx(api, orgA, (tx) => tx.directorPlan.createMany({ data, skipDuplicates: true }));
+    expect(await copy(seed(orgA))).toEqual({ count: 1 });
+    // Copying again adds nothing: (org_id, video_id) is unique.
+    expect(await copy(seed(orgA))).toEqual({ count: 0 });
+    // Only seeds, only into the workspace in app.org_id, and never in anyone's name.
+    await expect(copy({ ...seed(orgA), videoId: "User_Short1", source: "user" })).rejects.toThrow(
+      /row-level security/,
+    );
+    await expect(copy(seed(orgB))).rejects.toThrow(/row-level security/);
+    await expect(
+      tenantTx(api, orgA, (tx) =>
+        tx.directorPlan.create({
+          data: { ...seed(orgA), videoId: "Seed_Short2", createdBy: userId },
+        }),
+      ),
+    ).rejects.toThrow(/permission denied/);
+    await asRole("app_api", async (client) => {
+      await expect(client.query("SELECT id FROM ai.director_plan")).rejects.toThrow(
+        /permission denied/,
+      );
+      await expect(
+        client.query("UPDATE ai.director_plan SET status = 'ready' WHERE false"),
+      ).rejects.toThrow(/permission denied/);
+      await expect(client.query("DELETE FROM ai.director_plan WHERE false")).rejects.toThrow(
         /permission denied/,
       );
     });

@@ -82,6 +82,10 @@ await tenantTx(database.write, orgId, async (tx) => {  // one interactive transa
 });
 ```
 
+A transaction that starts on non-tenant data and goes on to tenant rows calls
+`enterTenant(tx, orgId)` from then on: creating a workspace (its id exists only once it's
+inserted) and copying Director's seeded templates into it, in one transaction.
+
 `withUser` / `userTx` are the same for `app.user_id`. They take a branded id, an `OrgId`
 or a `UserId` from `@repo/contracts/ids` ([architecture.md](architecture.md#auth-and-tenancy)),
 so a user's id can't scope a workspace's query. The setting must be applied inside

@@ -83,6 +83,10 @@
     "secrets:reencrypt": {
       "dependsOn": ["build"],
       "cache": false
+    },
+    "director:seed-workspaces": {
+      "dependsOn": ["build"],
+      "cache": false
     }
   }
 }
