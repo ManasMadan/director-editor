@@ -27,6 +27,12 @@ describe("a take's frames", () => {
     expect(colors).toEqual(["red", "blue"]);
   });
 
+  it("shows the take from its very first frame", async () => {
+    const [first] = await videoFrames(take, [0]);
+    const image = await imageOf(first?.src ?? "");
+    expect(hue(pixel(image, 72, 128, 36, 64))).toBe("red");
+  });
+
   it("fails on a take the browser can't read", async () => {
     const broken = URL.createObjectURL(new Blob(["not a video"], { type: "video/webm" }));
     await expect(videoFrames(broken, [0])).rejects.toThrow("the take couldn't be read");

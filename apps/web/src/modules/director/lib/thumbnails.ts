@@ -17,6 +17,22 @@ function once(target: HTMLVideoElement, event: "loadeddata" | "seeked") {
   });
 }
 
+/**
+ * Moves the video to `time` and waits until that frame is the one a canvas would draw.
+ * `seeked` alone isn't enough: Chrome hands the new frame to the video's compositor on
+ * another thread, and on a busy machine it gets there after `seeked`, so drawing at once
+ * draws the frame before, or nothing at all. The frame callback fires once the new frame
+ * is presented; asked for before seeking, it can't fire for an earlier one or be missed.
+ */
+async function seekTo(video: HTMLVideoElement, time: number) {
+  const presented = new Promise<void>((resolve) => {
+    video.requestVideoFrameCallback(() => resolve());
+  });
+  const seeked = once(video, "seeked");
+  video.currentTime = time;
+  await Promise.all([seeked, presented]);
+}
+
 export interface Frame {
   seconds: number;
   /** A JPEG data: URL. */
@@ -41,9 +57,7 @@ export async function videoFrames(url: string, times: readonly number[]): Promis
   }
   const frames: Frame[] = [];
   for (const time of times) {
-    const seeked = once(video, "seeked");
-    video.currentTime = time;
-    await seeked;
+    await seekTo(video, time);
     const scale = Math.max(THUMB_WIDTH / video.videoWidth, THUMB_HEIGHT / video.videoHeight);
     const w = video.videoWidth * scale;
     const h = video.videoHeight * scale;
