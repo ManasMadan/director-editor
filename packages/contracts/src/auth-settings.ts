@@ -13,21 +13,16 @@ export const OTP_EXPIRES_IN = 5 * 60;
 
 /**
  * "Sudo mode": sensitive changes need a session signed in within this many seconds
- * (better-auth's freshAge, and the API's `fresh` procedures); after it, sign in again.
+ * (better-auth's freshAge); after it, sign in again.
  */
 export const FRESH_SESSION_AGE = 2 * HOUR_S;
 
-/**
- * Workspaces one account may belong to (including those it created), and invitations
- * one workspace may have waiting: each invitation is an email from our domain with a
- * name someone else chose, so neither can be unbounded.
- */
+/** Workspaces one account may belong to, including those it created. */
 export const ORGANIZATION_LIMIT = 20;
-export const PENDING_INVITATION_LIMIT = 20;
 
 /**
- * People one workspace may have, invitations waiting included. Director gives each person
- * one personal workspace of their own, never shared, so it is one: its owner.
+ * People one workspace may have. Director gives each person one personal workspace of
+ * their own, never shared, so it is one: its owner, and nobody can be invited.
  */
 export const WORKSPACE_MEMBER_LIMIT = 1;
 

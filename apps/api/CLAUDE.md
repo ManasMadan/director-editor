@@ -14,8 +14,8 @@ production.
 
 ## Where things are
 
-- `src/rpc/procedures.ts`: the procedure builders (`base`, `authed`, `fresh`, `inOrg`,
-  `orgAdmin`) and error mapping. `src/rpc/router.ts`: the router and the
+- `src/rpc/procedures.ts`: the procedure builders (`base`, `authed`, `inOrg`) and
+  error mapping. `src/rpc/router.ts`: the router and the
   steps to add a feature. `src/rpc/openapi.ts`: the REST document.
 - `src/modules/<feature>/`: one Nest module per feature; `modules/files` is the example.
 - `src/outbox.ts`: `emitEvent` for this service's events (`app.outbox_event`).

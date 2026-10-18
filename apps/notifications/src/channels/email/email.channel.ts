@@ -11,18 +11,12 @@ export class EmailChannel {
     @InjectPinoLogger(EmailChannel.name) private readonly log: PinoLogger,
   ) {}
 
-  async send(
-    to: string,
-    email: RenderedEmail,
-    idempotencyKey: string,
-    headers?: Record<string, string>,
-  ) {
+  async send(to: string, email: RenderedEmail, idempotencyKey: string) {
     const { providerMessageId } = await this.transport.send({
       ...email,
       to,
       from: env.EMAIL_FROM,
       idempotencyKey,
-      ...(headers && { headers }),
     });
     // Never log the body: it can contain one-time codes.
     this.log.info({ providerMessageId, subject: email.subject, idempotencyKey }, "email sent");

@@ -355,7 +355,6 @@
     "IDEMPOTENCY_IN_PROGRESS": "That's already being processed.",
     "FEATURE_DISABLED": "This feature isn't available.",
     "CLIENT_OUTDATED": "A new version is available. Please update to continue.",
-    "FRESH_SESSION_REQUIRED": "For your security, sign in again to do that.",
     "DESTINATION_NOT_ALLOWED": "That address isn't allowed.",
     "RESPONSE_TOO_LARGE": "The response was too large.",
     "TOO_MANY_REDIRECTS": "The address redirected too many times.",

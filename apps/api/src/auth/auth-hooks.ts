@@ -6,7 +6,7 @@
 import { NAME_MAX_LENGTH } from "@repo/contracts/auth";
 import type { AuthErrorCode } from "@repo/contracts/errors";
 import { type OrgId, orgIdSchema, type UserId, userIdSchema } from "@repo/contracts/ids";
-import { fieldOf, required } from "@repo/contracts/objects";
+import { required } from "@repo/contracts/objects";
 import { parseOrgRole } from "@repo/contracts/roles";
 import { transaction } from "@repo/db";
 import { isLocale, isTimeZone, negotiateLocale } from "@repo/i18n";
@@ -95,18 +95,9 @@ async function sendSecurityAlert(
  * succeeded, and never fails the request: the email is queued with retries.
  */
 export function requestHooks(context: AuthContext) {
-  const { db, emailLimits, accountLimits, memberRemoved } = context;
+  const { db, accountLimits, memberRemoved } = context;
   return {
     before: createAuthMiddleware(async (ctx) => {
-      // Invitation emails go out in the background, too late to refuse; so the limit is
-      // taken here, for new invitations and resends alike.
-      if (ctx.path === "/organization/invite-member") {
-        const session = await getSessionFromCtx(ctx);
-        const email = fieldOf(requestOf(ctx).body, "email");
-        if (session && typeof email === "string") {
-          await emailLimits.invitation(session.user.id, email);
-        }
-      }
       // Everyone trying Director shares the demo account: nobody may change or lock it.
       if (DEMO_LOCKED_PATHS.has(ctx.path)) {
         refuseForDemo((await getSessionFromCtx(ctx))?.user);

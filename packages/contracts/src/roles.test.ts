@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canManageWorkspace, parseOrgRole } from "./roles";
+import { parseOrgRole } from "./roles";
 
 describe("workspace roles", () => {
   it.each([
@@ -15,12 +15,5 @@ describe("workspace roles", () => {
     [undefined, null],
   ])("%s reads as %s", (stored, role) => {
     expect(parseOrgRole(stored)).toBe(role);
-  });
-
-  it("let only owners and admins manage the workspace", () => {
-    expect(canManageWorkspace("owner")).toBe(true);
-    expect(canManageWorkspace("admin")).toBe(true);
-    expect(canManageWorkspace("member")).toBe(false);
-    expect(canManageWorkspace(null)).toBe(false);
   });
 });

@@ -23,7 +23,6 @@ type ErrorCode = Annotated[
         "IDEMPOTENCY_IN_PROGRESS",
         "FEATURE_DISABLED",
         "CLIENT_OUTDATED",
-        "FRESH_SESSION_REQUIRED",
         "DESTINATION_NOT_ALLOWED",
         "RESPONSE_TOO_LARGE",
         "TOO_MANY_REDIRECTS",

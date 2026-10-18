@@ -65,8 +65,9 @@ export const withTenant = (db: Db, orgId: OrgId) =>
 
 /**
  * Like withTenant, for rows owned by one user rather than an organization (their
- * notifications, preferences, devices): row-level security on `app.user_id` scopes
- * every query to that user.
+ * uploads): row-level security on `app.user_id` scopes every query to that user. Each
+ * per-user write today is one statement; a unit of several needs a transaction that
+ * sets `app.user_id` first, the way tenantTx sets `app.org_id`.
  */
 export const withUser = (db: Db, userId: UserId) =>
   scoped(
@@ -74,16 +75,8 @@ export const withUser = (db: Db, userId: UserId) =>
     "user",
     "app.user_id",
     userId,
-    "Use userTx() for multi-statement units on per-user data.",
+    "A per-user client runs each query in its own transaction: a multi-statement unit needs one that scopes the user first, like tenantTx.",
   );
-
-/** Like tenantTx, for per-user data (see withUser). */
-export function userTx<T>(db: Db, userId: UserId, fn: (tx: Tx) => Promise<T>): Promise<T> {
-  return db.$transaction(async (tx) => {
-    await setScope(tx, "app.user_id", userId);
-    return fn(asTx(tx));
-  }, TX_OPTIONS);
-}
 
 declare const txBrand: unique symbol;
 

@@ -131,8 +131,8 @@ is a plain UUID string. A branded id is made by its schema, which checks it, whe
 id enters the code: the contract's input and output schemas, queue payloads and events
 (`parseJob`), better-auth's users, sessions and members (`apps/api/src/auth/ids.ts`),
 and a database row handed on (`orgIdSchema.parse(row.orgId)`;
-Prisma types columns as plain strings). `withTenant`, `tenantTx`, `withUser` and
-`userTx` take only an `OrgId` or a `UserId`. An id is never cast to its brand.
+Prisma types columns as plain strings). `withTenant`, `tenantTx` and `withUser` take
+only an `OrgId` or a `UserId`. An id is never cast to its brand.
 
 ## Async work
 

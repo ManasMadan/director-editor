@@ -86,7 +86,8 @@ A transaction that starts on non-tenant data and goes on to tenant rows calls
 `enterTenant(tx, orgId)` from then on: creating a workspace (its id exists only once it's
 inserted) and copying Director's seeded templates into it, in one transaction.
 
-`withUser` / `userTx` are the same for `app.user_id`. They take a branded id, an `OrgId`
+`withUser` is the same for `app.user_id` (each per-user write is one statement today, so
+there is no per-user transaction helper). They take a branded id, an `OrgId`
 or a `UserId` from `@repo/contracts/ids` ([architecture.md](architecture.md#auth-and-tenancy)),
 so a user's id can't scope a workspace's query. The setting must be applied inside
 the transaction that runs the query, because PgBouncer (transaction mode) hands each
@@ -106,7 +107,7 @@ query so read replicas are a change in that file only. Every connection is label
 with the service (`application_name`) and has a 15 s statement timeout and a 10 s
 idle-in-transaction timeout.
 
-`Tx` is a branded transaction client: only `tenantTx`, `userTx` and `transaction`
+`Tx` is a branded transaction client: only `tenantTx` and `transaction`
 produce one, so APIs that must run in a transaction (`emitEvent`) can't be called
 without one.
 

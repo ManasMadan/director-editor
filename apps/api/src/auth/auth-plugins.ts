@@ -7,10 +7,9 @@ import {
   ORGANIZATION_LIMIT,
   OTP_EXPIRES_IN,
   OTP_LENGTH,
-  PENDING_INVITATION_LIMIT,
   WORKSPACE_MEMBER_LIMIT,
 } from "@repo/contracts/auth";
-import { DAY_S, MINUTE_S } from "@repo/contracts/time";
+import { MINUTE_S } from "@repo/contracts/time";
 import { transaction } from "@repo/db";
 import { jobMetaFromContext } from "@repo/nest-common";
 import { APIError } from "better-auth/api";
@@ -24,8 +23,6 @@ import { emitEvent } from "../outbox";
 import { type AuthContext } from "./auth-context";
 import { membershipOf, orgIdOf, userIdOf } from "./ids";
 import { orgAccess, orgRoles } from "./org-access";
-
-const INVITATION_DAYS = 7;
 
 /** Refuses a client's attempt to mark a workspace as someone's personal one. */
 function refusePersonal(org: { slug?: string; metadata?: Record<string, unknown> }) {
@@ -82,16 +79,6 @@ function membershipHooks({
         { actorId: actor(userId), orgId },
       );
     },
-    afterAcceptInvitation: async ({ member, organization: org }) => {
-      const { orgId, userId } = membershipOf(member, org);
-      await memberships.forget(orgId, userId);
-      await record(
-        "org.member_added.v1",
-        member.id,
-        { organizationId: orgId, userId, role: member.role },
-        { actorId: userId, orgId },
-      );
-    },
     afterRemoveMember: async ({ member, organization: org }) => {
       const { orgId, userId } = membershipOf(member, org);
       await memberRemoved(
@@ -112,7 +99,7 @@ function membershipHooks({
   };
 }
 
-/** Workspaces created, deleted and invited to: audited, and held to the member limit. */
+/** Workspaces created and deleted, audited; and nobody invited to one. */
 function workspaceHooks({
   db,
   memberships,
@@ -154,18 +141,16 @@ function workspaceHooks({
       }
       await memberships.forgetOrganization(orgIdOf(org));
     },
-    // Invitations count towards the member limit, so a full workspace can't over-invite.
-    beforeCreateInvitation: async ({ organization: org }) => {
-      const [members, pending] = await Promise.all([
-        db.member.count({ where: { organizationId: org.id } }),
-        db.invitation.count({ where: { organizationId: org.id, status: "pending" } }),
-      ]);
-      if (members + pending >= WORKSPACE_MEMBER_LIMIT) {
-        throw new APIError("FORBIDDEN", {
-          code: "FORBIDDEN",
-          message: "The workspace's member limit is reached.",
-        });
-      }
+    // A workspace holds its owner alone (WORKSPACE_MEMBER_LIMIT is 1, and the inviter is
+    // a member), so every invitation is refused before better-auth writes it. better-auth
+    // checks the member limit only when one is accepted, which would leave invitations
+    // waiting that nobody can use. Raising the limit means counting members and pending
+    // invitations against it here.
+    beforeCreateInvitation: async () => {
+      throw new APIError("FORBIDDEN", {
+        code: "FORBIDDEN",
+        message: "The workspace's member limit is reached.",
+      });
     },
     afterDeleteOrganization: async ({ organization: org, user }) => {
       const orgId = orgIdOf(org);
@@ -176,20 +161,6 @@ function workspaceHooks({
         { actorId: userIdOf(user), orgId },
       );
     },
-    afterCreateInvitation: async ({ invitation, inviter, organization: org }) => {
-      const orgId = orgIdOf(org);
-      await record(
-        "org.invitation_sent.v1",
-        invitation.id,
-        {
-          organizationId: orgId,
-          invitationId: invitation.id,
-          email: invitation.email,
-          role: String(invitation.role),
-        },
-        { actorId: userIdOf(inviter), orgId },
-      );
-    },
   };
 }
 
@@ -198,9 +169,7 @@ export function organizationPlugin(context: AuthContext) {
     creatorRole: "owner",
     ac: orgAccess,
     roles: orgRoles,
-    invitationExpiresIn: INVITATION_DAYS * DAY_S,
     organizationLimit: ORGANIZATION_LIMIT,
-    invitationLimit: PENDING_INVITATION_LIMIT,
     membershipLimit: WORKSPACE_MEMBER_LIMIT,
     // Every membership change is audited (in the organization's own log, so its admins
     // see it) and forgets the cached role, so access follows immediately.

@@ -125,8 +125,9 @@ export function createAuth({ database = undefined, ...dependencies }: AuthDepend
     appName: APP_NAME,
     baseURL: env.BETTER_AUTH_URL,
     secret: env.BETTER_AUTH_SECRET,
-    // When set, the newest signs and encrypts and BETTER_AUTH_SECRET decrypts older values.
-    ...(env.BETTER_AUTH_SECRETS && { secrets: env.BETTER_AUTH_SECRETS }),
+    // Rotation: better-auth reads BETTER_AUTH_SECRETS from the environment itself (env.ts
+    // has already refused a malformed or short one). When set, the newest signs and
+    // encrypts, and BETTER_AUTH_SECRET decrypts older values (src/auth/secrets.ts).
     // Browsers may only call auth endpoints from the site itself (CSRF protection).
     trustedOrigins: [env.WEB_URL],
 
