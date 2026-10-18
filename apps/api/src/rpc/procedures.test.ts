@@ -23,9 +23,9 @@ describe("errors from procedures", () => {
 
   it("logs a client error only at debug, and only when it has a cause", () => {
     const log = vi.fn();
-    toContractError(new AppError("SHORT_NOT_FOUND"), log);
+    toContractError(new AppError("DIRECTOR_PLAN_NOT_FOUND"), log);
     expect(log).not.toHaveBeenCalled();
-    toContractError(new AppError("SHORT_NOT_FOUND", { cause: new Error("row gone") }), log);
+    toContractError(new AppError("DIRECTOR_PLAN_NOT_FOUND", { cause: new Error("row gone") }), log);
     expect(log).toHaveBeenCalledWith(expect.any(AppError), "debug");
   });
 
@@ -69,8 +69,12 @@ describe("errors from procedures", () => {
 
   it("keeps an oRPC error with a catalog code, and its params", () => {
     const log = vi.fn();
-    const bare = toContractError(new ORPCError("SHORT_NOT_FOUND", { status: 404 }), log);
-    expect(bare).toMatchObject({ code: "SHORT_NOT_FOUND", status: 404, data: { params: {} } });
+    const bare = toContractError(new ORPCError("DIRECTOR_PLAN_NOT_FOUND", { status: 404 }), log);
+    expect(bare).toMatchObject({
+      code: "DIRECTOR_PLAN_NOT_FOUND",
+      status: 404,
+      data: { params: {} },
+    });
     const withParams = toContractError(
       new ORPCError("RATE_LIMITED", { data: { params: { retryAfterSeconds: 3 } } }),
       log,

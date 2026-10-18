@@ -11,7 +11,7 @@ async function refusal(work: () => Promise<unknown>) {
 
 describe("a call to the AI service that fails", () => {
   it("lets this API's own error through as it is", async () => {
-    const own = new AppError("SHORT_NOT_FOUND");
+    const own = new AppError("DIRECTOR_PLAN_NOT_FOUND");
     await expect(refusal(() => Promise.reject(own))).resolves.toBe(own);
   });
 

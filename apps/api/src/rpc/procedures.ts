@@ -8,8 +8,8 @@
  *   inOrg   a signed-in member of the active organization; `context.orgId` (tenant for
  *           row-level security), `context.userId`, `context.role`
  *
- *   export const shortsRouter = ({ inOrg }: Procedures, shorts: ShortsService) => ({
- *     saved: inOrg.shorts.saved.handler(({ context, input }) => shorts.saved(context.orgId, ...)),
+ *   export const directorRouter = ({ inOrg }: Procedures, director: DirectorService) => ({
+ *     media: inOrg.director.media.handler(({ context }) => director.media(context.userId, ...)),
  *   });
  *
  * Every builder but `base` also applies the rate limit the procedure's contract declares

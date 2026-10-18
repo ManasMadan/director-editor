@@ -9,7 +9,6 @@ import { populateContractRouterPaths } from "@orpc/contract";
 import { directorContract } from "./director";
 import { filesContract } from "./files";
 import { realtimeContract } from "./realtime";
-import { shortsContract } from "./shorts";
 import { systemContract } from "./system";
 import { userContract } from "./user";
 
@@ -18,7 +17,6 @@ export const contract = populateContractRouterPaths({
   user: userContract,
   realtime: realtimeContract,
   files: filesContract,
-  shorts: shortsContract,
   director: directorContract,
 });
 
@@ -28,6 +26,5 @@ export * from "./base";
 export * from "./director";
 export * from "./files";
 export * from "./realtime";
-export * from "./shorts";
 export * from "./system";
 export * from "./user";

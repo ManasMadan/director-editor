@@ -19,7 +19,6 @@ import {
 } from "../ids";
 import { HOUR_S } from "../time";
 import { base, EVERYDAY_WRITES, errorsOf, WORKSPACE_ERRORS } from "./base";
-import { SHORT_URL_MAX_LENGTH } from "./shorts";
 
 const errors = errorsOf(
   ...WORKSPACE_ERRORS,
@@ -38,6 +37,10 @@ const errors = errorsOf(
   "FILE_NOT_READY",
 );
 
+/** Director films shorts: anything longer is refused (DIRECTOR_TOO_LONG). */
+export const SHORT_MAX_SECONDS = 180;
+/** A pasted YouTube link's longest. */
+export const SHORT_URL_MAX_LENGTH = 300;
 export const DIRECTOR_MAX_SHOTS = 12;
 /** A shot needs a retake when its best take scored below this (out of 100). */
 export const DIRECTOR_RETAKE_BELOW = 60;

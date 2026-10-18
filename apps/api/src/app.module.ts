@@ -12,7 +12,6 @@ import { AnalyticsModule } from "./modules/analytics";
 import { DirectorModule } from "./modules/director";
 import { FilesModule } from "./modules/files";
 import { RealtimeModule } from "./modules/realtime";
-import { ShortsModule } from "./modules/shorts";
 import { UserModule } from "./modules/user";
 import { NotificationsProducerModule } from "./notifications";
 
@@ -36,7 +35,6 @@ import { NotificationsProducerModule } from "./notifications";
     UserModule,
     RealtimeModule,
     FilesModule,
-    ShortsModule,
     AnalyticsModule,
     DirectorModule,
   ],

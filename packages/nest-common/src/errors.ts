@@ -5,7 +5,7 @@
  * code, so a Spanish UI never shows an English server message. The HTTP status comes
  * from the catalog, so it is defined once per code.
  *
- *   throw new AppError("SHORT_NOT_FOUND", { params: { id } });
+ *   throw new AppError("DIRECTOR_PLAN_NOT_FOUND", { params: { id } });
  *
  * The API layer maps it to its protocol (an oRPC error over /rpc and REST, an MCP tool
  * error for MCP).

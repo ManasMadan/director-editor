@@ -5,7 +5,7 @@ import { errorResponse } from "./api/base";
 
 describe("errorResponse", () => {
   it("is the shape of a contract error on the wire", () => {
-    const body = new ORPCError("SHORT_NOT_FOUND", {
+    const body = new ORPCError("DIRECTOR_PLAN_NOT_FOUND", {
       status: 404,
       data: { params: { id: "t-1" }, requestId: "r-1" },
     }).toJSON();

@@ -1,55 +1,18 @@
 /**
- * The Shorts feed, read from YouTube (./youtube.ts) and cached in Redis: YouTube's quota
- * is small (a search is 100 of 10,000 units a day) and shorts don't change by the minute.
- * The data is public, so the cache isn't per workspace; likes and saves are.
+ * The shorts Director films, as YouTube describes them (./youtube.ts): whether a pasted
+ * link is one it can index. What YouTube says about a video is cached in Redis for an
+ * hour (YouTube's quota is small, and a video's length doesn't change); the data is
+ * public, so the cache isn't per workspace.
  */
 import { Injectable } from "@nestjs/common";
-import {
-  SAVED_SHORTS_LIMIT,
-  SHORT_MAX_SECONDS,
-  type Short,
-  type ShortReactionKind,
-  type ShortReactions,
-  type ShortTopic,
-  shortCommentSchema,
-  shortSchema,
-} from "@repo/contracts/api";
-import type { OrgId, UserId, VideoId } from "@repo/contracts/ids";
-import { HOUR_S, MINUTE_S } from "@repo/contracts/time";
+import { SHORT_MAX_SECONDS } from "@repo/contracts/api";
+import type { VideoId } from "@repo/contracts/ids";
+import { HOUR_S } from "@repo/contracts/time";
 import { AppError, CacheService, InjectRedis, type Redis } from "@repo/nest-common";
-import * as z from "zod";
 import { env } from "../../env";
-import { ShortsRepository } from "./shorts.repository";
-import { videoIdFromLink, YouTube, YouTubeError } from "./youtube";
+import { type Video, videoIdFromLink, videoSchema, YouTube, YouTubeError } from "./youtube";
 
-/**
- * What each topic chip searches for. "all" is the most watched shorts; the rest are the
- * trends Director is made for, by the words their creators tag them with.
- */
-const TOPIC_QUERIES: Record<ShortTopic, string> = {
-  all: "#shorts",
-  grwm: "#grwm get ready with me #shorts",
-  outfits: "#outfit fit check #shorts",
-  sneakers: "#sneakers shoe check #shorts",
-  dance: "#dance trend #shorts",
-  cooking: "#cooking recipe #shorts",
-  travel: "#travel #shorts",
-  comedy: "#comedy skit #shorts",
-  fitness: "#workout #fitness #shorts",
-  pets: "#pets #dog #cat #shorts",
-};
-
-const FEED_TTL_S = 30 * MINUTE_S;
 const VIDEO_TTL_S = HOUR_S;
-const COMMENTS_TTL_S = 10 * MINUTE_S;
-
-// Cached as JSON, where dates come back as strings.
-const cachedShort = shortSchema.extend({ publishedAt: z.coerce.date() });
-const cachedFeed = z.object({ items: z.array(cachedShort), nextPageToken: z.string().nullable() });
-const cachedComments = z.object({
-  items: z.array(shortCommentSchema.extend({ publishedAt: z.coerce.date() })),
-  disabled: z.boolean(),
-});
 
 @Injectable()
 export class ShortsService {
@@ -58,54 +21,8 @@ export class ShortsService {
     : null;
   private readonly cache: CacheService;
 
-  constructor(
-    private readonly reactions: ShortsRepository,
-    @InjectRedis() redis: Redis,
-  ) {
+  constructor(@InjectRedis() redis: Redis) {
     this.cache = new CacheService(redis, "shorts");
-  }
-
-  private get source() {
-    if (!this.youtube) {
-      throw new AppError("FEATURE_DISABLED", { params: { feature: "director" } });
-    }
-    return this.youtube;
-  }
-
-  private async call<T>(work: (youtube: YouTube) => Promise<T>): Promise<T> {
-    const youtube = this.source;
-    try {
-      return await work(youtube);
-    } catch (error) {
-      if (error instanceof YouTubeError) {
-        throw new AppError("UPSTREAM_UNAVAILABLE", {
-          params: { service: "youtube" },
-          cause: error,
-        });
-      }
-      throw error;
-    }
-  }
-
-  feed(topic: ShortTopic, pageToken: string | undefined) {
-    return this.call((youtube) =>
-      this.cache.wrap(`feed:${topic}:${pageToken ?? ""}`, FEED_TTL_S, cachedFeed, () =>
-        youtube.search(
-          TOPIC_QUERIES[topic],
-          pageToken,
-          topic === "all" ? "viewCount" : "relevance",
-        ),
-      ),
-    );
-  }
-
-  /** One short (SHORT_NOT_FOUND when YouTube has no such video, or it can't be shown). */
-  async get(videoId: VideoId): Promise<Short> {
-    const [short] = await this.videos([videoId]);
-    if (!short) {
-      throw new AppError("SHORT_NOT_FOUND");
-    }
-    return short;
   }
 
   /**
@@ -113,70 +30,39 @@ export class ShortsService {
    * when the link isn't a YouTube video or YouTube won't show it (private, removed),
    * DIRECTOR_TOO_LONG past SHORT_MAX_SECONDS.
    */
-  async filmable(link: string): Promise<Short> {
+  async filmable(link: string): Promise<Video> {
     const videoId = videoIdFromLink(link);
-    const [short] = videoId ? await this.videos([videoId]) : [];
-    if (!short) {
+    const video = videoId ? await this.video(videoId) : null;
+    if (!video) {
       throw new AppError("DIRECTOR_VIDEO_UNAVAILABLE");
     }
-    if (short.durationSeconds > SHORT_MAX_SECONDS) {
+    if (video.durationSeconds > SHORT_MAX_SECONDS) {
       throw new AppError("DIRECTOR_TOO_LONG", { params: { maxSeconds: SHORT_MAX_SECONDS } });
     }
-    return short;
+    return video;
   }
 
-  lookup(link: string) {
-    const videoId = videoIdFromLink(link);
-    if (!videoId) {
-      throw new AppError("SHORT_NOT_FOUND");
+  /** The video, from the cache when it's there and from YouTube otherwise. */
+  private async video(videoId: VideoId): Promise<Video | null> {
+    if (!this.youtube) {
+      throw new AppError("FEATURE_DISABLED", { params: { feature: "director" } });
     }
-    return this.get(videoId);
-  }
-
-  comments(videoId: VideoId) {
-    return this.call((youtube) =>
-      this.cache.wrap(`comments:${videoId}`, COMMENTS_TTL_S, cachedComments, () =>
-        youtube.comments(videoId),
-      ),
-    );
-  }
-
-  async reactionsOf(orgId: OrgId, userId: UserId, videoId: VideoId): Promise<ShortReactions> {
-    const kinds = await this.reactions.kinds(orgId, userId, videoId);
-    return { liked: kinds.has("like"), saved: kinds.has("save") };
-  }
-
-  async react(
-    orgId: OrgId,
-    userId: UserId,
-    input: { videoId: VideoId; kind: ShortReactionKind; on: boolean },
-  ) {
-    await this.reactions.set(orgId, userId, input.videoId, input.kind, input.on);
-    return this.reactionsOf(orgId, userId, input.videoId);
-  }
-
-  async saved(orgId: OrgId, userId: UserId, kind: ShortReactionKind) {
-    const ids = await this.reactions.videos(orgId, userId, kind, SAVED_SHORTS_LIMIT);
-    return this.videos(ids);
-  }
-
-  /**
-   * Videos by id, from the cache where it has them and from YouTube (one request) for
-   * the rest; ones YouTube no longer has are left out.
-   */
-  private videos(ids: VideoId[]): Promise<Short[]> {
-    return this.call(async (youtube) => {
-      const cached = await Promise.all(ids.map((id) => this.cache.get(`video:${id}`, cachedShort)));
-      const missing = ids.filter((_, index) => cached[index] === undefined);
-      const fetched = new Map(
-        (await youtube.videos(missing)).map((short) => [short.videoId, short]),
-      );
-      await Promise.all(
-        [...fetched.values()].map((short) =>
-          this.cache.set(`video:${short.videoId}`, short, VIDEO_TTL_S),
-        ),
-      );
-      return ids.flatMap((id, index) => cached[index] ?? fetched.get(id) ?? []);
+    const cached = await this.cache.get(`video:${videoId}`, videoSchema);
+    if (cached) {
+      return cached;
+    }
+    const video = await this.youtube.video(videoId).catch((error: unknown) => {
+      if (error instanceof YouTubeError) {
+        throw new AppError("UPSTREAM_UNAVAILABLE", {
+          params: { service: "youtube" },
+          cause: error,
+        });
+      }
+      throw error;
     });
+    if (video) {
+      await this.cache.set(`video:${videoId}`, video, VIDEO_TTL_S);
+    }
+    return video;
   }
 }

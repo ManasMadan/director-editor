@@ -6,13 +6,15 @@ describe("AppError", () => {
     const error = new AppError("RATE_LIMITED", { params: { retryAfterSeconds: 30 } });
     expect(error.status).toBe(429);
     expect(error.params).toEqual({ retryAfterSeconds: 30 });
-    expect(new AppError("SHORT_NOT_FOUND").params).toEqual({});
+    expect(new AppError("DIRECTOR_PLAN_NOT_FOUND").params).toEqual({});
   });
 
   it("must be given the params its code's message needs (a type error otherwise)", () => {
     type Takes<C extends ErrorCode, A extends unknown[]> =
       A extends ConstructorParameters<typeof AppError<C>> ? true : false;
-    expectTypeOf<Takes<"SHORT_NOT_FOUND", ["SHORT_NOT_FOUND"]>>().toEqualTypeOf<true>();
+    expectTypeOf<
+      Takes<"DIRECTOR_PLAN_NOT_FOUND", ["DIRECTOR_PLAN_NOT_FOUND"]>
+    >().toEqualTypeOf<true>();
     expectTypeOf<
       Takes<"RATE_LIMITED", ["RATE_LIMITED", { params: { retryAfterSeconds: number } }]>
     >().toEqualTypeOf<true>();
@@ -23,8 +25,8 @@ describe("AppError", () => {
   });
 
   it("tells an expected failure from any other error", () => {
-    expect(isAppError(new AppError("SHORT_NOT_FOUND"))).toBe(true);
-    expect(isAppError(new Error("SHORT_NOT_FOUND"))).toBe(false);
-    expect(isAppError({ code: "SHORT_NOT_FOUND", status: 404 })).toBe(false);
+    expect(isAppError(new AppError("DIRECTOR_PLAN_NOT_FOUND"))).toBe(true);
+    expect(isAppError(new Error("DIRECTOR_PLAN_NOT_FOUND"))).toBe(false);
+    expect(isAppError({ code: "DIRECTOR_PLAN_NOT_FOUND", status: 404 })).toBe(false);
   });
 });

@@ -287,7 +287,6 @@
     "FILE_NOT_UPLOADED": "The file didn't finish uploading. Try again.",
     "FILE_NOT_READY": "That file is still being checked. Try again in a moment.",
     "AI_BUDGET_EXCEEDED": "You've used this month's AI allowance. It resets on the 1st.",
-    "SHORT_NOT_FOUND": "That short isn't on YouTube, or it's private.",
     "DIRECTOR_INDEX_LIMIT": "You've already added your own Short. Film it, or pick one of the templates.",
     "DIRECTOR_VIDEO_UNAVAILABLE": "That video isn't on YouTube, or it's private. Check the link and try again.",
     "DIRECTOR_TOO_LONG": "Director works with Shorts up to {maxSeconds, number} seconds long. Pick a shorter video.",

@@ -67,9 +67,12 @@ describe("features off", () => {
     expect(error.data?.params).toEqual({ feature: "ai" });
   });
 
-  it("answers FEATURE_DISABLED for the Shorts feed without a YouTube key", async () => {
+  it("answers FEATURE_DISABLED for indexing a short without a YouTube key", async () => {
     const session = await signedIn();
-    const error = await expectError(session.rpc.shorts.feed({ topic: "all" }), "FEATURE_DISABLED");
+    const error = await expectError(
+      session.rpc.director.index({ url: "https://youtu.be/dQw4w9WgXcQ" }),
+      "FEATURE_DISABLED",
+    );
     expect(error.data?.params).toEqual({ feature: "director" });
   });
 });
