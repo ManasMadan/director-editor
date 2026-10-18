@@ -6,12 +6,15 @@ import { useEffect, useRef, useState } from "react";
 type Href = Parameters<ReturnType<typeof useRouter>["push"]>[0];
 
 /**
- * Puts this page's extra history entry on top, with no state of our own: Next's App
- * Router copies its own state into every entry pushed this way (its native History API
- * support), so back to the entry under it restores the page as it was.
+ * Puts this page's extra history entry on top, unless it's there already. It carries no
+ * state of our own: Next's App Router copies its own state into every entry pushed this
+ * way (its native History API support), so back to the entry under it restores the page.
  */
-function pushEntry() {
-  window.history.pushState(null, "", window.location.href);
+function pushEntry(pushed: { current: boolean }) {
+  if (!pushed.current) {
+    pushed.current = true;
+    window.history.pushState(null, "", window.location.href);
+  }
 }
 
 /**
@@ -23,6 +26,9 @@ function pushEntry() {
  * The back gesture can't be cancelled, so while guarded an extra history entry for this
  * same page sits on top: back pops that one, which asks; Stay puts it back. When the take
  * is settled (kept or thrown away) the entry is taken off again, so back works as usual.
+ * Taking it off (`history.back()`) is asynchronous: a take started again before that pop
+ * arrives pushes its entry only once the pop has landed, so the old pop can't take the new
+ * entry with it.
  */
 export function useLeaveGuard({
   guarded,
@@ -45,9 +51,9 @@ export function useLeaveGuard({
   });
 
   useEffect(() => {
-    if (guarded && !pushed.current) {
-      pushed.current = true;
-      pushEntry();
+    // Our own pop is still on its way: the entry goes on once it has landed (below).
+    if (guarded && !ignoreNext.current) {
+      pushEntry(pushed);
     }
     if (!guarded && pushed.current) {
       pushed.current = false;
@@ -60,6 +66,10 @@ export function useLeaveGuard({
     const onBack = () => {
       if (ignoreNext.current) {
         ignoreNext.current = false;
+        // A take started while that pop was on its way: its entry goes on now.
+        if (latest.current.guarded) {
+          pushEntry(pushed);
+        }
         return;
       }
       if (pushed.current && latest.current.guarded) {
@@ -95,9 +105,8 @@ export function useLeaveGuard({
     },
     stay: () => {
       setAsking(false);
-      if (latest.current.guarded && !pushed.current) {
-        pushed.current = true;
-        pushEntry();
+      if (latest.current.guarded) {
+        pushEntry(pushed);
       }
     },
     confirm: () => {
