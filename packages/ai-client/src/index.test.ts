@@ -6,7 +6,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { jwtVerify } from "jose";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, expectTypeOf, it } from "vitest";
 import { AiServiceError, createAiClient } from "./index";
 
 const SECRET = "s".repeat(32);
@@ -145,6 +145,13 @@ describe("each call", () => {
 });
 
 describe("Director's calls", () => {
+  it("keep their types (a client typed any would hide every contract change from the API)", () => {
+    type Director = ReturnType<typeof createAiClient>["director"];
+    expectTypeOf<Director>().not.toBeAny();
+    expectTypeOf<Awaited<ReturnType<Director["library"]>>>().toHaveProperty("templates");
+    expectTypeOf<Awaited<ReturnType<Director["askEditor"]>>>().not.toBeAny();
+  });
+
   it("return what the service answered", async () => {
     handler = (request, response) => {
       const answers: Record<string, [number, unknown]> = {

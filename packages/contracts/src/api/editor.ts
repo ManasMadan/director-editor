@@ -21,9 +21,9 @@ const errors = errorsOf(
   "DIRECTOR_PLAN_NOT_READY",
 );
 
-export const EDITOR_TEXT_MAX_LENGTH = 500;
+const EDITOR_TEXT_MAX_LENGTH = 500;
 /** About a minute of speech (Opus in WebM or MP4), base64. */
-export const EDITOR_AUDIO_MAX_LENGTH = 1_400_000;
+const EDITOR_AUDIO_MAX_LENGTH = 1_400_000;
 const EDITOR_MAX_FIXES = 20;
 /** The longest a take can be, in seconds (apps/ai MAX_SHOT_SECONDS). */
 const TAKE_MAX_SECONDS = 60;
@@ -39,7 +39,7 @@ export const editorGrades = [
 ] as const;
 export type EditorGrade = (typeof editorGrades)[number];
 
-export const editorOps = [
+const editorOps = [
   "pick_take",
   "trim",
   "move_shot",
@@ -65,7 +65,7 @@ const shotIndex = z
 const takeSeconds = z.number().min(0).max(TAKE_MAX_SECONDS);
 
 /** The edit as the browser holds it, for Director to read. */
-export const editorStateSchema = z.object({
+const editorStateSchema = z.object({
   shots: z
     .array(
       z.object({

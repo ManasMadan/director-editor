@@ -20,7 +20,7 @@ import type { Clip } from "./edit";
 import type { Picks } from "./picks";
 
 /** The part of a take played, in seconds from its start. */
-export interface Trim {
+interface Trim {
   from: number;
   to: number;
 }

@@ -318,12 +318,13 @@ export function createAiClient(options: { baseUrl: string; secret: string; timeo
 
   /** Director's calls, as `ai.director.index(...)`. */
   return {
+    // Object.assign is typed for at most three sources and returns any past that, which
+    // hid every call's types from the API: the last two go in nested.
     director: Object.assign(
       directorCalls(forCall),
       takeCalls(forCall),
       assetCalls(forCall),
-      templateCalls(forCall),
-      editorCalls(forCall),
+      Object.assign(templateCalls(forCall), editorCalls(forCall)),
     ),
   };
 }
