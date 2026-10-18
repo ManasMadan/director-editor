@@ -337,6 +337,8 @@ describe("a live call", () => {
         automaticActivityDetection: {
           disabled: false,
           startOfSpeechSensitivity: "START_SENSITIVITY_LOW",
+          // Director's own voice from the loudspeaker needs more than a moment to cut it off.
+          prefixPaddingMs: 400,
           silenceDurationMs: 700,
         },
         activityHandling: "START_OF_ACTIVITY_INTERRUPTS",

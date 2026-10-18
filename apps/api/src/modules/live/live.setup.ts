@@ -526,11 +526,17 @@ export function setupMessage(
       // Low start-of-speech sensitivity keeps room noise and a short "mm" from cutting
       // Director off; 700 ms of silence ends the member's turn, which leaves the model
       // about 800 ms to start answering inside the 1.5 s the conversation allows.
+      // Speech has to last 400 ms before it counts as the member cutting in. On a phone,
+      // Director plays through the loudspeaker a few centimetres from the microphone, and
+      // the browser's echo cancellation lets bursts of its own voice through (worst with
+      // WebAudio playback at full volume, and outdoors with the noise suppressor working
+      // hard): at 200 ms those bursts cut Director off mid-sentence. A real "wait" or
+      // "stop" is longer than 400 ms, and the member can always type or tap.
       realtimeInputConfig: {
         automaticActivityDetection: {
           disabled: false,
           startOfSpeechSensitivity: "START_SENSITIVITY_LOW",
-          prefixPaddingMs: 200,
+          prefixPaddingMs: 400,
           silenceDurationMs: 700,
         },
         activityHandling: "START_OF_ACTIVITY_INTERRUPTS",
