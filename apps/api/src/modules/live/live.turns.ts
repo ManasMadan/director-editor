@@ -11,6 +11,10 @@
  * is a slight underestimate; a typed one is exact.
  */
 import type { LiveTool } from "@repo/contracts/live";
+import type { RATE_TOOL } from "./live.picks";
+
+/** A tool Director called: the browser's, or `rate`, which the relay answers itself. */
+type TurnTool = LiveTool | typeof RATE_TOOL;
 
 /** What the member did that Director answered: spoke, typed, or nothing (the app's note). */
 export type TurnInput = "voice" | "text" | "app";
@@ -20,7 +24,7 @@ export interface LiveTurn {
   /** The member's wait for Director's voice; null when Director didn't speak or nobody asked. */
   latencyMs: number | null;
   /** The tools Director called in the turn, in order. */
-  tools: LiveTool[];
+  tools: TurnTool[];
   /** The member talked over Director. */
   interrupted: boolean;
   /** Director said something aloud (a turn can be only a tool call). */
@@ -31,7 +35,7 @@ export class TurnMeter {
   private heardAt: number | null = null;
   private heard: Exclude<TurnInput, "app"> | null = null;
   private spokeAt: number | null = null;
-  private tools: LiveTool[] = [];
+  private tools: TurnTool[] = [];
   private interrupted = false;
 
   constructor(private readonly now: () => number) {}
@@ -50,7 +54,7 @@ export class TurnMeter {
     this.spokeAt ??= this.now();
   }
 
-  tool(name: LiveTool) {
+  tool(name: TurnTool) {
     this.tools.push(name);
   }
 

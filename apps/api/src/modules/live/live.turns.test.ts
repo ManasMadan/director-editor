@@ -31,12 +31,13 @@ describe("a turn's figures", () => {
     const { clock, turns } = meter();
     turns.member("text");
     turns.tool("adapt_shot");
+    turns.tool("rate");
     turns.tool("go_to_shot");
     turns.cutIn();
     expect(turns.complete()).toEqual({
       input: "text",
       latencyMs: null,
-      tools: ["adapt_shot", "go_to_shot"],
+      tools: ["adapt_shot", "rate", "go_to_shot"],
       interrupted: true,
       spoke: false,
     });

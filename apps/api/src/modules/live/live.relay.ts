@@ -601,6 +601,7 @@ export class LiveRelay {
         toolResponse: { functionResponses: [{ id: call.id, name: call.name, response }] },
       });
     if (call.name === RATE_TOOL) {
+      this.turn.tool(RATE_TOOL);
       return this.rate(call.args, answerNow);
     }
     if (!name) {
