@@ -15,7 +15,7 @@
  * (both refused in production, which needs HTTPS).
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { text } from "node:stream/consumers";
+import { buffer, text } from "node:stream/consumers";
 import * as z from "zod";
 import { answer, generateRequest, generateResponse, promptTokens, type SceneSteps } from "./gemini";
 import { type Answer, createOAuth, type OAuth } from "./oauth";
@@ -89,11 +89,7 @@ function reply(response: ServerResponse, { status, headers = {}, body: payload }
 }
 
 async function bytesOf(request: IncomingMessage) {
-  let bytes = 0;
-  for await (const chunk of request) {
-    bytes += Buffer.byteLength(z.instanceof(Buffer).parse(chunk));
-  }
-  return bytes;
+  return (await buffer(request)).length;
 }
 
 type Uploads = ReturnType<typeof createYouTubeUploads>;
