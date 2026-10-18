@@ -814,7 +814,6 @@
       "gaps": {
         "title": "Moments to fill",
         "hint": "Cutaways the original had, and shots you skipped. Pick a photo, a clip or stock for each; empty ones hold your nearest shot.",
-        "fill": "Fill: {description}",
         "filled": "Filled",
         "empty": "Holds your shot",
         "skipped": "Skipped shot"

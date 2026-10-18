@@ -281,7 +281,10 @@ function TellBox({ live }: { live: DirectorLive }) {
   return (
     <form
       onSubmit={send}
-      className={cn("flex items-center gap-1 rounded-full py-1 pr-1 pl-4", GLASS)}
+      className={cn(
+        "flex items-center gap-1 rounded-full py-1 pr-1 pl-4 focus-within:outline-2 focus-within:outline-studio-foreground",
+        GLASS,
+      )}
     >
       <input
         value={text}

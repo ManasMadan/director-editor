@@ -81,7 +81,6 @@ export function GapStrip({
                 type="button"
                 disabled={locked}
                 onClick={() => setPicking(gap)}
-                aria-label={t("fill", { description: gap.description })}
                 className={cn(
                   "flex min-h-11 w-40 flex-col items-start gap-1 rounded-xl border border-studio-foreground/15 px-3 py-2 text-left text-xs disabled:opacity-40",
                   done && "border-record",

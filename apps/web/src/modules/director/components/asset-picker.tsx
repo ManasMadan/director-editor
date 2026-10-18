@@ -33,7 +33,7 @@ import { Textarea } from "@repo/ui/components/textarea";
 import { cn } from "@repo/ui/lib/utils";
 import { Check, CircleAlert, ImagePlus, Plus, Send, Undo2, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { type FormEvent, useId, useState } from "react";
+import { type FormEvent, useId, useRef, useState } from "react";
 import { isGapSlot } from "../lib/scene";
 import { slotOrientation, slotPlacement } from "../lib/slot-preview";
 import { SlotPreview } from "./slot-preview";
@@ -74,7 +74,7 @@ function urlOf(slot: AssetSlot, selected: Selected) {
   return slot.images.find((image) => image.id === selected)?.url ?? null;
 }
 
-function Tile({
+export function PictureTile({
   label,
   image,
   selected,
@@ -88,6 +88,11 @@ function Tile({
   onSelect: () => void;
 }) {
   const t = useTranslations("director.picker");
+  // A clip plays only while the member looks at it (hovered or focused): a grid of them
+  // looping by themselves can't be stopped (WCAG 2.2.2), and spends a phone's data.
+  const clip = useRef<HTMLVideoElement>(null);
+  const play = () => void clip.current?.play().catch(() => undefined);
+  const still = () => clip.current?.pause();
   return (
     <button
       type="button"
@@ -95,13 +100,25 @@ function Tile({
       aria-label={inUse ? t("tileInUse", { label }) : label}
       disabled={image.status !== "ready"}
       onClick={onSelect}
+      onPointerEnter={play}
+      onPointerLeave={still}
+      onFocus={play}
+      onBlur={still}
       className={cn(
         "relative flex aspect-square min-h-11 items-center justify-center overflow-hidden rounded-lg bg-muted ring-offset-2 ring-offset-background",
         selected && "ring-2 ring-primary",
       )}
     >
       {image.status === "ready" && image.url && image.media === "video" ? (
-        <video src={image.url} muted loop autoPlay playsInline className="size-full object-cover" />
+        <video
+          ref={clip}
+          src={image.url}
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          className="size-full object-cover"
+        />
       ) : null}
       {image.status === "ready" && image.url && image.media !== "video" ? (
         <img src={image.url} alt="" className="size-full object-cover" />
@@ -141,7 +158,7 @@ function Results({
   return (
     <section aria-label={t("results")} className="grid grid-cols-3 gap-2">
       {showDefault && slot.defaultImage ? (
-        <Tile
+        <PictureTile
           label={t("defaultImage")}
           image={slot.defaultImage}
           selected={selected === "default"}
@@ -150,7 +167,7 @@ function Results({
         />
       ) : null}
       {images.map((image, index) => (
-        <Tile
+        <PictureTile
           key={image.id}
           label={
             image.credit ? t("stockBy", creditParams(image)) : t("yours", { index: index + 1 })
