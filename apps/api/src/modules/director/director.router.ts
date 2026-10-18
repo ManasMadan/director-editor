@@ -45,4 +45,13 @@ export const directorRouter = ({ inOrg }: Procedures, director: DirectorService)
   media: inOrg.director.media.handler(({ context }) =>
     director.media(context.userId, context.orgId),
   ),
+  brainstorm: inOrg.director.brainstorm.handler(({ context, input }) =>
+    director.brainstorm(context.userId, context.orgId, input),
+  ),
+  create: inOrg.director.create.handler(({ context, input }) =>
+    director.create(context.userId, context.orgId, input),
+  ),
+  editPlan: inOrg.director.editPlan.handler(({ context, input }) =>
+    director.editPlan(context.userId, context.orgId, input),
+  ),
 });

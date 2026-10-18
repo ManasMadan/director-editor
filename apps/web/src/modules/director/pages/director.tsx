@@ -26,6 +26,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DirectorGate, type EmbedOptions, sendCommand, YouTubeEmbed } from "@/modules/shorts";
+import { CreatedHero } from "../components/created-hero";
 import { IndexProgress } from "../components/index-progress";
 import { type MediaLinks, ShotList, Storyboard, useMediaLink } from "../components/shot-list";
 import { WhatYouNeed } from "../components/what-you-need";
@@ -391,12 +392,16 @@ function Ready({
   };
   return (
     <>
-      <Hero
-        plan={plan.plan}
-        videoId={plan.videoId}
-        watching={watching}
-        onWatchAll={() => setWatching(null)}
-      />
+      {plan.source === "created" ? (
+        <CreatedHero plan={plan.plan} videoId={plan.videoId} />
+      ) : (
+        <Hero
+          plan={plan.plan}
+          videoId={plan.videoId}
+          watching={watching}
+          onWatchAll={() => setWatching(null)}
+        />
+      )}
       <div className="flex flex-col gap-6 px-4 pt-2 pb-36">
         <p className="text-sm text-studio-foreground/70">{plan.plan.summary}</p>
         <WhatYouNeed videoId={plan.videoId} plan={plan.plan} />
@@ -407,7 +412,10 @@ function Ready({
           </p>
           <Storyboard shots={shots} watching={watching} onWatch={watch} />
         </section>
-        <Sound plan={plan} value={chosen} onChange={setChosen} />
+        {/* A template the member described has no original sound to film along to. */}
+        {plan.source === "created" ? null : (
+          <Sound plan={plan} value={chosen} onChange={setChosen} />
+        )}
         <section className="flex flex-col gap-3">
           <h2 className="text-sm font-semibold text-studio-foreground/80">{t("inOrder")}</h2>
           <ShotList

@@ -11,6 +11,8 @@
 import { createHash } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import {
+  type BrainstormReply,
+  type BriefInput,
   type DirectorChatInput,
   type DirectorChatReply,
   type DirectorCut,
@@ -76,6 +78,9 @@ function speechKey({ text, voice }: { text: string; voice: DirectorVoice }) {
 // A seed's storyboard cards, previews and music: signed only for a template's own page
 // (director.plan), which is read again before then.
 const MEDIA_READ_EXPIRES_S = HOUR_S;
+// A brief's photos are read by a brainstorm turn at once, and by the job that writes the
+// plan within its retries (three, minutes apart).
+const BRIEF_PHOTO_READ_EXPIRES_S = 30 * MINUTE_S;
 
 const PURPOSE: Record<DirectorTake["kind"], UploadPurpose> = {
   video: "director-take-video",
@@ -100,9 +105,20 @@ const wirePlan = directorPlanSchema.omit({ audio: true, plan: true }).extend({
       }),
     )
     .default([]),
+  // A created plan's storyboard cards, by shot; none for any other plan.
+  storyboards: z
+    .array(
+      z.object({
+        shotIndex: z.number().int(),
+        status: z.enum(["pending", "generating", "ready", "failed"]),
+        objectKey: z.string().nullable(),
+      }),
+    )
+    .default([]),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
+type StoryboardRow = z.infer<typeof wirePlan>["storyboards"][number];
 const wireTake = directorTakeSchema.extend({ createdAt: z.coerce.date() });
 const wireCut = directorCutSchema.omit({ picks: true, publish: true }).extend({
   picks: z.array(z.object({ shotIndex: z.number().int(), takeId: directorTakeSchema.shape.id })),
@@ -350,18 +366,77 @@ export class DirectorService {
   }
 
   /**
+   * Director's next turn while the member describes a template: their photos (ready
+   * `director-brief-photo` uploads of theirs) go to the AI service as short-lived reads.
+   */
+  async brainstorm(userId: UserId, orgId: OrgId, input: BriefInput): Promise<BrainstormReply> {
+    const photos = await this.briefPhotos(userId, input.photos);
+    return callAi((ai) =>
+      ai.director.brainstorm(aiCaller(userId, orgId), {
+        text: input.text,
+        messages: input.messages,
+        photos,
+      }),
+    );
+  }
+
+  /** A template of the member's own, queued to be written from their brief and photos. */
+  async create(userId: UserId, orgId: OrgId, input: BriefInput): Promise<DirectorPlan> {
+    const photos = await this.briefPhotos(userId, input.photos);
+    const row = await callAi((ai) =>
+      ai.director.createTemplate(aiCaller(userId, orgId), {
+        text: input.text,
+        messages: input.messages,
+        photos,
+      }),
+    );
+    return this.toPlan(row, { media: false });
+  }
+
+  /** The member's changes to the shots of a template they described. */
+  async editPlan(
+    userId: UserId,
+    orgId: OrgId,
+    input: { videoId: VideoId; plan: ShotPlan },
+  ): Promise<DirectorPlan> {
+    const row = await callAi((ai) => ai.director.editTemplate(aiCaller(userId, orgId), input));
+    return this.toPlan(row, { media: true });
+  }
+
+  private briefPhotos(userId: UserId, photos: readonly FileId[]) {
+    return Promise.all(
+      photos.map(async (fileId) => {
+        const { url } = await this.files.readUrl(
+          userId,
+          fileId,
+          "director-brief-photo",
+          BRIEF_PHOTO_READ_EXPIRES_S,
+        );
+        return { fileId, url };
+      }),
+    );
+  }
+
+  /**
    * The row as the contract serves it, with a short-lived link to its audio and, when
    * `media` is asked for, to a seeded template's storyboard cards, previews and music.
    */
   private async toPlan(row: unknown, { media }: { media: boolean }): Promise<DirectorPlan> {
-    const { audioStatus, audioKey, assetImages, plan: stored, ...plan } = wirePlan.parse(row);
+    const {
+      audioStatus,
+      audioKey,
+      assetImages,
+      storyboards,
+      plan: stored,
+      ...plan
+    } = wirePlan.parse(row);
     const shotPlan =
       stored && plan.source === "seed" ? withSeedAssets(plan.videoId, stored) : stored;
     const [url, served] = await Promise.all([
       audioStatus === "ready" && audioKey
         ? this.files.objectUrl(audioKey, AUDIO_READ_EXPIRES_S)
         : null,
-      shotPlan && media ? this.withMedia(plan, shotPlan, assetImages) : shotPlan,
+      shotPlan && media ? this.withMedia(plan, shotPlan, assetImages, storyboards) : shotPlan,
     ]);
     return { ...plan, plan: served, audio: { status: audioStatus, url } };
   }
@@ -375,6 +450,7 @@ export class DirectorService {
     plan: { id: string; videoId: VideoId; source: DirectorPlan["source"] },
     shotPlan: ShotPlan,
     rows: readonly AssetImageRow[],
+    storyboards: readonly StoryboardRow[] = [],
   ): Promise<ServedShotPlan> {
     const seed = plan.source === "seed";
     const made = seed ? seedAssetImages(plan.videoId, shotPlan) : planAssetImages(plan.id, rows);
@@ -382,7 +458,9 @@ export class DirectorService {
     const ids = new Set(shotPlan.assets.map((asset) => asset.id));
     const images = made.filter((image) => ids.has(image.assetId));
     const [served, signed] = await Promise.all([
-      seed ? this.withSeedMedia(plan.videoId, shotPlan) : shotPlan,
+      seed
+        ? this.withSeedMedia(plan.videoId, shotPlan)
+        : this.withStoryboards(shotPlan, storyboards),
       Promise.all(
         images.map(async (image) => ({
           image,
@@ -391,6 +469,32 @@ export class DirectorService {
       ),
     ]);
     return { ...served, assets: withAssetImages(served.assets, signed) };
+  }
+
+  /** A created plan with a link to each shot's storyboard card that's drawn. */
+  private async withStoryboards(
+    shotPlan: ShotPlan,
+    storyboards: readonly StoryboardRow[],
+  ): Promise<ServedShotPlan> {
+    const links = new Map<number, string>();
+    await Promise.all(
+      storyboards.map(async ({ shotIndex, status, objectKey }) => {
+        const url =
+          status === "ready" && objectKey
+            ? await this.files.objectUrl(objectKey, MEDIA_READ_EXPIRES_S)
+            : null;
+        if (url) {
+          links.set(shotIndex, url);
+        }
+      }),
+    );
+    return {
+      ...shotPlan,
+      shots: shotPlan.shots.map((shot, index) => {
+        const storyboardUrl = links.get(index);
+        return storyboardUrl ? { ...shot, storyboardUrl } : shot;
+      }),
+    };
   }
 
   /**

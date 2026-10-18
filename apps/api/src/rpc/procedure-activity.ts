@@ -23,6 +23,9 @@ import type { RecordActivity } from "../activity";
 /** The procedures with a name of their own (the rest are `api.called`). */
 const PROCEDURE_ACTIVITIES: Readonly<Record<string, ActivityName>> = {
   "director.index": "director.index_requested",
+  "director.brainstorm": "director.brainstormed",
+  "director.create": "director.create_requested",
+  "director.editPlan": "director.plan_edited",
   "director.plan": "director.plan_opened",
   "director.checkScene": "director.scene_checked",
   "director.addTake": "director.take_recorded",

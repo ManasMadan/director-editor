@@ -9,6 +9,8 @@ export const APP_PATHS = [
   "/library",
   "/shorts",
   "/director",
+  // Describing a template of your own, and changing its shots.
+  "/create",
   // My media: the videos the member saved from the editor.
   "/media",
 ];
@@ -23,7 +25,7 @@ export const STUDIO_PATHS = ["/library", "/media"];
  * Full-screen pages that bring their own chrome (a short's page and Director's camera),
  * so the site header and the page column stay out of their way.
  */
-export const IMMERSIVE_PATHS = ["/director"];
+export const IMMERSIVE_PATHS = ["/director", "/create"];
 
 /** Where a signed-in person lands: after signing in, and from the site's own links. */
 export const HOME_PATH = "/library";
