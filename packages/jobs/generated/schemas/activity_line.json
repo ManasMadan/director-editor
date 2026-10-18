@@ -1,0 +1,105 @@
+{
+  "title": "ActivityLine",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "activity": {
+      "type": "string",
+      "enum": [
+        "auth.signed_up",
+        "auth.signed_in",
+        "auth.signed_out",
+        "auth.session_revoked",
+        "auth.google_linked",
+        "auth.youtube_granted",
+        "auth.demo_refused",
+        "api.called",
+        "director.index_requested",
+        "director.indexed",
+        "director.plan_opened",
+        "director.call_started",
+        "director.call_ended",
+        "director.scene_checked",
+        "director.take_recorded",
+        "director.take_reviewed",
+        "director.cut_saved",
+        "director.publish_copy_drafted",
+        "director.publish_started",
+        "director.published",
+        "director.media_viewed",
+        "job.finished"
+      ],
+      "title": "ActivityName"
+    },
+    "actor": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "demo": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "title": "ActivityActor"
+    },
+    "orgId": {
+      "type": "string"
+    },
+    "target": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean",
+          "null"
+        ]
+      }
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "refused",
+        "failed"
+      ],
+      "title": "ActivityOutcome"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "ip": {
+      "type": "string"
+    },
+    "userAgent": {
+      "type": "string"
+    },
+    "requestId": {
+      "type": "string"
+    },
+    "traceId": {
+      "type": "string"
+    },
+    "durationMs": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "activity",
+    "actor",
+    "outcome"
+  ],
+  "additionalProperties": false
+}

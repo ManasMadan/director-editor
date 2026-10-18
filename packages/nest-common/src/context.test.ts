@@ -27,11 +27,11 @@ describe("request context", () => {
     });
   });
 
-  it("copies the request and user ids onto a job, and nothing outside a request", () => {
+  it("copies the request, user and workspace ids onto a job, and nothing outside a request", () => {
     expect(jobMetaFromContext()).toEqual({});
-    runWithContext({ requestId: "r-4", orgId: "o-4", locale: "es" }, () => {
+    runWithContext({ requestId: "r-4", orgId: "o-4", locale: "es", email: "a@b.c" }, () => {
       updateContext({ userId: "u-4" });
-      expect(jobMetaFromContext()).toEqual({ requestId: "r-4", userId: "u-4" });
+      expect(jobMetaFromContext()).toEqual({ requestId: "r-4", userId: "u-4", orgId: "o-4" });
     });
   });
 
@@ -48,8 +48,12 @@ describe("request context", () => {
     runWithContext({ requestId: "r-3", locale: "es", timeZone: "Europe/Madrid" }, () => {
       expect(contextLogFields()).toEqual({ requestId: "r-3" });
     });
-    runWithContext({ requestId: "r-4", userId: "u-1", orgId: "o-1", locale: "es" }, () => {
-      expect(contextLogFields()).toEqual({ requestId: "r-4", userId: "u-1", orgId: "o-1" });
-    });
+    const person = { email: "ada@example.com", name: "Ada", ip: "203.0.113.9", userAgent: "UA" };
+    runWithContext(
+      { requestId: "r-4", userId: "u-1", orgId: "o-1", locale: "es", ...person },
+      () => {
+        expect(contextLogFields()).toEqual({ requestId: "r-4", userId: "u-1", orgId: "o-1" });
+      },
+    );
   });
 });

@@ -20,12 +20,18 @@ export interface LoggerConfig {
   pretty?: boolean;
 }
 
-/** Header paths removed from request/response logs. */
+/**
+ * Paths removed from every line: credentials in headers, and request bodies whole (a
+ * sign-in's holds the password or code, a take's its signed URL; nothing logs one on
+ * purpose, and one logged by mistake must not leak).
+ */
 const REDACT_PATHS = [
   "req.headers.authorization",
   "req.headers.cookie",
   'req.headers["x-api-key"]',
   'res.headers["set-cookie"]',
+  "req.body",
+  "body",
 ];
 
 /**
@@ -41,19 +47,41 @@ const SENSITIVE_KEYS = new Set([
   "token",
   "secret",
   "accesstoken",
+  "access_token",
   "refreshtoken",
+  "refresh_token",
   "idtoken",
+  "id_token",
+  "sessiontoken",
+  "session_token",
+  "clientsecret",
+  "client_secret",
   "apikey",
   "authorization",
   "cookie",
+  "set-cookie",
   "backupcodes",
 ]);
 
 const CENSOR = "[redacted]";
 const MAX_DEPTH = 8;
 
+/**
+ * A presigned URL's signature is a credential: whoever has it can read the object
+ * (S3's and GCS's query parameters, and the `Signature` of older schemes).
+ */
+const SIGNED_URL = /\?(.*&)?(x-amz-signature|x-goog-signature|signature)=/is;
+
+/** A string as logged: a signed URL loses its whole query, anything else is kept. */
+function scrubText(value: string): string {
+  return SIGNED_URL.test(value) ? `${value.slice(0, value.indexOf("?"))}?${CENSOR}` : value;
+}
+
 /** Returns a copy of `value` with every sensitive field censored. Exported for tests. */
 export function scrub(value: unknown, depth = 0): unknown {
+  if (typeof value === "string") {
+    return scrubText(value);
+  }
   if (depth > MAX_DEPTH || value === null || typeof value !== "object") {
     return value;
   }

@@ -60,7 +60,7 @@ async function runService(env: Record<string, string>) {
   return stdout
     .split("\n")
     .filter(Boolean)
-    .map((line) => JSON.parse(line) as { msg?: string; trace_id?: string });
+    .map((line) => JSON.parse(line) as { msg?: string; traceId?: string });
 }
 
 interface ExportedSpans {
@@ -97,8 +97,8 @@ describe("telemetry", () => {
     // The request's log line carries the trace the collector received.
     const line = logs.find((entry) => entry.msg === "handling a request");
     const traceIds = scopes.flatMap((scope) => scope.spans.map((span) => span.traceId));
-    expect(line?.trace_id).toMatch(/^[0-9a-f]{32}$/);
-    expect(traceIds).toContain(line?.trace_id);
+    expect(line?.traceId).toMatch(/^[0-9a-f]{32}$/);
+    expect(traceIds).toContain(line?.traceId);
     // URLs keep their query's names, never its values (in and out).
     const exported = JSON.stringify(traces);
     expect(exported).toContain("code=&state=");
@@ -110,6 +110,6 @@ describe("telemetry", () => {
   it("sends nothing and changes nothing without an endpoint", async () => {
     const logs = await runService({});
     expect(received).toEqual([]);
-    expect(logs.find((entry) => entry.msg === "handling a request")?.trace_id).toBeUndefined();
+    expect(logs.find((entry) => entry.msg === "handling a request")?.traceId).toBeUndefined();
   });
 });
