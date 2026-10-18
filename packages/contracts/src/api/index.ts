@@ -10,6 +10,7 @@ import { directorContract } from "./director";
 import { filesContract } from "./files";
 import { publishContract } from "./publish";
 import { realtimeContract } from "./realtime";
+import { recordingContract } from "./recording";
 import { systemContract } from "./system";
 import { userContract } from "./user";
 
@@ -20,6 +21,7 @@ export const contract = populateContractRouterPaths({
   files: filesContract,
   director: directorContract,
   publish: publishContract,
+  recording: recordingContract,
 });
 
 export type Contract = typeof contract;
@@ -29,5 +31,6 @@ export * from "./director";
 export * from "./files";
 export * from "./publish";
 export * from "./realtime";
+export * from "./recording";
 export * from "./system";
 export * from "./user";

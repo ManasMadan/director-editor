@@ -59,3 +59,155 @@ model ShortReaction {
   @@map("short_reaction")
   @@schema("app")
 }
+
+/// Director's continuous recording (the roll): one session per "Start shooting" on a
+/// plan, until Done, the member's own. Its footage is in storage under
+/// `recordings/<id>/<part>/<slice>`, in ten-second slices the browser uploads as it
+/// records (packages/contracts recording.ts). Each attempt Director marks is cut out of
+/// it as a take (ai.director_take) by the clipper; the raw footage is deleted at
+/// `expires_at` (app.purge_expired_recordings, run by apps/worker's maintenance).
+model RecordingSession {
+  id           String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  orgId        String             @map("org_id") @db.Uuid
+  userId       String             @map("user_id") @db.Uuid
+  planId       String             @map("plan_id") @db.Uuid
+  /// The plan's YouTube video id, for the takes cut from it.
+  videoId      String             @map("video_id")
+  /// How many shots the plan has (a ready plan's shots never change): what a mark may name.
+  shotCount    Int                @map("shot_count")
+  /// recording | done
+  status       String             @default("recording")
+  /// Recorded on the shared demo account, whose footage and takes go after 24 hours.
+  demo         Boolean            @default(false)
+  /// Footage uploaded so far: what counts against the 20 minutes and the member's allowance.
+  recordedMs   Int                @default(0) @map("recorded_ms")
+  bytes        Int                @default(0)
+  /// When its raw footage is deleted: 7 days after the last video saved from it, 14 days
+  /// at most; 24 hours for the demo.
+  expiresAt    DateTime           @map("expires_at") @db.Timestamptz(3)
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  finishedAt   DateTime?          @map("finished_at") @db.Timestamptz(3)
+  organization Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan         DirectorPlan       @relation(fields: [planId], references: [id], onDelete: Cascade)
+  parts        RecordingPart[]
+  attempts     RecordingAttempt[]
+  pauses       RecordingPause[]
+
+  @@index([orgId, userId, createdAt(sort: Desc)])
+  @@index([userId])
+  @@index([planId])
+  @@index([expiresAt])
+  @@map("recording_session")
+  @@schema("app")
+}
+
+/// One run of the browser's recorder in a session: the first, and one per camera flip or
+/// comeback (a recorder can't switch tracks). Its slices are played from the first.
+model RecordingPart {
+  sessionId   String             @map("session_id") @db.Uuid
+  orgId       String             @map("org_id") @db.Uuid
+  index       Int
+  /// front | back
+  camera      String
+  /// video/webm | video/mp4: what the recorder made.
+  contentType String             @map("content_type")
+  /// How many slices the run made, once its recorder stopped (null while it records).
+  sliceCount  Int?               @map("slice_count")
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  session     RecordingSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  slices      RecordingSlice[]
+  attempts    RecordingAttempt[]
+  pauses      RecordingPause[]
+
+  @@id([sessionId, index])
+  @@map("recording_part")
+  @@schema("app")
+}
+
+/// A slice of a part's footage, signed for upload and then stored. Deleting a row queues
+/// its object for deletion from storage (a trigger, like files').
+model RecordingSlice {
+  sessionId  String        @map("session_id") @db.Uuid
+  orgId      String        @map("org_id") @db.Uuid
+  partIndex  Int           @map("part_index")
+  index      Int
+  /// Where it starts in its part's clock, and how long it lasts, in milliseconds.
+  startMs    Int           @map("start_ms")
+  durationMs Int           @map("duration_ms")
+  /// What the upload was signed for (and storage holds it to).
+  size       Int
+  /// pending (signed) | uploaded
+  status     String        @default("pending")
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  uploadedAt DateTime?     @map("uploaded_at") @db.Timestamptz(3)
+  part       RecordingPart @relation(fields: [sessionId, partIndex], references: [sessionId, index], onDelete: Cascade)
+
+  @@id([sessionId, partIndex, index])
+  @@map("recording_slice")
+  @@schema("app")
+}
+
+/// An attempt at a shot, between Director's marks, and the take it was cut into.
+model RecordingAttempt {
+  id          String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  orgId       String           @map("org_id") @db.Uuid
+  sessionId   String           @map("session_id") @db.Uuid
+  /// 1 for the session's first attempt, at any shot: the shoot screen numbers them, so a
+  /// mark sent again names the attempt it was for.
+  number      Int
+  shotIndex   Int              @map("shot_index")
+  partIndex   Int              @map("part_index")
+  line        String?
+  note        String?
+  /// Director's marks, in the part's clock; no end while it's open, or when it ran to
+  /// the part's end.
+  startMs     Int              @map("start_ms")
+  endMs       Int?             @map("end_ms")
+  /// open | waiting (for its footage) | clipping | clipped | failed
+  status      String           @default("open")
+  /// Where the clipper cut it: the marks snapped to the first and last words.
+  clipStartMs Int?             @map("clip_start_ms")
+  clipEndMs   Int?             @map("clip_end_ms")
+  /// The take's video (files.file, director-take-video) and the take.
+  fileId      String?          @map("file_id") @db.Uuid
+  takeId      String?          @map("take_id") @db.Uuid
+  /// Why it couldn't be cut (an error code).
+  error       String?
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  session     RecordingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  part        RecordingPart    @relation(fields: [sessionId, partIndex], references: [sessionId, index], onDelete: Cascade)
+  file        File?            @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  take        DirectorTake?    @relation(fields: [takeId], references: [id], onDelete: SetNull)
+
+  @@unique([sessionId, number])
+  /// At most one attempt open at a time.
+  @@unique([sessionId], map: "recording_attempt_one_open", where: raw("status = 'open'"))
+  @@index([fileId])
+  @@index([takeId])
+  @@map("recording_attempt")
+  @@schema("app")
+}
+
+/// A stretch nothing was recorded (the member paused), in a part's clock: no attempt is
+/// ever cut across one. No end while paused, or when the recorder had to start again.
+model RecordingPause {
+  sessionId String           @map("session_id") @db.Uuid
+  orgId     String           @map("org_id") @db.Uuid
+  partIndex Int              @map("part_index")
+  startMs   Int              @map("start_ms")
+  endMs     Int?             @map("end_ms")
+  /// Resumed (a touch on the shoot screen), so no longer open.
+  resumedAt DateTime?        @map("resumed_at") @db.Timestamptz(3)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  session   RecordingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  part      RecordingPart    @relation(fields: [sessionId, partIndex], references: [sessionId, index], onDelete: Cascade)
+
+  @@id([sessionId, partIndex, startMs])
+  /// At most one pause open (not resumed) at a time.
+  @@unique([sessionId], map: "recording_pause_one_open", where: raw("resumed_at IS NULL"))
+  @@map("recording_pause")
+  @@schema("app")
+}

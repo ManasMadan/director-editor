@@ -11,6 +11,7 @@ import { DirectorService, directorRouter } from "../modules/director";
 import { FilesService, filesRouter } from "../modules/files";
 import { PublishService, publishRouter } from "../modules/publish";
 import { RealtimeService, realtimeRouter } from "../modules/realtime";
+import { RecordingService, recordingRouter } from "../modules/recording";
 import { systemRouter } from "../modules/system";
 import { AvatarService, userRouter } from "../modules/user";
 import type { Procedures } from "./procedures";
@@ -23,6 +24,7 @@ export function createRouter(procedures: Procedures, app: INestApplicationContex
     files: filesRouter(procedures, app.get(FilesService)),
     director: directorRouter(procedures, app.get(DirectorService)),
     publish: publishRouter(procedures, app.get(PublishService)),
+    recording: recordingRouter(procedures, app.get(RecordingService)),
   });
 }
 

@@ -15,6 +15,8 @@ export const realtimeMessage = z.discriminatedUnion("type", [
   z.object({ type: z.literal("files.changed") }),
   /** The organization's Director plans or a member's takes changed (analyzed, reviewed). */
   z.object({ type: z.literal("director.changed") }),
+  /** One of the user's recording sessions changed: an attempt was clipped, or couldn't be. */
+  z.object({ type: z.literal("recording.changed") }),
 ]);
 export type RealtimeMessage = z.infer<typeof realtimeMessage>;
 

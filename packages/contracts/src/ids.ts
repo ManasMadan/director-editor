@@ -40,6 +40,12 @@ export type DirectorTakeId = z.infer<typeof directorTakeIdSchema>;
 export const directorCutIdSchema = z.uuid().brand<"DirectorCutId">();
 export type DirectorCutId = z.infer<typeof directorCutIdSchema>;
 
+export const recordingSessionIdSchema = z.uuid().brand<"RecordingSessionId">();
+export type RecordingSessionId = z.infer<typeof recordingSessionIdSchema>;
+
+export const recordingAttemptIdSchema = z.uuid().brand<"RecordingAttemptId">();
+export type RecordingAttemptId = z.infer<typeof recordingAttemptIdSchema>;
+
 /** A YouTube video id: 11 characters of URL-safe base64. */
 export const videoIdSchema = z
   .string()
