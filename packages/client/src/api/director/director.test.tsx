@@ -19,6 +19,7 @@ import { MINUTE_MS, SECOND_MS } from "@repo/contracts/time";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn, until } from "../../../test/stand-in";
 import { errorCode } from "../../errors";
+import { useDirectorChatMutation } from "./chat";
 import { useCheckSceneMutation } from "./check-scene";
 import { useIndexShortMutation } from "./index-short";
 import { takeInProgress } from "./latest";
@@ -362,6 +363,35 @@ describe("finding something in the camera", () => {
       found,
     );
     expect(sent).toEqual([{ target: "the window", image }]);
+  });
+});
+
+describe("talking to Director on the slower line", () => {
+  it("sends the turn and answers with Director's reply and its calls", async () => {
+    const sent: unknown[] = [];
+    const reply = {
+      reply: "Inside it is.",
+      calls: [{ name: "adapt_shot" as const, shot: 0, where: "Inside" }],
+    };
+    const api = standIn((os) => ({
+      director: {
+        chat: os.director.chat.handler(({ input }) => {
+          sent.push(input);
+          return reply;
+        }),
+      },
+    }));
+    const { result } = renderHook(() => useDirectorChatMutation(), api);
+    const input = {
+      videoId,
+      shotIndex: 0,
+      turn: { kind: "said" as const, text: "I'm fine inside" },
+      adaptations: [],
+      recent: [],
+      answers: [],
+    };
+    await expect(result.current.mutateAsync(input)).resolves.toEqual(reply);
+    expect(sent).toEqual([input]);
   });
 });
 

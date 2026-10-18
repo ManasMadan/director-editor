@@ -97,3 +97,40 @@ export function levelOf(samples: Float32Array): number {
   }
   return Math.min(1, Math.sqrt(sum / samples.length) / FULL_LEVEL_RMS);
 }
+
+/**
+ * A WAV file's samples and rate, as Director's spoken lines come (`director.speak`:
+ * Gemini's text-to-speech, 16-bit mono). Null for anything else: a file with no `fmt `
+ * or `data` chunk, or samples of another size.
+ */
+export function wavSamples(file: ArrayBuffer): { pcm: Int16Array; rate: number } | null {
+  const view = new DataView(file);
+  // Only ever read where four bytes are there: past the length check, or inside the loop's.
+  const tag = (at: number) => String.fromCharCode(...new Uint8Array(file, at, 4));
+  if (file.byteLength < 12 || tag(0) !== "RIFF" || tag(8) !== "WAVE") {
+    return null;
+  }
+  let rate = 0;
+  let bits = 0;
+  for (let at = 12; at + 8 <= file.byteLength; ) {
+    const size = view.getUint32(at + 4, true);
+    const body = at + 8;
+    if (tag(at) === "fmt " && body + 16 <= file.byteLength) {
+      rate = view.getUint32(body + 4, true);
+      bits = view.getUint16(body + 14, true);
+    }
+    if (tag(at) === "data") {
+      if (bits !== 16 || rate === 0) {
+        return null;
+      }
+      const length = Math.floor(Math.min(size, file.byteLength - body) / 2);
+      const pcm = Int16Array.from({ length }, (_, sample) =>
+        view.getInt16(body + sample * 2, true),
+      );
+      return { pcm, rate };
+    }
+    // Chunks are padded to an even length.
+    at = body + size + (size % 2);
+  }
+  return null;
+}

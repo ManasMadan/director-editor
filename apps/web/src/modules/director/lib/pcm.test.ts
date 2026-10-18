@@ -7,6 +7,7 @@ import {
   fromPcm16,
   levelOf,
   toPcm16,
+  wavSamples,
 } from "./pcm";
 
 /** A 440 Hz tone, `seconds` long at `rate`. */
@@ -78,5 +79,50 @@ describe("the voice's level, for the orb", () => {
     expect(loud).toBeGreaterThan(quiet);
     expect(levelOf(new Float32Array(256).fill(1))).toBe(1);
     expect(levelOf(new Float32Array(0))).toBe(0);
+  });
+});
+
+/** A WAV file: RIFF, an optional odd-sized chunk, `fmt ` and `data`. */
+function wav({ rate = 24_000, bits = 16, samples = [1, -2, 3], extra = false } = {}) {
+  const chunks: [string, Uint8Array<ArrayBuffer>][] = [];
+  if (extra) {
+    chunks.push(["LIST", new Uint8Array(3)]);
+  }
+  const fmt = new DataView(new ArrayBuffer(16));
+  fmt.setUint16(0, 1, true);
+  fmt.setUint16(2, 1, true);
+  fmt.setUint32(4, rate, true);
+  fmt.setUint16(14, bits, true);
+  chunks.push(["fmt ", new Uint8Array(fmt.buffer)]);
+  const data = new DataView(new ArrayBuffer(samples.length * 2));
+  for (const [at, sample] of samples.entries()) {
+    data.setInt16(at * 2, sample, true);
+  }
+  chunks.push(["data", new Uint8Array(data.buffer)]);
+  const parts = chunks.flatMap(([name, body]) => {
+    const head = new DataView(new ArrayBuffer(8));
+    for (const [at, char] of [...name].entries()) {
+      head.setUint8(at, char.charCodeAt(0));
+    }
+    head.setUint32(4, body.length, true);
+    return [new Uint8Array(head.buffer), body, new Uint8Array(body.length % 2)];
+  });
+  const riff = new TextEncoder().encode("RIFF\0\0\0\0WAVE");
+  return new Blob([riff, ...parts]).arrayBuffer();
+}
+
+describe("Director's spoken lines, as WAV files", () => {
+  it("reads 16-bit samples and their rate, past chunks it doesn't need", async () => {
+    expect(wavSamples(await wav({ rate: 24_000, extra: true }))).toEqual({
+      pcm: Int16Array.from([1, -2, 3]),
+      rate: 24_000,
+    });
+  });
+
+  it("reads nothing from a file that isn't a 16-bit WAV", async () => {
+    expect(wavSamples(new ArrayBuffer(4))).toBeNull();
+    expect(wavSamples(new TextEncoder().encode("RIFF\0\0\0\0AVI LIST").buffer)).toBeNull();
+    expect(wavSamples(await wav({ bits: 8 }))).toBeNull();
+    expect(wavSamples(new TextEncoder().encode("RIFF\0\0\0\0WAVEjunk\0\0\0\0").buffer)).toBeNull();
   });
 });

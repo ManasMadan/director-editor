@@ -47,7 +47,7 @@ const FRAME_QUALITY = 0.6;
 /** How long a flipped camera may take to show its first picture before it's sent anyway. */
 const NEW_PICTURE_MS = 2 * SECOND_MS;
 
-interface LiveEvents {
+export interface LiveEvents {
   /** The socket is open: Director can see the member (and hear them, with a microphone). */
   onLive: () => void;
   onTranscript: (who: Speaker, text: string) => void;
@@ -137,7 +137,7 @@ function startFrames(
 }
 
 /** Resolves once the camera's <video> has a picture of its own stream, or a while has passed. */
-function picture(video: HTMLVideoElement | null) {
+export function picture(video: HTMLVideoElement | null) {
   return new Promise<void>((resolve) => {
     if (!video || video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
       return resolve();
