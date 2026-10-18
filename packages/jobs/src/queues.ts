@@ -21,6 +21,7 @@ import {
   directorTakeIdSchema,
   fileIdSchema,
   orgIdSchema,
+  recordingAttemptIdSchema,
 } from "@repo/contracts/ids";
 import { DAY_S, HOUR_S, MINUTE_MS, SECOND_MS } from "@repo/contracts/time";
 import { locales } from "@repo/i18n";
@@ -167,6 +168,22 @@ export const queues = {
       removeOnFail: { age: 7 * DAY_S },
     },
   },
+  /**
+   * Director's continuous recording (apps/api and apps/worker's maintenance produce it,
+   * apps/worker consumes it): an ended attempt whose footage is all uploaded, to cut into
+   * a take on the clipper. The job id is the attempt's id, so an attempt is cut once
+   * however often it's queued. A clipper outage passes: spaced retries, then the attempt
+   * fails.
+   */
+  recording: {
+    jobs: { clip: z.object({ attemptId: recordingAttemptIdSchema, orgId: orgIdSchema }) },
+    options: {
+      attempts: 5,
+      backoff: { type: "exponential", delay: 10 * SECOND_MS, jitter: 0.5 },
+      removeOnComplete: { age: DAY_S },
+      removeOnFail: { age: 7 * DAY_S },
+    },
+  },
   maintenance: {
     jobs: {
       "outbox-retention": z.object({}),
@@ -174,6 +191,7 @@ export const queues = {
       "session-retention": z.object({}),
       "files-cleanup": z.object({}),
       "demo-retention": z.object({}),
+      "recording-retention": z.object({}),
     },
     options: {
       attempts: 3,

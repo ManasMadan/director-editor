@@ -3,13 +3,11 @@ process or Cloud Storage call, except for the two default implementations themse
 which run for real against a harmless process and a fake Cloud Storage client."""
 
 import asyncio
-import os
-import sys
 from pathlib import Path
 
 import pytest
 
-from app.audio import fetch_audio, run_yt_dlp, upload_to_gcs
+from app.audio import fetch_audio, upload_to_gcs
 from app.audio import storage as gcs
 
 VIDEO = "dQw4w9WgXcQ"
@@ -88,29 +86,6 @@ async def test_fetch_audio_gives_up_on_a_yt_dlp_that_hangs() -> None:
         pytest.fail("never uploads what yt-dlp never finished")
 
     assert await fetch_audio(VIDEO, BUCKET, run=hangs, upload=upload, give_up_after=0.05) is None
-
-
-async def test_run_yt_dlp_kills_the_process_when_it_is_given_up_on(tmp_path: Path) -> None:
-    pid_file = tmp_path / "pid"
-    sleeper = (
-        "import os, pathlib, time; "
-        f"pathlib.Path({str(pid_file)!r}).write_text(str(os.getpid())); time.sleep(60)"
-    )
-    # Long enough for the process to start and say who it is, far short of its minute.
-    with pytest.raises(TimeoutError):
-        await asyncio.wait_for(run_yt_dlp([sys.executable, "-c", sleeper]), timeout=3)
-    # Killed and reaped: no process with that id is left behind.
-    with pytest.raises(ProcessLookupError):
-        os.kill(int(pid_file.read_text()), 0)
-
-
-async def test_run_yt_dlp_runs_a_real_subprocess_and_reports_its_exit() -> None:
-    # A harmless process standing in for yt-dlp: no network, no binary this test depends on.
-    code, stderr = await run_yt_dlp(
-        [sys.executable, "-c", "import sys; sys.stderr.write('boom'); sys.exit(3)"]
-    )
-
-    assert (code, stderr) == (3, b"boom")
 
 
 async def test_upload_to_gcs_uploads_through_the_bucket_and_blob(

@@ -24,6 +24,12 @@ tests:
           content:
             from: [{ podSelector: { matchLabels: { app.kubernetes.io/name: api, app.kubernetes.io/instance: demo } } }]
             ports: [{ port: 8000 }]
+      # The worker has recorded attempts cut into takes through it.
+      - contains:
+          path: spec.ingress
+          content:
+            from: [{ podSelector: { matchLabels: { app.kubernetes.io/name: worker, app.kubernetes.io/instance: demo } } }]
+            ports: [{ port: 8000 }]
 
   - it: accepts no connections to a service without routes or callers
     template: networkpolicy.yaml

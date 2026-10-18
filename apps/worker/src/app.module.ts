@@ -13,6 +13,7 @@ import { env } from "./env";
 import { FilesModule } from "./files/files.module";
 import { MaintenanceModule } from "./maintenance/maintenance.module";
 import { OutboxModule } from "./outbox/outbox.module";
+import { RecordingModule } from "./recording/recording.module";
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { OutboxModule } from "./outbox/outbox.module";
     OutboxModule,
     AuditModule,
     FilesModule,
+    RecordingModule,
     MaintenanceModule,
   ],
 })

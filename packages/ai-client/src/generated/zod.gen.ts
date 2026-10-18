@@ -26,6 +26,37 @@ export const zCameraMove = z.enum([
 ]);
 
 /**
+ * ClipPause
+ *
+ * A stretch nothing was recorded: no take is ever cut across one.
+ */
+export const zClipPause = z.object({
+    endMs: z.int().gte(0).lte(1260000).nullable(),
+    startMs: z.int().gte(0).lte(1260000)
+});
+
+/**
+ * ClipSlice
+ */
+export const zClipSlice = z.object({
+    durationMs: z.int().gt(0).lte(15000),
+    startMs: z.int().gte(0).lte(1260000),
+    url: z.string().max(4000).regex(/^https?:\/\//)
+});
+
+/**
+ * ClipRequest
+ */
+export const zClipRequest = z.object({
+    attemptId: z.uuid(),
+    contentType: z.enum(['video/webm', 'video/mp4']),
+    endMs: z.int().gte(0).lte(1260000).nullable(),
+    pauses: z.array(zClipPause).max(200),
+    slices: z.array(zClipSlice).min(1).max(150),
+    startMs: z.int().gte(0).lte(1260000)
+});
+
+/**
  * CutPick
  *
  * The take picked for one shot of a cut.
@@ -178,9 +209,21 @@ export const zErrorCode = z.enum([
     'PUBLISH_CUT_NOT_READY',
     'PUBLISH_NO_CHANNEL',
     'PUBLISH_QUOTA_EXHAUSTED',
+    'RECORDING_NOT_FOUND',
+    'RECORDING_FINISHED',
+    'RECORDING_LIMIT_REACHED',
+    'RECORDING_STORAGE_FULL',
+    'RECORDING_PAUSED',
+    'RECORDING_PART_NOT_FOUND',
+    'RECORDING_PART_CLOSED',
+    'RECORDING_SLICE_NOT_UPLOADED',
+    'RECORDING_ATTEMPT_NOT_OPEN',
+    'RECORDING_MARK_OUT_OF_ORDER',
+    'RECORDING_SLICE_INVALID',
     'DIRECTOR_VIDEO_UNREADABLE',
     'DIRECTOR_ANALYSIS_FAILED',
-    'DIRECTOR_REVIEW_FAILED'
+    'DIRECTOR_REVIEW_FAILED',
+    'RECORDING_CLIP_FAILED'
 ]);
 
 /**
@@ -473,6 +516,18 @@ export const zLiveResponse = zHealthResponse;
  * Successful Response
  */
 export const zReadyResponse = zHealthResponse;
+
+export const zClipDirectorAttemptBody = zClipRequest;
+
+export const zClipDirectorAttemptHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+/**
+ * The attempt's take, an MP4; where it was cut in the part's clock in the x-clip-start-ms and x-clip-end-ms headers.
+ */
+export const zClipDirectorAttemptResponse = z.string();
 
 export const zListDirectorMediaHeaders = z.object({
     authorization: z.string().nullish(),

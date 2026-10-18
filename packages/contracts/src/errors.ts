@@ -103,11 +103,36 @@ export const ERROR_CODES = {
    * (PUBLISH_DAILY_LIMIT), or YouTube's quota for the project.
    */
   PUBLISH_QUOTA_EXHAUSTED: 429,
+  // Director's continuous recording
+  /** No recording session of the member's has this id (or its footage was deleted). */
+  RECORDING_NOT_FOUND: 404,
+  /** The session is done: nothing more can be marked, paused or started in it. */
+  RECORDING_FINISHED: 409,
+  /** The session has recorded its 20 minutes (params: maxMinutes). */
+  RECORDING_LIMIT_REACHED: 409,
+  /** The member's raw footage is at its allowance: an older session has to go first. */
+  RECORDING_STORAGE_FULL: 409,
+  /** Recording is paused: nothing records, and no attempt starts, until a touch resumes. */
+  RECORDING_PAUSED: 409,
+  /** The session has no part with this index. */
+  RECORDING_PART_NOT_FOUND: 404,
+  /** The part has ended (a slice past its count), or is in use for another camera or type. */
+  RECORDING_PART_CLOSED: 409,
+  /** The slice isn't in storage: its upload didn't finish. */
+  RECORDING_SLICE_NOT_UPLOADED: 409,
+  /** An attempt was marked as ended while none was open. */
+  RECORDING_ATTEMPT_NOT_OPEN: 409,
+  /** A start numbered below the session's last attempt: a mark from before a reload. */
+  RECORDING_MARK_OUT_OF_ORDER: 409,
+  /** A part's first slice isn't the kind of recording its part said it would be. */
+  RECORDING_SLICE_INVALID: 422,
   // The next three are only ever a plan's or take's error, never an HTTP answer.
   /** Gemini couldn't watch the video (private, age-restricted, removed). */
   DIRECTOR_VIDEO_UNREADABLE: 422,
   DIRECTOR_ANALYSIS_FAILED: 422,
   DIRECTOR_REVIEW_FAILED: 422,
+  /** Only ever an attempt's error: it couldn't be cut out of the footage into a take. */
+  RECORDING_CLIP_FAILED: 422,
 } as const satisfies Record<string, number>;
 
 export type ErrorCode = keyof typeof ERROR_CODES;
@@ -123,6 +148,7 @@ export const ERROR_PARAMS = {
   FILE_TYPE_NOT_ALLOWED: z.object({ types: z.string() }),
   FILE_TOO_LARGE: z.object({ maxBytes: z.number().int() }),
   DIRECTOR_TOO_LONG: z.object({ maxSeconds: z.number().int() }),
+  RECORDING_LIMIT_REACHED: z.object({ maxMinutes: z.number().int() }),
 } as const satisfies Partial<Record<ErrorCode, z.ZodObject>>;
 
 type ParamsFree = Record<string, string | number>;

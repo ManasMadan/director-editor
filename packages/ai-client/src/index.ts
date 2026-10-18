@@ -12,9 +12,11 @@
  * the user and organization it's for: the service trusts nothing else.
  */
 import { SignJWT } from "jose";
+import * as z from "zod";
 import { createClient } from "./generated/client";
 import {
   checkDirectorScene,
+  clipDirectorAttempt,
   createDirectorCut,
   createDirectorTake,
   getDirectorCut,
@@ -28,6 +30,7 @@ import {
   writeDirectorPublishCopy,
 } from "./generated/sdk.gen";
 import type {
+  ClipRequest,
   DirectorCutCreate,
   DirectorTakeCreate,
   ErrorCode,
@@ -70,6 +73,10 @@ function toServiceError(status: number, body: unknown): AiServiceError {
 }
 
 const TOKEN_LIFETIME_SECONDS = 60;
+
+/** Where a clip was cut, as its response's headers say: whole milliseconds. */
+const milliseconds = z.string().regex(/^\d+$/).transform(Number);
+const clipWindow = z.object({ startMs: milliseconds, endMs: milliseconds });
 
 /** A call's headers: its own token, naming the user and organization, and the request id. */
 async function callHeaders(key: Uint8Array, caller: AiCaller) {
@@ -156,6 +163,24 @@ function directorCalls(forCall: (caller: AiCaller) => Promise<ReturnType<typeof 
         throw new AiServiceError(502, "UPSTREAM_UNAVAILABLE");
       }
       return new Uint8Array(await data.arrayBuffer());
+    },
+    /**
+     * A recorded attempt cut into a take: the MP4's bytes, and where in its part it was
+     * cut (the headers say; the bytes have no schema to check, so the type and those
+     * headers are the contract).
+     */
+    async clip(caller: AiCaller, body: ClipRequest) {
+      const { data, response } = await settle(
+        clipDirectorAttempt({ client: await forCall(caller), body, parseAs: "blob" }),
+      );
+      const cut = clipWindow.safeParse({
+        startMs: response?.headers.get("x-clip-start-ms"),
+        endMs: response?.headers.get("x-clip-end-ms"),
+      });
+      if (!data || response?.headers.get("content-type") !== "video/mp4" || !cut.success) {
+        throw new AiServiceError(502, "UPSTREAM_UNAVAILABLE");
+      }
+      return { video: new Uint8Array(await data.arrayBuffer()), ...cut.data };
     },
     async getCut(caller: AiCaller, cutId: string) {
       return unwrap(getDirectorCut({ client: await forCall(caller), path: { cut_id: cutId } }));

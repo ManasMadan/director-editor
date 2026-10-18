@@ -22,7 +22,8 @@ tests:
             type: redis
             metadata: { listName: "{files}:files:wait", listLength: "20" }
             authenticationRef: { name: demo-valkey }
-      - lengthEqual: { path: spec.triggers, count: 3 }
+      # events-audit, files, maintenance and recording.
+      - lengthEqual: { path: spec.triggers, count: 4 }
 
   - it: authenticates to Valkey from its Secret
     template: keda.yaml

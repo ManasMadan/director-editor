@@ -22,6 +22,7 @@ from redis.asyncio import Redis
 from sqlalchemy import text
 
 from app.auth import CallerDep
+from app.clipping import Clipper, LocalClipper, RemoteClipper, clip_response
 from app.contracts.error_response import ErrorResponse
 from app.db.models import DirectorCut, DirectorPlan, DirectorTake
 from app.db.session import close_engine, engine, open_engine
@@ -31,6 +32,7 @@ from app.log import configure_logging
 from app.queues import DirectorQueue
 from app.schemas import (
     VIDEO_ID_PATTERN,
+    ClipRequest,
     CutPick,
     DirectorCutCreate,
     DirectorCutOut,
@@ -60,6 +62,7 @@ class Services:
     redis: Redis
     director: Director | None
     speaker: Speaker | None
+    clipper: Clipper
 
 
 _services: Services | None = None
@@ -84,6 +87,11 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
         redis=redis,
         director=create_director(settings, director_queue, redis, http),
         speaker=create_speaker(settings),
+        # Recorded attempts are cut on the Cloud Run clipper when CLIPPER_URL names it,
+        # off this machine; otherwise here, the same way.
+        clipper=RemoteClipper(settings.clipper_url, http)
+        if settings.clipper_url
+        else LocalClipper(http),
     )
     yield
     _services = None
@@ -322,3 +330,24 @@ async def write_director_publish_copy(
     """Gemini's YouTube post for one of the caller's cuts: a title, a description and
     hashtags in the Short's language, and the credits to the original."""
     return await director.publish_copy(caller.org_id, caller.user_id, body)
+
+
+@app.post(
+    "/v1/director/clips",
+    operation_id="clipDirectorAttempt",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {"video/mp4": {"schema": {"type": "string", "format": "binary"}}},
+            "description": (
+                "The attempt's take, an MP4; where it was cut in the part's clock in the"
+                " x-clip-start-ms and x-clip-end-ms headers."
+            ),
+        }
+    },
+)
+async def clip_director_attempt(body: ClipRequest, _caller: CallerDep) -> Response:
+    """Cuts a recorded attempt out of its session's footage into a take: Director's marks
+    snapped to the first and last words, never across a pause (RECORDING_CLIP_FAILED when
+    there's nothing to cut; UPSTREAM_UNAVAILABLE while the footage can't be reached)."""
+    return await clip_response(services().clipper, body)

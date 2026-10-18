@@ -38,6 +38,7 @@ import {
   updateContext,
 } from "@repo/nest-common";
 import type { Auth } from "../auth/auth";
+import { DEMO_EMAIL } from "../auth/demo";
 import { sessionWithIds } from "../auth/ids";
 import type { Memberships } from "../auth/memberships";
 import { env } from "../env";
@@ -62,6 +63,11 @@ export interface OrgCaller {
   demo: boolean;
   /** A demo guest (auth/guest.ts), which gets fewer live calls than a member. */
   guest: boolean;
+  /**
+   * The one demo account everyone signs in to (DEMO_EMAIL), as opposed to a private demo
+   * guest of one browser's: what's recorded on it would be everyone's to see.
+   */
+  sharedDemo: boolean;
 }
 
 type ErrorParams = ErrorData["params"];
@@ -211,6 +217,7 @@ export function orgCallerFor(auth: Auth, memberships: Memberships) {
       signedInAt: new Date(result.session.createdAt),
       demo: result.user.demo === true,
       guest: result.user.guestUntil != null,
+      sharedDemo: result.user.demo === true && result.user.email === DEMO_EMAIL,
     };
   };
 }

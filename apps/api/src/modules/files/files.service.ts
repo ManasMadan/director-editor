@@ -152,6 +152,44 @@ export class FilesService {
     return storage.presignDownload(key, { expiresInSeconds });
   }
 
+  /**
+   * A presigned PUT of exactly `size` bytes of `contentType` to an object the services
+   * keep themselves rather than an upload (a slice of Director's recording, which only
+   * the clipper ever reads): no row, no quarantine, so the caller decides who may write
+   * it and where. FEATURE_DISABLED while storage is off.
+   */
+  signObjectUpload(key: string, contentType: string, size: number, expiresInSeconds: number) {
+    return this.storage.presignUpload({
+      key,
+      contentType,
+      contentLength: size,
+      expiresInSeconds,
+    });
+  }
+
+  /** How many bytes storage holds at `key`, or null when there's nothing there. */
+  async storedSize(key: string): Promise<number | null> {
+    const object = await this.storage.head(key);
+    return object ? object.size : null;
+  }
+
+  /** FEATURE_DISABLED while storage is off, before anything that will need it starts. */
+  requireStorage() {
+    if (!this.optionalStorage) {
+      throw new AppError("FEATURE_DISABLED", { params: { feature: "files" } });
+    }
+  }
+
+  /** The bytes of an object the services keep themselves, up to `maxBytes`. */
+  readObject(key: string, maxBytes: number) {
+    return this.storage.read(key, maxBytes);
+  }
+
+  /** Deletes an object the services keep themselves (deleting what's gone is fine). */
+  deleteObject(key: string) {
+    return this.storage.delete(key);
+  }
+
   /** Deletes the row; the database queues its stored objects for removal. */
   async remove(userId: UserId, fileId: FileId) {
     await this.files.remove(userId, fileId);

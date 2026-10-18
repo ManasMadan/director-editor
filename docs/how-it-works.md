@@ -282,6 +282,62 @@ conversation up (`&resume=1`, no second hello); only if that fails too does the 
 say why. The first time a shoot reaches Gemini, the API records a `call_started` event
 in BigQuery.
 
+## Continuous recording
+
+<!-- verify after the new shoot screen lands: it calls the client helpers below -->
+
+The new shoot screen records the whole session, from "Start shooting" to Done, instead
+of a take per button press (packages/contracts `src/recording.ts` and `src/api/recording.ts`).
+
+- **The session.** `recording.start` opens one on a ready plan (`app.recording_session`,
+  the member's own). Each run of the browser's MediaRecorder is a part (`addPart`): the
+  first, and one per camera flip or comeback (a recorder can't switch tracks); `closePart`
+  says how many slices it made.
+- **Slices.** The recorder hands over a slice every ten seconds. The browser keeps each in
+  IndexedDB (`useSliceUploader`, packages/client `api/recording/upload-slices.ts`) until
+  it's sent: `uploadSlice` signs a PUT for exactly that slice, the bytes go straight to
+  storage under `recordings/`, and `completeSlice` counts it. A dead tab loses at most the
+  slice in progress; the shoot screen opened again sends the rest. The queue holds at most
+  five minutes: past that the uploader refuses slices and says it's full, for the screen
+  to pause. A session records at most 20 minutes, and a member keeps at most 1 GB of raw
+  footage. Both are counted on the server, under a lock per member, so uploads at once
+  can't pass them; a slice counts for its duration, or for as long as its size takes at
+  the highest bitrate a recorder reaches (6.4 Mbit/s), whichever is longer. The shared
+  demo account can't record (`DEMO_ACCOUNT_LOCKED`); a demo guest's private workspace
+  can.
+- **Attempts.** Director's `mark` tool says where an attempt at a shot starts and ends,
+  in the part's own clock. The shoot screen numbers each start (1, 2, ...) and sends an
+  end with its attempt's number, so a retried mark is answered with what it did the first
+  time, and a late end can never end a newer attempt (`RECORDING_MARK_OUT_OF_ORDER`). A
+  start while one is open ends that one there; a pause ends the open attempt, and no
+  attempt is ever cut across a pause (`pause` and `resume`, the latter only from a
+  touch). Done (`finish`) leaves an open attempt to end where the speaker stops.
+- **Clipping.** Once an ended attempt's footage is all stored, the API queues it on
+  `recording`. The worker signs reads of the part's slices from the first (only it holds
+  the recording's header; for an attempt late in a long part that's a couple of hundred
+  megabytes per attempt, which a Cloud Storage compose of the part would save if it ever
+  matters) and sends them with the marks and the pauses to the AI service
+  (`app/clipping.py`; on the Cloud Run clipper when `CLIPPER_URL` is set,
+  [deploy.md](deploy.md#the-cloud-run-clipper)). The clipper finds speech around the marks
+  with ffmpeg's silencedetect, moves the start to the earliest word within 1.5 s of its
+  mark and the end to the speech edge nearest its mark, each with a quarter-second pad
+  (so a take starts within half a second of the first word); an attempt with no end mark
+  ends where the speaker first stops for a second and a half. It caps a take at 60
+  seconds, and re-encodes it as an ordinary, seekable H.264 MP4: long MediaRecorder
+  recordings have no seek index. ffmpeg reads the footage as its declared type only, with
+  no secrets and capped resources (docs/files.md). The worker stores it as a
+  `director-take-video` file and the AI service records it as a take, so the review, the
+  editor and My media carry on as for any take. The member's screens hear
+  `recording.changed`.
+- **Keeping it.** Raw footage is deleted 7 days after the last video saved from it (14
+  at most), 24 hours for a demo guest, whose takes go with it; `recording.remove`
+  deletes a session and its takes at once, even one being cut at that moment (the take's
+  file goes with its attempt, by a trigger). A session nothing reached for six hours is
+  finished for its member, and its attempts are cut from what was uploaded: one left
+  recording, and one finished whose footage stopped coming (a part whose recorder never
+  said how many slices it made, a slice that never arrived), each part keeping its
+  slices from the first up to any gap.
+
 ## Takes and the best take
 
 A take goes straight from the browser to Cloud Storage through a signed upload URL (at

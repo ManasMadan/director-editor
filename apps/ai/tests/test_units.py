@@ -115,8 +115,12 @@ def test_a_short_service_secret_is_refused() -> None:
         _settings(AI_SERVICE_SECRET="x" * 31)  # one character short
 
 
+# Production's settings always name the Cloud Run clipper.
+PRODUCTION = {"NODE_ENV": "production", "CLIPPER_URL": "https://clipper.test"}
+
+
 def test_production_refuses_a_plain_http_gemini_endpoint() -> None:
-    base = {"NODE_ENV": "production"}
+    base = PRODUCTION
     assert _settings(**base).google_base_url is None
     assert _settings(**base, GOOGLE_BASE_URL="https://gateway.example.com").google_base_url
     with pytest.raises(ValidationError, match="GOOGLE_BASE_URL must be HTTPS"):
@@ -225,7 +229,17 @@ def test_production_refuses_plain_http_for_the_indexer_and_google_s_certificates
     with pytest.raises(ValidationError, match="GOOGLE_CERTS_URL must be HTTPS"):
         _indexer_settings(**production, GOOGLE_CERTS_URL="http://127.0.0.1:1/certs")
     with pytest.raises(ValidationError, match="INDEXER_URL must be HTTPS"):
-        _settings(NODE_ENV="production", INDEXER_URL="http://indexer.test")
+        _settings(**PRODUCTION, INDEXER_URL="http://indexer.test")
+
+
+def test_production_clips_only_on_the_cloud_run_clipper_over_https() -> None:
+    assert _settings(CLIPPER_URL="http://127.0.0.1:8001").clipper_url == "http://127.0.0.1:8001"
+    assert _settings().clipper_url is None
+    with pytest.raises(ValidationError, match="CLIPPER_URL is required in production"):
+        _settings(NODE_ENV="production")
+    with pytest.raises(ValidationError, match="CLIPPER_URL must be HTTPS"):
+        _settings(NODE_ENV="production", CLIPPER_URL="http://clipper.test")
+    assert _settings(**PRODUCTION).clipper_url
 
 
 def test_the_media_bucket_is_a_bucket_name() -> None:

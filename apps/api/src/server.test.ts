@@ -20,6 +20,7 @@ const caller = {
   signedInAt: new Date(0),
   demo: false,
   guest: false,
+  sharedDemo: false,
 };
 
 function options(overrides: Partial<Parameters<typeof liveCallOptions>[0]> = {}) {

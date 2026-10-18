@@ -29,6 +29,19 @@ tests:
           path: "spec.template.spec.containers[0].env"
           content: { name: RELEASE, value: sha-abc123 }
 
+  - it: gives the worker the AI service's address and only its call-signing key
+    documentSelector: { path: metadata.name, value: demo-worker }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: AI_URL, value: "http://demo-ai.apps.svc.cluster.local:8000" }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content:
+            name: AI_SERVICE_SECRET
+            valueFrom: { secretKeyRef: { name: demo-ai, key: AI_SERVICE_SECRET, optional: true } }
+      - notExists: { path: "spec.template.spec.containers[0].envFrom" }
+
   - it: gives each service its database role over verified TLS, and Valkey
     documentSelector: { path: metadata.name, value: demo-worker }
     asserts:

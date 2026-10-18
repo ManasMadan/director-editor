@@ -14,6 +14,7 @@ import { DirectorModule } from "./modules/director";
 import { FilesModule } from "./modules/files";
 import { PublishModule } from "./modules/publish";
 import { RealtimeModule } from "./modules/realtime";
+import { RecordingModule } from "./modules/recording";
 import { UserModule } from "./modules/user";
 import { NotificationsProducerModule } from "./notifications";
 
@@ -39,6 +40,7 @@ import { NotificationsProducerModule } from "./notifications";
     RealtimeModule,
     FilesModule,
     AnalyticsModule,
+    RecordingModule,
     DirectorModule,
     PublishModule,
   ],

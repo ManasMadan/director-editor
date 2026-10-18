@@ -163,7 +163,9 @@ iOS asks before a page may read the tilt: the level shows a button for that.
   `ai.director_take` (each member's own; never replaced, the best-scored is picked),
   `ai.director_cut` (a member's rendered video of a plan and how far publishing it got),
   `app.short_reaction` (the removed feed's likes and saves: nothing reads it, and a
-  later migration drops it); all under row-level security. Plans are a JSON
+  later migration drops it), and the continuous recording's `app.recording_session`,
+  `recording_part`, `recording_slice`, `recording_attempt` and `recording_pause`
+  ([how-it-works.md](how-it-works.md#continuous-recording)); all under row-level security. Plans are a JSON
   column validated by `ShotPlan` on the way in and out.
 - AI service: `apps/ai/app/director.py` (the three Gemini calls, their token budgets and
   failures), queue `ai-director` (`plan`, `review-take`) in `packages/jobs`.

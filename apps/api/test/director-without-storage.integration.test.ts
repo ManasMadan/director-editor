@@ -115,6 +115,21 @@ describe("Director without uploads", () => {
     expect(aiRequests).toBe(asked);
   });
 
+  it("doesn't start recording, with nowhere to keep the footage", async () => {
+    const session = createSession(harness);
+    const email = newEmail();
+    await session.auth("/sign-up/email", { email, password: newPassword(), name: "No roll" });
+    const { otp } = await takeOtp(harness, email);
+    await session.auth("/email-otp/verify-email", { email, otp });
+    const error = await session.rpc.recording
+      .start({ videoId: seed.videoId })
+      .catch((e: unknown) => e);
+    expect(error).toMatchObject({
+      code: "FEATURE_DISABLED",
+      data: { params: { feature: "files" } },
+    });
+  });
+
   it("can't publish a cut, with nowhere to read its video from", async () => {
     const session = createSession(harness);
     const email = newEmail();

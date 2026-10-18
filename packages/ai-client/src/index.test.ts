@@ -278,6 +278,61 @@ describe("Director's calls", () => {
   });
 });
 
+describe("cutting a recorded attempt", () => {
+  const mp4 = Buffer.from("\x00\x00\x00\x20ftypisom", "latin1");
+  const request = {
+    attemptId: take.id,
+    contentType: "video/webm" as const,
+    slices: [{ url: "https://storage.test/s/0", startMs: 0, durationMs: 10_000 }],
+    startMs: 1_000,
+    endMs: 4_000,
+    pauses: [],
+  };
+  const answer =
+    (headers: Record<string, string>) => (_: IncomingMessage, response: ServerResponse) => {
+      response.writeHead(200, headers);
+      response.end(mp4);
+    };
+
+  it("returns the take's bytes and where it was cut", async () => {
+    handler = answer({
+      "content-type": "video/mp4",
+      "x-clip-start-ms": "750",
+      "x-clip-end-ms": "4250",
+    });
+    const clip = await client().director.clip(caller, request);
+    expect({ ...clip, video: Buffer.from(clip.video) }).toEqual({
+      video: mp4,
+      startMs: 750,
+      endMs: 4_250,
+    });
+    expect(seen[0]).toMatchObject({ method: "POST", path: "/v1/director/clips" });
+    expect(JSON.parse(String(seen[0]?.body))).toEqual(request);
+  });
+
+  it("refuses an answer that isn't an MP4 or doesn't say where it was cut", async () => {
+    handler = answer({
+      "content-type": "video/webm",
+      "x-clip-start-ms": "0",
+      "x-clip-end-ms": "1",
+    });
+    expect(await failed(client().director.clip(caller, request))).toMatchObject({
+      code: "UPSTREAM_UNAVAILABLE",
+    });
+    handler = answer({ "content-type": "video/mp4", "x-clip-start-ms": "0" });
+    expect(await failed(client().director.clip(caller, request))).toMatchObject({
+      code: "UPSTREAM_UNAVAILABLE",
+    });
+  });
+
+  it("throws the service's error with its code", async () => {
+    handler = (_request, response) =>
+      json(response, 422, failure("RECORDING_CLIP_FAILED", 422, { params: {} }));
+    const error = await failed(client().director.clip(caller, request));
+    expect(error).toMatchObject({ status: 422, code: "RECORDING_CLIP_FAILED" });
+  });
+});
+
 describe("Director's voice", () => {
   const wav = Buffer.from("RIFF\x24\x00\x00\x00WAVEfmt ", "latin1");
   const line = { text: "Take a small step to your left.", voice: "Puck" as const };

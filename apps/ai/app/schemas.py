@@ -497,3 +497,50 @@ class PublishCopy(BaseModel):
         max_length=MAX_PUBLISH_HASHTAGS, description="Single words, without the #."
     )
     credits: str = Field(max_length=MAX_PUBLISH_CREDITS)
+
+
+# ------------------------------------------------------------------------- clipping
+# Director's continuous recording (packages/contracts src/recording.ts): an attempt at a
+# shot, marked in a session's footage, cut into a take of its own (app/clipping.py). The
+# footage is a part's slices from its first, which the caller (apps/worker) signs reads
+# of: this service has no storage credentials. Times are the part's own clock, in
+# milliseconds. Bounds are that contract's: 150 slices of at most 15 seconds a part.
+MAX_PART_SLICES = 150
+MAX_PART_MS = 21 * 60_000
+MAX_SLICE_MS = 15_000
+MAX_CLIP_PAUSES = 200
+
+
+class ClipSlice(BaseModel):
+    model_config = REQUEST
+
+    url: str = Field(
+        pattern=r"^https?://", max_length=4_000, description="A presigned read of the slice."
+    )
+    startMs: int = Field(ge=0, le=MAX_PART_MS)
+    durationMs: int = Field(gt=0, le=MAX_SLICE_MS)
+
+
+class ClipPause(BaseModel):
+    """A stretch nothing was recorded: no take is ever cut across one."""
+
+    model_config = REQUEST
+
+    startMs: int = Field(ge=0, le=MAX_PART_MS)
+    endMs: int | None = Field(ge=0, le=MAX_PART_MS, description="None: to the part's end.")
+
+
+class ClipRequest(BaseModel):
+    model_config = REQUEST
+
+    # A JSON string, so not strict (strict wants a UUID object, which JSON can't carry).
+    attemptId: UUID = Field(strict=False, description="For the logs.")
+    contentType: Literal["video/webm", "video/mp4"]
+    slices: list[ClipSlice] = Field(
+        min_length=1, max_length=MAX_PART_SLICES, description="The part's, from its first."
+    )
+    startMs: int = Field(ge=0, le=MAX_PART_MS, description="Director's start mark.")
+    endMs: int | None = Field(
+        ge=0, le=MAX_PART_MS, description="Director's end mark; None: to the footage's end."
+    )
+    pauses: list[ClipPause] = Field(max_length=MAX_CLIP_PAUSES)

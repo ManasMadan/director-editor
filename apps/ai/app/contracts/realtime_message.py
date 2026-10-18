@@ -20,6 +20,13 @@ class DirectorChanged(BaseModel):
     type: Literal["director.changed"]
 
 
+class RecordingChanged(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    type: Literal["recording.changed"]
+
+
 type RealtimeMessage = Annotated[
-    FilesChanged | DirectorChanged, Field(..., title="RealtimeMessage")
+    FilesChanged | DirectorChanged | RecordingChanged, Field(..., title="RealtimeMessage")
 ]

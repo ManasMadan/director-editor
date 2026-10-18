@@ -1699,6 +1699,33 @@ def test_a_take_needs_a_ready_plan_a_real_shot_and_the_shot_s_kind(client: TestC
     assert takes_of(client, org, user) == []
 
 
+def test_a_file_added_twice_is_one_take(client: TestClient) -> None:
+    org, user = new_org()
+    _ = ready_plan(client, org, user)
+    take = {
+        "videoId": VIDEO,
+        "shotIndex": 0,
+        "fileId": str(new_file(user)),
+        "kind": "video",
+        "contentType": "video/mp4",
+        "sourceUrl": "http://storage/clip.mp4",
+    }
+    first = client.post("/v1/director/takes", json=take, headers=headers(org, user))
+    again = client.post("/v1/director/takes", json=take, headers=headers(org, user))
+    assert (first.status_code, again.status_code) == (201, 201)
+    assert first.json() == again.json()
+    assert len(takes_of(client, org, user)) == 1
+    # The file is that member's take: anyone else adding it finds no take of theirs.
+    teammate = uuid4()
+    with migrator() as db:
+        db.execute(
+            'INSERT INTO auth."user" (id, name, email, updated_at) VALUES (%s, %s, %s, now())',
+            (teammate, "T", f"{teammate}@test.dev"),
+        )
+    theirs = client.post("/v1/director/takes", json=take, headers=headers(org, teammate))
+    assert (theirs.status_code, error_of(theirs).code) == (404, "DIRECTOR_TAKE_NOT_FOUND")
+
+
 def test_a_member_only_sees_their_own_takes(client: TestClient) -> None:
     org, user = new_org()
     _ = ready_plan(client, org, user)

@@ -191,6 +191,18 @@
         "redis": { "type": "boolean" },
         "storage": { "enum": ["presign", "internal", "origin", "none"] },
         "secretFrom": { "type": "string" },
+        "secretKeys": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["from", "key"],
+            "properties": {
+              "from": { "type": "string" },
+              "key": { "type": "string" }
+            }
+          }
+        },
         "env": { "$ref": "#/$defs/env" },
         "replicas": { "type": "integer", "minimum": 0 },
         "resources": { "$ref": "#/$defs/resources" },

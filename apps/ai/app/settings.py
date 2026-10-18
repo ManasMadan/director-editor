@@ -4,9 +4,10 @@ Loaded lazily (`get_settings()`), so tools that only import the app, like the Op
 export, don't need a full environment. A missing or malformed value stops the service
 at its first use, with a readable message.
 
-Two processes read it: the service and its worker (`Settings`), and the Cloud Run
-indexer (`IndexerSettings`, app/indexer.py), which has no database, Redis or caller
-secret of its own. What indexing a short needs, in either, is `GeminiSettings`.
+Three processes read it: the service and its worker (`Settings`), the Cloud Run indexer
+(`IndexerSettings`, app/indexer.py) and the Cloud Run clipper (`ClipperSettings`,
+app/clipper.py), which have no database, Redis or caller secret of their own. What
+indexing a short needs, in the service or the indexer, is `GeminiSettings`.
 """
 
 from functools import lru_cache
@@ -148,10 +149,27 @@ class Settings(GeminiSettings):
     # indexed, with an ID token for this URL from the metadata server. Unset: they're
     # indexed here in the worker, the same way.
     indexer_url: str | None = Field(default=None, pattern=ORIGIN_PATTERN, alias="INDEXER_URL")
+    # The Cloud Run clipper (app/clipper.py), where recorded attempts are sent to be cut
+    # into takes, with an ID token for this URL from the metadata server. Required in
+    # production: a member's footage is never decoded in this service there, which holds
+    # the secrets and the database. Unset elsewhere: they're cut here, the same way.
+    clipper_url: str | None = Field(default=None, pattern=ORIGIN_PATTERN, alias="CLIPPER_URL")
 
     @model_validator(mode="after")
     def _indexer_is_https_in_production(self) -> Self:
         self._refuse_plain_http_indexer(self.indexer_url)
+        return self
+
+    @model_validator(mode="after")
+    def _production_clips_on_cloud_run(self) -> Self:
+        # Like the other local stand-ins, cutting in-process is refused in production:
+        # ffmpeg reading member-supplied bytes belongs in the Cloud Run clipper's sandbox.
+        if self.node_env != "production":
+            return self
+        if not self.clipper_url:
+            raise ValueError("CLIPPER_URL is required in production")
+        if not self.clipper_url.startswith("https:"):
+            raise ValueError("CLIPPER_URL must be HTTPS in production")
         return self
 
     @model_validator(mode="after")
@@ -205,6 +223,38 @@ class IndexerSettings(GeminiSettings):
         return self
 
 
+class ClipperSettings(BaseSettings):
+    """The Cloud Run clipper (app/clipper.py): no database, Redis, Gemini or storage of
+    its own; the footage comes and goes by presigned reads."""
+
+    model_config = SettingsConfigDict(extra="ignore", env_ignore_empty=True)
+
+    node_env: Literal["development", "test", "production"] = Field(
+        default="development", alias="NODE_ENV"
+    )
+    log_level: Literal["debug", "info", "warning", "error"] = Field(
+        default="info", alias="LOG_LEVEL"
+    )
+    # Its own URL (the AI service's CLIPPER_URL): the only audience its callers' ID
+    # tokens may name.
+    clipper_url: str = Field(pattern=ORIGIN_PATTERN, alias="CLIPPER_URL")
+    # The one service account allowed to call it (the VM's, which the AI service runs as).
+    clipper_invoker: str = Field(pattern=r"^[^@\s]+@[^@\s]+$", alias="CLIPPER_INVOKER")
+    # Where Google publishes the keys its ID tokens are signed with; only tests point it
+    # elsewhere, which production refuses.
+    google_certs_url: AnyHttpUrl = Field(
+        default=AnyHttpUrl(GOOGLE_CERTS_URL), alias="GOOGLE_CERTS_URL"
+    )
+
+    @model_validator(mode="after")
+    def _https_in_production(self) -> Self:
+        if self.node_env == "production" and (
+            not self.clipper_url.startswith("https:") or self.google_certs_url.scheme != "https"
+        ):
+            raise ValueError("CLIPPER_URL and GOOGLE_CERTS_URL must be HTTPS in production")
+        return self
+
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()  # pyright: ignore[reportCallIssue]  # values come from the environment
@@ -213,3 +263,8 @@ def get_settings() -> Settings:
 @lru_cache
 def get_indexer_settings() -> IndexerSettings:
     return IndexerSettings()  # pyright: ignore[reportCallIssue]  # values come from the environment
+
+
+@lru_cache
+def get_clipper_settings() -> ClipperSettings:
+    return ClipperSettings()  # pyright: ignore[reportCallIssue]  # values come from the environment

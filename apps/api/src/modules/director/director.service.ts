@@ -33,6 +33,7 @@ import { AppError } from "@repo/nest-common";
 import * as z from "zod";
 import { aiCaller, callAi } from "../ai";
 import { FilesService } from "../files";
+import { RecordingService } from "../recording";
 import { ShortsService } from "../shorts";
 import { seedMediaKeys, withMediaLinks } from "./seed-media";
 import { shotsOf } from "./shots";
@@ -98,6 +99,7 @@ export class DirectorService {
   constructor(
     private readonly shorts: ShortsService,
     private readonly files: FilesService,
+    private readonly recording: RecordingService,
   ) {}
 
   async library(userId: UserId, orgId: OrgId): Promise<DirectorLibrary> {
@@ -214,13 +216,20 @@ export class DirectorService {
     return rows.map(toCut);
   }
 
-  /** Saves a cut whose rendered video is a ready `director-cut-video` upload of the caller's. */
+  /**
+   * Saves a cut whose rendered video is a ready `director-cut-video` upload of the caller's,
+   * and keeps the raw footage its takes were cut from for another week (a video saved is
+   * what a member may want to recut).
+   */
   async saveCut(
     userId: UserId,
     orgId: OrgId,
     input: { videoId: VideoId; picks: DirectorCut["picks"]; fileId: FileId; title: string },
   ): Promise<DirectorCut> {
     await this.files.ready(userId, input.fileId, "director-cut-video");
+    // First, so a cut that's saved never answers with an error: footage kept a little
+    // longer for a save that then fails costs nothing.
+    await this.recording.keepFootageOf({ orgId, userId }, Object.values(input.picks));
     const row = await callAi((ai) =>
       ai.director.createCut(aiCaller(userId, orgId), {
         videoId: input.videoId,

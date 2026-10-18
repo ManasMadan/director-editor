@@ -8,12 +8,14 @@
  * count, so there's no separate cron or leader election.
  */
 import { InjectQueue, Processor } from "@nestjs/bullmq";
-import type { OnApplicationBootstrap } from "@nestjs/common";
+import { Inject, type OnApplicationBootstrap } from "@nestjs/common";
 import { authSessionKeys, DEMO_GUEST_LIFETIME_S } from "@repo/contracts/auth-settings";
+import { orgIdSchema, recordingAttemptIdSchema } from "@repo/contracts/ids";
 import { entriesOf } from "@repo/contracts/objects";
 import {
   type JobName,
   jobName,
+  type Producer,
   parseJob,
   type QueueOf,
   queuePrefix,
@@ -41,6 +43,16 @@ const int = z.object({ n: z.number().int() });
 const count = z.object({ n: z.bigint() });
 // A demo guest auth.purge_expired_guests deleted, and its sessions' tokens.
 const expiredGuest = z.object({ guest_id: z.uuid(), session_tokens: z.array(z.string()) });
+// What finishing the recording sessions left open answers: the attempts to cut.
+const idleAttempt = z.object({ org_id: orgIdSchema, attempt_id: recordingAttemptIdSchema });
+/**
+ * A recording session nothing has reached for this long was left open (the tab closed and
+ * never came back): it's finished for its member, and its attempts are cut.
+ */
+const RECORDING_IDLE_HOURS = 6;
+
+/** Where the attempts of the sessions it finishes go, with the queue's own options. */
+export const RECORDING_QUEUE = Symbol("RECORDING_QUEUE");
 
 type Task = JobName<"maintenance">;
 
@@ -51,6 +63,7 @@ const SCHEDULES: Record<Task, string> = {
   "session-retention": "0 * * * *",
   "files-cleanup": "30 * * * *",
   "demo-retention": "20 * * * *",
+  "recording-retention": "45 * * * *",
 };
 
 // Demo guests deleted a call (auth.purge_expired_guests); the task calls again while a
@@ -66,6 +79,7 @@ export class MaintenanceProcessor extends JobProcessor implements OnApplicationB
   constructor(
     @InjectDatabase() private readonly database: Database,
     @InjectQueue("maintenance") private readonly queue: QueueOf<"maintenance">,
+    @Inject(RECORDING_QUEUE) private readonly recording: Producer<"recording">,
     private readonly files: FilesCleanup,
     @InjectRedis() private readonly redis: Redis,
     @InjectPinoLogger(MaintenanceProcessor.name) private readonly log: PinoLogger,
@@ -113,44 +127,16 @@ export class MaintenanceProcessor extends JobProcessor implements OnApplicationB
         break;
       }
       case "outbox-retention":
-        for (const source of OUTBOX_SOURCES) {
-          const outbox = await row(
-            count,
-            db.$queryRawUnsafe(
-              `SELECT "${source}".purge_published_outbox(make_interval(days => $1::int)) AS n`,
-              env.OUTBOX_RETENTION_DAYS,
-            ),
-          );
-          const processed = await row(
-            count,
-            db.$queryRawUnsafe(
-              `SELECT "${source}".purge_processed_events(make_interval(days => $1::int)) AS n`,
-              env.PROCESSED_EVENT_RETENTION_DAYS,
-            ),
-          );
-          result[`${source}.outbox`] = Number(outbox.n);
-          result[`${source}.processed`] = Number(processed.n);
-        }
-        {
-          const history = await row(
-            count,
-            db.$queryRaw`
-              SELECT webhooks.purge_history(make_interval(days => ${env.WEBHOOK_HISTORY_DAYS}::int)) AS n`,
-          );
-          result["webhooks.history"] = Number(history.n);
-          const notifications = await row(
-            count,
-            db.$queryRaw`
-              SELECT notifications.purge_history(make_interval(days => ${env.NOTIFICATION_HISTORY_DAYS}::int)) AS n`,
-          );
-          result["notifications.history"] = Number(notifications.n);
-        }
+        Object.assign(result, await this.outboxRetention());
         break;
       case "files-cleanup":
         Object.assign(result, await this.files.run());
         break;
       case "demo-retention":
         Object.assign(result, await this.demoRetention());
+        break;
+      case "recording-retention":
+        Object.assign(result, await this.recordingRetention());
         break;
       case "session-retention": {
         const purged = await row(count, db.$queryRaw`SELECT auth.purge_expired() AS n`);
@@ -159,6 +145,43 @@ export class MaintenanceProcessor extends JobProcessor implements OnApplicationB
       }
     }
     this.log.info({ task, ...result }, "maintenance task finished");
+    return result;
+  }
+
+  /** Published outbox events, processed-event records and delivery histories past their keeping. */
+  private async outboxRetention() {
+    const db = this.database.write;
+    const result: Record<string, number> = {};
+    for (const source of OUTBOX_SOURCES) {
+      const outbox = await row(
+        count,
+        db.$queryRawUnsafe(
+          `SELECT "${source}".purge_published_outbox(make_interval(days => $1::int)) AS n`,
+          env.OUTBOX_RETENTION_DAYS,
+        ),
+      );
+      const processed = await row(
+        count,
+        db.$queryRawUnsafe(
+          `SELECT "${source}".purge_processed_events(make_interval(days => $1::int)) AS n`,
+          env.PROCESSED_EVENT_RETENTION_DAYS,
+        ),
+      );
+      result[`${source}.outbox`] = Number(outbox.n);
+      result[`${source}.processed`] = Number(processed.n);
+    }
+    const history = await row(
+      count,
+      db.$queryRaw`
+        SELECT webhooks.purge_history(make_interval(days => ${env.WEBHOOK_HISTORY_DAYS}::int)) AS n`,
+    );
+    result["webhooks.history"] = Number(history.n);
+    const notifications = await row(
+      count,
+      db.$queryRaw`
+        SELECT notifications.purge_history(make_interval(days => ${env.NOTIFICATION_HISTORY_DAYS}::int)) AS n`,
+    );
+    result["notifications.history"] = Number(notifications.n);
     return result;
   }
 
@@ -196,5 +219,30 @@ export class MaintenanceProcessor extends JobProcessor implements OnApplicationB
         SELECT files.purge_demo_footage(make_interval(secs => ${DEMO_GUEST_LIFETIME_S}::int)) AS n`,
     );
     return { guests, sharedFootage: Number(footage.n), ...(await this.files.run()) };
+  }
+
+  /**
+   * Raw footage past its keeping deleted (its objects queued for the files cleanup), and
+   * the sessions left open finished, their attempts sent to the clipper.
+   */
+  private async recordingRetention() {
+    const db = this.database.write;
+    const expired = await row(count, db.$queryRaw`SELECT app.purge_expired_recordings() AS n`);
+    const idle = await rows(
+      idleAttempt,
+      db.$queryRaw`
+        SELECT org_id, attempt_id
+          FROM app.finish_idle_recordings(make_interval(hours => ${RECORDING_IDLE_HOURS}::int))`,
+    );
+    // The producer gives each job the queue's retries, backoff and clean-up (packages/jobs),
+    // as apps/api's do; the attempt's id keeps it to one job however often it's queued.
+    await this.recording.addBulk(
+      idle.map(({ org_id: orgId, attempt_id: attemptId }) => ({
+        name: "clip" as const,
+        payload: { attemptId, orgId },
+        options: { jobId: attemptId, meta: { orgId } },
+      })),
+    );
+    return { expired: Number(expired.n), finished: idle.length };
   }
 }
