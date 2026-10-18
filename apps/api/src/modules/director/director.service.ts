@@ -20,6 +20,8 @@ import {
   directorCutSchema,
   directorPlanSchema,
   directorTakeSchema,
+  type Located,
+  locatedSchema,
   type SceneCheck,
   type ServedShotPlan,
   type ShotPlan,
@@ -140,6 +142,17 @@ export class DirectorService {
   ): Promise<SceneCheck> {
     return sceneCheckSchema.parse(
       await callAi((ai) => ai.director.checkScene(aiCaller(userId, orgId), input)),
+    );
+  }
+
+  /** Where a thing Director named is in one camera frame, for a mark on the shoot screen. */
+  async locate(
+    userId: UserId,
+    orgId: OrgId,
+    input: { target: string; image: string },
+  ): Promise<Located> {
+    return locatedSchema.parse(
+      await callAi((ai) => ai.director.locate(aiCaller(userId, orgId), input)),
     );
   }
 

@@ -7,7 +7,12 @@
  * a socket, not a procedure.
  */
 import * as z from "zod";
-import { DIRECTOR_FRAME_MAX_LENGTH, DIRECTOR_MAX_SHOTS } from "./api/director";
+import {
+  DIRECTOR_FRAME_MAX_LENGTH,
+  DIRECTOR_LOCATE_TARGET_MAX_LENGTH,
+  DIRECTOR_MARK_LABEL_MAX_LENGTH,
+  DIRECTOR_MAX_SHOTS,
+} from "./api/director";
 import { errorCode } from "./errors";
 
 export const LIVE_PATH = "/api/live";
@@ -16,7 +21,7 @@ export const LIVE_PATH = "/api/live";
  * What Director can do on the shoot screen (Gemini's function calls). Nothing here starts
  * or stops a take: only the member's own tap on the shutter does that.
  */
-export const LIVE_TOOLS = ["go_to_shot", "switch_camera", "adapt_shot"] as const;
+export const LIVE_TOOLS = ["go_to_shot", "switch_camera", "adapt_shot", "point_at"] as const;
 export type LiveTool = (typeof LIVE_TOOLS)[number];
 
 /** About two seconds of 16 kHz 16-bit mono audio, base64; the browser sends ~100 ms at a time. */
@@ -52,14 +57,21 @@ const liveToolCall = z.discriminatedUnion("name", [
   z.object({ name: z.literal("go_to_shot"), shot: shotIndex }),
   z.object({ name: z.literal("switch_camera"), to: facing }),
   liveAdaptation.extend({ name: z.literal("adapt_shot") }),
+  /** Find `target` in the camera and pin a mark on it, labelled `label`. */
+  z.object({
+    name: z.literal("point_at"),
+    target: z.string().trim().min(1).max(DIRECTOR_LOCATE_TARGET_MAX_LENGTH),
+    label: z.string().trim().min(1).max(DIRECTOR_MARK_LABEL_MAX_LENGTH),
+  }),
 ]);
 export type LiveToolCall = z.infer<typeof liveToolCall>;
 
 /**
  * What came of a tool call: done, or refused because a take is under way (counting down,
- * recording, being watched back or sent) or there's no camera on to switch.
+ * recording, being watched back or sent) or there's no camera on to switch, or (a mark)
+ * what Director pointed at isn't in the camera's view.
  */
-const LIVE_TOOL_RESULTS = ["done", "busy", "no_camera"] as const;
+const LIVE_TOOL_RESULTS = ["done", "busy", "no_camera", "not_found"] as const;
 export type LiveToolResult = (typeof LIVE_TOOL_RESULTS)[number];
 
 /**

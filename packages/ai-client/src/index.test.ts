@@ -59,6 +59,12 @@ const copy = {
   hashtags: ["pendrop"],
   credits: "Inspired by Maya.",
 };
+const located = {
+  found: true,
+  label: "your window",
+  box: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },
+};
+
 const scene = {
   direction: "none",
   distanceMeters: null,
@@ -149,6 +155,7 @@ describe("Director's calls", () => {
     handler = (request, response) => {
       const answers: Record<string, [number, unknown]> = {
         "/v1/director/scene-checks": [200, scene],
+        "/v1/director/locate": [200, located],
         "/v1/director/takes": [201, take],
         [`/v1/director/plans/${VIDEO}/takes`]: [200, [take]],
         "/v1/director/library": [200, { templates: [plan], indexUsed: true }],
@@ -170,6 +177,9 @@ describe("Director's calls", () => {
     await expect(
       director.checkScene(caller, { videoId: VIDEO, shotIndex: 0, image: "a".repeat(100) }),
     ).resolves.toEqual(scene);
+    await expect(
+      director.locate(caller, { target: "the window", image: "a".repeat(100) }),
+    ).resolves.toEqual(located);
     await expect(
       director.createTake(caller, {
         videoId: VIDEO,
@@ -203,6 +213,7 @@ describe("Director's calls", () => {
       "GET /v1/director/library",
       `GET /v1/director/plans/${VIDEO}`,
       "POST /v1/director/scene-checks",
+      "POST /v1/director/locate",
       "POST /v1/director/takes",
       `GET /v1/director/plans/${VIDEO}/takes`,
       "POST /v1/director/cuts",

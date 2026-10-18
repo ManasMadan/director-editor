@@ -23,6 +23,7 @@ import { useCheckSceneMutation } from "./check-scene";
 import { useIndexShortMutation } from "./index-short";
 import { takeInProgress } from "./latest";
 import { useDirectorLibraryQuery } from "./library";
+import { useLocateMutation } from "./locate";
 import { useDirectorMediaQuery } from "./media";
 import { useDirectorPlanQuery } from "./plan";
 import { planInProgress } from "./progress";
@@ -336,6 +337,31 @@ describe("checking the scene", () => {
       .mutateAsync({ videoId, shotIndex: 0, image })
       .catch((e: unknown) => e);
     expect(errorCode(error)).toBe("AI_BUDGET_EXCEEDED");
+  });
+});
+
+describe("finding something in the camera", () => {
+  it("sends what to find with the frame and answers with where it is", async () => {
+    const sent: unknown[] = [];
+    const found = {
+      found: true,
+      label: "your window",
+      box: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },
+    };
+    const api = standIn((os) => ({
+      director: {
+        locate: os.director.locate.handler(({ input }) => {
+          sent.push(input);
+          return found;
+        }),
+      },
+    }));
+    const { result } = renderHook(() => useLocateMutation(), api);
+    const image = "A".repeat(200);
+    await expect(result.current.mutateAsync({ target: "the window", image })).resolves.toEqual(
+      found,
+    );
+    expect(sent).toEqual([{ target: "the window", image }]);
   });
 });
 

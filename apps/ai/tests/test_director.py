@@ -46,6 +46,7 @@ from app.schemas import (
     DirectorTakeOut,
     IndexRequest,
     IndexResult,
+    Located,
     PublishCopy,
     SceneCheck,
 )
@@ -1535,6 +1536,73 @@ def test_a_scene_check_with_no_budget_left_is_refused(client: TestClient) -> Non
     _ = ready_plan(client, org, user)
     spend_the_month(org)
     response = check(client, org, user)
+    assert (response.status_code, error_of(response).code) == (429, "AI_BUDGET_EXCEEDED")
+
+
+# ------------------------------------------------------------------------------- marks
+
+
+def locate(client: TestClient, org: UUID, user: UUID, image: str = FRAME) -> httpx.Response:
+    return client.post(
+        "/v1/director/locate",
+        json={"target": "the window behind you", "image": image},
+        headers=headers(org, user),
+    )
+
+
+def test_a_locate_turns_gemini_s_box_into_fractions_of_the_frame(
+    client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    org, user = new_org()
+    gemini[1][GEMINI_PATH] = gemini_output(
+        {"found": True, "label": "your window", "box_2d": [100, 250, 600, 750]}, tokens=400
+    )
+    response = locate(client, org, user)
+    assert response.status_code == 200, response.text
+    found = Located.model_validate_json(response.content)
+    assert found.found
+    assert found.label == "your window"
+    assert found.box is not None
+    assert (found.box.x, found.box.y, found.box.width, found.box.height) == (0.25, 0.1, 0.5, 0.5)
+    # The frame and the target reach Gemini together.
+    sent = gemini[0].received[-1][1]
+    assert b'"mime_type": "image/jpeg"' in sent
+    assert b"the window behind you" in sent
+    assert usage(org, "director-locate") == 400
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        {"found": False, "label": "a fridge", "box_2d": None},
+        # Found, but with no box, or one too thin to be a thing: never drawn.
+        {"found": True, "label": "a fridge", "box_2d": None},
+        {"found": True, "label": "a fridge", "box_2d": [100, 100, 105, 600]},
+        {"found": True, "label": "a fridge", "box_2d": [600, 100, 100, 600]},
+    ],
+)
+def test_what_isn_t_clearly_in_the_frame_is_not_found(
+    client: TestClient,
+    gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]],
+    answer: dict[str, object],
+) -> None:
+    org, user = new_org()
+    gemini[1][GEMINI_PATH] = gemini_output(answer)
+    found = Located.model_validate_json(locate(client, org, user).content)
+    assert (found.found, found.box) == (False, None)
+
+
+def test_a_locate_needs_a_jpeg_gemini_and_budget(
+    client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    org, user = new_org()
+    png = base64.b64encode(b"\x89PNG" + b"\x00" * 200).decode()
+    assert error_of(locate(client, org, user, image=png)).code == "VALIDATION_FAILED"
+    gemini[1][GEMINI_PATH] = gemini_error(503, "UNAVAILABLE")
+    response = locate(client, org, user)
+    assert (response.status_code, error_of(response).code) == (502, "UPSTREAM_UNAVAILABLE")
+    spend_the_month(org)
+    response = locate(client, org, user)
     assert (response.status_code, error_of(response).code) == (429, "AI_BUDGET_EXCEEDED")
 
 

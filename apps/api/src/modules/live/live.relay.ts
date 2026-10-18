@@ -36,6 +36,7 @@ import { describeError } from "@repo/nest-common";
 import { type RawData, WebSocket } from "ws";
 import type { GoogleAuth } from "./google-auth";
 import { SlidingBudget } from "./live.budget";
+import { NOT_FOUND_RESPONSE, POINT_AT_ANSWER_MS, pointAtCall } from "./live.marks";
 import {
   toolArgsSchemas,
   UPSTREAM_MAX_PAYLOAD_BYTES,
@@ -126,6 +127,7 @@ const TOOL_RESPONSES: Record<LiveToolResult | "unknown", object> = {
     why: "A take is under way: counting down, recording or being watched back. Wait until they've kept it or gone again.",
   },
   no_camera: { result: "refused", why: "Their camera isn't on." },
+  not_found: NOT_FOUND_RESPONSE,
 };
 
 /** Tells the browser why Director is going away, then closes the socket. */
@@ -585,7 +587,8 @@ export class LiveRelay {
     }
     this.toolIds += 1;
     const id = `tool-${this.toolIds}`;
-    const timer = setTimeout(() => this.answerTool(id, "unknown"), TOOL_ANSWER_MS);
+    const within = name === "point_at" ? POINT_AT_ANSWER_MS : TOOL_ANSWER_MS;
+    const timer = setTimeout(() => this.answerTool(id, "unknown"), within);
     const adaptation = browserCall.call.name === "adapt_shot" ? browserCall.call : undefined;
     this.pending.set(id, { line, geminiId: call.id, name, timer, adaptation });
     this.toClient({ type: "tool", id, call: browserCall.call });
@@ -619,6 +622,8 @@ export class LiveRelay {
       }
       case "adapt_shot":
         return this.adaptCall(raw);
+      case "point_at":
+        return pointAtCall(raw);
     }
   }
 

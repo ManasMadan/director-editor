@@ -4,11 +4,14 @@
  * the service refuses, and the plan's shape, so every plan the service returns parses
  * here, field for field and value for value.
  */
-import { zSceneCheckRequest, zShotPlan } from "@repo/ai-client/schemas";
+import { zLocated, zLocateRequest, zSceneCheckRequest, zShotPlan } from "@repo/ai-client/schemas";
 import {
   DIRECTOR_FRAME_MAX_LENGTH,
   DIRECTOR_FRAME_MIN_LENGTH,
+  DIRECTOR_LOCATE_TARGET_MAX_LENGTH,
+  DIRECTOR_MARK_LABEL_MAX_LENGTH,
   DIRECTOR_MAX_SHOTS,
+  locatedSchema,
   shotPlanSchema,
 } from "@repo/contracts/api";
 import { describe, expect, it } from "vitest";
@@ -58,6 +61,18 @@ describe("Director's contract and the AI service", () => {
     expect(image.maxLength).toBe(DIRECTOR_FRAME_MAX_LENGTH);
     expect(image.minLength).toBe(DIRECTOR_FRAME_MIN_LENGTH);
     expect(shotIndex.exclusiveMaximum).toBe(DIRECTOR_MAX_SHOTS);
+  });
+
+  it("share a locate's limits and answer", () => {
+    const request = node.parse(json(zLocateRequest));
+    const target = node.parse(request.properties?.target);
+    const image = node.parse(request.properties?.image);
+    expect(target.maxLength).toBe(DIRECTOR_LOCATE_TARGET_MAX_LENGTH);
+    expect(image.maxLength).toBe(DIRECTOR_FRAME_MAX_LENGTH);
+    expect(image.minLength).toBe(DIRECTOR_FRAME_MIN_LENGTH);
+    const label = node.parse(node.parse(json(zLocated)).properties?.label);
+    expect(label.maxLength).toBe(DIRECTOR_MARK_LABEL_MAX_LENGTH);
+    expect(shape(json(locatedSchema))).toEqual(shape(json(zLocated)));
   });
 
   it("describe the same plan, field for field", () => {

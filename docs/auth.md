@@ -117,7 +117,8 @@ builders (`apps/api/src/rpc/procedures.ts`) apply it once they know who's callin
 user or per workspace, with `createRateLimiter` (`packages/nest-common/src/rate-limit.ts`),
 shared across replicas through Redis; past it the call gets `RATE_LIMITED` with
 `retryAfterSeconds`. Declared limits, per user: file uploads (30 an hour), Director
-plans (30 an hour), indexing a short (10 an hour), scene checks (30 a minute) and takes
+plans (30 an hour), indexing a short (10 an hour), scene checks (30 a minute), finding
+something for one of Director's marks (60 a minute) and takes
 (120 an hour). Everyday changes (the profile, saving a cut) share one allowance of 120 a
 minute per user, which lets Redis outages through.
 

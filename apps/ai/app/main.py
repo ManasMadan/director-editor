@@ -42,6 +42,8 @@ from app.schemas import (
     DirectorTakeCreate,
     DirectorTakeOut,
     HealthResponse,
+    Located,
+    LocateRequest,
     PublishCopy,
     PublishCopyRequest,
     SceneCheck,
@@ -248,6 +250,14 @@ async def check_director_scene(
     return await director.check_scene(
         caller.org_id, caller.user_id, body.videoId, body.shotIndex, body.image
     )
+
+
+@app.post("/v1/director/locate", operation_id="locateDirectorTarget")
+async def locate_director_target(
+    body: LocateRequest, caller: CallerDep, director: DirectorDep
+) -> Located:
+    """Where something Director names is in one camera frame, for a mark on screen."""
+    return await director.locate(caller.org_id, caller.user_id, body.target, body.image)
 
 
 @app.post("/v1/director/takes", operation_id="createDirectorTake", status_code=201)

@@ -304,6 +304,25 @@ export const zKeypoint = z.object({
 });
 
 /**
+ * LocateRequest
+ */
+export const zLocateRequest = z.object({
+    image: z.string().min(100).max(400000),
+    target: z.string().min(1).max(120)
+});
+
+/**
+ * Located
+ *
+ * Where a target is in the frame it was looked for in, or that it isn't there.
+ */
+export const zLocated = z.object({
+    box: zBox.nullable(),
+    found: z.boolean(),
+    label: z.string().min(1).max(40)
+});
+
+/**
  * PhoneAngle
  */
 export const zPhoneAngle = z.object({
@@ -576,6 +595,18 @@ export const zGetDirectorLibraryHeaders = z.object({
  * Successful Response
  */
 export const zGetDirectorLibraryResponse = zDirectorLibraryOut;
+
+export const zLocateDirectorTargetBody = zLocateRequest;
+
+export const zLocateDirectorTargetHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+/**
+ * Successful Response
+ */
+export const zLocateDirectorTargetResponse = zLocated;
 
 export const zIndexDirectorPlanBody = zDirectorPlanCreate;
 
