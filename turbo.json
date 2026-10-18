@@ -93,6 +93,10 @@
     "director:seed-workspaces": {
       "dependsOn": ["build"],
       "cache": false
+    },
+    "director:demo-account": {
+      "dependsOn": ["build"],
+      "cache": false
     }
   }
 }

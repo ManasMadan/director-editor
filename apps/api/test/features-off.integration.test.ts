@@ -31,7 +31,7 @@ async function expectError(promise: Promise<unknown>, code: string) {
 }
 
 describe("features off", () => {
-  it("reports every optional feature off, with no keys for the browser", async () => {
+  it("reports every optional feature off, with no keys or demo account for the browser", async () => {
     const info = await createSession(harness).rpc.system.info();
     expect(info).toMatchObject({
       features: {
@@ -42,7 +42,21 @@ describe("features off", () => {
         files: false,
       },
       captchaSiteKey: null,
+      demo: null,
     });
+  });
+
+  it("limits sign-in attempts at the demo account's address like any other without a demo account", async () => {
+    const attempt = () =>
+      createSession(harness).auth("/sign-in/email", {
+        email: "demo@director.mmadan.in",
+        password: newPassword(),
+      });
+    // 10 attempts per account in 15 minutes (account-limits.ts), each from its own address.
+    for (let tries = 0; tries < 10; tries++) {
+      expect((await attempt()).status).toBe(401);
+    }
+    expect((await attempt()).status).toBe(429);
   });
 
   it("answers FEATURE_DISABLED for uploads", async () => {

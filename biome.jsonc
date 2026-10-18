@@ -161,6 +161,7 @@
         "apps/api/src/load-users.ts",
         "apps/api/src/reencrypt.ts",
         "apps/api/src/director-seed-workspaces.ts",
+        "apps/api/src/director-demo-account.ts",
         "deploy/docker/*.mjs",
         ".claude/hooks/**"
       ],

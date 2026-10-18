@@ -25,6 +25,7 @@ import { type ChildProcess, type SpawnOptions, spawn } from "node:child_process"
 import { mkdirSync, openSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { newSecret } from "../packages/testing/src/secrets";
 import { ENV_EXAMPLE_PATH, fail, listening, ok, ROOT, readEnv, runMain, runSync } from "./lib";
 
 /** The ports the run's services listen on, each one of .env.example's `*_PORT`. */
@@ -261,7 +262,13 @@ export async function e2e(
   argv = process.argv.slice(2),
   given: Partial<Stack> = {},
 ): Promise<number> {
-  const stack = { ...REAL, ...given };
+  const base = { ...REAL, ...given };
+  // The demo account's spec (apps/web/e2e/demo.spec.ts) needs the API to offer one: the
+  // checkout's own password if its .env sets one, else a throwaway one for this run.
+  const stack = {
+    ...base,
+    env: { ...base.env, DEMO_PASSWORD: base.env.DEMO_PASSWORD || newSecret() },
+  };
   const ports = stackPorts(stack.env);
 
   const busy = await busyServices(stack, services(ports));

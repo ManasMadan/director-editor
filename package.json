@@ -123,6 +123,7 @@
     "db:seed": "turbo run seed --filter=@repo/api",
     "secrets:reencrypt": "turbo run secrets:reencrypt --filter=@repo/api",
     "director:seed-workspaces": "turbo run director:seed-workspaces --filter=@repo/api",
+    "director:demo-account": "turbo run director:demo-account --filter=@repo/api --",
     "test:coverage": "turbo run coverage && bun test --coverage ./scripts/ ./.claude/hooks/ && bun scripts/coverage.ts",
     "lint:suppressions": "bun scripts/suppressions.ts",
     "rename": "bun scripts/rename.ts",

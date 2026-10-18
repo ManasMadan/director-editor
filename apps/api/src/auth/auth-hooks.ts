@@ -17,6 +17,7 @@ import { requestNotification } from "../notifications";
 import { emitAnyEvent, emitEvent } from "../outbox";
 import type { AuthContext } from "./auth-context";
 import { auditEventForAlert, sessionEndReason, sessionMethod } from "./auth-events";
+import { DEMO_LOCKED_PATHS, ownSessionOnly, refuseDemoProfileChange, refuseForDemo } from "./demo";
 import { orgIdOf, removedMemberSchema, userIdOf } from "./ids";
 import { type SecurityAlert, securityAlertFor } from "./security-alerts";
 
@@ -106,6 +107,10 @@ export function requestHooks(context: AuthContext) {
           await emailLimits.invitation(session.user.id, email);
         }
       }
+      // Everyone trying Director shares the demo account: nobody may change or lock it.
+      if (DEMO_LOCKED_PATHS.has(ctx.path)) {
+        refuseForDemo((await getSessionFromCtx(ctx))?.user);
+      }
       // Per account, on top of the per-address limits above (account-limits.ts).
       await accountLimits({
         path: ctx.path,
@@ -113,19 +118,25 @@ export function requestHooks(context: AuthContext) {
         secondFactor: ctx.getCookie(ctx.context.createAuthCookie("two_factor").name) ?? undefined,
       });
     }),
+    // Each way out returns: the device list's answer may be replaced, nothing else's.
     after: createAuthMiddleware(async (ctx) => {
       if (isAPIError(ctx.context.returned)) {
-        return;
+        return undefined;
+      }
+      // The demo account's devices are other people's: it sees only its own.
+      if (ctx.path === "/list-sessions") {
+        const own = ownSessionOnly(ctx.context.returned, ctx.context.session);
+        return own ? ctx.json(own) : undefined;
       }
       // Hooks get no session; the member who left is the one returned.
       if (ctx.path === "/organization/leave") {
         const member = removedMemberSchema.parse(ctx.context.returned);
         await memberRemoved(member, member.userId);
-        return;
+        return undefined;
       }
       const alert = securityAlertFor(ctx);
       if (!alert) {
-        return;
+        return undefined;
       }
       // better-auth has committed the change by now: whatever fails here is logged, and
       // never turns a change that happened into an error for the user.
@@ -139,6 +150,7 @@ export function requestHooks(context: AuthContext) {
       } catch (error) {
         ctx.context.logger.error("security alert not recorded", error);
       }
+      return undefined;
     }),
   };
 }
@@ -197,6 +209,10 @@ function userHooks({ db, record }: AuthContext): DatabaseHooks["user"] {
         // client picks.
         if (ctx?.path === "/update-user" && user.image !== undefined) {
           throw new APIError("BAD_REQUEST", { code: "VALIDATION_FAILED" });
+        }
+        // Everyone shares the demo account: its name stays the one the command gives it.
+        if (ctx?.path === "/update-user") {
+          refuseDemoProfileChange(user, ctx.context.session?.user);
         }
         if (
           (user.locale !== undefined && !isLocale(user.locale)) ||

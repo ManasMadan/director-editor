@@ -8,6 +8,8 @@ const errors = errorsOf(
   "FEATURE_DISABLED",
   "FILE_NOT_FOUND",
   "FILE_NOT_READY",
+  // Everyone shares the demo account, so its picture stays as it is.
+  "DEMO_ACCOUNT_LOCKED",
 );
 
 const meSchema = z.object({

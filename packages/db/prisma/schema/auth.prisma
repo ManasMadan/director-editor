@@ -23,6 +23,10 @@ model User {
   banned           Boolean         @default(false)
   banReason        String?         @map("ban_reason")
   banExpires       DateTime?       @map("ban_expires") @db.Timestamptz(3)
+  /// Director's shared demo account (apps/api/src/auth/demo.ts): publishing and
+  /// account changes are off for it. Registered with better-auth (user.additionalFields,
+  /// never client input), so a session's user carries it.
+  demo             Boolean         @default(false)
   createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
   sessions         Session[]

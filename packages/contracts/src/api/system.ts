@@ -21,6 +21,12 @@ export const systemContract = {
         minimumClientVersion: z.string(),
         /** Public Turnstile site key when captcha is on; clients render the widget with it. */
         captchaSiteKey: z.string().nullable(),
+        /**
+         * Director's shared demo account, for the sign-in page to show and fill in, when
+         * this environment has one (DEMO_PASSWORD set); null otherwise. Public on purpose:
+         * anyone may try Director with it, and it can't publish or change its own account.
+         */
+        demo: z.object({ email: z.email(), password: z.string() }).nullable(),
       }),
     ),
   alerting: base

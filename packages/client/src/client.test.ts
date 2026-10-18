@@ -14,6 +14,7 @@ const info = {
   },
   minimumClientVersion: "1.0.0",
   captchaSiteKey: null,
+  demo: null,
 };
 
 /** A stand-in that also records each request as sent. */

@@ -15,6 +15,7 @@ describe("system info", () => {
       },
       minimumClientVersion: "1.0.0",
       captchaSiteKey: null,
+      demo: null,
     };
     const api = standIn((os) => ({ system: { info: os.system.info.handler(() => info) } }));
     const { result } = renderHook(() => useSystemInfoQuery(), api);

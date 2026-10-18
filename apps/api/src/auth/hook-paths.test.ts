@@ -7,6 +7,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { auth } from "./auth.cli";
+import { DEMO_LOCKED_PATHS } from "./demo";
 
 const endpoints = Object.values(auth.api).flatMap((endpoint) =>
   typeof endpoint === "function" && "path" in endpoint ? [String(endpoint.path)] : [],
@@ -27,6 +28,10 @@ describe("the better-auth paths the hooks name", () => {
     expect(paths.filter((entry) => !endpoints.includes(entry.split(": ")[1] as string))).toEqual(
       [],
     );
+  });
+
+  it("include every one the demo account is locked out of", () => {
+    expect([...DEMO_LOCKED_PATHS].filter((path) => !endpoints.includes(path))).toEqual([]);
   });
 
   it("start endpoints, where they name a prefix", () => {

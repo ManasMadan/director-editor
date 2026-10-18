@@ -196,6 +196,49 @@ iOS asks before a page may read the tilt: the level shows a button for that.
   editor; `lib/` holds the
   pure parts: tilt, pose, framing, timeline, doodles, the edit, the stitcher).
 
+## The demo account
+
+Anyone can try Director without signing up: the sign-in page shows a shared account,
+`demo@director.mmadan.in`, with its password and a "Use demo account" button that fills
+the form (the landing page's "Try the demo" links to `/sign-in?demo=1`, which fills it at
+once). The page gets both from `system.info`, and only when the API has `DEMO_PASSWORD`
+set ([environment.md](environment.md)).
+
+The account itself is made by a command, once per environment and again whenever the
+password changes:
+
+```sh
+bun run --filter @repo/api director:demo-account --force   # locally
+node dist/director-demo-account.mjs                        # deployed, in the api image
+```
+
+Outside production it refuses without `--force`. It makes the account verified, with the
+password `DEMO_PASSWORD`, `demo` set on its user row (`auth.user.demo`) and the seeded
+templates in its personal workspace. Run again, it only sets the password and the flag back
+and copies any seed the library is missing: what judges did with the account (its own
+indexed Short, takes and cuts) stays. `--reset` starts over: it deletes the account and the
+workspaces only it belongs to, and everything made in them, then makes it again with only
+the seeds.
+
+Everyone shares the account, so (`apps/api/src/auth/demo.ts`):
+
+- it can't publish: publishing refuses a session whose `session.user.demo` is true with
+  `DEMO_ACCOUNT_LOCKED`;
+- it can't change, lock or empty the account or its workspace: changing the password,
+  deleting the account, turning on two-step verification, linking a Google account, ending
+  sessions, renaming itself or changing its picture, and making, renaming, leaving or
+  deleting a workspace answer `DEMO_ACCOUNT_LOCKED` (its email and a password reset need
+  codes sent to its address). It can still set its own language and time zone;
+- its device list shows only the device asking, never the others signed in to it;
+- while `DEMO_PASSWORD` is set, its sign-in has no per-account attempt limit, since its
+  password is public; the per-address limit still applies.
+
+Nobody can delete a personal workspace through the API, the demo's or anyone's: it goes
+with its account. Running the command again also puts back the account's and its
+workspace's names.
+
+It indexes a Short of its own like any account (one).
+
 ## Limits
 
 - A take is at most 60 seconds and 15 MB, so it stays under the 20 MB Gemini takes inline

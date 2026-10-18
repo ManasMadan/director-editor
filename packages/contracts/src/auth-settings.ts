@@ -36,8 +36,14 @@ export const WORKSPACE_MEMBER_LIMIT = 1;
  * them (`user.additionalFields`) and clients infer them (`inferAdditionalFields`), so
  * `authClient.updateUser({ locale })` and `session.user.timezone` are typed on both
  * sides. No defaultValue: see the sign-up hook in apps/api/src/auth/auth.ts.
+ *
+ * `demo` marks Director's shared demo account (apps/api/src/auth/demo.ts):
+ * publishing and account changes are off for it, and `session.user.demo` is how the
+ * server and the web app tell. Never input: better-auth refuses it in sign-up and profile
+ * bodies, so only the demo command sets it (the column defaults to false).
  */
 export const userAdditionalFields = {
   locale: { type: "string", required: false, input: true },
   timezone: { type: "string", required: false, input: true },
+  demo: { type: "boolean", required: false, input: false },
 } as const;

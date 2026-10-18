@@ -28,7 +28,7 @@ export const userRouter = ({ authed }: Procedures, avatar: AvatarService) => ({
     toMe(user, session.activeOrganizationId),
   ),
   setAvatar: authed.user.setAvatar.handler(async ({ context: { user, session }, input }) => {
-    await avatar.set(user.id, input.fileId);
+    await avatar.set(user, input.fileId);
     return toMe(
       { ...user, image: input.fileId ? fileContentPath(input.fileId) : null },
       session.activeOrganizationId,

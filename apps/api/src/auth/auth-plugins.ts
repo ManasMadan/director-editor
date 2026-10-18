@@ -143,6 +143,15 @@ function workspaceHooks({
       });
     },
     beforeDeleteOrganization: async ({ organization: org }) => {
+      // A personal workspace goes only with its account (account deletion removes it):
+      // without one, its owner would be left with nowhere to work, and the shared demo
+      // account's would take every judge's takes with it.
+      if (org.slug.startsWith("personal-")) {
+        throw new APIError("FORBIDDEN", {
+          code: "FORBIDDEN",
+          message: "A personal workspace is deleted with its account.",
+        });
+      }
       await memberships.forgetOrganization(orgIdOf(org));
     },
     // Invitations count towards the member limit, so a full workspace can't over-invite.

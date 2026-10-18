@@ -1,9 +1,9 @@
 /**
  * Starts what the browser tests talk to: two builds of the real API, one with every
  * optional feature on (files on the local RustFS, the AI stand-in, Google sign-in,
- * YouTube's link check from the mock YouTube) and one with every feature off except
- * captcha, both on one
- * cloned database. The browser reaches them on its own origin, through the proxy in
+ * YouTube's link check from the mock YouTube, the demo account offered) and one with
+ * every feature off except captcha, both on one cloned database. The browser reaches them
+ * on its own origin, through the proxy in
  * vitest.config.ts, exactly like the site does through the gateway.
  */
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
@@ -11,6 +11,7 @@ import { mkdirSync, openSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { createTestDatabase, prepareTemplate } from "@repo/db/testing";
 import { startFakeGoogle } from "@repo/fake-google";
+import { DEMO } from "./demo";
 import { startFakeAi } from "./fake-ai";
 import { API, CAPTCHA, REDIS_URL, type Services, SITE } from "./services";
 
@@ -97,10 +98,12 @@ async function start(): Promise<Services> {
     AI_URL: "",
     AI_SERVICE_SECRET: "",
     YOUTUBE_API_KEY: "",
+    DEMO_PASSWORD: "",
   };
   const variants = {
     full: {
       ...off,
+      DEMO_PASSWORD: DEMO.password,
       GOOGLE_CLIENT_ID: "web-tests.apps.googleusercontent.com",
       GOOGLE_CLIENT_SECRET: "web-tests-secret",
       S3_BUCKET: process.env.S3_BUCKET ?? "uploads",

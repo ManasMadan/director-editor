@@ -10,6 +10,7 @@
 import { Injectable } from "@nestjs/common";
 import { fileContentPath } from "@repo/contracts/files";
 import { type FileId, fileIdSchema, type UserId } from "@repo/contracts/ids";
+import { AppError } from "@repo/nest-common";
 import { type Auth, InjectAuth } from "../../auth/auth.module";
 import { FilesService } from "../files";
 import { UserRepository } from "./user.repository";
@@ -24,7 +25,12 @@ export class AvatarService {
     private readonly files: FilesService,
   ) {}
 
-  async set(userId: UserId, fileId: FileId | null) {
+  async set(user: { id: UserId; demo?: boolean | null | undefined }, fileId: FileId | null) {
+    // Everyone signed in to the shared demo account would see a picture one of them chose.
+    if (user.demo) {
+      throw new AppError("DEMO_ACCOUNT_LOCKED");
+    }
+    const userId = user.id;
     if (fileId) {
       await this.files.ready(userId, fileId, "avatar");
     }

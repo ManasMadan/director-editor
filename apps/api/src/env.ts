@@ -7,6 +7,8 @@
  * variables; see src/features.ts. Add new variables here, to .env.example and to
  * docs/environment.md in the same change.
  */
+
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@repo/contracts/auth-settings";
 import {
   asError,
   coreEnv,
@@ -76,6 +78,11 @@ export const envSchema = {
   PASSWORD_BREACH_CHECK: z
     .enum(["on", "off"])
     .default(process.env.NODE_ENV === "production" ? "on" : "off"),
+  // Optional: Director's shared demo account (src/auth/demo.ts). Its password,
+  // which `bun run --filter @repo/api director:demo-account` gives the account and
+  // `system.info` shows on the sign-in page, on purpose: anyone may try Director with it.
+  // Unset: no demo account is offered.
+  DEMO_PASSWORD: z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH).optional(),
   // Optional: the Python AI service, and the secret this API signs its calls with
   // (the same AI_SERVICE_SECRET the service verifies with).
   AI_URL: z.url().optional(),
