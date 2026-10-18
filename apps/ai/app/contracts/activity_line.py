@@ -25,7 +25,6 @@ type ActivityName = Annotated[
         "director.plan_opened",
         "director.call_started",
         "director.call_ended",
-        "director.scene_checked",
         "director.take_recorded",
         "director.take_reviewed",
         "director.cut_saved",

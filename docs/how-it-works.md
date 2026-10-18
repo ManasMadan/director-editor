@@ -507,7 +507,18 @@ Publishing starts from a saved video in My media and uploads only when the membe
 The API and the AI worker stream one row per event into one BigQuery table
 (`BIGQUERY_DATASET`'s `events`, `director.events` in production), with the VM's service
 account: `indexed` (with the model that wrote the plan and whether its audio was
-captured), `take_reviewed` (with the score) and `call_started`. Each is recorded only once
-the thing has happened (a stored plan, a stored score, a call Gemini answered), and a
+captured), `take_reviewed` (with the score), `call_started` and `director_turn`. Each is
+recorded only once the thing has happened (a stored plan, a stored score, a call Gemini
+answered, a turn Director finished), and a
 slow or failing BigQuery never holds up the action that triggered it
 (`packages/nest-common/src/analytics.ts`, `apps/ai/app/analytics.py`).
+
+`director_turn` is one row per turn Director finishes on the live line
+(`apps/api/src/modules/live/live.turns.ts`) or the slower line (`chat-turn.ts` in the
+director module, with `line` `chat`, `input` `said` or `app:<what>`, and `latencyMs` the
+reply's time on our side): the member, the short (`video_id`) and its
+format (`template_id`), and in `detail` the line (`live`), the shot, what started the turn
+(`voice`, `text`, or `app` for the app's own notes), the tools Director called, whether the
+member cut in, whether Director spoke, and `latencyMs`, the member's wait from the last
+thing heard from them to Director's first audio. It never carries what anyone said: the
+words stay in the browser and in the recording the consent card covers.

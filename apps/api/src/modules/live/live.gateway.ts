@@ -42,6 +42,7 @@ import { CLIENT_MAX_PAYLOAD_BYTES } from "./live.messages";
 import type { LivePicks } from "./live.picks";
 import { type CallEnd, closeWithError, type LiveLog, LiveRelay } from "./live.relay";
 import { type LiveModel, liveUrl, setupMessage } from "./live.setup";
+import type { LiveTurn } from "./live.turns";
 
 /**
  * A shoot's longest with Director live. Cost grows with every second of audio and video,
@@ -62,6 +63,14 @@ export interface LiveUpstream {
   model: LiveModel;
   url: string;
   auth: GoogleAuth;
+}
+
+/** One of Director's turns, with who it was for: a short (and its format) and its shot. */
+interface CallTurn extends LiveTurn {
+  userId: UserId;
+  videoId: VideoId;
+  template: string;
+  shot: number;
 }
 
 export interface LiveOptions {
@@ -91,6 +100,8 @@ export interface LiveOptions {
   now: () => number;
   /** Records that Director live reached Gemini and started (fire-and-forget analytics). */
   recordCallStarted(userId: UserId, videoId: VideoId): void;
+  /** Records one of Director's turns: who, which short and shot, tools and latency, no words. */
+  recordTurn(turn: CallTurn): void;
   /** The upgrade's request context: its id, address and user agent (http-context.ts). */
   context(request: IncomingMessage): RequestContext;
   /** Writes the call's activity lines: started (or refused), and how it ended. */
@@ -105,6 +116,8 @@ export function liveUpstream(settings: {
   project: string | undefined;
   location: string;
   model: string;
+  proactiveAudio?: boolean;
+  affectiveDialog?: boolean;
   url?: string | undefined;
   auth: GoogleAuth;
 }): LiveUpstream | null {
@@ -112,7 +125,13 @@ export function liveUpstream(settings: {
     return null;
   }
   return {
-    model: { project: settings.project, location: settings.location, model: settings.model },
+    model: {
+      project: settings.project,
+      location: settings.location,
+      model: settings.model,
+      proactiveAudio: settings.proactiveAudio ?? false,
+      affectiveDialog: settings.affectiveDialog ?? false,
+    },
     url: settings.url ?? liveUrl(settings.location),
     auth: settings.auth,
   };
@@ -188,6 +207,14 @@ function relayFor(
       options.recordCallStarted(call.caller.userId, call.videoId);
       options.activity({ activity: "director.call_started", target: callTarget(call) });
     }),
+    onTurn: (turn, shot) =>
+      options.recordTurn({
+        ...turn,
+        userId: call.caller.userId,
+        videoId: call.videoId,
+        template: call.plan.format,
+        shot,
+      }),
   });
 }
 

@@ -36,7 +36,7 @@ import { CLIENT_MAX_PAYLOAD_BYTES } from "./live.messages";
 import { QUIET_MS } from "./live.pacer";
 import { PERSONA, PERSONA_VERSION } from "./live.persona";
 import type { LivePicks } from "./live.picks";
-import { systemInstruction } from "./live.setup";
+import { setupMessage, systemInstruction } from "./live.setup";
 
 /**
  * What the persona must keep saying, whatever else changes in it: these are what the
@@ -245,6 +245,7 @@ async function startApi(overrides: Partial<LiveOptions> = {}, fake = new FakeLiv
     log,
     now: () => clock,
     recordCallStarted: vi.fn(),
+    recordTurn: vi.fn(),
     context: () => ({ requestId: "call-1" }),
     activity: vi.fn(),
     picks: () => ({ choose: () => Promise.resolve("done") }),
@@ -470,6 +471,36 @@ describe("a live call", () => {
     expect(await browser.message(3)).toEqual({ type: "interrupted" });
     // Its turn is over: the browser starts its next words on a new line.
     expect(await browser.message(4)).toEqual({ type: "turn" });
+  });
+
+  it("records each of Director's turns for analytics: who, the short, tools and the wait, no words", async () => {
+    const recordTurn = vi.fn<LiveOptions["recordTurn"]>();
+    const { fake, browser, tick } = await liveCall({ recordTurn });
+    browser.send({ type: "text", text: "I'm fine shooting inside" });
+    await fake.message(2);
+    tick(800);
+    fake.send({
+      toolCall: { functionCalls: [{ id: "g1", name: "switch_camera", args: { to: "front" } }] },
+    });
+    fake.send({
+      serverContent: {
+        modelTurn: { parts: [{ inlineData: { mimeType: "audio/pcm;rate=24000", data: "BBBB" } }] },
+      },
+    });
+    fake.send({ serverContent: { turnComplete: true } });
+    await vi.waitFor(() => expect(recordTurn).toHaveBeenCalledOnce());
+    expect(recordTurn).toHaveBeenCalledWith({
+      userId: caller.userId,
+      videoId: "dQw4w9WgXcQ",
+      template: readyPlan.plan?.format,
+      shot: 0,
+      input: "text",
+      latencyMs: 800,
+      tools: ["switch_camera"],
+      interrupted: false,
+      spoke: true,
+    });
+    expect(JSON.stringify(recordTurn.mock.calls)).not.toContain("inside");
   });
 
   it("forwards up to twice real time of microphone audio, and hangs up past it", async () => {
@@ -1984,10 +2015,37 @@ describe("the call's configuration", () => {
     const settings = { location: "europe-west4", model: "m", auth: tokenAuth };
     expect(liveUpstream({ ...settings, project: undefined })).toBeNull();
     expect(liveUpstream({ ...settings, project: "proj" })).toEqual({
-      model: { project: "proj", location: "europe-west4", model: "m" },
+      model: {
+        project: "proj",
+        location: "europe-west4",
+        model: "m",
+        proactiveAudio: false,
+        affectiveDialog: false,
+      },
       url: "wss://europe-west4-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1.LlmBidiService/BidiGenerateContent",
       auth: tokenAuth,
     });
+  });
+
+  it("asks for proactive audio and affective dialog only when they're on", () => {
+    const plan = readyPlan.plan;
+    expect(plan).not.toBeNull();
+    if (plan) {
+      const target = { project: "p", location: "l", model: "m" };
+      const plain = setupMessage(target, plan, 0, { version: EMPTY_VERSION }).setup;
+      expect(plain).not.toHaveProperty("proactivity");
+      expect(plain.generationConfig).not.toHaveProperty("enableAffectiveDialog");
+      const expressive = setupMessage(
+        { ...target, proactiveAudio: true, affectiveDialog: true },
+        plan,
+        0,
+        { version: EMPTY_VERSION },
+      ).setup;
+      expect(expressive).toMatchObject({
+        proactivity: { proactiveAudio: true },
+        generationConfig: { enableAffectiveDialog: true, responseModalities: ["AUDIO"] },
+      });
+    }
   });
 
   it("describes a shot with nothing to say or do, and refuses one the plan doesn't have", () => {

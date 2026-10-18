@@ -5,7 +5,6 @@ import type {
   DirectorShot,
   DirectorTake,
   FileInfo,
-  SceneCheck,
 } from "@repo/contracts/api";
 import type { FileRejection, UploadPurpose } from "@repo/contracts/files";
 import {
@@ -20,7 +19,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn, until } from "../../../test/stand-in";
 import { errorCode } from "../../errors";
 import { useDirectorChatMutation } from "./chat";
-import { useCheckSceneMutation } from "./check-scene";
 import { useIndexShortMutation } from "./index-short";
 import { takeInProgress } from "./latest";
 import { useDirectorLibraryQuery } from "./library";
@@ -298,50 +296,6 @@ describe("the takes, shot by shot", () => {
     await until(() => expect(first()).toBe("ready"));
     await vi.advanceTimersByTimeAsync(MINUTE_MS);
     expect(asked).toBe(2);
-  });
-});
-
-describe("checking the scene", () => {
-  const check: SceneCheck = {
-    inPlace: false,
-    instruction: "Move about five meters left, to the tree.",
-    direction: "left",
-    distanceMeters: 5,
-    landmark: { label: "tree", box: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 } },
-    lighting: "good",
-  };
-  const image = "A".repeat(200);
-
-  it("sends the shot's frame and answers with where to go", async () => {
-    const sent: unknown[] = [];
-    const api = standIn((os) => ({
-      director: {
-        checkScene: os.director.checkScene.handler(({ input }) => {
-          sent.push(input);
-          return check;
-        }),
-      },
-    }));
-    const { result } = renderHook(() => useCheckSceneMutation(), api);
-    await expect(result.current.mutateAsync({ videoId, shotIndex: 2, image })).resolves.toEqual(
-      check,
-    );
-    expect(sent).toEqual([{ videoId, shotIndex: 2, image }]);
-  });
-
-  it("fails with the API's reason", async () => {
-    const api = standIn((os) => ({
-      director: {
-        checkScene: os.director.checkScene.handler(() => {
-          throw new ORPCError("AI_BUDGET_EXCEEDED");
-        }),
-      },
-    }));
-    const { result } = renderHook(() => useCheckSceneMutation(), api);
-    const error = await result.current
-      .mutateAsync({ videoId, shotIndex: 0, image })
-      .catch((e: unknown) => e);
-    expect(errorCode(error)).toBe("AI_BUDGET_EXCEEDED");
   });
 });
 

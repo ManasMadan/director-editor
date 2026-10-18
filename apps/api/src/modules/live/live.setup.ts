@@ -438,6 +438,13 @@ export interface LiveModel {
   project: string;
   location: string;
   model: string;
+  /**
+   * The native-audio model may choose not to answer what isn't meant for it (chatter,
+   * someone else in the room, the member's own lines during an attempt).
+   */
+  proactiveAudio?: boolean;
+  /** The native-audio model matches its tone to the member's (warmer with a shy one). */
+  affectiveDialog?: boolean;
 }
 
 /**
@@ -456,7 +463,9 @@ export function setupMessage(
       generationConfig: {
         responseModalities: ["AUDIO"],
         speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: VOICE } } },
+        ...(target.affectiveDialog ? { enableAffectiveDialog: true } : {}),
       },
+      ...(target.proactiveAudio ? { proactivity: { proactiveAudio: true } } : {}),
       // Live alone rates attempts (the relay answers `rate` itself, live.picks.ts); the
       // slower line shares the rest of the instruction and the other tools.
       systemInstruction: {

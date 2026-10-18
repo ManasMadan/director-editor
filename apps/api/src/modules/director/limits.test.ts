@@ -4,7 +4,7 @@
  * the service refuses, and the plan's shape, so every plan the service returns parses
  * here, field for field and value for value.
  */
-import { zLocated, zLocateRequest, zSceneCheckRequest, zShotPlan } from "@repo/ai-client/schemas";
+import { zLocated, zLocateRequest, zShotPlan } from "@repo/ai-client/schemas";
 import {
   DIRECTOR_FRAME_MAX_LENGTH,
   DIRECTOR_FRAME_MIN_LENGTH,
@@ -55,15 +55,6 @@ const json = (schema: z.ZodType) =>
   z.toJSONSchema(schema, { io: "output", unrepresentable: "any" });
 
 describe("Director's contract and the AI service", () => {
-  it("share the scene check's limits", () => {
-    const request = node.parse(json(zSceneCheckRequest));
-    const image = node.parse(request.properties?.image);
-    const shotIndex = node.parse(request.properties?.shotIndex);
-    expect(image.maxLength).toBe(DIRECTOR_FRAME_MAX_LENGTH);
-    expect(image.minLength).toBe(DIRECTOR_FRAME_MIN_LENGTH);
-    expect(shotIndex.exclusiveMaximum).toBe(DIRECTOR_MAX_SHOTS);
-  });
-
   it("share a locate's limits and answer", () => {
     const request = node.parse(json(zLocateRequest));
     const target = node.parse(request.properties?.target);

@@ -26,7 +26,6 @@ from app.db.session import tenant
 
 type Feature = Literal[
     "director-plan",
-    "director-scene",
     "director-locate",
     "director-review",
     "director-speech",

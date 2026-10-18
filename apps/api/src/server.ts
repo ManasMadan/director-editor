@@ -102,6 +102,8 @@ export function liveCallOptions(deps: {
       project: env.GOOGLE_CLOUD_PROJECT,
       location: env.LIVE_LOCATION,
       model: env.LIVE_MODEL,
+      proactiveAudio: env.LIVE_PROACTIVE_AUDIO,
+      affectiveDialog: env.LIVE_AFFECTIVE_DIALOG,
       url: env.LIVE_API_URL,
       auth: createGoogleAuth(env.GOOGLE_ACCESS_TOKEN),
     }),
@@ -109,6 +111,13 @@ export function liveCallOptions(deps: {
     now: Date.now,
     recordCallStarted: (userId, videoId) =>
       deps.analytics.record("call_started", { userId, videoId }),
+    recordTurn: ({ userId, videoId, template, ...turn }) =>
+      deps.analytics.record("director_turn", {
+        userId,
+        videoId,
+        templateId: template,
+        detail: { line: "live", ...turn },
+      }),
     context: upgradeContext(env.TRUSTED_PROXIES),
     activity: deps.activity,
   };

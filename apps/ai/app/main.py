@@ -66,8 +66,6 @@ from app.schemas import (
     PublishCopyRequest,
     ReviseRequest,
     ReviseResult,
-    SceneCheck,
-    SceneCheckRequest,
     ShotPlan,
     SpeechRequest,
     StoryboardOut,
@@ -293,16 +291,6 @@ async def get_director_plan(
     plan = await director.plan(caller.org_id, video_id)
     storyboards = await creator.storyboards(caller.org_id, plan) if creator else []
     return _plan_out(plan, await director.asset_images(caller.org_id, plan), storyboards)
-
-
-@app.post("/v1/director/scene-checks", operation_id="checkDirectorScene")
-async def check_director_scene(
-    body: SceneCheckRequest, caller: CallerDep, director: DirectorDep
-) -> SceneCheck:
-    """Where to go for a shot, judged from one camera frame."""
-    return await director.check_scene(
-        caller.org_id, caller.user_id, body.videoId, body.shotIndex, body.image
-    )
 
 
 @app.post("/v1/director/locate", operation_id="locateDirectorTarget")

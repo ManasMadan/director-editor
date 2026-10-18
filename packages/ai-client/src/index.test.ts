@@ -6,7 +6,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { jwtVerify } from "jose";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, expectTypeOf, it } from "vitest";
 import { AiServiceError, createAiClient } from "./index";
 
 const SECRET = "s".repeat(32);
@@ -66,15 +66,6 @@ const located = {
   found: true,
   label: "your window",
   box: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },
-};
-
-const scene = {
-  direction: "none",
-  distanceMeters: null,
-  inPlace: true,
-  instruction: "Good spot.",
-  landmark: null,
-  lighting: "good",
 };
 
 type Handler = (request: IncomingMessage, response: ServerResponse, body: string) => void;
@@ -154,10 +145,16 @@ describe("each call", () => {
 });
 
 describe("Director's calls", () => {
+  it("keep their types (a client typed any would hide every contract change from the API)", () => {
+    type Director = ReturnType<typeof createAiClient>["director"];
+    expectTypeOf<Director>().not.toBeAny();
+    expectTypeOf<Awaited<ReturnType<Director["library"]>>>().toHaveProperty("templates");
+    expectTypeOf<Awaited<ReturnType<Director["askEditor"]>>>().not.toBeAny();
+  });
+
   it("return what the service answered", async () => {
     handler = (request, response) => {
       const answers: Record<string, [number, unknown]> = {
-        "/v1/director/scene-checks": [200, scene],
         "/v1/director/locate": [200, located],
         "/v1/director/takes": [201, take],
         [`/v1/director/plans/${VIDEO}/takes`]: [200, [take]],
@@ -178,9 +175,6 @@ describe("Director's calls", () => {
       indexUsed: true,
     });
     await expect(director.getPlan(caller, VIDEO)).resolves.toEqual(plan);
-    await expect(
-      director.checkScene(caller, { videoId: VIDEO, shotIndex: 0, image: "a".repeat(100) }),
-    ).resolves.toEqual(scene);
     await expect(
       director.locate(caller, { target: "the window", image: "a".repeat(100) }),
     ).resolves.toEqual(located);
@@ -219,7 +213,6 @@ describe("Director's calls", () => {
       "POST /v1/director/plans",
       "GET /v1/director/library",
       `GET /v1/director/plans/${VIDEO}`,
-      "POST /v1/director/scene-checks",
       "POST /v1/director/locate",
       "POST /v1/director/takes",
       `GET /v1/director/plans/${VIDEO}/takes`,

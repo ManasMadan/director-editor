@@ -1,16 +1,10 @@
 /**
- * The Gemini API's generateContent, as Director's three agents call it (apps/ai, through
+ * The Gemini API's generateContent, as Director's agents call it (apps/ai, through
  * Pydantic AI and google-genai): each asks for its output through a tool named
- * `final_result`, whose parameters say which of the three it is. The answers are mock
+ * `final_result`, whose parameters say which it is. The answers are mock
  * data, worked out from what the request carries:
  *
  * - a shot plan: the plan for the short at the request's YouTube `file_uri` (./plans.ts);
- * - a scene check: walks the member to the shot's landmark over a few checks, then says
- *   they're in place (per shot, so each shot starts over). "Left" is as the member sees
- *   their screen. It can't see the frame, so it never says where the landmark is in it
- *   (`landmark` is null): a made-up box would have the camera screen circle a mirror on a
- *   blank wall. The camera screen finds the landmark itself when its on-device detector
- *   knows it, and real Gemini answers with the box from the frame;
  * - a take review: keeps the take from just after its start for the shot's length, with
  *   a score and feedback named after the shot; a photo has no part to keep.
  */
@@ -56,12 +50,11 @@ export const generateRequest = z.looseObject({
 export type GenerateRequest = z.infer<typeof generateRequest>;
 
 /** What Director's agents ask Gemini for, by their output's fields. */
-type Ask = "plan" | "scene" | "review";
+type Ask = "plan" | "review";
 
 /** Which agent is asking, by the field its output has that the others' don't. */
 const ASKS: [field: string, ask: Ask][] = [
   ["shots", "plan"],
-  ["inPlace", "scene"],
   ["bestStartSeconds", "review"],
 ];
 
@@ -97,7 +90,6 @@ const shotText = z.object({
   title: z.string(),
   kind: z.enum(["video", "photo"]).optional(),
   durationSeconds: z.number().optional(),
-  sceneLandmark: z.string().nullable().optional(),
   camera: z.enum(["front", "back"]).optional(),
 });
 
@@ -109,45 +101,6 @@ function shotOf(request: GenerateRequest): z.infer<typeof shotText> | null {
     }
   }
   return null;
-}
-
-/** How many scene checks each shot has had, so the directions move the member closer. */
-export type SceneSteps = Map<string, number>;
-
-function sceneCheck(shot: z.infer<typeof shotText> | null, seen: SceneSteps) {
-  const landmark = shot?.sceneLandmark ?? null;
-  const key = shot?.title ?? "";
-  const count = (seen.get(key) ?? 0) + 1;
-  seen.set(key, count);
-  const walking = { inPlace: false, direction: "left", landmark: null, lighting: "good" };
-  // Said the way Director talks to someone filming for the first time: warm, short, and
-  // in steps rather than meters.
-  if (landmark && count === 1) {
-    return {
-      ...walking,
-      instruction: `Let's find your spot! Walk a few steps to your left, toward the ${landmark}.`,
-      distanceMeters: 5,
-    };
-  }
-  if (landmark && count === 2) {
-    return {
-      ...walking,
-      instruction: `Almost there! Just a couple more little steps to the ${landmark}.`,
-      distanceMeters: 1.5,
-    };
-  }
-  // Arrived: the next check (the next time this shot is filmed) walks there again.
-  seen.delete(key);
-  return {
-    inPlace: true,
-    instruction: landmark
-      ? `Perfect! Stay right there by the ${landmark}.`
-      : "This spot works great, and the light looks lovely!",
-    direction: "none",
-    distanceMeters: null,
-    landmark: null,
-    lighting: "good",
-  };
 }
 
 /** A take's review: the shot's length from just after the take starts (a video), and a score. */
@@ -164,7 +117,7 @@ function takeReview(shot: z.infer<typeof shotText> | null, takeBytes: number) {
   };
 }
 
-/** The bytes of the take or frame the request sends inline (base64 counts 4 per 3). */
+/** The bytes of the take the request sends inline (base64 counts 4 per 3). */
 function inlineBytes(request: GenerateRequest): number {
   return parts(request).reduce(
     (sum, { inlineData }) => sum + Math.floor(((inlineData?.data?.length ?? 0) * 3) / 4),
@@ -198,13 +151,10 @@ export function promptTokens(request: GenerateRequest): number {
 }
 
 /** The answer to one generateContent call (null: not something Director asks). */
-export function answer(request: GenerateRequest, seen: SceneSteps): object | null {
+export function answer(request: GenerateRequest): object | null {
   const ask = askOf(request);
   if (ask === "plan") {
     return planFor(shortOf(watchedVideo(request) ?? "").template);
-  }
-  if (ask === "scene") {
-    return sceneCheck(shotOf(request), seen);
   }
   if (ask === "review") {
     return takeReview(shotOf(request), inlineBytes(request));

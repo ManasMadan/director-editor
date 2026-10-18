@@ -130,6 +130,11 @@ export const envSchema = {
     .string()
     .regex(/^[a-z0-9][a-z0-9.-]*$/, "a model name")
     .default("gemini-live-2.5-flash-native-audio"),
+  // The native-audio model's proactive audio (it may stay quiet for what isn't meant for
+  // it) and affective dialog (it matches the member's tone). Both checked live on Vertex
+  // with the default model; turn one off if a model refuses it at setup.
+  LIVE_PROACTIVE_AUDIO: z.stringbool().default(true),
+  LIVE_AFFECTIVE_DIALOG: z.stringbool().default(true),
   // Test hook: where the Live API lives (the tests' stand-in in the mock Google). Unset:
   // the region's own endpoint, from LIVE_LOCATION.
   LIVE_API_URL: z.url({ protocol: /^wss?$/ }).optional(),

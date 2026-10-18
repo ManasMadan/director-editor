@@ -50,7 +50,7 @@ export const DIRECTOR_RETAKE_BELOW = 60;
 const DIRECTOR_CUT_TITLE_MAX_LENGTH = 100;
 /** A take's longest: what a 15 MB upload holds at the recorder's bitrate. */
 const DIRECTOR_MAX_SHOT_SECONDS = 60;
-/** A scene check's camera frame, base64 (a 640-pixel JPEG is 40-120 kB). */
+/** A camera frame for a locate, base64 (a 640-pixel JPEG is 40-120 kB). */
 export const DIRECTOR_FRAME_MAX_LENGTH = 400_000;
 export const DIRECTOR_FRAME_MIN_LENGTH = 100;
 /** A line Director says aloud: a guide, a cue or a script line, never a speech. */
@@ -97,16 +97,6 @@ const cameraMoves = [
   "tilt-down",
 ] as const;
 export type CameraMove = (typeof cameraMoves)[number];
-
-const sceneDirections = [
-  "none",
-  "left",
-  "right",
-  "forward",
-  "back",
-  "turn-left",
-  "turn-right",
-] as const;
 
 const seconds = z.number().min(0).max(DIRECTOR_MAX_SHOT_SECONDS);
 
@@ -420,18 +410,6 @@ const directorLibrarySchema = z.object({
 });
 export type DirectorLibrary = z.infer<typeof directorLibrarySchema>;
 
-export const sceneCheckSchema = z.object({
-  inPlace: z.boolean(),
-  /** One spoken direction: "Move about five meters left, to the tree." */
-  instruction: z.string(),
-  direction: z.enum(sceneDirections),
-  distanceMeters: z.number().min(0).nullable(),
-  /** Where the scene's landmark is in the frame: drawn as a doodle around it. */
-  landmark: z.object({ label: z.string(), box: boxSchema }).nullable(),
-  lighting: z.enum(["good", "too-dark", "too-bright", "backlit"]),
-});
-export type SceneCheck = z.infer<typeof sceneCheckSchema>;
-
 /** What Director points at on the camera, in its own words: "the window behind you". */
 export const DIRECTOR_LOCATE_TARGET_MAX_LENGTH = 120;
 /** A mark's label: two or three plain words. */
@@ -595,17 +573,6 @@ export const directorContract = {
   plan: route("GET", "/director/{videoId}/plan", "A short's plan")
     .input(z.object({ videoId: videoIdSchema }))
     .output(directorPlanSchema),
-  /** Where to go for a shot, from one camera frame (a model call each time). */
-  checkScene: route("POST", "/director/{videoId}/scene-checks", "Check the scene for a shot")
-    .meta({ rateLimit: { name: "director-scenes", points: 30, windowSeconds: 60, per: "user" } })
-    .input(
-      z.object({
-        videoId: videoIdSchema,
-        shotIndex,
-        image: z.string().min(DIRECTOR_FRAME_MIN_LENGTH).max(DIRECTOR_FRAME_MAX_LENGTH),
-      }),
-    )
-    .output(sceneCheckSchema),
   /**
    * Where something Director names is in one camera frame (the 9:16 crop the member sees,
    * unmirrored), for a mark pinned to it on the shoot screen. A model call each time:

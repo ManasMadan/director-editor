@@ -47,7 +47,6 @@ export const ACTIVITIES = [
   "director.plan_opened",
   "director.call_started",
   "director.call_ended",
-  "director.scene_checked",
   "director.take_recorded",
   "director.take_reviewed",
   "director.cut_saved",
@@ -75,6 +74,9 @@ export const ANALYTICS_KINDS = [
   "cut_saved",
   "published",
   "call_started",
+  // One of Director's turns on the live line: who, which short and shot, the tools it
+  // called and how long the member waited; never what was said.
+  "director_turn",
 ] as const;
 export const analyticsKind = z.enum(ANALYTICS_KINDS);
 export type AnalyticsKind = z.infer<typeof analyticsKind>;

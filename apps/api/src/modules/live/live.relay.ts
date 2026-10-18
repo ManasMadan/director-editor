@@ -62,6 +62,7 @@ import {
   versionMessage,
 } from "./live.setup";
 import { checkTool, TOOL_RESPONSES, toolNamed } from "./live.tools";
+import { type LiveTurn, TurnMeter } from "./live.turns";
 
 /** How the relay reports what went wrong, for the service's log. */
 export type LiveLog = (
@@ -95,6 +96,8 @@ export interface RelayOptions {
   onCallStarted: () => void;
   /** Where "use the second one" makes a take the member's choice (live.picks.ts). */
   picks: LivePicks;
+  /** Called as each of Director's turns ends, with the shot it was on (analytics, no words). */
+  onTurn: (turn: LiveTurn, shot: number) => void;
 }
 
 /** 16 kHz, 16-bit mono: what a microphone sends in real time. */
@@ -232,6 +235,7 @@ export class LiveRelay {
   private readonly pacer: Pacer;
   /** The shoot's attempts and Director's ratings of them, for `rate`. */
   private readonly tally = new ShotTally();
+  private readonly turn: TurnMeter;
 
   constructor(
     private readonly client: WebSocket,
@@ -243,6 +247,7 @@ export class LiveRelay {
     this.turns = new SlidingBudget(TEXT_TURNS, TEXT_WINDOW_MS, options.now);
     this.moves = new SlidingBudget(SHOT_MOVES, TEXT_WINDOW_MS, options.now);
     this.notes = new SlidingBudget(NOTES, TEXT_WINDOW_MS, options.now);
+    this.turn = new TurnMeter(options.now);
     this.pacer = new Pacer(
       {
         onQuiet: (nudge) => this.tell(quietMessage(nudge)),
@@ -445,6 +450,7 @@ export class LiveRelay {
           return this.end("DIRECTOR_CALL_TOO_FAST");
         }
         this.pacer.heard();
+        this.turn.member("text");
         return send(line, {
           clientContent: {
             turns: [{ role: "user", parts: [{ text: message.text }] }],
@@ -541,10 +547,12 @@ export class LiveRelay {
   private relayContent(content: NonNullable<UpstreamMessage["serverContent"]>) {
     for (const part of content.modelTurn?.parts ?? []) {
       if (part.inlineData?.mimeType.startsWith("audio/pcm")) {
+        this.turn.spoke();
         this.toClient({ type: "audio", pcm16: part.inlineData.data });
       }
     }
     if (content.inputTranscription?.text) {
+      this.turn.member("voice");
       this.transcript("you", content.inputTranscription.text);
     }
     if (content.outputTranscription?.text) {
@@ -553,9 +561,11 @@ export class LiveRelay {
     if (content.interrupted) {
       this.toClient({ type: "interrupted" });
       this.pacer.interrupted();
+      this.turn.cutIn();
     }
     if (content.turnComplete) {
       this.toClient({ type: "turn" });
+      this.options.onTurn(this.turn.complete(), this.shot);
     }
   }
 
@@ -591,12 +601,14 @@ export class LiveRelay {
         toolResponse: { functionResponses: [{ id: call.id, name: call.name, response }] },
       });
     if (call.name === RATE_TOOL) {
+      this.turn.tool(RATE_TOOL);
       return this.rate(call.args, answerNow);
     }
     if (!name) {
       this.options.log("warn", { tool: call.name }, "unknown live tool call");
       return answerNow({ error: "unknown tool" });
     }
+    this.turn.tool(name);
     const browserCall = checkTool(this.options.plan, name, call.args);
     if ("response" in browserCall) {
       return answerNow(browserCall.response);

@@ -581,7 +581,7 @@ def create_creator(
     settings: Settings, queue: DirectorQueue, redis: Redis, http: httpx.AsyncClient
 ) -> Creator | None:
     """Director's create-from-scratch, on and off with Director (DIRECTOR_MODEL). A
-    brainstorm turn is a short exchange like a scene check, and is budgeted like one."""
+    brainstorm turn is a short exchange like a locate, and is budgeted like one."""
     model = create_director_model(settings)
     if model is None or settings.director_model is None:
         return None
@@ -589,7 +589,7 @@ def create_creator(
         model,
         settings.director_model,
         monthly=Allowance(settings.monthly_tokens_per_org, settings.monthly_tokens_per_demo_guest),
-        per_turn=settings.director_tokens_per_scene_check,
+        per_turn=settings.director_tokens_per_locate,
         per_plan=settings.director_tokens_per_plan,
         queue=queue,
         redis=redis,
