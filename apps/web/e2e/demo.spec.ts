@@ -35,7 +35,10 @@ test("falls back to the shared demo account when no guest can be made", async ({
     }),
   );
   await page.goto("/sign-in?demo=1");
-  await expect(page.getByRole("alert")).toContainText("Your own demo couldn't start just now.");
+  // Filtered by its text: Next's route announcer is an alert too.
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Your own demo couldn't start just now." }),
+  ).toBeVisible();
   const card = page.getByRole("region", { name: "Try Director with the demo account" });
   await expect(card.getByText(DEMO_EMAIL)).toBeVisible();
   await expectAccessible(page);
