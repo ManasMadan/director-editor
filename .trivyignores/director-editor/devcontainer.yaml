@@ -122,3 +122,7 @@ vulnerabilities:
     statement: >-
       gir1.2-rsvg-2.0 2.60.0+dfsg-1 (fixed in 2.60.0+dfsg-1+deb13u1): no upstream rebuild with the fixed package as of 2026-10-13
     expired_at: 2026-11-12
+  - id: CVE-2026-56851
+    statement: >-
+      golang.org/x/text v0.40.0 in sops, v0.37.0 in OpenTofu (fixed in 0.41.0): no upstream rebuild with the fixed package as of 2026-10-18 (sops v3.13.3 is the newest release, and no OpenTofu 1.11 release has it)
+    expired_at: 2026-11-17
