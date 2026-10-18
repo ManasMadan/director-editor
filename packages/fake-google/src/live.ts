@@ -13,8 +13,10 @@
  * member's own when they changed it. A member's turn that names a tool's cue gets that
  * tool call: "go to shot 2" calls go_to_shot, "switch to the back camera" calls
  * switch_camera, and "what if I do it with my grandma" gets a word about it and then
- * adapt_shot. Once the tool's answer comes back it says whether it worked. Microphone
- * audio and camera frames are only counted. `goAway()` warns every open connection that it's
+ * adapt_shot; while the roll records, "here goes" marks an attempt's start and "how was
+ * that" its end. Once a tool's answer comes back it says whether it worked (and nothing
+ * after a start mark: it's quiet while the member goes). Microphone audio and camera
+ * frames are only counted. `goAway()` warns every open connection that it's
  * about to close, as Vertex does before its ten-minute limit.
  */
 import type { IncomingMessage } from "node:http";
@@ -105,6 +107,13 @@ function answerTo(text: string): string {
 
 /** The tool call a member's turn asks for, if it names one; `shot` is the one it's on, from 1. */
 function toolCallFor(text: string, shot: number): { name: string; args: object } | null {
+  // The roll: "here goes" starts an attempt, "how was that" ends it.
+  if (/\bhere goes\b/i.test(text)) {
+    return { name: "mark", args: { event: "start" } };
+  }
+  if (/\bhow was that\b/i.test(text)) {
+    return { name: "mark", args: { event: "end", note: "Clear and confident" } };
+  }
   const twist = /\bwhat if I (?:do (?:it|this one) )?with my (\w+)/i.exec(text);
   if (twist) {
     return {
@@ -155,6 +164,9 @@ interface Ids {
 
 /** One connection, past its setup: counted, answered, tool calls made on their cues. */
 class Conversation {
+  /** Start marks not answered yet: once they are, it stays quiet. */
+  private readonly starts = new Set<string>();
+
   constructor(
     private readonly socket: WebSocket,
     private readonly session: LiveSession,
@@ -188,7 +200,10 @@ class Conversation {
     for (const answer of toolResponse?.functionResponses ?? []) {
       this.session.toolResponses.push(answer.response);
       const done = z.object({ result: z.literal("done") }).safeParse(answer.response).success;
-      say(this.socket, done ? "There you go." : "Let's finish this one first.");
+      const started = answer.id !== undefined && this.starts.delete(answer.id);
+      if (!(done && started)) {
+        say(this.socket, done ? "There you go." : "Let's finish this one first.");
+      }
     }
     if (clientContent) {
       this.turn(clientContent);
@@ -209,6 +224,9 @@ class Conversation {
       }
       this.ids.toolCalls += 1;
       const id = `call-${this.ids.toolCalls}`;
+      if (tool.name === "mark" && "event" in tool.args && tool.args.event === "start") {
+        this.starts.add(id);
+      }
       send(this.socket, { toolCall: { functionCalls: [{ id, ...tool }] } });
     } else if (/\bmy line\b/i.test(text)) {
       const line = lineIn(this.brief);

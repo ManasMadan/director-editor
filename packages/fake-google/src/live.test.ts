@@ -160,6 +160,38 @@ describe("the mock Live API", () => {
     );
   });
 
+  it("marks an attempt on the roll, quiet once it starts and with a word once it ends", async () => {
+    const live = await connect();
+    live.send({ setup: { model: "m" } });
+    await live.nth(0);
+    live.send(turn("ok here goes"));
+    expect(await live.nth(1)).toEqual({
+      toolCall: {
+        functionCalls: [{ id: expect.any(String), name: "mark", args: { event: "start" } }],
+      },
+    });
+    const start = z
+      .object({ toolCall: z.object({ functionCalls: z.array(z.object({ id: z.string() })) }) })
+      .parse(live.received[1]).toolCall.functionCalls[0]?.id;
+    live.send({
+      toolResponse: {
+        functionResponses: [{ id: start, name: "mark", response: { result: "done" } }],
+      },
+    });
+    live.send(turn("how was that?"));
+    expect(await live.nth(2)).toMatchObject({
+      toolCall: {
+        functionCalls: [{ name: "mark", args: { event: "end", note: "Clear and confident" } }],
+      },
+    });
+    live.send({
+      toolResponse: {
+        functionResponses: [{ id: "other", name: "mark", response: { result: "done" } }],
+      },
+    });
+    await vi.waitFor(() => expect(saidIn(live.received)).toEqual(["There you go."]));
+  });
+
   it("comments on the member's twist and puts it on the card of the shot they're on", async () => {
     const live = await connect();
     live.send({ setup: { model: "m" } });
