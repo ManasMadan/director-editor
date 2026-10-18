@@ -74,7 +74,13 @@ import { cutPicks, pickedTakes } from "../lib/picks";
 import { gapSlots } from "../lib/scene";
 import { MAX_SECONDS, type Segment, stitch } from "../lib/stitch";
 import { timecode } from "../lib/track";
-import { loadVisuals, releaseVisuals, type SlotMedia, slotMedia } from "../lib/visuals";
+import {
+  loadVisuals,
+  posterPicture,
+  releaseVisuals,
+  type SlotMedia,
+  slotMedia,
+} from "../lib/visuals";
 import { adaptationOf, films, yourVersion } from "../lib/your-version";
 
 /**
@@ -176,8 +182,7 @@ async function heldPicture(
   if (!take) {
     return null;
   }
-  const image = await createImageBitmap(await (await fetch(take.poster)).blob());
-  return { source: image, width: image.width, height: image.height };
+  return posterPicture(take.poster);
 }
 
 const MEGABYTE = 1_000_000;

@@ -12,6 +12,7 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { type NextRequest, NextResponse } from "next/server";
 import { env } from "@/env";
+import { contentSecurityPolicy } from "@/lib/csp";
 import { APP_PATHS, GUEST_PATHS, HOME_PATH, matchesPath } from "@/lib/routes";
 
 export function proxy(request: NextRequest) {
@@ -30,31 +31,11 @@ export function proxy(request: NextRequest) {
   }
 
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
-  const development = process.env.NODE_ENV === "development";
-  // Uploads go straight to storage, and files load from it (presigned URLs).
-  const storage = env.STORAGE_ORIGIN ? ` ${new URL(env.STORAGE_ORIGIN).origin}` : "";
-  const csp = [
-    "default-src 'self'",
-    // 'strict-dynamic' lets Next's nonce'd bootstrap load its chunks; dev needs eval for
-    // HMR.
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${development ? " 'unsafe-eval'" : ""}`,
-    "style-src 'self' 'unsafe-inline'",
-    `img-src 'self' data: blob: https:${storage}`,
-    "font-src 'self'",
-    // Workers from this site only (none from elsewhere).
-    "worker-src 'self'",
-    // The API (and Director live's socket) is on this origin; Turnstile (captcha) needs
-    // its origin when enabled.
-    `connect-src 'self' https://challenges.cloudflare.com${storage}`,
-    // Recorded takes play from blob: URLs, reviewed ones from storage.
-    `media-src 'self' blob:${storage}`,
-    // Shorts play in YouTube's privacy-enhanced embed.
-    "frame-src https://challenges.cloudflare.com https://www.youtube-nocookie.com",
-    "frame-ancestors 'none'",
-    "base-uri 'self'",
-    "form-action 'self'",
-    "object-src 'none'",
-  ].join("; ");
+  const csp = contentSecurityPolicy({
+    nonce,
+    development: process.env.NODE_ENV === "development",
+    storageOrigin: env.STORAGE_ORIGIN,
+  }).join("; ");
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
