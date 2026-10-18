@@ -14,6 +14,27 @@ export const zAspectRatio = z.enum([
 ]);
 
 /**
+ * AssetChoiceCreate
+ */
+export const zAssetChoiceCreate = z.object({
+    candidateId: z.uuid().nullable()
+});
+
+/**
+ * AssetDrawingCreate
+ *
+ * A new image for a slot, drawn from `prompt`; with `baseId`, an edit of another of
+ * the slot's images by `instruction`.
+ */
+export const zAssetDrawingCreate = z.object({
+    baseId: z.uuid().nullable(),
+    demo: z.boolean(),
+    instruction: z.string().min(1).max(500).nullable(),
+    prompt: z.string().min(1).max(2000),
+    referenceKey: z.string().regex(/^files\/[0-9a-f-]{36}$/).nullable()
+});
+
+/**
  * AssetImageOut
  *
  * The default image made for one of a plan's assets (app/assets.py).
@@ -286,6 +307,8 @@ export const zErrorCode = z.enum([
     'INVALID_SIGNATURE',
     'AI_BUDGET_EXCEEDED',
     'DIRECTOR_INDEX_LIMIT',
+    'DIRECTOR_IMAGE_LIMIT',
+    'DIRECTOR_ASSET_NOT_FOUND',
     'DIRECTOR_VIDEO_UNAVAILABLE',
     'DIRECTOR_TOO_LONG',
     'DIRECTOR_PLAN_NOT_FOUND',
@@ -528,7 +551,7 @@ export const zPhoneAngle = z.object({
  * PublishCopy
  */
 export const zPublishCopy = z.object({
-    credits: z.string().max(300),
+    credits: z.string().max(2000),
     description: z.string().max(3000),
     hashtags: z.array(z.string().min(1).max(40)).max(15),
     title: z.string().min(1).max(91)
@@ -643,6 +666,82 @@ export const zSpeedEdit = z.object({
     startSeconds: z.number().gte(0).lte(180),
     toRate: z.number().gte(0.1).lte(8),
     type: z.literal('speed')
+});
+
+/**
+ * StockCredit
+ *
+ * Who made a stock picture and where it's from: shown in the picker and credited in
+ * the YouTube description.
+ */
+export const zStockCredit = z.object({
+    author: z.string().min(1).max(200),
+    authorUrl: z.string().max(500).regex(/^https:\/\//),
+    pageUrl: z.string().max(500).regex(/^https:\/\//),
+    provider: z.enum(['pexels', 'pixabay'])
+});
+
+/**
+ * AssetCandidateCreate
+ *
+ * An image apps/api has already checked and stored for a slot: an upload of the
+ * caller's, or a stock picture it copied.
+ */
+export const zAssetCandidateCreate = z.object({
+    credit: zStockCredit.nullable(),
+    fileId: z.uuid().nullable(),
+    objectKey: z.string().min(1).max(200),
+    origin: z.enum(['upload', 'stock'])
+});
+
+/**
+ * AssetCandidateOut
+ *
+ * One image of a slot: its default, or one of the caller's own.
+ */
+export const zAssetCandidateOut = z.object({
+    assetId: z.string(),
+    createdAt: z.iso.datetime(),
+    credit: zStockCredit.nullable(),
+    error: z.string().nullable(),
+    fileId: z.uuid().nullable(),
+    id: z.uuid(),
+    objectKey: z.string().max(200).nullable(),
+    origin: z.enum([
+        'default',
+        'created',
+        'upload',
+        'stock'
+    ]),
+    prompt: z.string().nullable(),
+    status: z.enum([
+        'pending',
+        'generating',
+        'ready',
+        'failed'
+    ])
+});
+
+/**
+ * AssetSlotOut
+ */
+export const zAssetSlotOut = z.object({
+    assetId: z.string(),
+    candidates: z.array(zAssetCandidateOut),
+    chosenId: z.uuid().nullable(),
+    history: z.array(z.union([z.uuid(), z.null()])),
+    prompt: z.string()
+});
+
+/**
+ * AssetSlotsOut
+ */
+export const zAssetSlotsOut = z.object({
+    imagesPerDay: z.int().gte(0),
+    imagesPerVideo: z.int().gte(0),
+    imagesToday: z.int().gte(0),
+    imagesUsed: z.int().gte(0),
+    slots: z.array(zAssetSlotOut)
 });
 
 /**
@@ -912,6 +1011,71 @@ export const zGetDirectorPlanPath = z.object({
  * Successful Response
  */
 export const zGetDirectorPlanResponse = zDirectorPlanOut;
+
+export const zListDirectorAssetsHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+export const zListDirectorAssetsPath = z.object({
+    video_id: z.string().regex(/^[A-Za-z0-9_-]{11}$/)
+});
+
+/**
+ * Successful Response
+ */
+export const zListDirectorAssetsResponse = zAssetSlotsOut;
+
+export const zChooseDirectorAssetBody = zAssetChoiceCreate;
+
+export const zChooseDirectorAssetHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+export const zChooseDirectorAssetPath = z.object({
+    video_id: z.string().regex(/^[A-Za-z0-9_-]{11}$/),
+    asset_id: z.string().max(40).regex(/^[a-z0-9]+(-[a-z0-9]+)*$/)
+});
+
+/**
+ * Successful Response
+ */
+export const zChooseDirectorAssetResponse = z.void();
+
+export const zDrawDirectorAssetBody = zAssetDrawingCreate;
+
+export const zDrawDirectorAssetHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+export const zDrawDirectorAssetPath = z.object({
+    video_id: z.string().regex(/^[A-Za-z0-9_-]{11}$/),
+    asset_id: z.string().max(40).regex(/^[a-z0-9]+(-[a-z0-9]+)*$/)
+});
+
+/**
+ * Successful Response
+ */
+export const zDrawDirectorAssetResponse = zAssetCandidateOut;
+
+export const zAddDirectorAssetBody = zAssetCandidateCreate;
+
+export const zAddDirectorAssetHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+export const zAddDirectorAssetPath = z.object({
+    video_id: z.string().regex(/^[A-Za-z0-9_-]{11}$/),
+    asset_id: z.string().max(40).regex(/^[a-z0-9]+(-[a-z0-9]+)*$/)
+});
+
+/**
+ * Successful Response
+ */
+export const zAddDirectorAssetResponse = zAssetCandidateOut;
 
 export const zListDirectorCutsHeaders = z.object({
     authorization: z.string().nullish(),

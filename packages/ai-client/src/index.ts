@@ -136,8 +136,36 @@ const slotPath = ({ videoId, assetId }: AssetSlotPath) => ({
   asset_id: assetId,
 });
 
+type ClientFor = (caller: AiCaller) => Promise<ReturnType<typeof createClient>>;
+
+/** The asset picker's calls (apps/ai/app/picker.py), each on a client made for that call. */
+function assetCalls(forCall: ClientFor) {
+  return {
+    async listAssets(caller: AiCaller, videoId: string) {
+      return unwrap(
+        listDirectorAssets({ client: await forCall(caller), path: { video_id: videoId } }),
+      );
+    },
+    async drawAsset(caller: AiCaller, slot: AssetSlotPath, body: AssetDrawingCreate) {
+      return unwrap(
+        drawDirectorAsset({ client: await forCall(caller), path: slotPath(slot), body }),
+      );
+    },
+    async addAsset(caller: AiCaller, slot: AssetSlotPath, body: AssetCandidateCreate) {
+      return unwrap(
+        addDirectorAsset({ client: await forCall(caller), path: slotPath(slot), body }),
+      );
+    },
+    async chooseAsset(caller: AiCaller, slot: AssetSlotPath, body: AssetChoiceCreate) {
+      await settle(
+        chooseDirectorAsset({ client: await forCall(caller), path: slotPath(slot), body }),
+      );
+    },
+  };
+}
+
 /** Director's calls (apps/ai/app/director.py), each on a client made for that call. */
-function directorCalls(forCall: (caller: AiCaller) => Promise<ReturnType<typeof createClient>>) {
+function directorCalls(forCall: ClientFor) {
   return {
     async index(caller: AiCaller, videoId: string) {
       return unwrap(indexDirectorPlan({ client: await forCall(caller), body: { videoId } }));
@@ -211,26 +239,6 @@ function directorCalls(forCall: (caller: AiCaller) => Promise<ReturnType<typeof 
     async writePublishCopy(caller: AiCaller, body: PublishCopyRequest) {
       return unwrap(writeDirectorPublishCopy({ client: await forCall(caller), body }));
     },
-    async listAssets(caller: AiCaller, videoId: string) {
-      return unwrap(
-        listDirectorAssets({ client: await forCall(caller), path: { video_id: videoId } }),
-      );
-    },
-    async drawAsset(caller: AiCaller, slot: AssetSlotPath, body: AssetDrawingCreate) {
-      return unwrap(
-        drawDirectorAsset({ client: await forCall(caller), path: slotPath(slot), body }),
-      );
-    },
-    async addAsset(caller: AiCaller, slot: AssetSlotPath, body: AssetCandidateCreate) {
-      return unwrap(
-        addDirectorAsset({ client: await forCall(caller), path: slotPath(slot), body }),
-      );
-    },
-    async chooseAsset(caller: AiCaller, slot: AssetSlotPath, body: AssetChoiceCreate) {
-      await settle(
-        chooseDirectorAsset({ client: await forCall(caller), path: slotPath(slot), body }),
-      );
-    },
   };
 }
 
@@ -252,5 +260,5 @@ export function createAiClient(options: { baseUrl: string; secret: string; timeo
   }
 
   /** Director's calls, as `ai.director.index(...)`. */
-  return { director: directorCalls(forCall) };
+  return { director: Object.assign(directorCalls(forCall), assetCalls(forCall)) };
 }

@@ -6,7 +6,16 @@ import { base } from "./base";
  * apps/api/src/features.ts). `demoGuests`: the demo gives each browser a private guest
  * (`/api/auth/sign-in/guest`), instead of only the shared demo account.
  */
-const FEATURES = ["ai", "captcha", "demoGuests", "director", "files", "google", "live", "stock"] as const;
+const FEATURES = [
+  "ai",
+  "captcha",
+  "demoGuests",
+  "director",
+  "files",
+  "google",
+  "live",
+  "stock",
+] as const;
 export type Feature = (typeof FEATURES)[number];
 
 export const systemContract = {

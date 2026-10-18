@@ -6,7 +6,7 @@ SET lock_timeout = '5s';
 -- The new table is empty and no running release reads it; its foreign keys hold writes
 -- on the tables they point at until the migration commits: milliseconds, bounded by the
 -- lock timeout above.
--- squawk-ignore-file adding-foreign-key-constraint, require-concurrent-index-creation
+-- squawk-ignore-file adding-foreign-key-constraint, constraint-missing-not-valid, require-concurrent-index-creation
 
 -- AlterTable
 ALTER TABLE "ai"."director_asset" ADD COLUMN     "base_id" UUID,

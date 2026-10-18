@@ -72,6 +72,124 @@ export type Asset = {
 };
 
 /**
+ * AssetCandidateCreate
+ *
+ * An image apps/api has already checked and stored for a slot: an upload of the
+ * caller's, or a stock picture it copied.
+ */
+export type AssetCandidateCreate = {
+    credit: StockCredit | null;
+    /**
+     * Fileid
+     */
+    fileId: string | null;
+    /**
+     * Objectkey
+     */
+    objectKey: string;
+    /**
+     * Origin
+     */
+    origin: 'upload' | 'stock';
+};
+
+/**
+ * AssetCandidateOut
+ *
+ * One image of a slot: its default, or one of the caller's own.
+ */
+export type AssetCandidateOut = {
+    /**
+     * Assetid
+     */
+    assetId: string;
+    /**
+     * Createdat
+     */
+    createdAt: string;
+    credit: StockCredit | null;
+    /**
+     * Error
+     */
+    error: string | null;
+    /**
+     * Fileid
+     *
+     * An upload's file.
+     */
+    fileId: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Objectkey
+     *
+     * Its key in storage once ready; apps/api signs it.
+     */
+    objectKey: string | null;
+    /**
+     * Origin
+     */
+    origin: 'default' | 'created' | 'upload' | 'stock';
+    /**
+     * Prompt
+     *
+     * What a drawn one was drawn from.
+     */
+    prompt: string | null;
+    /**
+     * Status
+     */
+    status: 'pending' | 'generating' | 'ready' | 'failed';
+};
+
+/**
+ * AssetChoiceCreate
+ */
+export type AssetChoiceCreate = {
+    /**
+     * Candidateid
+     *
+     * None goes back to the default.
+     */
+    candidateId: string | null;
+};
+
+/**
+ * AssetDrawingCreate
+ *
+ * A new image for a slot, drawn from `prompt`; with `baseId`, an edit of another of
+ * the slot's images by `instruction`.
+ */
+export type AssetDrawingCreate = {
+    /**
+     * Baseid
+     */
+    baseId: string | null;
+    /**
+     * Demo
+     *
+     * The caller is a demo guest, with fewer images a video.
+     */
+    demo: boolean;
+    /**
+     * Instruction
+     */
+    instruction: string | null;
+    /**
+     * Prompt
+     */
+    prompt: string;
+    /**
+     * Referencekey
+     *
+     * A ready director-asset-image upload of the caller's (apps/api checked it), drawn from as the reference picture.
+     */
+    referenceKey: string | null;
+};
+
+/**
  * AssetImageOut
  *
  * The default image made for one of a plan's assets (app/assets.py).
@@ -144,6 +262,70 @@ export type AssetReference = {
      * Every line of text on it, word for word; empty when there is none.
      */
     text: Array<string>;
+};
+
+/**
+ * AssetSlotOut
+ */
+export type AssetSlotOut = {
+    /**
+     * Assetid
+     */
+    assetId: string;
+    /**
+     * Candidates
+     *
+     * Oldest first.
+     */
+    candidates: Array<AssetCandidateOut>;
+    /**
+     * Chosenid
+     *
+     * The image the slot uses; none is its default.
+     */
+    chosenId: string | null;
+    /**
+     * History
+     *
+     * The slot's earlier choices, newest first (what undo goes back to).
+     */
+    history: Array<string | null>;
+    /**
+     * Prompt
+     *
+     * The Create tab's prompt, filled in from the asset's reference: its subject, composition, style, palette and text, in English.
+     */
+    prompt: string;
+};
+
+/**
+ * AssetSlotsOut
+ */
+export type AssetSlotsOut = {
+    /**
+     * Imagesperday
+     */
+    imagesPerDay: number;
+    /**
+     * Imagespervideo
+     */
+    imagesPerVideo: number;
+    /**
+     * Imagestoday
+     *
+     * Images drawn for the caller in the last day.
+     */
+    imagesToday: number;
+    /**
+     * Imagesused
+     *
+     * Images drawn for the caller in this video.
+     */
+    imagesUsed: number;
+    /**
+     * Slots
+     */
+    slots: Array<AssetSlotOut>;
 };
 
 export type AssetSource = 'create' | 'stock' | 'upload';
@@ -564,7 +746,7 @@ export type EndCardEdit = {
 /**
  * ErrorCode
  */
-export type ErrorCode = 'BAD_REQUEST' | 'VALIDATION_FAILED' | 'UNAUTHENTICATED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT' | 'RATE_LIMITED' | 'INTERNAL' | 'SERVICE_UNAVAILABLE' | 'METHOD_NOT_SUPPORTED' | 'TIMEOUT' | 'PAYLOAD_TOO_LARGE' | 'UNSUPPORTED_MEDIA_TYPE' | 'IDEMPOTENCY_IN_PROGRESS' | 'FEATURE_DISABLED' | 'CLIENT_OUTDATED' | 'DESTINATION_NOT_ALLOWED' | 'RESPONSE_TOO_LARGE' | 'TOO_MANY_REDIRECTS' | 'UPSTREAM_UNAVAILABLE' | 'NO_ACTIVE_ORGANIZATION' | 'DEMO_ACCOUNT_LOCKED' | 'FILE_NOT_FOUND' | 'FILE_TYPE_NOT_ALLOWED' | 'FILE_TOO_LARGE' | 'FILE_SIZE_MISMATCH' | 'FILE_INFECTED' | 'FILE_UNREADABLE' | 'FILE_NOT_UPLOADED' | 'FILE_NOT_READY' | 'INVALID_SIGNATURE' | 'AI_BUDGET_EXCEEDED' | 'DIRECTOR_INDEX_LIMIT' | 'DIRECTOR_VIDEO_UNAVAILABLE' | 'DIRECTOR_TOO_LONG' | 'DIRECTOR_PLAN_NOT_FOUND' | 'DIRECTOR_PLAN_NOT_READY' | 'DIRECTOR_SHOT_NOT_FOUND' | 'DIRECTOR_TAKE_NOT_FOUND' | 'DIRECTOR_TAKE_KIND_MISMATCH' | 'DIRECTOR_CALL_TOO_FAST' | 'DIRECTOR_CUT_NOT_FOUND' | 'PUBLISH_DEMO_DISABLED' | 'PUBLISH_NEEDS_YOUTUBE' | 'PUBLISH_CUT_NOT_READY' | 'PUBLISH_NO_CHANNEL' | 'PUBLISH_QUOTA_EXHAUSTED' | 'RECORDING_NOT_FOUND' | 'RECORDING_FINISHED' | 'RECORDING_LIMIT_REACHED' | 'RECORDING_STORAGE_FULL' | 'RECORDING_PAUSED' | 'RECORDING_PART_NOT_FOUND' | 'RECORDING_PART_CLOSED' | 'RECORDING_SLICE_NOT_UPLOADED' | 'RECORDING_ATTEMPT_NOT_OPEN' | 'RECORDING_MARK_OUT_OF_ORDER' | 'RECORDING_SLICE_INVALID' | 'DIRECTOR_VIDEO_UNREADABLE' | 'DIRECTOR_ANALYSIS_FAILED' | 'DIRECTOR_REVIEW_FAILED' | 'RECORDING_CLIP_FAILED';
+export type ErrorCode = 'BAD_REQUEST' | 'VALIDATION_FAILED' | 'UNAUTHENTICATED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT' | 'RATE_LIMITED' | 'INTERNAL' | 'SERVICE_UNAVAILABLE' | 'METHOD_NOT_SUPPORTED' | 'TIMEOUT' | 'PAYLOAD_TOO_LARGE' | 'UNSUPPORTED_MEDIA_TYPE' | 'IDEMPOTENCY_IN_PROGRESS' | 'FEATURE_DISABLED' | 'CLIENT_OUTDATED' | 'DESTINATION_NOT_ALLOWED' | 'RESPONSE_TOO_LARGE' | 'TOO_MANY_REDIRECTS' | 'UPSTREAM_UNAVAILABLE' | 'NO_ACTIVE_ORGANIZATION' | 'DEMO_ACCOUNT_LOCKED' | 'FILE_NOT_FOUND' | 'FILE_TYPE_NOT_ALLOWED' | 'FILE_TOO_LARGE' | 'FILE_SIZE_MISMATCH' | 'FILE_INFECTED' | 'FILE_UNREADABLE' | 'FILE_NOT_UPLOADED' | 'FILE_NOT_READY' | 'INVALID_SIGNATURE' | 'AI_BUDGET_EXCEEDED' | 'DIRECTOR_INDEX_LIMIT' | 'DIRECTOR_IMAGE_LIMIT' | 'DIRECTOR_ASSET_NOT_FOUND' | 'DIRECTOR_VIDEO_UNAVAILABLE' | 'DIRECTOR_TOO_LONG' | 'DIRECTOR_PLAN_NOT_FOUND' | 'DIRECTOR_PLAN_NOT_READY' | 'DIRECTOR_SHOT_NOT_FOUND' | 'DIRECTOR_TAKE_NOT_FOUND' | 'DIRECTOR_TAKE_KIND_MISMATCH' | 'DIRECTOR_CALL_TOO_FAST' | 'DIRECTOR_CUT_NOT_FOUND' | 'PUBLISH_DEMO_DISABLED' | 'PUBLISH_NEEDS_YOUTUBE' | 'PUBLISH_CUT_NOT_READY' | 'PUBLISH_NO_CHANNEL' | 'PUBLISH_QUOTA_EXHAUSTED' | 'RECORDING_NOT_FOUND' | 'RECORDING_FINISHED' | 'RECORDING_LIMIT_REACHED' | 'RECORDING_STORAGE_FULL' | 'RECORDING_PAUSED' | 'RECORDING_PART_NOT_FOUND' | 'RECORDING_PART_CLOSED' | 'RECORDING_SLICE_NOT_UPLOADED' | 'RECORDING_ATTEMPT_NOT_OPEN' | 'RECORDING_MARK_OUT_OF_ORDER' | 'RECORDING_SLICE_INVALID' | 'DIRECTOR_VIDEO_UNREADABLE' | 'DIRECTOR_ANALYSIS_FAILED' | 'DIRECTOR_REVIEW_FAILED' | 'RECORDING_CLIP_FAILED';
 
 /**
  * ErrorData
@@ -1182,6 +1364,31 @@ export type SpeedEdit = {
 };
 
 /**
+ * StockCredit
+ *
+ * Who made a stock picture and where it's from: shown in the picker and credited in
+ * the YouTube description.
+ */
+export type StockCredit = {
+    /**
+     * Author
+     */
+    author: string;
+    /**
+     * Authorurl
+     */
+    authorUrl: string;
+    /**
+     * Pageurl
+     */
+    pageUrl: string;
+    /**
+     * Provider
+     */
+    provider: 'pexels' | 'pixabay';
+};
+
+/**
  * TargetPose
  */
 export type TargetPose = {
@@ -1637,6 +1844,178 @@ export type GetDirectorPlanResponses = {
 };
 
 export type GetDirectorPlanResponse = GetDirectorPlanResponses[keyof GetDirectorPlanResponses];
+
+export type ListDirectorAssetsData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path: {
+        /**
+         * Video Id
+         */
+        video_id: string;
+    };
+    query?: never;
+    url: '/v1/director/plans/{video_id}/assets';
+};
+
+export type ListDirectorAssetsErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type ListDirectorAssetsError = ListDirectorAssetsErrors[keyof ListDirectorAssetsErrors];
+
+export type ListDirectorAssetsResponses = {
+    /**
+     * Successful Response
+     */
+    200: AssetSlotsOut;
+};
+
+export type ListDirectorAssetsResponse = ListDirectorAssetsResponses[keyof ListDirectorAssetsResponses];
+
+export type ChooseDirectorAssetData = {
+    body: AssetChoiceCreate;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path: {
+        /**
+         * Video Id
+         */
+        video_id: string;
+        /**
+         * Asset Id
+         */
+        asset_id: string;
+    };
+    query?: never;
+    url: '/v1/director/plans/{video_id}/assets/{asset_id}/choice';
+};
+
+export type ChooseDirectorAssetErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type ChooseDirectorAssetError = ChooseDirectorAssetErrors[keyof ChooseDirectorAssetErrors];
+
+export type ChooseDirectorAssetResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type ChooseDirectorAssetResponse = ChooseDirectorAssetResponses[keyof ChooseDirectorAssetResponses];
+
+export type DrawDirectorAssetData = {
+    body: AssetDrawingCreate;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path: {
+        /**
+         * Video Id
+         */
+        video_id: string;
+        /**
+         * Asset Id
+         */
+        asset_id: string;
+    };
+    query?: never;
+    url: '/v1/director/plans/{video_id}/assets/{asset_id}/drawings';
+};
+
+export type DrawDirectorAssetErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type DrawDirectorAssetError = DrawDirectorAssetErrors[keyof DrawDirectorAssetErrors];
+
+export type DrawDirectorAssetResponses = {
+    /**
+     * Successful Response
+     */
+    201: AssetCandidateOut;
+};
+
+export type DrawDirectorAssetResponse = DrawDirectorAssetResponses[keyof DrawDirectorAssetResponses];
+
+export type AddDirectorAssetData = {
+    body: AssetCandidateCreate;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path: {
+        /**
+         * Video Id
+         */
+        video_id: string;
+        /**
+         * Asset Id
+         */
+        asset_id: string;
+    };
+    query?: never;
+    url: '/v1/director/plans/{video_id}/assets/{asset_id}/images';
+};
+
+export type AddDirectorAssetErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type AddDirectorAssetError = AddDirectorAssetErrors[keyof AddDirectorAssetErrors];
+
+export type AddDirectorAssetResponses = {
+    /**
+     * Successful Response
+     */
+    201: AssetCandidateOut;
+};
+
+export type AddDirectorAssetResponse = AddDirectorAssetResponses[keyof AddDirectorAssetResponses];
 
 export type ListDirectorCutsData = {
     body?: never;
