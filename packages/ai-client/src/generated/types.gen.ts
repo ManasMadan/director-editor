@@ -531,6 +531,12 @@ export type Shot = {
     phoneAngle: PhoneAngle;
     pose: TargetPose;
     /**
+     * Previewkey
+     *
+     * A seed's short preview clip of the shot: its object key in storage.
+     */
+    previewKey?: string | null;
+    /**
      * Purpose
      *
      * The scene's role in the story (hook, setup, reveal or payoff) and the feeling it's going for.
@@ -567,6 +573,12 @@ export type Shot = {
      */
     steps: Array<ShotStep>;
     /**
+     * Storyboardkey
+     *
+     * A seed's storyboard card for the shot: its object key in storage.
+     */
+    storyboardKey?: string | null;
+    /**
      * Title
      */
     title: string;
@@ -590,6 +602,12 @@ export type ShotPlan = {
      * The trend, e.g. "GRWM".
      */
     format: string;
+    /**
+     * Musickey
+     *
+     * A seed's music track: its object key in storage.
+     */
+    musicKey?: string | null;
     /**
      * Shots
      */

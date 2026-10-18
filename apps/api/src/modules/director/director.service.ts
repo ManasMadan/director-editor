@@ -4,7 +4,8 @@
  * is a short on YouTube (ShortsService), that a take's or a cut's file is the caller's,
  * checked and of the right kind (FilesService), whose presigned read it hands the AI
  * service for a take's review, and the short-lived links to a plan's stored audio and to
- * the lines Director speaks (kept in storage, so each is spoken once).
+ * the lines Director speaks (kept in storage, so each is spoken once), and to a seeded
+ * template's media (storyboard cards, preview clips, music).
  */
 import { createHash } from "node:crypto";
 import { Injectable } from "@nestjs/common";
@@ -20,7 +21,10 @@ import {
   directorPlanSchema,
   directorTakeSchema,
   type SceneCheck,
+  type ServedShotPlan,
+  type ShotPlan,
   sceneCheckSchema,
+  shotPlanSchema,
 } from "@repo/contracts/api";
 import type { UploadPurpose } from "@repo/contracts/files";
 import type { FileId, OrgId, UserId, VideoId } from "@repo/contracts/ids";
@@ -50,6 +54,8 @@ function speechKey({ text, voice }: { text: string; voice: DirectorVoice }) {
   const digest = createHash("sha256").update(`${voice}\n${text}`).digest("hex");
   return `director/speech/v1/${digest}.wav`;
 }
+// A seed's storyboard cards, previews and music: shown while the template is open.
+const MEDIA_READ_EXPIRES_S = HOUR_S;
 
 const PURPOSE: Record<DirectorTake["kind"], UploadPurpose> = {
   video: "director-take-video",
@@ -59,8 +65,10 @@ const PURPOSE: Record<DirectorTake["kind"], UploadPurpose> = {
 const takeContentType = z.enum(["video/webm", "video/mp4", "image/jpeg"]);
 
 // The AI service's JSON carries dates as strings; the contract's schemas want Dates. A
-// plan's audio comes as its stored object's key, which only this API turns into a link.
-const wirePlan = directorPlanSchema.omit({ audio: true }).extend({
+// plan's audio, and a seed's media, come as their stored objects' keys, which only this
+// API turns into links.
+const wirePlan = directorPlanSchema.omit({ audio: true, plan: true }).extend({
+  plan: shotPlanSchema.nullable(),
   audioStatus: directorPlanSchema.shape.audio.shape.status,
   audioKey: z.string().nullable(),
   createdAt: z.coerce.date(),
@@ -208,11 +216,42 @@ export class DirectorService {
   }
 
   private async toPlan(row: unknown): Promise<DirectorPlan> {
-    const { audioStatus, audioKey, ...plan } = wirePlan.parse(row);
-    const url =
+    const { audioStatus, audioKey, plan: shotPlan, ...plan } = wirePlan.parse(row);
+    const [url, served] = await Promise.all([
       audioStatus === "ready" && audioKey
-        ? await this.files.objectUrl(audioKey, AUDIO_READ_EXPIRES_S)
-        : null;
-    return { ...plan, audio: { status: audioStatus, url } };
+        ? this.files.objectUrl(audioKey, AUDIO_READ_EXPIRES_S)
+        : null,
+      shotPlan && this.served(shotPlan, plan.source === "seed"),
+    ]);
+    return { ...plan, plan: served, audio: { status: audioStatus, url } };
+  }
+
+  /**
+   * The plan with each media key swapped for a link to it. Only a seeded template's: its
+   * keys come from the committed seed file (apps/api copies them in), while a member's
+   * plan never has media, so a key one somehow carried is dropped rather than signed.
+   */
+  private async served(shotPlan: ShotPlan, seed: boolean): Promise<ServedShotPlan> {
+    // Null with uploads off, like the audio's link: the plan is served without the media.
+    const link = async (key: string | undefined) =>
+      seed && key ? this.files.objectUrl(key, MEDIA_READ_EXPIRES_S) : null;
+    const { musicKey, shots, ...rest } = shotPlan;
+    const [musicUrl, servedShots] = await Promise.all([
+      link(musicKey),
+      Promise.all(
+        shots.map(async ({ storyboardKey, previewKey, ...shot }) => {
+          const [storyboardUrl, previewUrl] = await Promise.all([
+            link(storyboardKey),
+            link(previewKey),
+          ]);
+          return {
+            ...shot,
+            ...(storyboardUrl && { storyboardUrl }),
+            ...(previewUrl && { previewUrl }),
+          };
+        }),
+      ),
+    ]);
+    return { ...rest, shots: servedShots, ...(musicUrl && { musicUrl }) };
   }
 }

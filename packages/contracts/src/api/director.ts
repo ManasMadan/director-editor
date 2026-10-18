@@ -108,6 +108,11 @@ const sceneDirections = [
 ] as const;
 
 const seconds = z.number().min(0).max(DIRECTOR_MAX_SHOT_SECONDS);
+/**
+ * Media made once for each seeded template (apps/ai/scripts/seed_media.py), by the
+ * object's key in storage; a plan Gemini wrote for a member has none.
+ */
+const mediaKey = z.string().min(1).max(200).optional();
 
 const shotSchema = z.object({
   kind: z.enum(["video", "photo"]),
@@ -148,6 +153,10 @@ const shotSchema = z.object({
   ),
   /** The teleprompter's lines, timed from the shot's start; empty when nothing is said. */
   script: z.array(z.object({ startSeconds: seconds, endSeconds: seconds, text: z.string() })),
+  /** A seeded template's storyboard card of the shot: its object key in storage. */
+  storyboardKey: mediaKey,
+  /** A seeded template's few-second preview clip of the shot: its object key in storage. */
+  previewKey: mediaKey,
 });
 export type Shot = z.infer<typeof shotSchema>;
 
@@ -159,8 +168,23 @@ export const shotPlanSchema = z.object({
   audio: z.enum(["speech", "music", "speech-and-music", "none"]),
   durationSeconds: z.number().min(0.5),
   shots: z.array(shotSchema).min(1).max(DIRECTOR_MAX_SHOTS),
+  /** A seeded template's music track: its object key in storage. */
+  musicKey: mediaKey,
 });
 export type ShotPlan = z.infer<typeof shotPlanSchema>;
+
+// A plan as the API serves it: each media key above becomes a short-lived link to the
+// object (only a seeded template's, and only while uploads are on), and the key itself
+// stays in the API, like a plan's audio key.
+const mediaUrl = z.url().optional();
+const servedShotSchema = shotSchema
+  .omit({ storyboardKey: true, previewKey: true })
+  .extend({ storyboardUrl: mediaUrl, previewUrl: mediaUrl });
+export type ServedShot = z.infer<typeof servedShotSchema>;
+const servedShotPlanSchema = shotPlanSchema
+  .omit({ shots: true, musicKey: true })
+  .extend({ shots: z.array(servedShotSchema).min(1).max(DIRECTOR_MAX_SHOTS), musicUrl: mediaUrl });
+export type ServedShotPlan = z.infer<typeof servedShotPlanSchema>;
 
 export const directorPlanSchema = z.object({
   id: directorPlanIdSchema,
@@ -172,7 +196,7 @@ export const directorPlanSchema = z.object({
   /** How far indexing got, finer than `status`, for showing its progress. */
   stage: z.enum(["queued", "watching", "writing", "ready", "failed"]),
   error: z.string().nullable(),
-  plan: shotPlanSchema.nullable(),
+  plan: servedShotPlanSchema.nullable(),
   model: z.string().nullable(),
   /**
    * The short's original audio, to film along to: `url` is a short-lived link to it,

@@ -27,7 +27,9 @@ from scripts.build_seeds import (
     audio_key,
     build_entry,
     build_templates,
+    keep_media,
     load_seeds,
+    load_templates,
     main,
     settings_indexer,
     write_templates,
@@ -44,30 +46,29 @@ ANGLE: dict[str, object] = {"pitch": 0, "roll": 0, "tolerance": 8, "height": "ch
 POSE: dict[str, object] = {"description": "Standing, arms relaxed.", "keypoints": []}
 
 
+PLAN_SHOT: dict[str, object] = {
+    "kind": "video",
+    "title": "A shot",
+    "purpose": "Shows something.",
+    "sourceStartSeconds": 0,
+    "sourceEndSeconds": 4,
+    "durationSeconds": 4,
+    "camera": "back",
+    "scene": "Anywhere with light",
+    "sceneLandmark": None,
+    "framing": FRAMING,
+    "phoneAngle": ANGLE,
+    "pose": POSE,
+    "steps": [{"atSeconds": 0, "instruction": "Do it.", "cameraMove": "static"}],
+    "script": [],
+}
 PLAN: dict[str, object] = {
     "title": "A plan",
     "format": "GRWM",
     "summary": "A summary.",
     "audio": "none",
     "durationSeconds": 4,
-    "shots": [
-        {
-            "kind": "video",
-            "title": "A shot",
-            "purpose": "Shows something.",
-            "sourceStartSeconds": 0,
-            "sourceEndSeconds": 4,
-            "durationSeconds": 4,
-            "camera": "back",
-            "scene": "Anywhere with light",
-            "sceneLandmark": None,
-            "framing": FRAMING,
-            "phoneAngle": ANGLE,
-            "pose": POSE,
-            "steps": [{"atSeconds": 0, "instruction": "Do it.", "cameraMove": "static"}],
-            "script": [],
-        }
-    ],
+    "shots": [PLAN_SHOT],
 }
 FALLBACK_MODEL = "gemini-fallback-test"
 FALLBACK_PATH = f"/v1beta/models/{FALLBACK_MODEL}:generateContent"
@@ -217,6 +218,105 @@ def test_seed_template_refuses_a_plan_with_no_shots() -> None:
                 "audioKey": "seed-audio/22k0fZarxh8.m4a",
             }
         )
+
+
+def test_a_plan_s_seed_media_keys_are_optional_and_left_out_when_unset() -> None:
+    """Only the seeds carry media (scripts/seed_media.py): a plan the model wrote has no
+    keys, and its JSON (stored, served, committed) has no key fields at all rather than
+    nulls, so every plan and seed file from before reads the same."""
+    plan = shot_plan()
+    assert plan.musicKey is None
+    assert plan.shots[0].storyboardKey is None
+    assert plan.shots[0].previewKey is None
+    assert plan.model_dump(mode="json") == PLAN
+
+    with_media = {
+        **PLAN,
+        "musicKey": "seed-media/22k0fZarxh8/music.mp3",
+        "shots": [
+            {
+                **PLAN_SHOT,
+                "storyboardKey": "seed-media/22k0fZarxh8/shot-0.png",
+                "previewKey": "seed-media/22k0fZarxh8/shot-0.mp4",
+            }
+        ],
+    }
+    assert ShotPlan.model_validate(with_media).model_dump(mode="json") == with_media
+
+
+def _template(plan: ShotPlan, video_id: str = "22k0fZarxh8") -> SeedTemplate:
+    return SeedTemplate(
+        videoId=video_id, plan=plan, model="gemini-4-argon", audioKey=audio_key(video_id)
+    )
+
+
+def _with_media(plan: ShotPlan) -> ShotPlan:
+    return plan.model_copy(
+        update={
+            "musicKey": "seed-media/22k0fZarxh8/music.mp3",
+            "shots": [
+                shot.model_copy(update={"storyboardKey": f"seed-media/22k0fZarxh8/shot-{n}.png"})
+                for n, shot in enumerate(plan.shots)
+            ],
+        }
+    )
+
+
+def test_keep_media_carries_a_seed_s_media_over_when_its_plan_is_unchanged() -> None:
+    previous = [_template(_with_media(shot_plan()))]
+
+    assert keep_media([_template(shot_plan())], previous) == previous
+
+
+def test_keep_media_drops_the_media_of_a_seed_whose_plan_changed() -> None:
+    """Media drawn from the old plan's shots would show the wrong scenes: a changed seed
+    starts without any, and scripts/seed_media.py makes its media again."""
+    previous = [_template(_with_media(shot_plan()))]
+    changed = shot_plan().model_copy(update={"title": "Another plan"})
+
+    [kept] = keep_media([_template(changed)], previous)
+
+    assert kept == _template(changed)
+    assert kept.plan.musicKey is None
+
+
+def test_keep_media_leaves_a_seed_with_no_previous_entry_alone() -> None:
+    previous = [_template(_with_media(shot_plan()), "152Jy2c3XSM")]
+
+    assert keep_media([_template(shot_plan())], previous) == [_template(shot_plan())]
+
+
+def test_load_templates_reads_what_write_templates_wrote(tmp_path: Path) -> None:
+    path = tmp_path / "templates.json"
+    templates = [_template(_with_media(shot_plan()))]
+    write_templates(templates, path)
+
+    assert load_templates(path) == templates
+    assert load_templates(tmp_path / "missing.json") == []
+
+
+@pytest.mark.integration
+async def test_main_keeps_the_media_of_a_seed_whose_plan_came_out_the_same(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]],
+) -> None:
+    seeds = tmp_path / "seeds.json"
+    seeds.write_text(json.dumps([{"videoId": "22k0fZarxh8"}]))
+    templates = tmp_path / "templates.json"
+    previous = [
+        _template(_with_media(shot_plan())).model_copy(update={"model": GEMINI_MODEL})
+    ]
+    write_templates(previous, templates)
+    for key, value in gemini_env(gemini[0].url).items():
+        monkeypatch.setenv(key, value)
+    get_settings.cache_clear()
+    try:
+        await main(seeds, templates)
+    finally:
+        get_settings.cache_clear()
+
+    assert load_templates(templates) == previous
 
 
 @pytest.mark.integration

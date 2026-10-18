@@ -9816,6 +9816,14 @@
                                               "text"
                                             ]
                                           }
+                                        },
+                                        "storyboardUrl": {
+                                          "type": "string",
+                                          "format": "uri"
+                                        },
+                                        "previewUrl": {
+                                          "type": "string",
+                                          "format": "uri"
                                         }
                                       },
                                       "required": [
@@ -9835,6 +9843,10 @@
                                         "script"
                                       ]
                                     }
+                                  },
+                                  "musicUrl": {
+                                    "type": "string",
+                                    "format": "uri"
                                   }
                                 },
                                 "required": [
@@ -11565,6 +11577,14 @@
                                         "text"
                                       ]
                                     }
+                                  },
+                                  "storyboardUrl": {
+                                    "type": "string",
+                                    "format": "uri"
+                                  },
+                                  "previewUrl": {
+                                    "type": "string",
+                                    "format": "uri"
                                   }
                                 },
                                 "required": [
@@ -11584,6 +11604,10 @@
                                   "script"
                                 ]
                               }
+                            },
+                            "musicUrl": {
+                              "type": "string",
+                              "format": "uri"
                             }
                           },
                           "required": [
@@ -13297,6 +13321,14 @@
                                         "text"
                                       ]
                                     }
+                                  },
+                                  "storyboardUrl": {
+                                    "type": "string",
+                                    "format": "uri"
+                                  },
+                                  "previewUrl": {
+                                    "type": "string",
+                                    "format": "uri"
                                   }
                                 },
                                 "required": [
@@ -13316,6 +13348,10 @@
                                   "script"
                                 ]
                               }
+                            },
+                            "musicUrl": {
+                              "type": "string",
+                              "format": "uri"
                             }
                           },
                           "required": [

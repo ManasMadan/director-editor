@@ -117,6 +117,19 @@ const PLAN = {
   ],
 };
 
+/** PLAN with a storyboard card, a preview and a music track, as a seed's plan may have. */
+function withMedia(videoId: string) {
+  return {
+    ...PLAN,
+    musicKey: `seed-media/${videoId}/music.mp3`,
+    shots: PLAN.shots.map((shot, index) => ({
+      ...shot,
+      storyboardKey: `seed-media/${videoId}/shot-${index}.png`,
+      previewKey: `seed-media/${videoId}/shot-${index}.mp4`,
+    })),
+  };
+}
+
 interface StandInPlan {
   id: string;
   org: string;
@@ -125,6 +138,8 @@ interface StandInPlan {
   videoId: string;
   status: string;
   audioKey: string | null;
+  /** Its plan carries media keys (withMedia). */
+  media?: boolean;
 }
 const plans: StandInPlan[] = [];
 const takes: {
@@ -156,7 +171,7 @@ function planOut(plan: StandInPlan) {
     status: plan.status,
     stage: plan.status === "ready" ? "ready" : "queued",
     error: null,
-    plan: plan.status === "ready" ? PLAN : null,
+    plan: plan.status === "ready" ? (plan.media ? withMedia(plan.videoId) : PLAN) : null,
     model: plan.status === "ready" ? "gemini-test" : null,
     audioStatus: plan.audioKey ? "ready" : "none",
     audioKey: plan.audioKey,
@@ -166,8 +181,13 @@ function planOut(plan: StandInPlan) {
 }
 
 /** A plan of the workspace's, ready to film, as a seeded template is. */
-function readyTemplate(org: string, videoId: string, audioKey: string | null = null) {
-  const plan = { id: randomUUID(), org, user: null, videoId, status: "ready", audioKey };
+function readyTemplate(
+  org: string,
+  videoId: string,
+  audioKey: string | null = null,
+  extra: Partial<StandInPlan> = {},
+) {
+  const plan = { id: randomUUID(), org, user: null, videoId, status: "ready", audioKey, ...extra };
   plans.unshift(plan);
   return plan;
 }
@@ -531,6 +551,41 @@ describe("Director's library", () => {
       templates: [],
       indexUsed: false,
     });
+  });
+
+  it("links a seeded template's storyboard cards, previews and music, never a key", async () => {
+    const { session, me } = await signedIn();
+    const org = String(me.activeOrganizationId);
+    const bare = readyTemplate(org, "SeedBare001");
+    const seeded = readyTemplate(org, "SeedMedia01", null, { media: true });
+    // A member's own plan never has media; should one ever carry keys, nobody gets a link
+    // to whatever they name.
+    const own = readyTemplate(org, "OwnMedia001", null, { user: me.id, media: true });
+    const { templates } = await session.rpc.director.library();
+    expect(templates.map((plan) => plan.id)).toEqual([own.id, seeded.id, bare.id]);
+
+    const media = templates[1]?.plan;
+    const signed = (url: string | undefined, key: string) => {
+      const link = new URL(String(url));
+      expect(link.pathname).toContain(key);
+      expect(link.searchParams.get("X-Amz-Expires")).toBe("3600");
+    };
+    signed(media?.musicUrl, "seed-media/SeedMedia01/music.mp3");
+    signed(media?.shots[0]?.storyboardUrl, "seed-media/SeedMedia01/shot-0.png");
+    signed(media?.shots[0]?.previewUrl, "seed-media/SeedMedia01/shot-0.mp4");
+    expect(media).not.toHaveProperty("musicKey");
+    expect(media?.shots[0]).not.toHaveProperty("storyboardKey");
+    expect(media?.shots[0]).not.toHaveProperty("previewKey");
+
+    for (const plan of [templates[0]?.plan, templates[2]?.plan]) {
+      expect(plan).not.toHaveProperty("musicUrl");
+      expect(plan?.shots[0]).not.toHaveProperty("storyboardUrl");
+      expect(plan?.shots[0]).not.toHaveProperty("previewUrl");
+      expect(plan?.shots[0]).not.toHaveProperty("previewKey");
+    }
+    // The template page reads the one plan the same way.
+    const one = await session.rpc.director.plan({ videoId: "SeedMedia01" });
+    signed(one.plan?.shots[0]?.previewUrl, "seed-media/SeedMedia01/shot-0.mp4");
   });
 });
 

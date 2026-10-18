@@ -18,6 +18,11 @@ running again a few times before keeping the fallback's plan.
 The 6 seeds' original audio is already captured and uploaded (by a different task, once,
 by hand) to gs://director-media-1053522546520/seed-audio/<videoId>.m4a; this script only
 records that key (`audio_key`), it never fetches or uploads audio itself.
+
+Each seed's generated media (storyboard cards, preview clips and a music track) is made
+afterwards by scripts/seed_media.py, which only adds keys to this file. Rebuilding keeps
+the media keys of every seed whose plan came out exactly the same (`keep_media`) and
+drops those of a seed whose plan changed, so run this first and seed_media after it.
 """
 
 import asyncio
@@ -26,6 +31,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic.main import IncEx
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from app.director import create_index_model, create_planner_agent
@@ -111,6 +117,41 @@ def write_templates(templates: list[SeedTemplate], path: Path = TEMPLATES_PATH) 
     )
 
 
+_TEMPLATES = TypeAdapter(list[SeedTemplate])
+
+
+def load_templates(path: Path = TEMPLATES_PATH) -> list[SeedTemplate]:
+    """The seed file as it stands; empty when there is none yet."""
+    return _TEMPLATES.validate_json(path.read_text()) if path.exists() else []
+
+
+# A plan's media keys (scripts/seed_media.py), left out to compare two plans' content.
+_MEDIA_KEYS: IncEx = {
+    "musicKey": True,
+    "shots": {"__all__": {"storyboardKey", "previewKey"}},
+}
+
+
+def _content(plan: ShotPlan) -> dict[str, object]:
+    return plan.model_dump(mode="json", exclude=_MEDIA_KEYS)
+
+
+def keep_media(templates: list[SeedTemplate], previous: list[SeedTemplate]) -> list[SeedTemplate]:
+    """`templates` with the media keys of each seed whose plan came out exactly as it
+    was. A seed whose plan changed starts without media, since media drawn from the old
+    shots would show the wrong scenes: run scripts/seed_media.py after this to make it
+    again."""
+    earlier = {template.videoId: template.plan for template in previous}
+
+    def kept(template: SeedTemplate) -> SeedTemplate:
+        plan = earlier.get(template.videoId)
+        if plan is None or _content(plan) != _content(template.plan):
+            return template
+        return template.model_copy(update={"plan": plan})
+
+    return [kept(template) for template in templates]
+
+
 def settings_indexer(settings: Settings) -> Indexer:
     """An `Indexer` that actually calls Gemini: its own pair of planner agents (built the
     same way `Director`'s are, from INDEX_MODEL and INDEX_FALLBACK_MODEL through
@@ -139,7 +180,7 @@ async def main(seeds_path: Path = SEEDS_PATH, templates_path: Path = TEMPLATES_P
     settings = get_settings()
     configure_logging(settings.log_level, json=False)
     templates = await build_templates(load_seeds(seeds_path), settings_indexer(settings))
-    write_templates(templates, templates_path)
+    write_templates(keep_media(templates, load_templates(templates_path)), templates_path)
     log.info("wrote seed templates", count=len(templates), path=str(templates_path))
 
 
