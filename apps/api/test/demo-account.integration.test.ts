@@ -16,6 +16,7 @@ import {
   type Harness,
   newEmail,
   newPassword,
+  pwnedPasswords,
   refusingExit,
   startApi,
   takeOtp,
@@ -24,6 +25,15 @@ import {
 const DEMO = { email: "demo@director.mmadan.in", password: "demo-password-for-the-tests" };
 const ENTRY = "../src/director-demo-account";
 const SEED_IDS = directorSeeds.map((seed) => seed.videoId).sort();
+/** Production's breached-password check, which the deployed command runs with. */
+const BREACH_CHECK_ON = { PASSWORD_BREACH_CHECK: "on" };
+
+/**
+ * Have I Been Pwned, down: with the check on, anything that asked it would fail (the
+ * check fails closed). The command never should: the demo password is public anyway.
+ * Returns what was asked.
+ */
+const pwnedPasswordsDown = () => pwnedPasswords(() => new Response("unavailable", { status: 503 }));
 
 let harness: Harness;
 let database: Database;
@@ -131,8 +141,10 @@ describe("the demo account command", () => {
   });
 
   it("creates the account: verified, flagged, the seeds in its library, signing in with DEMO_PASSWORD", async () => {
-    const run = await command(ENTRY, {}, ["--force"]);
+    const asked = pwnedPasswordsDown();
+    const run = await command(ENTRY, BREACH_CHECK_ON, ["--force"]);
     expect(run.lines).toEqual([`Created the demo account ${DEMO.email}.`]);
+    expect(asked).toEqual([]);
 
     const account = await demoAccount();
     expect(account).toMatchObject({ emailVerified: true, demo: true });
@@ -161,10 +173,16 @@ describe("the demo account command", () => {
       missingSeed,
     ]);
 
-    const run = await command(ENTRY, { DEMO_PASSWORD: "a-rotated-demo-password" }, ["--force"]);
+    const asked = pwnedPasswordsDown();
+    const run = await command(
+      ENTRY,
+      { DEMO_PASSWORD: "a-rotated-demo-password", ...BREACH_CHECK_ON },
+      ["--force"],
+    );
     expect(run.lines).toEqual([
       `Updated the demo account ${DEMO.email}: copied 1 missing seeded templates, and kept its own Shorts and takes.`,
     ]);
+    expect(asked).toEqual([]);
     const after = await demoAccount();
     expect(after.id).toBe(before.id);
     const library = await plans(after.orgId);
@@ -243,7 +261,9 @@ describe("the demo account command", () => {
   it("gives back a password sign-in to a demo account that lost it", async () => {
     const { id } = await demoAccount();
     await database.write.account.deleteMany({ where: { userId: id, providerId: "credential" } });
-    await command(ENTRY, {}, ["--force"]);
+    const asked = pwnedPasswordsDown();
+    expect((await command(ENTRY, BREACH_CHECK_ON, ["--force"])).thrown).toBeUndefined();
+    expect(asked).toEqual([]);
     await signedInAsDemo();
   });
 

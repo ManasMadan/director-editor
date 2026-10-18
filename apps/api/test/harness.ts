@@ -411,3 +411,25 @@ export function refusingExit() {
     throw new Error(`exit ${code}`);
   }) as never);
 }
+
+const PWNED_PASSWORDS_RANGE = "https://api.pwnedpasswords.com/range/";
+
+/**
+ * Stands in for Have I Been Pwned's range API, which has no local fake: answers its
+ * requests with `answer` (given the SHA-1 prefix asked about) and returns the prefixes
+ * asked, in order. Every other request goes out as usual.
+ */
+export function pwnedPasswords(answer: (prefix: string) => Response) {
+  const real = globalThis.fetch;
+  const asked: string[] = [];
+  vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (!url.startsWith(PWNED_PASSWORDS_RANGE)) {
+      return real(input, init);
+    }
+    const prefix = url.slice(PWNED_PASSWORDS_RANGE.length);
+    asked.push(prefix);
+    return Promise.resolve(answer(prefix));
+  });
+  return asked;
+}
