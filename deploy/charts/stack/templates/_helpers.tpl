@@ -194,6 +194,20 @@ env:
   - name: S3_FORCE_PATH_STYLE
     value: "true"
   {{- end }}
+  {{- /* Single keys of another service's Secret (the worker signing calls to the AI service
+  with its secret). Optional only so the pod can be created before that Secret exists (a
+  fresh install brings them up together): a service that needs the key refuses to start
+  without it (the worker, given AI_URL without AI_SERVICE_SECRET) and restarts until it's
+  there. */}}
+  {{- range $var := keys ($svc.secretKeys | default dict) | sortAlpha }}
+  {{- $ref := index $svc.secretKeys $var }}
+  - name: {{ $var }}
+    valueFrom:
+      secretKeyRef:
+        name: {{ include "stack.fullname" (list $root $ref.from) }}
+        key: {{ $ref.key }}
+        optional: true
+  {{- end }}
 {{- if $secret }}
 envFrom:
   - secretRef:

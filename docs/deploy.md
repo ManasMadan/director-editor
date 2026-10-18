@@ -215,6 +215,108 @@ Finally point the worker at it: set `INDEXER_URL: <$INDEXER_URL>` in the ai work
 `env` in `deploy/environments/production/stack.yaml` (where its comment says), and
 promote. Unsetting it again is the rollback: the worker goes back to indexing itself.
 
+## The Cloud Run clipper
+
+Director's continuous recording cuts each attempt a member makes at a shot out of the
+session's footage into a take of its own: the worker sends the attempt (presigned reads
+of its slices, Director's marks, the part's pauses) to the AI service's
+`/v1/director/clips`, which joins the slices, snaps the marks to the first and last words
+with ffmpeg's silencedetect and re-encodes the stretch as an H.264 MP4. In production
+that work runs on a private Cloud Run service, `director-clipper`, never in the ai pod:
+the slices are whatever bytes a member uploaded, and ffmpeg decoding them belongs in a
+container that holds no secrets or data, not in the pod with the database URL and the
+service's keys (the ai service refuses to start in production without `CLIPPER_URL`).
+It also keeps minutes of decoding off the VM, and its memory out of the ai pod's 768 MiB.
+It's the same `ai` image (ffmpeg is in it) with another entrypoint
+(`uvicorn app.clipper:app`, apps/ai/app/clipper.py) and the same code the ai service
+runs in development (apps/ai/app/clipping.py). It has no database, Redis, storage or
+Vertex AI access: the footage comes and goes by presigned reads the worker signs, and the
+take goes back in the response.
+
+Wherever it runs, ffmpeg reads the footage defensively (apps/ai/app/clipping.py): the
+first bytes must be the part's declared type's (apps/api checks the first slice too), the
+demuxer is pinned to that type (`-f matroska` or `-f mov`) instead of guessed from the
+content, it may open local files only (`-protocol_whitelist file`), it gets two threads,
+and it runs through apps/ai/app/jail.py: an environment of `PATH` alone, ten minutes of
+CPU, files of at most 64 MiB, no core dumps and, on Linux, 2 GiB of address space. The
+ai service's own wall-clock limit is five minutes per ffmpeg run, and it cuts one attempt
+at a time.
+
+Only the VM's account may call it (`--no-allow-unauthenticated`, and the clipper checks
+the ID token again: audience `CLIPPER_URL`, email `CLIPPER_INVOKER`). Its own account,
+`director-clipper@…`, needs no roles at all: give it none.
+
+Like the indexer, it isn't deployed by Argo CD. With the variables from "The Cloud Run
+indexer" above, and these:
+
+```sh
+CLIPPER=director-clipper@$PROJECT.iam.gserviceaccount.com
+CLIPPER_URL=https://director-clipper-1053522546520.$REGION.run.app
+```
+
+Once per project:
+
+```sh
+gcloud iam service-accounts create director-clipper --project=$PROJECT \
+  --display-name="Director clipper (Cloud Run)"
+```
+
+Each release (the image copied to Artifact Registry as for the indexer):
+
+```sh
+gcloud run deploy director-clipper --project=$PROJECT --region=$REGION \
+  --image=$IMAGE \
+  --command=uvicorn --args=app.clipper:app,--host,0.0.0.0,--port,8080 --port=8080 \
+  --service-account=$CLIPPER --no-allow-unauthenticated \
+  --timeout=900 --memory=4Gi --cpu=2 --concurrency=1 --max-instances=4 \
+  --set-env-vars=NODE_ENV=production,LOG_LEVEL=info,CLIPPER_URL=$CLIPPER_URL,CLIPPER_INVOKER=$VM
+
+# The VM's account (the ai service) may call it.
+gcloud run services add-iam-policy-binding director-clipper --project=$PROJECT \
+  --region=$REGION --member=serviceAccount:$VM --role=roles/run.invoker
+```
+
+`--timeout=900` is what the ai service waits for it (`CLIP_REQUEST_SECONDS` in
+app/clipping.py): a whole part's download and both ffmpeg runs (five minutes each at
+most) fit in it; the worker waits a minute longer for the ai service. One attempt per
+instance (`--concurrency=1`): each is a whole ffmpeg run, and Cloud Run adds instances
+for the next, up to `--max-instances`. `--memory=4Gi` because Cloud Run's `/tmp` is in
+memory: a part's footage (at most 1.2 GB, 150 slices of 8 MB) is written there, next to
+ffmpeg's 2 GiB. Check it from the VM as for the indexer (`$CLIPPER_URL/health/live`).
+
+Production's `CLIPPER_URL` is already in the ai and ai-worker services' `env` in
+`deploy/environments/production/stack.yaml`, so deploy the clipper before the release
+that carries recording: until it answers, every attempt waits and retries, then fails
+(UPSTREAM_UNAVAILABLE), and nothing is cut in the ai pod instead. A failing clipper is
+rolled back on Cloud Run (`gcloud run services update-traffic director-clipper
+--to-revisions=<previous>=100`), never by unsetting `CLIPPER_URL`, which production
+refuses.
+
+The worker reaches the ai service with the api's call-signing secret
+(`AI_SERVICE_SECRET`, taken from the ai Secret by the stack chart's `secretKeys`) and
+`AI_URL`; the ai service's network policy lets the worker in.
+
+Raw footage lives in the media bucket under `recordings/`, deleted by the worker's
+`recording-retention` task when its session expires. The bucket needs a lifecycle rule
+on that prefix as a backstop, and it isn't applied yet: apply it before the release that
+carries recording. Without it, nothing outlives the longest keeping (14 days) only while
+the worker's task runs, and a slice PUT through a still-valid upload URL (ten minutes)
+after its session was deleted is never deleted at all:
+
+```sh
+cat > /tmp/lifecycle.json <<'EOF'
+{"rule": [
+  {"action": {"type": "Delete"}, "condition": {"age": 90, "matchesPrefix": ["director/speech/"]}},
+  {"action": {"type": "Delete"}, "condition": {"age": 15, "matchesPrefix": ["recordings/"]}}
+]}
+EOF
+gcloud storage buckets update gs://$BUCKET --lifecycle-file=/tmp/lifecycle.json
+gcloud storage buckets describe gs://$BUCKET --format='value(lifecycle)'
+```
+
+(A lifecycle file replaces the bucket's rules: it carries the spoken lines' 90-day rule,
+docs/files.md, too.)
+
 ## Previews
 
 Adding the `preview` label to a pull request from this repository (not a fork) runs

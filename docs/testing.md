@@ -158,8 +158,9 @@ shell, for one).
   the api's breached-password suite 17, the web's browser tests 18, jobs 19, the jobs
   CLI's suite 20 (its worker fails every job on a real queue, so it shares with nothing),
   Python 6, the pre-push hook's end-to-end run 21 (emptied before each run), and the
-  api's files 24 to 26, 28, 29 (the activity log) and 30 (the demo guests). A new suite
-  takes the next free number: 22, 23, 27 or 31;
+  api's files 24 to 26, 28, 29 (the activity log) and 30 (the demo guests), the
+  worker's recording suite 22 and the api's 23. A new suite takes the next free number:
+  27 or 31;
   `scripts/redis-databases.test.ts` fails when two suites that flush share one. A change
   to the flag needs the local container recreated (`docker compose up -d valkey`).
 - Tests never read your `.env`: they run with `.env.example`'s values (the ports docker
@@ -171,6 +172,10 @@ shell, for one).
   itself.
 - Services are built in-process (`createApiServer()` and the like); emails are read
   back from Mailpit, and Gemini and YouTube are `packages/fake-google`.
+- The clipper's tests (`apps/ai/tests/test_clipping.py`) make short recordings the way
+  browsers do (a live WebM with no index, as Chrome's MediaRecorder writes it, and a
+  fragmented MP4, as Safari's) and cut them with real ffmpeg, which must be on the PATH
+  (`brew install ffmpeg`; CI's Python job installs it).
 - Nothing sleeps for a fixed time. A test waits for what it's waiting on:
   `eventually(read, done)` from `@repo/testing/eventually`, `vi.waitFor` or
   `expect.poll`. To show that something did not happen, it first waits for a signal that
@@ -324,6 +329,8 @@ file below 100%, or one no test loads.
 | `apps/web/src/lib/cookies.ts` | `biome-ignore lint/suspicious/noDocumentCookie` | the Cookie Store API isn't in every browser yet |
 | `packages/db/prisma/migrations/20261010121359_director/migration.sql` | `-- squawk-ignore` (`adding-foreign-key-constraint`, `constraint-missing-not-valid`, `require-concurrent-index-creation`) | every flagged statement acts on a table the same migration creates: it is empty and no running release reads it, so nothing waits on a scan; the foreign keys hold writes on the tables they point at only until the migration commits, bounded by `lock_timeout` |
 | `packages/db/prisma/migrations/20261018150000_director_library/migration.sql` | `-- squawk-ignore` (`adding-foreign-key-constraint`, `constraint-missing-not-valid`, `require-concurrent-index-creation`) | the foreign keys, checks and indexes of `ai.director_cut` act on a table the same migration creates, as in the director migration; the one-member-one-short unique index on `ai.director_plan` is built in the same transaction as the update that makes it buildable, under the `ACCESS EXCLUSIVE` lock the migration's `ADD COLUMN` already holds, so no write can slip between them; the table is a workspace's library (a few rows), so the build takes milliseconds, bounded by `lock_timeout` |
+| `packages/db/prisma/migrations/20261018210000_recording/migration.sql` | `-- squawk-ignore` (`adding-foreign-key-constraint`, `constraint-missing-not-valid`, `require-concurrent-index-creation`) | every flagged statement acts on a recording table the same migration creates, as in the director migration: empty, read by no running release; the foreign keys hold writes on the tables they point at (auth.user, auth.organization, ai.director_plan, ai.director_take, files.file) only until the migration commits, bounded by `lock_timeout`; its policies on `files.file` take that table's `ACCESS EXCLUSIVE` lock for a moment, bounded the same way |
+| `packages/db/prisma/migrations/20261018210100_director_take_one_per_file/migration.sql` | `-- squawk-ignore require-timeout-settings` | the file holds a single `CREATE UNIQUE INDEX CONCURRENTLY`, which can't run in the transaction the timeouts would be set in; it takes no lock that holds up a write |
 | `packages/db/prisma/migrations/20261018120000_remove_starter_features/migration.sql` | `-- squawk-ignore` (`ban-drop-table`, `ban-drop-column`) | drops the tables and column of the starter features Director removed: production holds no data in them, and pods of the previous release may error on them until the rollout replaces them |
 | `packages/ui/src/components/field.tsx` | `biome-ignore lint/a11y/useSemanticElements` | `Field` is a `div` with the group role: a fieldset brings its own border, padding and minimum width into every form row (`FieldSet` is the fieldset, for a group of fields) |
 | `packages/ui/src/components/input-otp.tsx` | `biome-ignore lint/a11y/useSemanticElements` | the separator holds an icon, which an `hr` can't |
@@ -340,6 +347,7 @@ file below 100%, or one no test loads.
 | `biome.jsonc` | `noDuplicateCustomProperties` off in `packages/ui/src/styles/theme.css` | the theme sets each variable once per variant (light, dark), and Biome reads the blocks as one rule |
 | `biome.jsonc` | `useImportType` and `noStaticOnlyClass` off in the Nest services and `packages/nest-common` | Nest's dependency injection needs the imported class at run time, which `import type` erases; a module is a class with only a decorator and static members |
 | `biome.jsonc` | `noConsole` off in `scripts/`, the hooks, config files and the API's command-line scripts | they talk to whoever runs them through the console |
+| `apps/ai/app/jail.py` | `# noqa: S606` | the jail becomes ffmpeg by `exec` on purpose, with an environment of `PATH` alone: a child process would outlive the caller's timeout kill, and its arguments are an argv list, never a shell's line |
 | `apps/ai/tests/test_plan_repair.py` | `# noqa: S311` | a deterministic seed for a reproducible fuzz test, not a cryptographic use |
 | `apps/ai/app/audio.py` | `# pyright: ignore[reportMissingTypeStubs]` on the import, `# pyright: ignore[reportUnknownMemberType]` on the upload | google-cloud-storage ships no stubs |
 | `apps/ai/scripts/seed_media.py` | `# pyright: ignore[reportMissingTypeStubs]` on the import, `# pyright: ignore[reportUnknownMemberType]` on the upload | google-cloud-storage ships no stubs |

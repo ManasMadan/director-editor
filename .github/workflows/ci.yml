@@ -469,6 +469,10 @@ jobs:
       - uses: ./.github/actions/services-up
       - uses: ./.github/actions/setup
         with: { python: "true" }
+      # The clipper's tests cut a real recording with ffmpeg, as the ai image does
+      # (tests/test_clipping.py).
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run basedpyright

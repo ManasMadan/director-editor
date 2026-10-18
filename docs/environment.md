@@ -219,6 +219,8 @@ On when the chosen provider's bucket is set (`files` feature). Read by api and w
 | `AUDIT_RETENTION_MONTHS` | 13 | Audit log partitions older than this are dropped. |
 | `WEBHOOK_HISTORY_DAYS` | 30 | Received provider events (the mail server's). |
 | `NOTIFICATION_HISTORY_DAYS` | 90 | The email delivery log. |
+| `RECORDING_CONCURRENCY` | 2 | Recorded attempts cut into takes at once per process (each holds its take, up to 15 MB, in memory). |
+| `AI_URL`, `AI_SERVICE_SECRET` | unset | The AI service, as the API reaches it (below): the worker has it cut each recorded attempt into a take and record the take. Both or neither; without them recorded attempts wait for their take. |
 
 ## AI (apps/ai; apps/api and apps/web call it)
 
@@ -227,8 +229,8 @@ both `AI_URL` and `AI_SERVICE_SECRET` are set.
 
 | Variable | Read by | Default / example | What it does |
 |---|---|---|---|
-| `AI_URL` | api | `http://localhost:8000` | Where the API calls the AI service. |
-| `AI_SERVICE_SECRET` | ai (req.), api | generated | At least 32 characters. The API signs a 60-second token for every call with it; the service verifies it. |
+| `AI_URL` | api, worker | `http://localhost:8000` | Where the API (and the worker, for cutting recorded attempts into takes) calls the AI service. |
+| `AI_SERVICE_SECRET` | ai (req.), api, worker | generated | At least 32 characters. The API and the worker sign a 60-second token for every call with it; the service verifies it. |
 | `API_URL` | web | `http://localhost:3001` | Where `/rpc`, `/api` and `/docs` are forwarded in local development and e2e (the gateway does it when deployed). Read when the web app is built, not when it starts: the image keeps the default, which clusters never use. |
 | `AI_MONTHLY_TOKENS_PER_ORG` | ai | 2000000 | Tokens a workspace may use per calendar month. |
 | `AI_MONTHLY_TOKENS_PER_DEMO_GUEST` | ai | 300000 | Tokens a demo guest's workspace may use per calendar month, at most (it lasts a day; the guests' purge adds what they spent to `ai.demo_usage`). |
@@ -257,7 +259,9 @@ themselves, never `bun dev` or `bun dev:full`. See [director.md](director.md).
 | `MEDIA_BUCKET` | ai, indexer | empty in `.env.example` | The Cloud Storage bucket a short's original audio is captured into while it's indexed (`audio/<videoId>.m4a`, yt-dlp then an upload with Application Default Credentials): production's `director-media-…`, the same bucket as `GCS_BUCKET`, which apps/api signs links to. The account indexing (the VM's, or the indexer's on Cloud Run) needs `roles/storage.objectAdmin` on it. Unset: the audio isn't captured; plans are still written. |
 | `INDEXER_URL` | ai (worker), indexer (required) | unset | The Cloud Run indexer (`app/indexer.py`, [deploy.md](deploy.md#the-cloud-run-indexer)), its URL with no trailing slash. The worker sends each plan job's short there, with an ID token for this URL from the metadata server, so Gemini's long video calls and the audio download happen off the VM; unset, the worker indexes in-process, the same way. For the indexer, its own URL: the only audience its ID tokens may name. HTTPS in production. |
 | `INDEXER_INVOKER` | indexer (required) | unset | The one service account allowed to call the indexer (production: the VM's, `director-vm@…`). Cloud Run's IAM already lets only its invokers in; the indexer checks the ID token's email again itself. |
-| `GOOGLE_CERTS_URL` | indexer | `https://www.googleapis.com/oauth2/v1/certs` | Where Google publishes the keys its ID tokens are signed with. Only tests point it elsewhere; production refuses anything but HTTPS. |
+| `GOOGLE_CERTS_URL` | indexer, clipper | `https://www.googleapis.com/oauth2/v1/certs` | Where Google publishes the keys its ID tokens are signed with. Only tests point it elsewhere; production refuses anything but HTTPS. |
+| `CLIPPER_URL` | ai (required in production), clipper (required) | unset | The Cloud Run clipper (`app/clipper.py`, [deploy.md](deploy.md#the-cloud-run-clipper)), its URL with no trailing slash. The AI service sends each recorded attempt there to be cut into a take, with an ID token for this URL from the metadata server, so a member's footage is decoded in a container with no secrets, off the VM. Unset (development and tests only: production refuses to start without it), the AI service cuts it itself with its own ffmpeg, the same way. For the clipper, its own URL: the only audience its ID tokens may name. HTTPS in production. |
+| `CLIPPER_INVOKER` | clipper (required) | unset | The one service account allowed to call the clipper (production: the VM's, `director-vm@…`, which the AI service runs as). |
 | `TTS_MODEL` | ai | `gemini-3.8-flash-tts` | Gemini's text-to-speech model, behind `director.speak` (a line in Director's voice). On with Director; the API keeps each spoken line in object storage, so it needs uploads on too. |
 | `DIRECTOR_TOKENS_PER_SPEECH` | ai | 3000 | What one spoken line may take (about 25 tokens a second of speech; at least 1000). A line waits for a budget that holds all of it: Vertex refuses a cap on the TTS model's output. |
 | `YOUTUBE_API_KEY` | api | empty in `.env.example` | YouTube Data API v3 key: whether a pasted link is a Short Director can film (its length), before it's indexed. Unset: Director off. |

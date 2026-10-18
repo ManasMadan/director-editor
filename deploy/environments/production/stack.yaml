@@ -70,6 +70,10 @@ services:
       BIGQUERY_DATASET: director
       # The api's GCS_BUCKET: the audio captured while indexing is played from there.
       MEDIA_BUCKET: director-media-1053522546520
+      # Recorded attempts are cut into takes on the Cloud Run clipper, called with the
+      # VM's ID token (docs/deploy.md, "The Cloud Run clipper"): production refuses to cut
+      # a member's footage in this pod, which holds the secrets and the database.
+      CLIPPER_URL: https://director-clipper-1053522546520.us-central1.run.app
   ai-worker:
     allowMetadataServer: true
     env:
@@ -77,6 +81,8 @@ services:
       # Take reviews and indexing run here: both go to the same events table as the api's.
       BIGQUERY_DATASET: director
       MEDIA_BUCKET: director-media-1053522546520
+      # The same settings as the ai pod's, which production checks in both.
+      CLIPPER_URL: https://director-clipper-1053522546520.us-central1.run.app
       # Plans are indexed by the Cloud Run indexer, called with the VM's ID token
       # (docs/deploy.md, "The Cloud Run indexer"); without INDEXER_URL the worker
       # indexes them itself.

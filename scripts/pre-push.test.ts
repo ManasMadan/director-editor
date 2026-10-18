@@ -169,6 +169,7 @@ const COUNTERPARTS: Record<string, Record<string, string>> = {
     "Restore drill": "e2e",
   },
   "ci.yml:python": {
+    "Install ffmpeg": "setup: ffmpeg, which the clipper's tests need on a developer's machine too",
     "uv run ruff check .": "lint",
     "uv run ruff format --check .": "lint",
     "uv run basedpyright": "types",

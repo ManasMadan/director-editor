@@ -70,6 +70,21 @@ they were made, so the cache can't grow forever; a line asked for again is simpl
 again. Set it with `gsutil lifecycle set` on the bucket (`age: 90`,
 `matchesPrefix: ["director/speech/"]`), and check it with `gsutil lifecycle get`.
 
+Director's continuous recording keeps its raw footage under `recordings/<session>/<part>/<slice>`
+(apps/api's `recording` module). Slices aren't uploads: the API signs a PUT for exactly
+each slice (its size and the recorder's type) with no `files.file` row, quarantine or
+virus scan, since nothing ever serves or shows them. The API checks a part's first slice
+starts as its declared type does (`RECORDING_SLICE_INVALID` otherwise, and the slice is
+deleted). Only the clipper decodes them, as that type only, from local files only, with
+no secrets in its environment and its CPU, file size and memory capped (in production on
+Cloud Run, never in the ai pod: [deploy.md](deploy.md#the-cloud-run-clipper)), and
+the take it makes is its own re-encode, stored by the worker as a ready
+`director-take-video` file of the member's. Deleting a session (or its expiry, run by the
+worker's `recording-retention` task) queues each slice's object in
+`files.object_deletion`, which `files-cleanup` drains. In production the bucket's
+lifecycle rule on `recordings/` (15 days, [deploy.md](deploy.md#the-cloud-run-clipper),
+still to be applied) is the backstop.
+
 In a cluster, the uploads bucket is on a RustFS server of its own, reached by browsers
 at a host of its own (`storage.uploads.host` in the environment's `data.yaml`, e.g.
 `files.example.com`) through the gateway and Cloudflare. A separate host rather than a

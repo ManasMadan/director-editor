@@ -69,7 +69,8 @@ lets it in (`deploy/charts/data/templates/valkey.yaml`).
 | `events-notifications` | `event` | the outbox relay | notifications (security alerts, and suppressing an address that hard-bounced) |
 | `files` | `process` | api (upload completed) | worker |
 | `ai-director` | `plan`, `review-take` | ai (FastAPI and its worker) | ai worker (Python) |
-| `maintenance` | `outbox-retention`, `audit-partitions`, `session-retention`, `files-cleanup`, `demo-retention` | worker (job schedulers) | worker |
+| `recording` | `clip` | api (an ended attempt whose footage is all stored), worker (sessions whose footage stopped coming: left open, or finished with a part never closed or a slice missing), both through `createProducer`, so with the queue's retries | worker (through the AI service's clipper) |
+| `maintenance` | `outbox-retention`, `audit-partitions`, `session-retention`, `files-cleanup`, `demo-retention`, `recording-retention` | worker (job schedulers) | worker |
 
 Scheduled work uses BullMQ job schedulers upserted at boot (`maintenance.processor.ts`),
 so each occurrence runs once whatever the replica count.
@@ -79,7 +80,8 @@ so each occurrence runs once whatever the replica count.
 Most queues retry 5 times with exponential backoff from 2 s, with jitter (each delay
 somewhere in its upper half) so jobs that failed together don't all return at once.
 `ai-director` retries 3 times from 5 s (model calls cost money, and a provider outage
-passes), and `maintenance` 3 times from a minute.
+passes), `recording` 5 times from 10 s (a clipper outage passes; the last failure
+fails the attempt), and `maintenance` 3 times from a minute.
 
 A job that fails validation or runs out of attempts stays in BullMQ's failed set for
 its queue's `removeOnFail` age: an hour on `notifications-critical` (its payloads can

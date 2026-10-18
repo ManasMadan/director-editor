@@ -238,9 +238,15 @@ services:
     env:
       PORT: "3002"
       CLAMAV_URL: "tcp://{{ include \"stack.host\" (list $ \"clamav\") }}:3310"
+      # Recorded attempts are cut into takes through the AI service (its clipper).
+      AI_URL: "{{ include \"stack.url\" (list $ \"ai\") }}"
+    # The AI service's call-signing secret, from its Secret: the worker calls it as the
+    # api does. Nothing else of that Secret.
+    secretKeys:
+      AI_SERVICE_SECRET: { from: ai, key: AI_SERVICE_SECRET }
     keda:
       enabled: true
-      queues: [events-audit, files, maintenance]
+      queues: [events-audit, files, maintenance, recording]
 
   notifications:
     enabled: true
@@ -285,7 +291,8 @@ services:
     probes:
       liveness: /health/live
       readiness: /health/ready
-    allowFrom: [api]
+    # The api, and the worker for cutting recorded attempts into takes.
+    allowFrom: [api, worker]
 
   ai-worker:
     enabled: true
