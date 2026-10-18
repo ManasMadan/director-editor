@@ -4,8 +4,8 @@ import * as z from 'zod';
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CheckDirectorSceneData, CheckDirectorSceneErrors, CheckDirectorSceneResponses, CreateDirectorCutData, CreateDirectorCutErrors, CreateDirectorCutResponses, CreateDirectorTakeData, CreateDirectorTakeErrors, CreateDirectorTakeResponses, DependenciesData, DependenciesErrors, DependenciesResponses, GetDirectorLibraryData, GetDirectorLibraryErrors, GetDirectorLibraryResponses, GetDirectorPlanData, GetDirectorPlanErrors, GetDirectorPlanResponses, IndexDirectorPlanData, IndexDirectorPlanErrors, IndexDirectorPlanResponses, ListDirectorCutsData, ListDirectorCutsErrors, ListDirectorCutsResponses, ListDirectorMediaData, ListDirectorMediaErrors, ListDirectorMediaResponses, ListDirectorTakesData, ListDirectorTakesErrors, ListDirectorTakesResponses, LiveData, LiveErrors, LiveResponses, ReadyData, ReadyErrors, ReadyResponses } from './types.gen';
-import { zCheckDirectorSceneBody, zCheckDirectorSceneHeaders, zCheckDirectorSceneResponse, zCreateDirectorCutBody, zCreateDirectorCutHeaders, zCreateDirectorCutResponse, zCreateDirectorTakeBody, zCreateDirectorTakeHeaders, zCreateDirectorTakeResponse, zDependenciesResponse, zGetDirectorLibraryHeaders, zGetDirectorLibraryResponse, zGetDirectorPlanHeaders, zGetDirectorPlanPath, zGetDirectorPlanResponse, zIndexDirectorPlanBody, zIndexDirectorPlanHeaders, zIndexDirectorPlanResponse, zListDirectorCutsHeaders, zListDirectorCutsPath, zListDirectorCutsResponse, zListDirectorMediaHeaders, zListDirectorMediaResponse, zListDirectorTakesHeaders, zListDirectorTakesPath, zListDirectorTakesResponse, zLiveResponse, zReadyResponse } from './zod.gen';
+import type { CheckDirectorSceneData, CheckDirectorSceneErrors, CheckDirectorSceneResponses, CreateDirectorCutData, CreateDirectorCutErrors, CreateDirectorCutResponses, CreateDirectorTakeData, CreateDirectorTakeErrors, CreateDirectorTakeResponses, DependenciesData, DependenciesErrors, DependenciesResponses, GetDirectorLibraryData, GetDirectorLibraryErrors, GetDirectorLibraryResponses, GetDirectorPlanData, GetDirectorPlanErrors, GetDirectorPlanResponses, IndexDirectorPlanData, IndexDirectorPlanErrors, IndexDirectorPlanResponses, ListDirectorCutsData, ListDirectorCutsErrors, ListDirectorCutsResponses, ListDirectorMediaData, ListDirectorMediaErrors, ListDirectorMediaResponses, ListDirectorTakesData, ListDirectorTakesErrors, ListDirectorTakesResponses, LiveData, LiveErrors, LiveResponses, ReadyData, ReadyErrors, ReadyResponses, SpeakDirectorLineData, SpeakDirectorLineErrors, SpeakDirectorLineResponses } from './types.gen';
+import { zCheckDirectorSceneBody, zCheckDirectorSceneHeaders, zCheckDirectorSceneResponse, zCreateDirectorCutBody, zCreateDirectorCutHeaders, zCreateDirectorCutResponse, zCreateDirectorTakeBody, zCreateDirectorTakeHeaders, zCreateDirectorTakeResponse, zDependenciesResponse, zGetDirectorLibraryHeaders, zGetDirectorLibraryResponse, zGetDirectorPlanHeaders, zGetDirectorPlanPath, zGetDirectorPlanResponse, zIndexDirectorPlanBody, zIndexDirectorPlanHeaders, zIndexDirectorPlanResponse, zListDirectorCutsHeaders, zListDirectorCutsPath, zListDirectorCutsResponse, zListDirectorMediaHeaders, zListDirectorMediaResponse, zListDirectorTakesHeaders, zListDirectorTakesPath, zListDirectorTakesResponse, zLiveResponse, zReadyResponse, zSpeakDirectorLineBody, zSpeakDirectorLineHeaders, zSpeakDirectorLineResponse } from './zod.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -208,6 +208,27 @@ export const checkDirectorScene = <ThrowOnError extends boolean = false>(options
     }).parseAsync(data),
     responseValidator: async (data) => await zCheckDirectorSceneResponse.parseAsync(data),
     url: '/v1/director/scene-checks',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Speak Director Line
+ *
+ * A line in Director's voice (Gemini's text-to-speech), as a WAV file.
+ */
+export const speakDirectorLine = <ThrowOnError extends boolean = false>(options: Options<SpeakDirectorLineData, ThrowOnError>): RequestResult<SpeakDirectorLineResponses, SpeakDirectorLineErrors, ThrowOnError> => (options.client ?? client).post<SpeakDirectorLineResponses, SpeakDirectorLineErrors, ThrowOnError>({
+    requestValidator: async (data) => await z.object({
+        body: zSpeakDirectorLineBody,
+        headers: zSpeakDirectorLineHeaders.optional(),
+        path: z.never().optional(),
+        query: z.never().optional()
+    }).parseAsync(data),
+    responseValidator: async (data) => await zSpeakDirectorLineResponse.parseAsync(data),
+    url: '/v1/director/speak',
     ...options,
     headers: {
         'Content-Type': 'application/json',

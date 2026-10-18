@@ -260,3 +260,32 @@ describe("Director's calls", () => {
     expect(error).toMatchObject({ status: 503, code: "UPSTREAM_UNAVAILABLE" });
   });
 });
+
+describe("Director's voice", () => {
+  const wav = Buffer.from("RIFF\x24\x00\x00\x00WAVEfmt ", "latin1");
+  const line = { text: "Take a small step to your left.", voice: "Puck" as const };
+
+  it("returns the line the service spoke, as the WAV file's bytes", async () => {
+    handler = (_request, response) => {
+      response.writeHead(200, { "content-type": "audio/wav" });
+      response.end(wav);
+    };
+    const audio = await client().director.speak(caller, line);
+    expect(Buffer.from(audio)).toEqual(wav);
+    expect(seen[0]).toMatchObject({ method: "POST", path: "/v1/director/speak" });
+    expect(JSON.parse(String(seen[0]?.body))).toEqual(line);
+  });
+
+  it("refuses a successful answer that isn't a WAV file", async () => {
+    handler = (_request, response) => json(response, 200, { audio: "base64" });
+    const error = await failed(client().director.speak(caller, line));
+    expect(error).toMatchObject({ status: 502, code: "UPSTREAM_UNAVAILABLE" });
+  });
+
+  it("throws the service's error with its code", async () => {
+    handler = (_request, response) =>
+      json(response, 429, failure("AI_BUDGET_EXCEEDED", 429, { params: {} }));
+    const error = await failed(client().director.speak(caller, line));
+    expect(error).toMatchObject({ status: 429, code: "AI_BUDGET_EXCEEDED" });
+  });
+});

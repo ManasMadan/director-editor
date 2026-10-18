@@ -119,6 +119,15 @@ class Settings(GeminiSettings):
     director_tokens_per_review: int = Field(
         default=120_000, ge=10_000, alias="DIRECTOR_TOKENS_PER_REVIEW"
     )
+    # Director's voice (app/speech.py): the Gemini text-to-speech model that reads a guide
+    # line aloud on the shoot screen, by its short name, addressed like every other model
+    # (VERTEX_LOCATION). On with Director. A line is bounded (MAX_SPEECH_TEXT), and so is
+    # what it costs: about 25 tokens a second of speech, so a whole line of the longest
+    # kind fits comfortably in the default.
+    tts_model: str = Field(default="gemini-3.8-flash-tts", min_length=1, alias="TTS_MODEL")
+    director_tokens_per_speech: int = Field(
+        default=3_000, ge=1_000, alias="DIRECTOR_TOKENS_PER_SPEECH"
+    )
 
     # Product analytics (app/analytics.py): plans indexed and take reviews, streamed into
     # this BigQuery dataset's `events` table in GOOGLE_CLOUD_PROJECT, the same table

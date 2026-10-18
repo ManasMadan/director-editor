@@ -324,6 +324,22 @@ export const zShotStep = z.object({
     instruction: z.string().min(1).max(160)
 });
 
+export const zSpeechVoice = z.enum([
+    'Puck',
+    'Kore',
+    'Aoede',
+    'Charon',
+    'Sulafat'
+]);
+
+/**
+ * SpeechRequest
+ */
+export const zSpeechRequest = z.object({
+    text: z.string().min(1).max(500),
+    voice: zSpeechVoice
+});
+
 /**
  * TargetPose
  */
@@ -528,6 +544,18 @@ export const zCheckDirectorSceneHeaders = z.object({
  * Successful Response
  */
 export const zCheckDirectorSceneResponse = zSceneCheck;
+
+export const zSpeakDirectorLineBody = zSpeechRequest;
+
+export const zSpeakDirectorLineHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+/**
+ * The line, spoken, as a WAV file.
+ */
+export const zSpeakDirectorLineResponse = z.string();
 
 export const zCreateDirectorTakeBody = zDirectorTakeCreate;
 

@@ -345,6 +345,7 @@ file below 100%, or one no test loads.
 | `apps/ai/app/worker.py` | `# pyright: ignore[reportUnknownMemberType]` | redis-py's options are untyped |
 | `apps/ai/app/realtime.py` | `# pyright: ignore[reportUnknownMemberType]` | redis-py's options are untyped |
 | `apps/ai/app/settings.py` | `# pyright: ignore[reportCallIssue]` | pydantic-settings fills the fields from the environment |
+| `apps/ai/app/speech.py` | `# pyright: ignore[reportUnknownMemberType]` | google-genai's `generate_content` takes Pillow's `Image` among its contents, and Pillow isn't installed, so that part of its signature is unknown |
 | `apps/ai/app/log.py` | `typing.cast()` | structlog's `get_logger()` is typed `Any` and hands back a lazy proxy that takes its class from `configure_logging`, which runs later; there is nothing to check at import, and checking the proxy would bind it before it's configured |
 | `apps/ai/app/telemetry.py` | `# pyright: ignore[reportUnknownMemberType]` | the Redis instrumentor's `instrument()` is untyped |
 | `apps/ai/tests/conftest.py` | `# pyright: ignore[reportUnknownMemberType]` | redis-py's options are untyped |

@@ -3,15 +3,19 @@
  * takes and cuts and calls Gemini. This API checks what only it can: that a pasted link
  * is a short on YouTube (ShortsService), that a take's or a cut's file is the caller's,
  * checked and of the right kind (FilesService), whose presigned read it hands the AI
- * service for a take's review, and the short-lived links to a plan's stored audio.
+ * service for a take's review, and the short-lived links to a plan's stored audio and to
+ * the lines Director speaks (kept in storage, so each is spoken once).
  */
+import { createHash } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import {
   type DirectorCut,
   type DirectorLibrary,
   type DirectorPlan,
   type DirectorShot,
+  type DirectorSpeech,
   type DirectorTake,
+  type DirectorVoice,
   directorCutSchema,
   directorPlanSchema,
   directorTakeSchema,
@@ -32,6 +36,20 @@ import { shotsOf } from "./shots";
 const TAKE_READ_EXPIRES_S = 30 * MINUTE_S;
 // Long enough to film along to it for a while; the library is read again before then.
 const AUDIO_READ_EXPIRES_S = HOUR_S;
+// A spoken line is played again and again through a shoot; the screen asks for a fresh
+// link once this one is near its end.
+const SPEECH_READ_EXPIRES_S = HOUR_S;
+
+/**
+ * Where a spoken line is kept: named by the voice and the words, so the same line is
+ * spoken once for everyone (every workspace starts with the same seeded templates, and
+ * the cues are the same few sentences). A new TTS model keeps the old recordings; bump
+ * the prefix's version to have every line spoken afresh.
+ */
+function speechKey({ text, voice }: { text: string; voice: DirectorVoice }) {
+  const digest = createHash("sha256").update(`${voice}\n${text}`).digest("hex");
+  return `director/speech/v1/${digest}.wav`;
+}
 
 const PURPOSE: Record<DirectorTake["kind"], UploadPurpose> = {
   video: "director-take-video",
@@ -97,6 +115,20 @@ export class DirectorService {
   ): Promise<SceneCheck> {
     return sceneCheckSchema.parse(
       await callAi((ai) => ai.director.checkScene(aiCaller(userId, orgId), input)),
+    );
+  }
+
+  /**
+   * A line in Director's voice: spoken by the AI service the first time anyone asks for
+   * it, kept in storage, and handed back as a short-lived link to the WAV file.
+   */
+  async speak(
+    userId: UserId,
+    orgId: OrgId,
+    input: { text: string; voice: DirectorVoice },
+  ): Promise<DirectorSpeech> {
+    return this.files.keptObjectUrl(speechKey(input), "audio/wav", SPEECH_READ_EXPIRES_S, () =>
+      callAi((ai) => ai.director.speak(aiCaller(userId, orgId), input)),
     );
   }
 
