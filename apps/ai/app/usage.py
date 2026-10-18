@@ -25,7 +25,12 @@ from app.db.models import AiUsage
 from app.db.session import tenant
 
 type Feature = Literal[
-    "director-plan", "director-scene", "director-review", "director-speech", "director-publish"
+    "director-plan",
+    "director-scene",
+    "director-locate",
+    "director-review",
+    "director-speech",
+    "director-publish",
 ]
 
 

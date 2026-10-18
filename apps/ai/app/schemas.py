@@ -367,6 +367,58 @@ class SceneCheck(BaseModel):
     lighting: Literal["good", "too-dark", "too-bright", "backlit"]
 
 
+# What Director may point at on the member's camera (packages/contracts'
+# DIRECTOR_LOCATE_TARGET_MAX_LENGTH): a thing, named in a few words.
+MAX_LOCATE_TARGET = 120
+MAX_LOCATE_LABEL = 40
+
+
+class LocateRequest(BaseModel):
+    model_config = REQUEST
+
+    target: str = Field(
+        min_length=1,
+        max_length=MAX_LOCATE_TARGET,
+        description='What to find, in Director\'s words: "the window behind you".',
+    )
+    image: str = Field(
+        min_length=100, max_length=MAX_FRAME_BASE64, description="A JPEG camera frame, base64."
+    )
+
+
+# One of Gemini's 0 to 1000 coordinates, the scale it is trained to give boxes on.
+type Thousandth = Annotated[int, Field(ge=0, le=1000)]
+
+
+class LocateDraft(BaseModel):
+    """Gemini's answer to a locate: in its own box format, which `Located` turns into the
+    fractions every other frame position in Director uses."""
+
+    found: bool = Field(
+        description="The target is clearly in this frame. False when it isn't, or unsure."
+    )
+    label: str = Field(
+        min_length=1,
+        max_length=MAX_LOCATE_LABEL,
+        description='What it is, in two or three plain words for the person: "your window".',
+    )
+    box_2d: list[Thousandth] | None = Field(
+        min_length=4,
+        max_length=4,
+        description="[ymin, xmin, ymax, xmax] of the target, from 0 to 1000; null if not found.",
+    )
+
+
+class Located(BaseModel):
+    """Where a target is in the frame it was looked for in, or that it isn't there."""
+
+    found: bool
+    label: str = Field(min_length=1, max_length=MAX_LOCATE_LABEL)
+    box: Box | None = Field(
+        description="As fractions of the frame from its top-left; null when not found."
+    )
+
+
 class DirectorTakeCreate(BaseModel):
     model_config = REQUEST
 
