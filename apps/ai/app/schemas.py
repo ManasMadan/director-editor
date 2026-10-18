@@ -292,6 +292,21 @@ class SceneCheckRequest(BaseModel):
     )
 
 
+# A line Director says aloud (packages/contracts' DIRECTOR_SPEECH_MAX_LENGTH): a guide, a
+# cue or a script line, never a speech.
+MAX_SPEECH_TEXT = 500
+# Gemini's prebuilt text-to-speech voices Director may speak in (packages/contracts'
+# directorVoices).
+type SpeechVoice = Literal["Puck", "Kore", "Aoede", "Charon", "Sulafat"]
+
+
+class SpeechRequest(BaseModel):
+    model_config = REQUEST
+
+    text: str = Field(min_length=1, max_length=MAX_SPEECH_TEXT, description="The line to say.")
+    voice: SpeechVoice
+
+
 class SceneLandmark(BaseModel):
     label: str = Field(min_length=1, max_length=40)
     box: Box

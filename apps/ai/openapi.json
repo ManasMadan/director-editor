@@ -1196,6 +1196,37 @@
         "title": "ShotStep",
         "type": "object"
       },
+      "SpeechRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "description": "The line to say.",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "voice": {
+            "$ref": "#/components/schemas/SpeechVoice"
+          }
+        },
+        "required": [
+          "text",
+          "voice"
+        ],
+        "title": "SpeechRequest",
+        "type": "object"
+      },
+      "SpeechVoice": {
+        "enum": [
+          "Puck",
+          "Kore",
+          "Aoede",
+          "Charon",
+          "Sulafat"
+        ],
+        "type": "string"
+      },
       "TargetPose": {
         "properties": {
           "description": {
@@ -1886,6 +1917,80 @@
           }
         },
         "summary": "Check Director Scene"
+      }
+    },
+    "/v1/director/speak": {
+      "post": {
+        "description": "A line in Director's voice (Gemini's text-to-speech), as a WAV file.",
+        "operationId": "speakDirectorLine",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpeechRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "audio/wav": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The line, spoken, as a WAV file."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Speak Director Line"
       }
     },
     "/v1/director/takes": {

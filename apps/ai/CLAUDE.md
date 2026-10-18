@@ -30,7 +30,8 @@ TypeScript client is `packages/ai-client`.
 - What the app builds at startup is `services()` in `app/main.py` (typed; routes and
   tests use it instead of Starlette's untyped `app.state`).
 - `app/director.py`: plans, scene checks and take reviews; `app/plan_repair.py` fixes
-  inconsistent shot plans; `app/audio.py` captures a short's original audio.
+  inconsistent shot plans; `app/audio.py` captures a short's original audio;
+  `app/speech.py` speaks a guide line with Gemini's text-to-speech (`TTS_MODEL`).
 
 ## Gotchas
 

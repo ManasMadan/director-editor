@@ -23,6 +23,7 @@ import {
   listDirectorCuts,
   listDirectorMedia,
   listDirectorTakes,
+  speakDirectorLine,
 } from "./generated/sdk.gen";
 import type {
   DirectorCutCreate,
@@ -30,6 +31,7 @@ import type {
   ErrorCode,
   ErrorIssue,
   SceneCheckRequest,
+  SpeechRequest,
 } from "./generated/types.gen";
 import { zErrorResponse } from "./generated/zod.gen";
 
@@ -139,6 +141,18 @@ function directorCalls(forCall: (caller: AiCaller) => Promise<ReturnType<typeof 
     },
     async listMedia(caller: AiCaller) {
       return unwrap(listDirectorMedia({ client: await forCall(caller) }));
+    },
+    /** A line in Director's voice: the bytes of the WAV file the service spoke. */
+    async speak(caller: AiCaller, body: SpeechRequest): Promise<Uint8Array> {
+      // Read as bytes rather than JSON (this client's default); there's no schema to check
+      // them against, so the content type is the contract.
+      const { data, response } = await settle(
+        speakDirectorLine({ client: await forCall(caller), body, parseAs: "blob" }),
+      );
+      if (!data || response?.headers.get("content-type") !== "audio/wav") {
+        throw new AiServiceError(502, "UPSTREAM_UNAVAILABLE");
+      }
+      return new Uint8Array(await data.arrayBuffer());
     },
   };
 }

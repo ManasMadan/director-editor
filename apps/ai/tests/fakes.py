@@ -2,6 +2,7 @@
 under test talks to them exactly as it would to the real thing (the same idea as
 packages/fake-google on the TypeScript side)."""
 
+import base64
 import json
 import threading
 from collections.abc import Callable, Generator, Mapping
@@ -92,6 +93,51 @@ def gemini_output(args: Mapping[str, object], *, tokens: int = 1_000) -> Callabl
         }
 
     return reply
+
+
+TTS_MODEL = "gemini-test-tts"
+TTS_PATH = f"/v1beta/models/{TTS_MODEL}:generateContent"
+# What the Gemini 2.5 TTS models answer with: raw 16-bit little-endian mono samples.
+# gemini-3.8-flash-tts answers with a whole WAV file instead ("audio/wav"), checked live
+# on Vertex.
+PCM_TYPE = "audio/L16;codec=pcm;rate=24000"
+
+
+def gemini_speech(
+    audio: bytes, *, mime_type: str = PCM_TYPE, tokens: int = 200
+) -> Callable[[bytes], Reply]:
+    """The Gemini API's generateContent answering a speech request (responseModalities
+    AUDIO) with `audio` inline, as `mime_type`, having used `tokens` tokens (12 of them the
+    prompt's, the rest the audio's)."""
+
+    def reply(_body: bytes) -> Reply:
+        part: dict[str, object] = {
+            "inlineData": {"mimeType": mime_type, "data": base64.b64encode(audio).decode()}
+        }
+        return 200, _speech_answer([part], tokens)
+
+    return reply
+
+
+def gemini_text_instead_of_speech(_body: bytes) -> Reply:
+    """A speech request answered with words rather than audio (a TTS model can, when it
+    takes the line for a question to answer)."""
+    return 200, _speech_answer([{"text": "Sure! Here you go."}], 50)
+
+
+def _speech_answer(parts: list[dict[str, object]], tokens: int) -> dict[str, object]:
+    return {
+        "candidates": [
+            {"content": {"role": "model", "parts": parts}, "finishReason": "STOP", "index": 0}
+        ],
+        "usageMetadata": {
+            "promptTokenCount": 12,
+            "candidatesTokenCount": tokens - 12,
+            "totalTokenCount": tokens,
+        },
+        "modelVersion": TTS_MODEL,
+        "responseId": "fake-speech",
+    }
 
 
 def gemini_error(status: int, reason: str, message: str = "") -> Callable[[bytes], Reply]:

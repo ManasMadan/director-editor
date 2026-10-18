@@ -247,6 +247,8 @@ themselves, never `bun dev` or `bun dev:full`. See [director.md](director.md).
 | `DIRECTOR_TOKENS_PER_REVIEW` | ai | 120000 | Cap per take review: watching one take (at least 10000). |
 | `INDEX_MODEL` | ai | `gemini-4-argon` | The model a plan job indexes a short with, unattended, so it can be a different, more thorough model than `DIRECTOR_MODEL`'s live scene checks and reviews. |
 | `INDEX_FALLBACK_MODEL` | ai | `gemini-3.1-pro-preview` | Tried once after `INDEX_MODEL`'s own retries on a plan are spent (a transient failure, not a refusal). |
+| `TTS_MODEL` | ai | `gemini-3.8-flash-tts` | Gemini's text-to-speech model: Director's voice on the shoot screen when the member isn't on a live call (`director.speak`). On with Director; the API keeps each spoken line in object storage, so it needs uploads on too. |
+| `DIRECTOR_TOKENS_PER_SPEECH` | ai | 3000 | What one spoken line may take (about 25 tokens a second of speech; at least 1000). A line waits for a budget that holds all of it: Vertex refuses a cap on the TTS model's output. |
 | `YOUTUBE_API_KEY` | api | empty in `.env.example` | YouTube Data API v3 key: the Shorts feed, search, video details and comments. Unset: Director off. |
 | `YOUTUBE_API_URL` | api | `https://www.googleapis.com/youtube/v3` | Where the API reads YouTube: real by default, a gateway otherwise (`.env.example` ships it commented out). Must be HTTPS in production. |
 | `GOOGLE_CLOUD_PROJECT` | api; ai (req. with `GOOGLE_VERTEX` once `GOOGLE_API_KEY` is set) | unset | The Google Cloud project Director's live video call (`/api/live`, Gemini Live on Vertex AI) runs in and bills to. Unset: the call answers `FEATURE_DISABLED`. apps/ai reads the same project to address Vertex AI models by their full resource name. |

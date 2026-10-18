@@ -624,6 +624,21 @@ export type ShotStep = {
 };
 
 /**
+ * SpeechRequest
+ */
+export type SpeechRequest = {
+    /**
+     * Text
+     *
+     * The line to say.
+     */
+    text: string;
+    voice: SpeechVoice;
+};
+
+export type SpeechVoice = 'Puck' | 'Kore' | 'Aoede' | 'Charon' | 'Sulafat';
+
+/**
  * TargetPose
  */
 export type TargetPose = {
@@ -1014,6 +1029,41 @@ export type CheckDirectorSceneResponses = {
 };
 
 export type CheckDirectorSceneResponse = CheckDirectorSceneResponses[keyof CheckDirectorSceneResponses];
+
+export type SpeakDirectorLineData = {
+    body: SpeechRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/director/speak';
+};
+
+export type SpeakDirectorLineErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type SpeakDirectorLineError = SpeakDirectorLineErrors[keyof SpeakDirectorLineErrors];
+
+export type SpeakDirectorLineResponses = {
+    /**
+     * The line, spoken, as a WAV file.
+     */
+    200: Blob | File;
+};
+
+export type SpeakDirectorLineResponse = SpeakDirectorLineResponses[keyof SpeakDirectorLineResponses];
 
 export type CreateDirectorTakeData = {
     body: DirectorTakeCreate;

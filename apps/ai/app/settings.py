@@ -79,6 +79,15 @@ class Settings(BaseSettings):
     index_fallback_model: str = Field(
         default="gemini-3.1-pro-preview", min_length=1, alias="INDEX_FALLBACK_MODEL"
     )
+    # Director's voice (app/speech.py): the Gemini text-to-speech model that reads a guide
+    # line aloud on the shoot screen, by its short name, addressed like every other model
+    # (VERTEX_LOCATION). On with Director. A line is bounded (MAX_SPEECH_TEXT), and so is
+    # what it costs: about 25 tokens a second of speech, so a whole line of the longest
+    # kind fits comfortably in the default.
+    tts_model: str = Field(default="gemini-3.8-flash-tts", min_length=1, alias="TTS_MODEL")
+    director_tokens_per_speech: int = Field(
+        default=3_000, ge=1_000, alias="DIRECTOR_TOKENS_PER_SPEECH"
+    )
 
     # Product analytics (app/analytics.py): take reviews, with their scores, streamed into
     # this BigQuery dataset's `events` table in GOOGLE_CLOUD_PROJECT, the same table

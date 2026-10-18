@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Annotated
 
 import httpx
-from fastapi import Depends, FastAPI, Path, Request
+from fastapi import Depends, FastAPI, Path, Request, Response
 from pydantic import TypeAdapter
 from redis.asyncio import Redis
 from sqlalchemy import text
@@ -42,8 +42,10 @@ from app.schemas import (
     SceneCheck,
     SceneCheckRequest,
     ShotPlan,
+    SpeechRequest,
 )
 from app.settings import get_settings
+from app.speech import Speaker, create_speaker
 from app.telemetry import start_telemetry
 
 
@@ -54,6 +56,7 @@ class Services:
 
     redis: Redis
     director: Director | None
+    speaker: Speaker | None
 
 
 _services: Services | None = None
@@ -77,6 +80,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     _services = Services(
         redis=redis,
         director=create_director(settings, director_queue, redis, http),
+        speaker=create_speaker(settings),
     )
     yield
     _services = None
@@ -106,6 +110,17 @@ def _director() -> Director:
 
 
 DirectorDep = Annotated[Director, Depends(_director)]
+
+
+def _speaker() -> Speaker:
+    # Director's voice is part of Director: on and off with it.
+    speaker = services().speaker
+    if not speaker:
+        raise AppError("FEATURE_DISABLED", {"feature": "director"})
+    return speaker
+
+
+SpeakerDep = Annotated[Speaker, Depends(_speaker)]
 
 
 def _plan_out(plan: DirectorPlan) -> DirectorPlanOut:
@@ -268,3 +283,22 @@ async def list_director_cuts(
 async def list_director_media(caller: CallerDep, director: DirectorDep) -> list[DirectorCutOut]:
     """Every cut of the caller's, newest first."""
     return [_cut_out(*row) for row in await director.cuts(caller.org_id, caller.user_id, None)]
+
+
+@app.post(
+    "/v1/director/speak",
+    operation_id="speakDirectorLine",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {"audio/wav": {"schema": {"type": "string", "format": "binary"}}},
+            "description": "The line, spoken, as a WAV file.",
+        }
+    },
+)
+async def speak_director_line(
+    body: SpeechRequest, caller: CallerDep, speaker: SpeakerDep
+) -> Response:
+    """A line in Director's voice (Gemini's text-to-speech), as a WAV file."""
+    audio = await speaker.speak(caller.org_id, caller.user_id, body.text, body.voice)
+    return Response(content=audio, media_type="audio/wav")
