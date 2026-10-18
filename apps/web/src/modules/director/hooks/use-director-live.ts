@@ -14,18 +14,15 @@ import type {
 } from "@repo/contracts/live";
 import { SECOND_MS } from "@repo/contracts/time";
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import {
-  answered,
-  type Captions,
-  liveUrl,
-  NO_CAPTIONS,
-  turnEnded,
-  withoutMember,
-  withTranscript,
-  withTyped,
-} from "../lib/live";
+import { type CaptionStore, createCaptionStore, type Working } from "../lib/caption-store";
+import { liveUrl } from "../lib/live";
 import { restLiveAudio } from "../lib/live-audio";
-import { type LiveControls, type LiveFailure, startSession } from "../lib/live-session";
+import {
+  type LiveControls,
+  type LiveEvents,
+  type LiveFailure,
+  startSession,
+} from "../lib/live-session";
 import { type SlowLineApi, type SlowTarget, startSlowSession } from "../lib/slow-session";
 
 export type { LiveFailure } from "../lib/live-session";
@@ -43,8 +40,6 @@ type LiveLine = "live" | "slower";
 /** Failures that may pass: one silent retry, a moment later, before the member is told. */
 const PASSING: readonly LiveFailure[] = ["dropped", "UPSTREAM_UNAVAILABLE", "INTERNAL"];
 const RETRY_AFTER_MS = 2 * SECOND_MS;
-/** How long the member's line stays up once Director has answered it. */
-const ANSWERED_FOR_MS = 8 * SECOND_MS;
 /** Where a take is when the member's last line has been overtaken by what they did. */
 const OVERTAKING: readonly LiveTakeState[] = ["countdown", "recorded"];
 /**
@@ -69,6 +64,8 @@ interface Options {
   onTool: (id: string, call: LiveToolCall) => void;
   /** The member's version so far, for a fresh connection (or the slower line) to know. */
   version: YourVersion;
+  /** The member said or typed something (the screen reads it: did they ask to move on?). */
+  onMemberSaid?: (text: string) => void;
 }
 
 /** What the session hears, kept in the hook's state. */
@@ -77,7 +74,8 @@ function useSessionState() {
   const [failure, setFailure] = useState<LiveFailure | null>(null);
   const [speaking, setSpeaking] = useState(false);
   const [hearing, setHearing] = useState(true);
-  const [captions, setCaptions] = useState<Captions>(NO_CAPTIONS);
+  // The captions keep their own store: a transcript chunk re-renders them, not the screen.
+  const [captions] = useState(createCaptionStore);
   const [line, setLine] = useState<LiveLine>("live");
   const [away, setAway] = useState(false);
   return {
@@ -94,7 +92,6 @@ function useSessionState() {
     hearing,
     setHearing,
     captions,
-    setCaptions,
   };
 }
 
@@ -132,29 +129,62 @@ interface Refs {
   held: RefObject<boolean>;
   retry: RefObject<number>;
   retried: RefObject<boolean>;
-  latest: RefObject<Pick<Options, "onTool" | "shotIndex" | "version"> & { api: SlowLineApi }>;
+  captions: CaptionStore;
+  latest: RefObject<
+    Pick<Options, "onTool" | "shotIndex" | "version" | "onMemberSaid"> & { api: SlowLineApi }
+  >;
 }
 
 type Setters = Pick<
   ReturnType<typeof useSessionState>,
-  "setState" | "setFailure" | "setCaptions" | "setSpeaking" | "setHearing" | "setLine" | "setAway"
+  "setState" | "setFailure" | "setSpeaking" | "setHearing" | "setLine" | "setAway"
 >;
+
+/**
+ * What either line says goes to the captions. Words said while Director's voice is held
+ * were never heard: they aren't shown either. The member's words also go to the screen,
+ * which listens for them asking to move on.
+ */
+function captionEvents({
+  captions,
+  held,
+  latest,
+}: Pick<Refs, "captions" | "held" | "latest">): Pick<
+  LiveEvents,
+  "onTranscript" | "onTurn" | "onInterrupted" | "onTool"
+> {
+  return {
+    onTranscript: (who, text, delayMs) => {
+      if (who === "you") {
+        latest.current.onMemberSaid?.(text);
+      }
+      if (!(who === "director" && held.current)) {
+        captions.said(who, text, delayMs);
+      }
+    },
+    // Director's next words are a new line, not more of this one, once its voice is over.
+    onTurn: (delayMs) => captions.turnOver(delayMs),
+    onInterrupted: () => captions.cut(),
+    onTool: (id, call) => latest.current.onTool(id, call),
+  };
+}
 
 /**
  * Moves Director to the slower line: the same captions, tools and voice, one turn at a
  * time. It ends only when it can't help either, and Director is then unavailable.
  */
 function useSlowerLine(refs: Refs, setters: Setters) {
-  const { videoId, video, session, held, latest } = refs;
-  const { setState, setFailure, setCaptions, setSpeaking, setHearing, setLine, setAway } = setters;
+  const { videoId, video, session, held, latest, captions } = refs;
+  const { setState, setFailure, setSpeaking, setHearing, setLine, setAway } = setters;
   return useCallback(() => {
     setLine("slower");
     const events: SlowTarget["events"] = {
+      ...captionEvents({ captions, held, latest }),
       onLive: () => setState("live"),
-      onTranscript: (who, text) => setCaptions((now) => withTranscript(now, who, text)),
-      onTurn: () => setCaptions(turnEnded),
-      onSaid: (text) => setCaptions((now) => withTyped(now, text)),
-      onTool: (id, call) => latest.current.onTool(id, call),
+      onSaid: (text) => {
+        latest.current.onMemberSaid?.(text);
+        captions.typed(text);
+      },
       onSpeaking: setSpeaking,
       onDeaf: () => setHearing(false),
       onAway: setAway,
@@ -184,9 +214,9 @@ function useSlowerLine(refs: Refs, setters: Setters) {
     session,
     held,
     latest,
+    captions,
     setState,
     setFailure,
-    setCaptions,
     setSpeaking,
     setHearing,
     setLine,
@@ -200,8 +230,8 @@ function useSlowerLine(refs: Refs, setters: Setters) {
  * once, silently.
  */
 function useConnect(refs: Refs, setters: Setters) {
-  const { videoId, video, session, held, retry, retried, latest } = refs;
-  const { setState, setFailure, setCaptions, setSpeaking, setHearing, setLine } = setters;
+  const { videoId, video, session, held, retry, retried, latest, captions } = refs;
+  const { setState, setFailure, setSpeaking, setHearing, setLine } = setters;
   const slower = useSlowerLine(refs, setters);
   const connect = useCallback(
     (resume: boolean) => {
@@ -218,19 +248,11 @@ function useConnect(refs: Refs, setters: Setters) {
         video,
         version: () => latest.current.version,
         events: {
+          ...captionEvents({ captions, held, latest }),
           onLive: () => {
             retried.current = false;
             setState("live");
           },
-          onTranscript: (who, text) => {
-            // Words said while its voice is held were never heard: they aren't shown either.
-            if (!(who === "director" && held.current)) {
-              setCaptions((now) => withTranscript(now, who, text));
-            }
-          },
-          // Director's next words are a new line, not more of this one.
-          onTurn: () => setCaptions(turnEnded),
-          onTool: (id, call) => latest.current.onTool(id, call),
           onSpeaking: setSpeaking,
           onDeaf: () => setHearing(false),
           onEnd: (failure) => {
@@ -260,9 +282,9 @@ function useConnect(refs: Refs, setters: Setters) {
       retry,
       retried,
       latest,
+      captions,
       setState,
       setFailure,
-      setCaptions,
       setSpeaking,
       setHearing,
     ],
@@ -283,18 +305,6 @@ function useRejoin(wanted: boolean, state: LiveState, connect: (resume: boolean)
 function rollTo(session: LiveControls | null, state: LiveRollState) {
   session?.mute(state === "paused");
   session?.roll(state);
-}
-
-/** The member's line goes a while after Director has answered it. */
-function useAnsweredLineFades(captions: Captions, setCaptions: Setters["setCaptions"]) {
-  const done = answered(captions);
-  useEffect(() => {
-    if (!done) {
-      return;
-    }
-    const timer = window.setTimeout(() => setCaptions(withoutMember), ANSWERED_FOR_MS);
-    return () => window.clearTimeout(timer);
-  }, [done, setCaptions]);
 }
 
 /** The API calls the slower line makes: a turn, and a line in Director's voice. */
@@ -319,31 +329,34 @@ function versionOf(session: RefObject<LiveControls | null>) {
 /** What the screen tells whichever line Director is on, with the captions that go with it. */
 function sessionControls(
   session: RefObject<LiveControls | null>,
-  setCaptions: Setters["setCaptions"],
+  { captions, latest }: Pick<Refs, "captions" | "latest">,
 ) {
   return {
     /** A typed line, shown as the member's own; false when Director isn't there to read it. */
     say: (text: string) => {
       const sent = session.current?.say(text) ?? false;
       if (sent) {
-        setCaptions((now) => withTyped(now, text));
+        latest.current.onMemberSaid?.(text);
+        captions.typed(text);
       }
       return sent;
     },
     answer: (id: string, result: LiveToolResult) => session.current?.answer(id, result),
     /** The member flipped the camera: Director looks at the new view. */
     camera: (facing: Facing) => {
-      setCaptions(withoutMember);
+      captions.withoutMember();
       void session.current?.camera(facing);
     },
     roll: (state: LiveRollState) => rollTo(session.current, state),
     /** Where the member's take is; from a countdown on, their last line has had its moment. */
     take: (state: LiveTakeState) => {
       if (OVERTAKING.includes(state)) {
-        setCaptions(withoutMember);
+        captions.withoutMember();
       }
       session.current?.take(state);
     },
+    /** What Director is busy with that the member can't hear (a re-plan), shown meanwhile. */
+    working: (working: Working) => captions.working(working),
   };
 }
 
@@ -361,7 +374,14 @@ function sessionControls(
  * member taps Reconnect. Only what neither line can fix (signed out, the plan gone)
  * makes Director "unavailable", with the reason, until the member taps to try again.
  */
-export function useDirectorLive({ videoId, shotIndex, video, onTool, version }: Options) {
+export function useDirectorLive({
+  videoId,
+  shotIndex,
+  video,
+  onTool,
+  version,
+  onMemberSaid,
+}: Options) {
   const live = useSessionState();
   const [wanted, setWanted] = useState(false);
   const session = useRef<LiveControls | null>(null);
@@ -369,20 +389,20 @@ export function useDirectorLive({ videoId, shotIndex, video, onTool, version }: 
   const retry = useRef(0);
   const retried = useRef(false);
   const api = useSlowLineApi();
-  const latest = useRef({ onTool, shotIndex, version, api });
+  const latest = useRef({ onTool, shotIndex, version, onMemberSaid, api });
   useLayoutEffect(() => {
-    latest.current = { onTool, shotIndex, version, api };
+    latest.current = { onTool, shotIndex, version, onMemberSaid, api };
   });
-  const { setState, setFailure, setCaptions, setSpeaking, setHearing, setLine, setAway } = live;
+  const { setState, setFailure, setSpeaking, setHearing, setLine, setAway, captions } = live;
 
   const connect = useConnect(
-    { videoId, video, session, held, retry, retried, latest },
-    { setState, setFailure, setCaptions, setSpeaking, setHearing, setLine, setAway },
+    { videoId, video, session, held, retry, retried, latest, captions },
+    { setState, setFailure, setSpeaking, setHearing, setLine, setAway },
   );
 
   useRejoin(wanted, live.state, connect);
   useLifetime(session, shotIndex, { setState, retry });
-  useAnsweredLineFades(live.captions, setCaptions);
+  useEffect(() => () => captions.stop(), [captions]);
 
   return {
     state: live.state,
@@ -395,7 +415,7 @@ export function useDirectorLive({ videoId, shotIndex, video, onTool, version }: 
       retried.current = false;
       setFailure(null);
       setHearing(true);
-      setCaptions(NO_CAPTIONS);
+      captions.clear();
       setAway(false);
       setWanted(true);
       connect(false);
@@ -415,7 +435,7 @@ export function useDirectorLive({ videoId, shotIndex, video, onTool, version }: 
       retried.current = true;
       connect(true);
     },
-    ...sessionControls(session, setCaptions),
+    ...sessionControls(session, { captions, latest }),
     ...versionOf(session),
     /** Holds Director's voice (drops it unplayed, uncaptioned) from the 3-2-1 to the take's end. */
     hold: useCallback((on: boolean) => {
@@ -424,7 +444,8 @@ export function useDirectorLive({ videoId, shotIndex, video, onTool, version }: 
     }, []),
     /** Whether Director's voice is playing. */
     speaking: live.speaking,
-    captions: live.captions,
+    /** The conversation's captions, read only by the captions (`useCaptions`). */
+    captions,
     /** How loud Director is right now, from 0 to 1 (read every frame by the orb). */
     level: useCallback(() => session.current?.level() ?? 0, []),
   };

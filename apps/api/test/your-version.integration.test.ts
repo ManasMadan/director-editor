@@ -17,6 +17,9 @@ const SECRET = `test-ai-secret-${randomUUID()}`;
 const VIDEO = "dQw4w9WgXcQ";
 /** A template whose re-plan the AI service fails. */
 const FAILING = "FailingPln1";
+/** A template whose re-plan waits until the test lets it answer. */
+const HELD = "HeldReplan1";
+let heldReplan = Promise.withResolvers<void>();
 
 let harness: Harness;
 let ai: Server;
@@ -48,6 +51,9 @@ async function aiRoute(request: IncomingMessage, response: ServerResponse) {
   }
   const body = await readBody(request);
   revisions.push({ org: String(payload.org), user: String(payload.sub), video: match[1], body });
+  if (match[1] === HELD) {
+    await heldReplan.promise;
+  }
   if (match[1] === FAILING) {
     return send(response, 502, {
       defined: true,
@@ -144,6 +150,28 @@ describe("your version of a template", () => {
       body: { instruction: "one position, front camera", version: INSIDE },
     });
     await expect(session.rpc.yourVersion.get({ videoId: VIDEO })).resolves.toEqual(result.version);
+  });
+
+  it("keeps what the member saved while a re-plan ran, rather than the re-plan over it", async () => {
+    const { session } = await signedIn();
+    heldReplan = Promise.withResolvers<void>();
+    await session.rpc.yourVersion.save({ videoId: HELD, version: INSIDE });
+    const asked = revisions.length;
+    const replanning = session.rpc.yourVersion.revise({
+      videoId: HELD,
+      instruction: "one angle",
+      version: INSIDE,
+    });
+    await expect.poll(() => revisions.length).toBe(asked + 1);
+    // The member takes the chip away while Gemini works.
+    await session.rpc.yourVersion.save({ videoId: HELD, version: { ...INSIDE, notes: [] } });
+    heldReplan.resolve();
+    const result = await replanning;
+    expect(result.version.gaps).toEqual([1]);
+    await expect(session.rpc.yourVersion.get({ videoId: HELD })).resolves.toEqual({
+      ...INSIDE,
+      notes: [],
+    });
   });
 
   it("keeps the version as it was when the re-plan fails", async () => {

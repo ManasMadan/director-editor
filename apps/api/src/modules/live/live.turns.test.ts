@@ -13,9 +13,9 @@ describe("a turn's figures", () => {
     clock.now = 400;
     turns.member("voice");
     clock.now = 1_300;
-    turns.spoke();
+    turns.spoke(4800);
     clock.now = 1_500;
-    turns.spoke();
+    turns.spoke(4800);
     // Heard after Director started: it's the next turn's, not this one's wait.
     turns.member("voice");
     expect(turns.complete()).toEqual({
@@ -24,7 +24,25 @@ describe("a turn's figures", () => {
       tools: [],
       interrupted: false,
       spoke: true,
+      voiceMs: 200,
+      captionLagMs: null,
     });
+  });
+
+  it("time how far the turn's first words trail its first audio", () => {
+    const { clock, turns } = meter();
+    clock.now = 100;
+    turns.spoke(48_000);
+    clock.now = 700;
+    turns.said();
+    clock.now = 900;
+    turns.said();
+    expect(turns.complete()).toMatchObject({ voiceMs: 1000, captionLagMs: 600 });
+    // Words before the voice: the captions are early, not late.
+    turns.said();
+    clock.now = 1000;
+    turns.spoke(48);
+    expect(turns.complete()).toMatchObject({ voiceMs: 1, captionLagMs: -100 });
   });
 
   it("keep the tools in order, a cut-in, and start clean after each turn", () => {
@@ -40,16 +58,20 @@ describe("a turn's figures", () => {
       tools: ["adapt_shot", "rate", "go_to_shot"],
       interrupted: true,
       spoke: false,
+      voiceMs: 0,
+      captionLagMs: null,
     });
     // A turn the app's note started (a flip, a take): nobody waited on it.
     clock.now = 50;
-    turns.spoke();
+    turns.spoke(96);
     expect(turns.complete()).toEqual({
       input: "app",
       latencyMs: null,
       tools: [],
       interrupted: false,
       spoke: true,
+      voiceMs: 2,
+      captionLagMs: null,
     });
   });
 });

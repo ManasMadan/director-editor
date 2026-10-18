@@ -26,6 +26,7 @@ import type { OrgCaller } from "../../rpc/procedures";
 import type { GoogleAuth } from "./google-auth";
 import {
   callEnded,
+  LIVE_HEARTBEAT_MS,
   type LiveOptions,
   liveUpstream,
   MAX_LIVE_MS,
@@ -69,6 +70,10 @@ const PERSONA_RULES = [
   "confirm what changed in one line",
   "call skip_shot: the screen moves on by itself",
   "Never replan during a take",
+  "Never move them to another shot on your own",
+  "isn't a yes to moving on",
+  "before you call replan",
+  "Never skip a shot they didn't ask to skip",
 ];
 
 const shot: Shot = {
@@ -126,6 +131,9 @@ const caller: OrgCaller = {
 
 const WEB = "http://localhost:3000";
 const json = (data: RawData) => z.record(z.string(), z.unknown()).parse(JSON.parse(String(data)));
+/** What the relay logged as going wrong, leaving out its info lines about the conversation. */
+const problemsIn = (log: { mock: { calls: Parameters<LiveOptions["log"]>[] } }) =>
+  log.mock.calls.filter(([level]) => level !== "info");
 
 /**
  * A stand-in for the Live API: answers setup, records what arrives, sends what it's told.
@@ -329,6 +337,8 @@ describe("a live call", () => {
         automaticActivityDetection: {
           disabled: false,
           startOfSpeechSensitivity: "START_SENSITIVITY_LOW",
+          // Director's own voice from the loudspeaker needs more than a moment to cut it off.
+          prefixPaddingMs: 400,
           silenceDurationMs: 700,
         },
         activityHandling: "START_OF_ACTIVITY_INTERRUPTS",
@@ -345,7 +355,7 @@ describe("a live call", () => {
       // The instruction arrives as JSON, its quotes escaped.
       expect(text).toContain(JSON.stringify(rule).slice(1, -1));
     }
-    expect(PERSONA_VERSION).toBe(4);
+    expect(PERSONA_VERSION).toBe(5);
     const tools = setup.tools as { functionDeclarations: { name: string }[] }[];
     expect(tools[0]?.functionDeclarations.map((tool) => tool.name)).toEqual([
       ...LIVE_TOOLS,
@@ -418,7 +428,7 @@ describe("a live call", () => {
     expect(recordCallStarted).toHaveBeenCalledOnce();
   });
 
-  it("forwards the microphone, typed text, and at most one camera frame a second", async () => {
+  it("forwards the microphone, typed text, and about one camera frame a second", async () => {
     const { fake, browser, tick } = await liveCall();
     browser.send({ type: "audio", pcm16: "AAAAAA==" });
     browser.send({ type: "frame", jpeg: "/9j/4AAQ" });
@@ -436,7 +446,8 @@ describe("a live call", () => {
         turnComplete: true,
       },
     });
-    tick(1000);
+    // The browser sends one a second; network jitter can bring the next a little sooner.
+    tick(800);
     browser.send({ type: "frame", jpeg: "/9j/next" });
     expect(await fake.message(5)).toMatchObject({ realtimeInput: { video: { data: "/9j/next" } } });
   });
@@ -499,12 +510,14 @@ describe("a live call", () => {
       tools: ["switch_camera"],
       interrupted: false,
       spoke: true,
+      voiceMs: 0,
+      captionLagMs: null,
     });
     expect(JSON.stringify(recordTurn.mock.calls)).not.toContain("inside");
   });
 
-  it("forwards up to twice real time of microphone audio, and hangs up past it", async () => {
-    const { fake, browser, tick } = await liveCall();
+  it("forwards up to twice real time of microphone audio, and drops what's past it", async () => {
+    const { fake, browser, tick, log } = await liveCall();
     // 66,000 bytes of audio each: four fit in five seconds' budget of 320,000, five don't.
     const chunk = { type: "audio", pcm16: "A".repeat(88_000) };
     for (let sent = 0; sent < 4; sent++) {
@@ -512,13 +525,16 @@ describe("a live call", () => {
     }
     await fake.message(5);
     tick(5000);
-    for (let sent = 0; sent < 5; sent++) {
+    // A burst after the network stalled: what's over the allowance is stale, and dropped.
+    for (let sent = 0; sent < 6; sent++) {
       browser.send(chunk);
     }
-    expect(await browser.closed).toBe(1008);
-    expect(browser.received).toEqual([{ type: "error", code: "DIRECTOR_CALL_TOO_FAST" }]);
-    await vi.waitFor(() => expect(fake.server.clients.size).toBe(0));
-    expect(fake.received).toHaveLength(10);
+    browser.send({ type: "text", text: "still here" });
+    await vi.waitFor(() => expect(turnsWith(fake, "still here")).toHaveLength(1));
+    expect(fake.received.filter((message) => "realtimeInput" in message)).toHaveLength(8);
+    expect(browser.socket.readyState).toBe(WebSocket.OPEN);
+    expect(log).toHaveBeenCalledOnce();
+    expect(log).toHaveBeenCalledWith("warn", {}, "live microphone over its allowance");
   });
 
   it("takes six typed turns in ten seconds, and hangs up on a seventh; a move to another shot isn't one", async () => {
@@ -534,18 +550,24 @@ describe("a live call", () => {
     expect(fake.received).toHaveLength(9);
   });
 
-  it("hangs up when Gemini stops reading what it's sent", async () => {
+  it("skips camera frames while Gemini is behind, and hangs up once even the audio can't get through", async () => {
     let clock = 0;
-    // Every frame a second after the last, so none is dropped for coming too soon.
+    // Every message a second after the last, so no frame is dropped for coming too soon
+    // and the audio never runs over its allowance.
     const { fake, browser, log } = await liveCall({ now: () => (clock += 1000) });
     fake.socket?.pause();
-    const frame = { type: "frame", jpeg: "A".repeat(300_000) };
-    for (let sent = 0; sent < 80 && browser.socket.readyState === WebSocket.OPEN; sent++) {
-      // One at a time, as each leaves: the API reads them as fast as they come.
-      await new Promise<void>((resolve) =>
-        browser.socket.send(JSON.stringify(frame), () => resolve()),
-      );
-    }
+    /** Sends one at a time, as each leaves: the API reads them as fast as they come. */
+    const sendAll = async (message: object, count: number) => {
+      for (let sent = 0; sent < count && browser.socket.readyState === WebSocket.OPEN; sent++) {
+        await new Promise<void>((resolve) =>
+          browser.socket.send(JSON.stringify(message), () => resolve()),
+        );
+      }
+    };
+    await sendAll({ type: "frame", jpeg: "A".repeat(300_000) }, 80);
+    // Frames are only pictures: past a backlog they're skipped, and the call goes on.
+    expect(browser.socket.readyState).toBe(WebSocket.OPEN);
+    await sendAll({ type: "audio", pcm16: "A".repeat(20_000) }, 2000);
     expect(await browser.closed).toBe(1011);
     expect(browser.received).toContainEqual({ type: "error", code: "UPSTREAM_UNAVAILABLE" });
     expect(log).toHaveBeenCalledWith("warn", expect.anything(), "live upstream fell behind");
@@ -572,7 +594,7 @@ describe("a live call", () => {
     fake.send({ serverContent: { interrupted: "yes" } });
     fake.send({ serverContent: { interrupted: true } });
     expect(await browser.message(0)).toEqual({ type: "interrupted" });
-    expect(log).toHaveBeenCalledTimes(2);
+    expect(problemsIn(log)).toHaveLength(2);
     expect(log).toHaveBeenCalledWith("warn", expect.anything(), "unreadable live message");
   });
 
@@ -1082,6 +1104,7 @@ describe("the roll", () => {
     expect(await fake.message(6)).toEqual(
       toolResponse("g2", "mark", { result: "refused", why: "Nothing is recording right now." }),
     );
+    fake.send(turnDone);
     browser.send({ type: "roll", state: "paused" });
     browser.send({ type: "roll", state: "resumed" });
     browser.send({ type: "roll", state: "done" });
@@ -1124,7 +1147,10 @@ describe("the member's version of a shot", () => {
       },
     });
     browser.send({ type: "tool_result", id: "tool-1", result: "done" });
-    expect(await fake.message(2)).toEqual(toolResponse("g1", "adapt_shot", { result: "done" }));
+    expect(await fake.message(2)).toMatchObject(
+      toolResponse("g1", "adapt_shot", { result: "done", theyAreOn: { shot: 1, status: "film" } }),
+    );
+    fake.send(turnDone);
     // On that shot, Director hears the member's version beside the original.
     browser.send({ type: "shot", shot: 1 });
     const brief = turnOf(await fake.message(3)).text;
@@ -1144,6 +1170,7 @@ describe("the member's version of a shot", () => {
     await browser.message(0);
     browser.send({ type: "tool_result", id: "tool-1", result: "busy" });
     await fake.message(2);
+    fake.send(turnDone);
     browser.send({ type: "shot", shot: 1 });
     browser.send({ type: "shot", shot: 0 });
     expect(turnOf(await fake.message(4)).text).not.toContain("Their version");
@@ -1281,6 +1308,7 @@ describe("a place change said once", () => {
     browser.send({ type: "tool_result", id: "tool-1", result: "done" });
     browser.send({ type: "tool_result", id: "tool-2", result: "done" });
     expect(JSON.stringify(await fake.message(4))).toContain("Indoors");
+    fake.send(turnDone);
     for (const next of [1, 2]) {
       browser.send({ type: "shot", shot: next });
       const brief = turnOf(await fake.message(4 + next)).text;
@@ -1381,6 +1409,63 @@ describe("memory, skipping and re-planning", () => {
     const said = JSON.stringify(answer);
     expect(said).toContain("One angle");
     expect(said).toContain("Gaps the edit fills, so nobody films them: shot 1.");
+  });
+
+  it("tells Director which shot the member is on after a re-plan, and to ask before moving them off a gap", async () => {
+    const { fake, browser } = await liveCall();
+    fake.send({
+      toolCall: {
+        functionCalls: [{ id: "g1", name: "replan", args: { instruction: "one angle" } }],
+      },
+    });
+    await browser.message(0);
+    browser.send({ type: "context", version: { ...EMPTY_VERSION, gaps: [0] } });
+    browser.send({ type: "tool_result", id: "tool-1", result: "done" });
+    expect(await fake.message(2)).toMatchObject(
+      toolResponse("g1", "replan", {
+        result: "done",
+        theyAreOn: {
+          shot: 1,
+          status: "gap",
+          say: expect.stringContaining("ask whether to go to shot 2. Move only once they say yes."),
+        },
+      }),
+    );
+    // Nothing left to film: Director asks whether they're done.
+    fake.send({
+      toolCall: { functionCalls: [{ id: "g2", name: "replan", args: { instruction: "less" } }] },
+    });
+    await browser.message(1);
+    browser.send({ type: "context", version: { ...EMPTY_VERSION, gaps: [0], skipped: [1] } });
+    browser.send({ type: "tool_result", id: "tool-2", result: "done" });
+    expect(JSON.stringify(await fake.message(3))).toContain("ask whether they're done");
+  });
+
+  it("tells Director why the screen wouldn't move: not asked, or a shot they don't film", async () => {
+    const { fake, browser } = await liveCall();
+    fake.send({
+      toolCall: {
+        functionCalls: [
+          { id: "g1", name: "go_to_shot", args: { shot: 2 } },
+          { id: "g2", name: "go_to_shot", args: { shot: 2 } },
+        ],
+      },
+    });
+    await browser.message(1);
+    browser.send({ type: "tool_result", id: "tool-1", result: "not_asked" });
+    browser.send({ type: "tool_result", id: "tool-2", result: "not_filmed" });
+    expect(await fake.message(2)).toMatchObject(
+      toolResponse("g1", "go_to_shot", {
+        result: "refused",
+        why: expect.stringContaining("ask whether they want to move on"),
+      }),
+    );
+    expect(await fake.message(3)).toMatchObject(
+      toolResponse("g2", "go_to_shot", {
+        result: "refused",
+        why: expect.stringContaining("restore_shot it first"),
+      }),
+    );
   });
 
   it("says a re-plan that failed failed", async () => {
@@ -1536,6 +1621,8 @@ describe("quiet stretches and a noisy room", () => {
       fake.send({ serverContent: { interrupted: true } });
     }
     await browser.message(6);
+    // Told once Director has answered them, not over them.
+    fake.send(turnDone);
     await vi.waitFor(() => expect(turnsWith(fake, "keep getting cut off")).toHaveLength(1));
     expect(turnOf(turnsWith(fake, "keep getting cut off")[0])).toEqual({
       text: expect.stringContaining("suggest typing in the box or earphones, once"),
@@ -1685,7 +1772,7 @@ describe("moving to a fresh connection to Gemini", () => {
     }
     fake.send({ serverContent: { inputTranscription: { text: "I'm in " } } });
     fake.send({ serverContent: { inputTranscription: { text: "the kitchen" } } });
-    fake.send({ serverContent: { outputTranscription: { text: "Love it." } } });
+    fake.send({ serverContent: { outputTranscription: { text: "Love it." }, turnComplete: true } });
     await browser.message(10);
     fake.send({ goAway: { timeLeft: "10s" } });
     fake.send({ goAway: { timeLeft: "9s" } });
@@ -1708,21 +1795,67 @@ describe("moving to a fresh connection to Gemini", () => {
     expect(JSON.stringify(await fake.on(1, 1))).toContain("Shot 2 of 2: The sip");
   });
 
-  it("drops a tool call's answer when the connection that asked has gone", async () => {
-    const { fake, browser } = await rotated();
+  it("lets Director finish its turn and its tool call on the old connection before handing over", async () => {
+    const { fake, browser, tick } = await rotated();
+    const [first, second] = fake.connections;
+    fake.send(speech, first?.socket);
     fake.send(
-      { toolCall: { functionCalls: [{ id: "g1", name: "go_to_shot", args: { shot: 2 } }] } },
-      fake.connections[0]?.socket,
+      { toolCall: { functionCalls: [{ id: "g1", name: "switch_camera", args: { to: "back" } }] } },
+      first?.socket,
     );
-    await browser.message(1);
-    fake.send({ setupComplete: {} }, fake.connections[1]?.socket);
-    await vi.waitFor(() => expect(fake.connections[0]?.socket.readyState).toBe(WebSocket.CLOSED));
+    await settled(() => expect(browser.received).toHaveLength(3));
+    fake.send({ setupComplete: {} }, second?.socket);
+    // Ready, but Director is mid-turn: the old connection still carries the call.
+    await settledFrame(fake, browser, tick);
+    expect(first?.socket.readyState).toBe(WebSocket.OPEN);
     browser.send({ type: "tool_result", id: "tool-1", result: "done" });
+    await settled(() =>
+      expect(first?.received).toContainEqual(
+        toolResponse("g1", "switch_camera", { result: "done" }),
+      ),
+    );
+    fake.send(speech, first?.socket);
+    expect(first?.socket.readyState).toBe(WebSocket.OPEN);
+    fake.send(turnDone, first?.socket);
+    await settled(() => expect(first?.socket.readyState).toBe(WebSocket.CLOSED));
     browser.send({ type: "text", text: "and now?" });
-    expect(await fake.on(1, 1)).toMatchObject({
+    await settled(() => expect(second?.received).toHaveLength(2));
+    expect(second?.received[1]).toMatchObject({
       clientContent: { turns: [{ parts: [{ text: "and now?" }] }] },
     });
-    expect(fake.connections[1]?.received).toHaveLength(2);
+  });
+
+  it("hands over by the deadline Gemini gave, even mid-turn, and drops that turn's calls", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { fake, browser, log } = await liveCall();
+    fake.answerSetup = false;
+    fake.send(speech);
+    fake.send({
+      toolCall: { functionCalls: [{ id: "g1", name: "switch_camera", args: { to: "back" } }] },
+    });
+    fake.send({ goAway: { timeLeft: "3s" } });
+    await settled(() => expect(fake.connections[1]?.received).toHaveLength(1));
+    fake.send({ setupComplete: {} }, fake.connections[1]?.socket);
+    await settled(() => expect(browser.received).toHaveLength(2));
+    // The relay hears the fresh connection is ready a few turns of the event loop later.
+    for (let turn = 0; turn < 50; turn += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    vi.advanceTimersByTime(SECOND_MS);
+    expect(fake.connections[0]?.socket.readyState).toBe(WebSocket.OPEN);
+    // A second before the old connection goes, the new one takes over.
+    vi.advanceTimersByTime(SECOND_MS);
+    await settled(() => expect(fake.connections[0]?.socket.readyState).toBe(WebSocket.CLOSED));
+    expect(log).toHaveBeenCalledWith(
+      "info",
+      expect.objectContaining({ turnOpen: true }),
+      "live connection handed over",
+    );
+    // Nobody is left to hear that call's answer, and notes no longer wait for it.
+    browser.send({ type: "tool_result", id: "tool-1", result: "done" });
+    browser.send({ type: "camera", facing: "back" });
+    await settled(() => expect(turnsWith(fake, "They flipped")).toHaveLength(1));
+    expect(fake.connections[1]?.received.some((message) => "toolResponse" in message)).toBe(false);
   });
 
   it("waits for the fresh connection when the old one closes first", async () => {
@@ -1740,7 +1873,7 @@ describe("moving to a fresh connection to Gemini", () => {
       clientContent: { turns: [{ parts: [{ text: "back?" }] }] },
     });
     expect(fake.connections[1]?.received).toHaveLength(3);
-    expect(log).not.toHaveBeenCalled();
+    expect(problemsIn(log)).toEqual([]);
     expect(browser.socket.readyState).toBe(WebSocket.OPEN);
   });
 
@@ -1806,17 +1939,38 @@ describe("starting a call", () => {
     expect(browser.received).toEqual([{ type: "error", code }]);
   });
 
-  it("refuses a second call while the first is open, and allows one after", async () => {
+  it("lets a new call from the same member take over from one still open", async () => {
+    // A phone that switched networks comes back before the API has seen the old socket go.
     const { call, fake, browser } = await liveCall();
-    const second = call();
-    expect(await second.closed).toBe(1008);
-    expect(second.received).toEqual([{ type: "error", code: "CONFLICT" }]);
-    browser.socket.close();
-    await browser.closed;
-    await vi.waitFor(() => expect(fake.server.clients.size).toBe(0));
+    const second = call("videoId=dQw4w9WgXcQ&shot=0&resume=1");
+    expect(await browser.closed).toBe(1008);
+    expect(browser.received).toEqual([{ type: "error", code: "CONFLICT" }]);
+    await vi.waitFor(() => expect(fake.connections).toHaveLength(2));
+    await fake.on(1, 1);
+    expect(fake.connections[0]?.socket.readyState).not.toBe(WebSocket.OPEN);
+    expect(second.socket.readyState).toBe(WebSocket.OPEN);
+    // The old call ending doesn't free the member's place the new one holds.
     const third = call();
-    await fake.message(3); // its setup and greeting, after the first call's two
+    expect(await second.closed).toBe(1008);
+    await vi.waitFor(() => expect(fake.connections).toHaveLength(3));
     third.socket.close();
+  });
+
+  it("hangs up on a browser that stops answering pings, so its member can call again", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const { port, fake } = await startApi();
+    const silent = new Browser(
+      new WebSocket(`ws://127.0.0.1:${port}${LIVE_PATH}?videoId=dQw4w9WgXcQ&shot=0`, {
+        headers: { origin: WEB },
+        autoPong: false,
+      }),
+    );
+    await fake.message(1);
+    vi.advanceTimersByTime(LIVE_HEARTBEAT_MS);
+    expect(silent.socket.readyState).toBe(WebSocket.OPEN);
+    vi.advanceTimersByTime(LIVE_HEARTBEAT_MS);
+    await silent.closed;
+    await vi.waitFor(() => expect(fake.server.clients.size).toBe(0));
   });
 
   it("says our side failed, and logs why, when loading the plan breaks", async () => {
@@ -2059,3 +2213,307 @@ describe("the call's configuration", () => {
     }
   });
 });
+
+/** A moment of Director's voice, as Gemini streams it. */
+const speech = {
+  serverContent: {
+    modelTurn: { parts: [{ inlineData: { mimeType: "audio/pcm;rate=24000", data: "BBBB" } }] },
+  },
+};
+const turnDone = { serverContent: { turnComplete: true } };
+const frameOf = (jpeg: string) => ({
+  realtimeInput: { video: { mimeType: "image/jpeg", data: jpeg } },
+});
+/** The app's turns Gemini got after the setup and greeting. */
+const notesAfterGreeting = (fake: FakeLiveApi) =>
+  fake.received.slice(2).filter((message) => "clientContent" in message);
+
+/**
+ * Everything the browser sent before this has reached Gemini: a camera frame goes up at
+ * once, after whatever the relay did with the messages ahead of it.
+ */
+async function caughtUp(fake: FakeLiveApi, browser: Browser, tick: (ms: number) => void) {
+  tick(SECOND_MS);
+  const jpeg = btoa(`sync-${fake.received.length}`);
+  browser.send({ type: "frame", jpeg });
+  await vi.waitFor(() => expect(fake.received).toContainEqual(frameOf(jpeg)));
+}
+
+/** `caughtUp`, under fake timers (vi.waitFor would move them on). */
+async function settledFrame(fake: FakeLiveApi, browser: Browser, tick: (ms: number) => void) {
+  tick(SECOND_MS);
+  const jpeg = btoa(`sync-${fake.received.length}`);
+  browser.send({ type: "frame", jpeg });
+  await settled(() => expect(fake.received).toContainEqual(frameOf(jpeg)));
+}
+
+type ClientTurn = {
+  clientContent: { turns: { parts: { text: string }[] }[]; turnComplete: boolean };
+};
+
+describe("Director's turns, never cut off by the app", () => {
+  it("briefs a shot Director moved to itself quietly, once its line is over", async () => {
+    const { fake, browser, tick } = await liveCall();
+    fake.send(speech);
+    fake.send({
+      toolCall: { functionCalls: [{ id: "g1", name: "go_to_shot", args: { shot: 2 } }] },
+    });
+    await browser.message(1);
+    browser.send({ type: "tool_result", id: "tool-1", result: "done" });
+    browser.send({ type: "shot", shot: 1 });
+    await caughtUp(fake, browser, tick);
+    // The answer went, and nothing that would stop Director mid-sentence.
+    expect(fake.received).toContainEqual(toolResponse("g1", "go_to_shot", { result: "done" }));
+    expect(notesAfterGreeting(fake)).toEqual([]);
+    // Director says its line about the move; once it's over, it's briefed, with no call
+    // to introduce the shot a second time.
+    fake.send(speech);
+    fake.send(turnDone);
+    await vi.waitFor(() => expect(turnsWith(fake, "Shot 2 of 2")).toHaveLength(1));
+    const brief = turnOf(turnsWith(fake, "Shot 2 of 2")[0]);
+    expect(brief.answer).toBe(false);
+    expect(brief.text).not.toContain("Say in one sentence");
+  });
+
+  it("holds the app's notes while Director speaks, then sends them as one turn", async () => {
+    const { fake, browser, tick } = await liveCall();
+    fake.send({ serverContent: { outputTranscription: { text: "Hold it right there" } } });
+    await browser.message(0);
+    browser.send({ type: "camera", facing: "back" });
+    browser.send({ type: "restored", shot: 0, row: "where" });
+    browser.send({ type: "shot", shot: 1 });
+    await caughtUp(fake, browser, tick);
+    expect(notesAfterGreeting(fake)).toEqual([]);
+    fake.send(turnDone);
+    await vi.waitFor(() => expect(notesAfterGreeting(fake)).toHaveLength(1));
+    const [held] = notesAfterGreeting(fake) as ClientTurn[];
+    expect(held?.clientContent.turnComplete).toBe(true);
+    expect(held?.clientContent.turns.map((turn) => turn.parts[0]?.text.slice(0, 30))).toEqual([
+      "[They flipped to the back came",
+      "[They put the original back fo",
+      "[They've moved on to shot 2. I",
+    ]);
+  });
+
+  it("holds notes while a tool call waits for the browser, and while the member talks", async () => {
+    const { fake, browser, tick } = await liveCall();
+    fake.send({
+      toolCall: { functionCalls: [{ id: "g1", name: "switch_camera", args: { to: "back" } }] },
+    });
+    await browser.message(0);
+    browser.send({ type: "forgot", kind: "place", note: "Inside" });
+    await caughtUp(fake, browser, tick);
+    expect(notesAfterGreeting(fake)).toEqual([]);
+    browser.send({ type: "tool_result", id: "tool-1", result: "done" });
+    // Director carries on from the answer: the note waits for that line to end too.
+    fake.send(speech);
+    fake.send({ serverContent: { inputTranscription: { text: "wait" } } });
+    await caughtUp(fake, browser, tick);
+    expect(notesAfterGreeting(fake)).toEqual([]);
+    fake.send(turnDone);
+    await vi.waitFor(() => expect(turnsWith(fake, "They removed")).toHaveLength(1));
+  });
+
+  it("sends a held note once Director has said nothing for a while, turn over or not", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { fake, browser, tick } = await liveCall();
+    fake.send(speech);
+    await settled(() => expect(browser.received).toHaveLength(1));
+    browser.send({ type: "camera", facing: "back" });
+    await settledFrame(fake, browser, tick);
+    expect(notesAfterGreeting(fake)).toEqual([]);
+    vi.advanceTimersByTime(5 * SECOND_MS);
+    await settled(() => expect(turnsWith(fake, "They flipped")).toHaveLength(1));
+  });
+
+  it("logs each of Director's tool calls by name and outcome, never what it said", async () => {
+    const { fake, browser, log } = await liveCall();
+    fake.send({
+      toolCall: {
+        functionCalls: [
+          { id: "g1", name: "adapt_shot", args: { shot: 1, line: "Coffee, then words." } },
+          { id: "g2", name: "go_to_shot", args: { shot: 9 } },
+        ],
+      },
+    });
+    await browser.message(0);
+    browser.send({ type: "tool_result", id: "tool-1", result: "done" });
+    await fake.message(3);
+    expect(log).toHaveBeenCalledWith(
+      "info",
+      { tool: "go_to_shot", outcome: "not_found", shot: 1, waitedMs: 0 },
+      "live tool call",
+    );
+    expect(log).toHaveBeenCalledWith(
+      "info",
+      { tool: "adapt_shot", outcome: "done", shot: 1, waitedMs: 0 },
+      "live tool call",
+    );
+    expect(JSON.stringify(log.mock.calls)).not.toContain("Coffee");
+  });
+
+  it("never nudges while Director waits for a tool's answer, however long a re-plan takes", async () => {
+    const { fake, browser, tick } = await liveCall();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    fake.send({
+      toolCall: { functionCalls: [{ id: "g1", name: "replan", args: { instruction: "inside" } }] },
+    });
+    await settled(() => expect(browser.received).toHaveLength(1));
+    vi.advanceTimersByTime(QUIET_MS + 15 * SECOND_MS);
+    await settledFrame(fake, browser, tick);
+    expect(turnsWith(fake, "been quiet")).toHaveLength(0);
+    browser.send({ type: "tool_result", id: "tool-1", result: "done" });
+    await settled(() =>
+      expect(fake.received.some((message) => "toolResponse" in message)).toBe(true),
+    );
+    fake.send(turnDone);
+    await settled(() => expect(browser.received).toContainEqual({ type: "turn" }));
+    // The quiet counts from the answer.
+    vi.advanceTimersByTime(QUIET_MS);
+    await settled(() => expect(turnsWith(fake, "been quiet")).toHaveLength(1));
+  });
+
+  it("waits longer than the re-plan and the locate themselves before saying nobody knows", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { fake, browser, tick } = await liveCall();
+    fake.send({
+      toolCall: {
+        functionCalls: [
+          { id: "g1", name: "replan", args: { instruction: "inside" } },
+          { id: "g2", name: "point_at", args: { target: "the lamp", label: "lamp" } },
+        ],
+      },
+    });
+    await browser.message(1);
+    const answers = () => fake.received.filter((message) => "toolResponse" in message);
+    // The locate's model call alone may take 20 seconds, the re-plan's 25.
+    vi.advanceTimersByTime(22 * SECOND_MS);
+    await settledFrame(fake, browser, tick);
+    expect(answers()).toEqual([]);
+    vi.advanceTimersByTime(10 * SECOND_MS);
+    await settled(() => expect(answers()).toHaveLength(1));
+    expect(answers()[0]).toMatchObject(toolResponse("g2", "point_at", { result: "unknown" }));
+  });
+});
+
+describe("what Director must know whenever a connection starts", () => {
+  it("keeps what the browser says as its socket opens, while the call is still being set up", async () => {
+    const signedIn = Promise.withResolvers<OrgCaller>();
+    const { fake, call } = await startApi({ caller: () => signedIn.promise });
+    const browser = call();
+    await browser.opened;
+    browser.send({
+      type: "context",
+      version: { ...EMPTY_VERSION, notes: [{ kind: "place", note: "Inside" }] },
+    });
+    browser.send({ type: "roll", state: "recording" });
+    // Both have reached the API by the time the sign-in is checked.
+    for (let turn = 0; turn < 50; turn += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    signedIn.resolve(caller);
+    expect(JSON.stringify(await fake.message(0))).toContain('- place: \\"Inside\\"');
+    await vi.waitFor(() => expect(turnsWith(fake, "The roll is on")).toHaveLength(1));
+  });
+
+  it("tells Director the roll is on when the browser said so before Gemini was ready", async () => {
+    const fake = new FakeLiveApi();
+    fake.answerSetup = false;
+    const { call } = await startApi({}, fake);
+    const browser = call();
+    await fake.message(0);
+    browser.send({ type: "roll", state: "recording" });
+    browser.send({ type: "take", state: "recording" });
+    await settledTurns();
+    fake.send({ setupComplete: {} });
+    await fake.message(3);
+    // The roll first, as something to know, then the hello that asks for an answer.
+    expect(turnOf(fake.received[1])).toMatchObject({
+      text: expect.stringContaining("The roll is on"),
+      answer: false,
+    });
+    expect(turnOf(fake.received[3]).text).toContain("tapped Start shooting");
+  });
+
+  it("restates the roll to a fresh connection that couldn't pick the conversation up", async () => {
+    const { fake, browser } = await liveCall();
+    browser.send({ type: "roll", state: "recording" });
+    await fake.message(2);
+    fake.send({ goAway: { timeLeft: "10s" } });
+    await fake.on(1, 1);
+    expect(JSON.stringify(fake.connections[1]?.received)).toContain("The roll is on");
+  });
+
+  it("nudges Director when an attempt it started is never marked as ended", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { fake, browser } = await liveCall();
+    browser.send({ type: "roll", state: "recording" });
+    fake.send({
+      toolCall: { functionCalls: [{ id: "g1", name: "mark", args: { event: "start" } }] },
+    });
+    await settled(() => expect(browser.received).toHaveLength(1));
+    browser.send({ type: "tool_result", id: "tool-1", result: "done" });
+    await settled(() =>
+      expect(fake.received.some((message) => "toolResponse" in message)).toBe(true),
+    );
+    fake.send(turnDone);
+    await settled(() => expect(browser.received).toContainEqual({ type: "turn" }));
+    // Twice the shot's three seconds, and some: still no end mark, and no nudge meanwhile.
+    vi.advanceTimersByTime(19 * SECOND_MS);
+    await settledTurns();
+    expect(turnsWith(fake, "been quiet")).toHaveLength(0);
+    expect(turnsWith(fake, "hasn't been marked")).toHaveLength(0);
+    vi.advanceTimersByTime(SECOND_MS);
+    await settled(() => expect(turnsWith(fake, "hasn't been marked")).toHaveLength(1));
+    expect(turnOf(turnsWith(fake, "hasn't been marked")[0]).text).toContain("stay silent");
+  });
+
+  it("starts the attempt's quiet only once the browser has marked it", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { fake, browser } = await liveCall();
+    fake.send({
+      toolCall: { functionCalls: [{ id: "g1", name: "mark", args: { event: "start" } }] },
+    });
+    await settled(() => expect(browser.received).toHaveLength(1));
+    browser.send({ type: "tool_result", id: "tool-1", result: "not_recording" });
+    await settled(() =>
+      expect(fake.received.some((message) => "toolResponse" in message)).toBe(true),
+    );
+    fake.send(turnDone);
+    await settled(() => expect(browser.received).toContainEqual({ type: "turn" }));
+    vi.advanceTimersByTime(QUIET_MS);
+    await settled(() => expect(turnsWith(fake, "been quiet")).toHaveLength(1));
+    expect(turnsWith(fake, "hasn't been marked")).toHaveLength(0);
+  });
+
+  it("keeps Director's earlier change to a shot when it changes the same shot again", async () => {
+    const { fake, browser } = await liveCall();
+    fake.send({
+      toolCall: {
+        functionCalls: [{ id: "g1", name: "adapt_shot", args: { shot: 2, where: "The kitchen" } }],
+      },
+    });
+    await browser.message(0);
+    browser.send({ type: "tool_result", id: "tool-1", result: "done" });
+    fake.send({
+      toolCall: {
+        functionCalls: [{ id: "g2", name: "adapt_shot", args: { shot: 2, line: "Hi!" } }],
+      },
+    });
+    await browser.message(1);
+    browser.send({ type: "tool_result", id: "tool-2", result: "done" });
+    await fake.message(3);
+    fake.send(turnDone);
+    browser.send({ type: "shot", shot: 1 });
+    const brief = turnOf(await fake.message(4)).text;
+    expect(brief).toContain('- Where: "The kitchen"');
+    expect(brief).toContain('- Their line: "Hi!"');
+  });
+});
+
+/** Lets the sockets' I/O run a while, without moving fake timers. */
+async function settledTurns() {
+  for (let turn = 0; turn < 50; turn += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}

@@ -3,9 +3,10 @@
 import { useApiErrorMessage } from "@repo/client";
 import { cn } from "@repo/ui/lib/utils";
 import { useTranslations } from "next-intl";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import type { LiveFailure } from "../hooks/use-director-live";
-import type { Caption, Captions } from "../lib/live";
+import type { CaptionStore } from "../lib/caption-store";
+import type { Caption } from "../lib/live";
 import { GLASS } from "./shoot-parts";
 
 const prefersStill = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -83,7 +84,7 @@ function Line({ line, older, level }: { line: Caption; older: boolean; level: ()
     return (
       <div
         className={cn(
-          "flex animate-[live-rise_300ms_ease-out_both] items-start gap-2.5 rounded-3xl px-3.5 py-3",
+          "flex animate-[live-rise_120ms_ease-out_both] items-start gap-2.5 rounded-3xl px-3.5 py-3",
           GLASS,
         )}
       >
@@ -102,7 +103,7 @@ function Line({ line, older, level }: { line: Caption; older: boolean; level: ()
   return (
     <p
       className={cn(
-        "ml-auto max-w-[85%] animate-[live-rise_250ms_ease-out_both] rounded-2xl rounded-br-md bg-studio-foreground/90 px-3 py-1.5 text-sm font-medium text-studio transition-colors duration-300",
+        "ml-auto max-w-[85%] animate-[live-rise_120ms_ease-out_both] rounded-2xl rounded-br-md bg-studio-foreground/90 px-3 py-1.5 text-sm font-medium text-studio transition-colors duration-300",
         older && "text-studio/75",
       )}
     >
@@ -117,9 +118,16 @@ function Line({ line, older, level }: { line: Caption; older: boolean; level: ()
  * shoot can be followed with the sound off. Screen readers hear each line once, when it's
  * finished, rather than every few words as the transcript streams in.
  */
-export function DirectorCaptions({ captions, level }: { captions: Captions; level: () => number }) {
+export function DirectorCaptions({
+  captions,
+  level,
+}: {
+  captions: CaptionStore;
+  level: () => number;
+}) {
   const t = useTranslations("director.live");
-  const { lines } = captions;
+  const { captions: shown, working } = useCaptions(captions);
+  const { lines } = shown;
   const finished = lines.findLast((line) => line.done);
   return (
     <div className="live-motion flex flex-col gap-1.5">
@@ -128,9 +136,19 @@ export function DirectorCaptions({ captions, level }: { captions: Captions; leve
           <Line key={line.key} line={line} older={at < lines.length - 1} level={level} />
         ))}
       </div>
+      {working ? (
+        <p role="status" className={cn("self-start rounded-2xl px-3 py-1.5 text-sm", GLASS)}>
+          {t(working)}
+        </p>
+      ) : null}
       <p aria-live="polite" className="sr-only">
         {finished ? t(finished.who, { text: finished.text.trim() }) : null}
       </p>
     </div>
   );
+}
+
+/** The captions as the store has them, re-rendering only what reads them. */
+function useCaptions(captions: CaptionStore) {
+  return useSyncExternalStore(captions.subscribe, captions.get, captions.get);
 }

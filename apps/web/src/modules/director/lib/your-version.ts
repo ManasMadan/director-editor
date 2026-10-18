@@ -83,20 +83,8 @@ export function forgotten(version: YourVersion, note: string): YourVersion {
   return { ...version, notes };
 }
 
-/** Whether the member films shot `index` (it's neither skipped nor a gap). */
-export function films(version: YourVersion, index: number): boolean {
-  return !(version.skipped.includes(index) || version.gaps.includes(index));
-}
-
-/** The next shot after `index` they film, or null when there's none left. */
-export function nextFilmed(version: YourVersion, index: number, count: number): number | null {
-  for (let next = index + 1; next < count; next += 1) {
-    if (films(version, next)) {
-      return next;
-    }
-  }
-  return null;
-}
+// Which shots the member films, as the relay reads it too.
+export { films, nextFilmed } from "@repo/contracts/api";
 
 const CARD_ROWS: readonly ChangedRow[] = ["where", "do", "say", "framing"];
 

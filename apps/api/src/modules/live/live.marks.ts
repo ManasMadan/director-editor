@@ -15,10 +15,12 @@ import * as z from "zod";
 
 /**
  * How long Gemini waits for a mark: the browser captures a frame and asks Gemini Flash
- * where the thing is (a second or two, the locate's own timeout well past that), before
- * it's told nobody knows.
+ * where the thing is. Usually a second or two, but the AI service gives the model up to
+ * 20 seconds (LOCATE_TIMEOUT_SECONDS in apps/ai/app/director.py); past that plus the trips
+ * there and back, Gemini is told nobody knows. A shorter wait would tell it "no answer"
+ * and then draw the box anyway.
  */
-export const POINT_AT_ANSWER_MS = 12 * SECOND_MS;
+export const POINT_AT_ANSWER_MS = 25 * SECOND_MS;
 
 /** What Gemini hears when the thing it pointed at isn't in the camera's view. */
 export const NOT_FOUND_RESPONSE = {

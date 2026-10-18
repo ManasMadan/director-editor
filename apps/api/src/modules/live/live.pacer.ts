@@ -4,7 +4,8 @@
  * (live.setup.ts) and decides what to say; this only decides when.
  *
  * Quiet: fifteen seconds without a word from either side (or a typed line, or anything the
- * member did on screen) outside a take brings a nudge, at most twice a shot. Noise: three
+ * member did on screen) outside a take, and with no tool call waiting for its answer,
+ * brings a nudge, at most twice a shot. Noise: three
  * interruptions inside thirty seconds mean the room is cutting the member off; Director
  * hears that once a shoot.
  */
@@ -26,6 +27,7 @@ export class Pacer {
   private timer: NodeJS.Timeout | undefined;
   private nudges = 0;
   private inTake = false;
+  private waiting = false;
   private stopped = false;
   private noiseTold = false;
   private interruptions: number[] = [];
@@ -38,7 +40,7 @@ export class Pacer {
   /** Something was said, typed or done: the quiet starts over. */
   heard() {
     clearTimeout(this.timer);
-    if (this.stopped || this.inTake || this.nudges >= NUDGES_PER_SHOT) {
+    if (this.stopped || this.inTake || this.waiting || this.nudges >= NUDGES_PER_SHOT) {
       return;
     }
     this.timer = setTimeout(() => {
@@ -51,6 +53,16 @@ export class Pacer {
   /** From the 3-2-1 to the take's end, silence is the point: no nudges. */
   take(on: boolean) {
     this.inTake = on;
+    this.heard();
+  }
+
+  /**
+   * Director is waiting on a tool call (a re-plan can take half a minute): the quiet is
+   * the app's, not the member's, and a nudge would land on a call Gemini is waiting for.
+   * The quiet counts again from the answer.
+   */
+  toolPending(on: boolean) {
+    this.waiting = on;
     this.heard();
   }
 

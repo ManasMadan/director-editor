@@ -117,7 +117,9 @@ export type LiveToolCall = z.infer<typeof liveToolCall>;
  * What came of a tool call: done; refused because a take is under way, the camera is
  * off, the roll is paused (only the member's touch resumes it) or nothing is recording;
  * what Director pointed at isn't in the picture; or failed (a re-plan the model couldn't
- * make).
+ * make). A move to another shot is refused when the member hasn't asked for one just after
+ * Director changed their plan (not_asked), or when that shot isn't in their version any
+ * more (not_filmed: skipped, or a gap the edit fills).
  */
 export const LIVE_TOOL_RESULTS = [
   "done",
@@ -127,6 +129,8 @@ export const LIVE_TOOL_RESULTS = [
   "paused",
   "not_recording",
   "failed",
+  "not_asked",
+  "not_filmed",
 ] as const;
 export type LiveToolResult = (typeof LIVE_TOOL_RESULTS)[number];
 
