@@ -28,14 +28,13 @@ import {
 } from "@repo/contracts/api";
 import type { UploadPurpose } from "@repo/contracts/files";
 import type { FileId, OrgId, UserId, VideoId } from "@repo/contracts/ids";
-import { required } from "@repo/contracts/objects";
 import { HOUR_S, MINUTE_S } from "@repo/contracts/time";
 import { AppError } from "@repo/nest-common";
 import * as z from "zod";
 import { aiCaller, callAi } from "../ai";
 import { FilesService } from "../files";
 import { ShortsService } from "../shorts";
-import { seedMediaFor } from "./seed-media";
+import { seedMediaKeys, withMediaLinks } from "./seed-media";
 import { shotsOf } from "./shots";
 
 // Long enough for the review job's retries (three, minutes apart), no longer.
@@ -250,34 +249,16 @@ export class DirectorService {
 
   /**
    * A seeded template's plan with links to its media: the committed seed's
-   * (seedMediaFor), never anything its stored plan names. Each link left out with
+   * (seedMediaKeys), never anything its stored plan names. Each link left out with
    * uploads off, like the audio's.
    */
   private async withSeedMedia(videoId: VideoId, shotPlan: ShotPlan): Promise<ServedShotPlan> {
-    const media = seedMediaFor(videoId, shotPlan.shots.length);
-    if (!media) {
-      return shotPlan;
-    }
-    const link = async (key: string | undefined) =>
-      key ? this.files.objectUrl(key, MEDIA_READ_EXPIRES_S) : null;
-    const [musicUrl, shots] = await Promise.all([
-      link(media.music),
-      Promise.all(
-        shotPlan.shots.map(async (shot, index) => {
-          // One entry per shot, checked when the seed file loaded.
-          const made = required(media.shots[index], "the shot's media");
-          const [storyboardUrl, previewUrl] = await Promise.all([
-            link(made.storyboard),
-            link(made.preview),
-          ]);
-          return {
-            ...shot,
-            ...(storyboardUrl && { storyboardUrl }),
-            ...(previewUrl && { previewUrl }),
-          };
-        }),
-      ),
-    ]);
-    return { ...shotPlan, shots, ...(musicUrl && { musicUrl }) };
+    const signed = await Promise.all(
+      seedMediaKeys(videoId, shotPlan.shots.length).map(async (media) => ({
+        media,
+        url: await this.files.objectUrl(media.key, MEDIA_READ_EXPIRES_S),
+      })),
+    );
+    return withMediaLinks(shotPlan, signed);
   }
 }

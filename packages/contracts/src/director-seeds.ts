@@ -36,7 +36,7 @@ const seedMediaSchema = z.strictObject({
   /** One entry per shot of the plan, in its order. */
   shots: z.array(z.strictObject({ storyboard: mediaKey, preview: mediaKey })),
 });
-export type SeedMedia = z.infer<typeof seedMediaSchema>;
+type SeedMedia = z.infer<typeof seedMediaSchema>;
 
 /** Every key `media` names, each with the only keys it may be for this seed. */
 function expectedKeys(videoId: string, media: SeedMedia) {
