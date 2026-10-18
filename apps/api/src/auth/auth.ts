@@ -78,13 +78,23 @@ const EMAIL_AND_PASSWORD = {
   revokeSessionsOnPasswordReset: true,
 } satisfies BetterAuthOptions["emailAndPassword"];
 
-/** Google, when it's turned on and configured. */
+/**
+ * Google, when it's turned on and configured. Offline access, so Google hands back a
+ * refresh token: publishing to YouTube (modules/publish) uses the member's access token
+ * long after they signed in, and better-auth refreshes it with that. Sign-in asks for
+ * the profile only; YouTube's upload permission is asked for when someone first publishes
+ * (linkSocial with its scope), and Google adds it to what the account already granted.
+ */
 function socialProviders(env: Env) {
   return {
     ...(features.google &&
       env.GOOGLE_CLIENT_ID &&
       env.GOOGLE_CLIENT_SECRET && {
-        google: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET },
+        google: {
+          clientId: env.GOOGLE_CLIENT_ID,
+          clientSecret: env.GOOGLE_CLIENT_SECRET,
+          accessType: "offline" as const,
+        },
       }),
   };
 }

@@ -9,8 +9,17 @@ import { SHORT_MAX_SECONDS } from "@repo/contracts/api";
 import type { VideoId } from "@repo/contracts/ids";
 import { HOUR_S } from "@repo/contracts/time";
 import { AppError, CacheService, InjectRedis, type Redis } from "@repo/nest-common";
+import type * as z from "zod";
 import { env } from "../../env";
-import { type Video, videoIdFromLink, videoSchema, YouTube, YouTubeError } from "./youtube";
+import {
+  type Credit,
+  creditSchema,
+  type Video,
+  videoIdFromLink,
+  videoSchema,
+  YouTube,
+  YouTubeError,
+} from "./youtube";
 
 const VIDEO_TTL_S = HOUR_S;
 
@@ -42,16 +51,33 @@ export class ShortsService {
     return video;
   }
 
+  /**
+   * The original's title and channel, for the credits of a cut published from it; null
+   * when YouTube no longer shows it.
+   */
+  credit(videoId: VideoId): Promise<Credit | null> {
+    return this.cached(`credit:${videoId}`, creditSchema, (youtube) => youtube.credit(videoId));
+  }
+
   /** The video, from the cache when it's there and from YouTube otherwise. */
-  private async video(videoId: VideoId): Promise<Video | null> {
+  private video(videoId: VideoId): Promise<Video | null> {
+    return this.cached(`video:${videoId}`, videoSchema, (youtube) => youtube.video(videoId));
+  }
+
+  /** What YouTube says, from the cache when it's there; what isn't there isn't cached. */
+  private async cached<T>(
+    key: string,
+    schema: z.ZodType<T>,
+    read: (youtube: YouTube) => Promise<T | null>,
+  ): Promise<T | null> {
     if (!this.youtube) {
       throw new AppError("FEATURE_DISABLED", { params: { feature: "director" } });
     }
-    const cached = await this.cache.get(`video:${videoId}`, videoSchema);
+    const cached = await this.cache.get(key, schema);
     if (cached) {
       return cached;
     }
-    const video = await this.youtube.video(videoId).catch((error: unknown) => {
+    const value = await read(this.youtube).catch((error: unknown) => {
       if (error instanceof YouTubeError) {
         throw new AppError("UPSTREAM_UNAVAILABLE", {
           params: { service: "youtube" },
@@ -60,9 +86,9 @@ export class ShortsService {
       }
       throw error;
     });
-    if (video) {
-      await this.cache.set(`video:${videoId}`, video, VIDEO_TTL_S);
+    if (value) {
+      await this.cache.set(key, value, VIDEO_TTL_S);
     }
-    return video;
+    return value;
   }
 }

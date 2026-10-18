@@ -294,7 +294,7 @@ export type DirectorTakeOut = {
 /**
  * ErrorCode
  */
-export type ErrorCode = 'BAD_REQUEST' | 'VALIDATION_FAILED' | 'UNAUTHENTICATED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT' | 'RATE_LIMITED' | 'INTERNAL' | 'SERVICE_UNAVAILABLE' | 'METHOD_NOT_SUPPORTED' | 'TIMEOUT' | 'PAYLOAD_TOO_LARGE' | 'UNSUPPORTED_MEDIA_TYPE' | 'IDEMPOTENCY_IN_PROGRESS' | 'FEATURE_DISABLED' | 'CLIENT_OUTDATED' | 'DESTINATION_NOT_ALLOWED' | 'RESPONSE_TOO_LARGE' | 'TOO_MANY_REDIRECTS' | 'UPSTREAM_UNAVAILABLE' | 'NO_ACTIVE_ORGANIZATION' | 'DEMO_ACCOUNT_LOCKED' | 'FILE_NOT_FOUND' | 'FILE_TYPE_NOT_ALLOWED' | 'FILE_TOO_LARGE' | 'FILE_SIZE_MISMATCH' | 'FILE_INFECTED' | 'FILE_UNREADABLE' | 'FILE_NOT_UPLOADED' | 'FILE_NOT_READY' | 'INVALID_SIGNATURE' | 'AI_BUDGET_EXCEEDED' | 'DIRECTOR_INDEX_LIMIT' | 'DIRECTOR_VIDEO_UNAVAILABLE' | 'DIRECTOR_TOO_LONG' | 'DIRECTOR_PLAN_NOT_FOUND' | 'DIRECTOR_PLAN_NOT_READY' | 'DIRECTOR_SHOT_NOT_FOUND' | 'DIRECTOR_TAKE_NOT_FOUND' | 'DIRECTOR_TAKE_KIND_MISMATCH' | 'DIRECTOR_CALL_TOO_FAST' | 'DIRECTOR_VIDEO_UNREADABLE' | 'DIRECTOR_ANALYSIS_FAILED' | 'DIRECTOR_REVIEW_FAILED';
+export type ErrorCode = 'BAD_REQUEST' | 'VALIDATION_FAILED' | 'UNAUTHENTICATED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT' | 'RATE_LIMITED' | 'INTERNAL' | 'SERVICE_UNAVAILABLE' | 'METHOD_NOT_SUPPORTED' | 'TIMEOUT' | 'PAYLOAD_TOO_LARGE' | 'UNSUPPORTED_MEDIA_TYPE' | 'IDEMPOTENCY_IN_PROGRESS' | 'FEATURE_DISABLED' | 'CLIENT_OUTDATED' | 'DESTINATION_NOT_ALLOWED' | 'RESPONSE_TOO_LARGE' | 'TOO_MANY_REDIRECTS' | 'UPSTREAM_UNAVAILABLE' | 'NO_ACTIVE_ORGANIZATION' | 'DEMO_ACCOUNT_LOCKED' | 'FILE_NOT_FOUND' | 'FILE_TYPE_NOT_ALLOWED' | 'FILE_TOO_LARGE' | 'FILE_SIZE_MISMATCH' | 'FILE_INFECTED' | 'FILE_UNREADABLE' | 'FILE_NOT_UPLOADED' | 'FILE_NOT_READY' | 'INVALID_SIGNATURE' | 'AI_BUDGET_EXCEEDED' | 'DIRECTOR_INDEX_LIMIT' | 'DIRECTOR_VIDEO_UNAVAILABLE' | 'DIRECTOR_TOO_LONG' | 'DIRECTOR_PLAN_NOT_FOUND' | 'DIRECTOR_PLAN_NOT_READY' | 'DIRECTOR_SHOT_NOT_FOUND' | 'DIRECTOR_TAKE_NOT_FOUND' | 'DIRECTOR_TAKE_KIND_MISMATCH' | 'DIRECTOR_CALL_TOO_FAST' | 'DIRECTOR_CUT_NOT_FOUND' | 'PUBLISH_DEMO_DISABLED' | 'PUBLISH_NEEDS_YOUTUBE' | 'PUBLISH_CUT_NOT_READY' | 'PUBLISH_NO_CHANNEL' | 'PUBLISH_QUOTA_EXHAUSTED' | 'DIRECTOR_VIDEO_UNREADABLE' | 'DIRECTOR_ANALYSIS_FAILED' | 'DIRECTOR_REVIEW_FAILED';
 
 /**
  * ErrorData
@@ -423,6 +423,60 @@ export type PhoneAngle = {
      * Degrees either way that still look right.
      */
     tolerance: number;
+};
+
+/**
+ * PublishCopy
+ */
+export type PublishCopy = {
+    /**
+     * Credits
+     */
+    credits: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Hashtags
+     *
+     * Single words, without the #.
+     */
+    hashtags: Array<string>;
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
+ * PublishCopyRequest
+ */
+export type PublishCopyRequest = {
+    /**
+     * Cutid
+     */
+    cutId: string;
+    /**
+     * The original Short, when YouTube still shows it.
+     */
+    original: PublishOriginal | null;
+};
+
+/**
+ * PublishOriginal
+ *
+ * The original Short as YouTube shows it, for the credits.
+ */
+export type PublishOriginal = {
+    /**
+     * Channel
+     */
+    channel: string;
+    /**
+     * Title
+     */
+    title: string;
 };
 
 /**
@@ -801,6 +855,46 @@ export type CreateDirectorCutResponses = {
 
 export type CreateDirectorCutResponse = CreateDirectorCutResponses[keyof CreateDirectorCutResponses];
 
+export type GetDirectorCutData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path: {
+        /**
+         * Cut Id
+         */
+        cut_id: string;
+    };
+    query?: never;
+    url: '/v1/director/cuts/{cut_id}';
+};
+
+export type GetDirectorCutErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type GetDirectorCutError = GetDirectorCutErrors[keyof GetDirectorCutErrors];
+
+export type GetDirectorCutResponses = {
+    /**
+     * Successful Response
+     */
+    200: DirectorCutOut;
+};
+
+export type GetDirectorCutResponse = GetDirectorCutResponses[keyof GetDirectorCutResponses];
+
 export type GetDirectorLibraryData = {
     body?: never;
     headers?: {
@@ -994,6 +1088,41 @@ export type ListDirectorTakesResponses = {
 };
 
 export type ListDirectorTakesResponse = ListDirectorTakesResponses[keyof ListDirectorTakesResponses];
+
+export type WriteDirectorPublishCopyData = {
+    body: PublishCopyRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/director/publish-copy';
+};
+
+export type WriteDirectorPublishCopyErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type WriteDirectorPublishCopyError = WriteDirectorPublishCopyErrors[keyof WriteDirectorPublishCopyErrors];
+
+export type WriteDirectorPublishCopyResponses = {
+    /**
+     * Successful Response
+     */
+    200: PublishCopy;
+};
+
+export type WriteDirectorPublishCopyResponse = WriteDirectorPublishCopyResponses[keyof WriteDirectorPublishCopyResponses];
 
 export type CheckDirectorSceneData = {
     body: SceneCheckRequest;

@@ -83,6 +83,20 @@ describe("reading a video", () => {
   });
 });
 
+describe("reading who made a video", () => {
+  it("reads its title and channel, and nothing when YouTube doesn't have it", async () => {
+    calls.length = 0;
+    const snippet = { title: "4 head nods", channelTitle: "Maya Travels" };
+    route = (_url, response) => send(response, 200, { items: [{ id: "Short000001", snippet }] });
+    await expect(youtube().credit(id("Short000001"))).resolves.toEqual({
+      title: "4 head nods",
+      channel: "Maya Travels",
+    });
+    expect(calls[0]?.searchParams.get("part")).toBe("snippet");
+    await expect(youtube().credit(id("Another0001"))).resolves.toBeNull();
+  });
+});
+
 describe("a call that fails", () => {
   it("carries YouTube's status and reason", async () => {
     route = (_url, response) =>

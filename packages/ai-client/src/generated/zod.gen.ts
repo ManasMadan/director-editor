@@ -172,6 +172,12 @@ export const zErrorCode = z.enum([
     'DIRECTOR_TAKE_NOT_FOUND',
     'DIRECTOR_TAKE_KIND_MISMATCH',
     'DIRECTOR_CALL_TOO_FAST',
+    'DIRECTOR_CUT_NOT_FOUND',
+    'PUBLISH_DEMO_DISABLED',
+    'PUBLISH_NEEDS_YOUTUBE',
+    'PUBLISH_CUT_NOT_READY',
+    'PUBLISH_NO_CHANNEL',
+    'PUBLISH_QUOTA_EXHAUSTED',
     'DIRECTOR_VIDEO_UNREADABLE',
     'DIRECTOR_ANALYSIS_FAILED',
     'DIRECTOR_REVIEW_FAILED'
@@ -269,6 +275,34 @@ export const zPhoneAngle = z.object({
     pitch: z.number().gte(-90).lte(90),
     roll: z.number().gte(-45).lte(45),
     tolerance: z.number().gte(3).lte(30)
+});
+
+/**
+ * PublishCopy
+ */
+export const zPublishCopy = z.object({
+    credits: z.string().max(300),
+    description: z.string().max(3000),
+    hashtags: z.array(z.string().min(1).max(40)).max(15),
+    title: z.string().min(1).max(91)
+});
+
+/**
+ * PublishOriginal
+ *
+ * The original Short as YouTube shows it, for the credits.
+ */
+export const zPublishOriginal = z.object({
+    channel: z.string().min(1).max(200),
+    title: z.string().min(1).max(200)
+});
+
+/**
+ * PublishCopyRequest
+ */
+export const zPublishCopyRequest = z.object({
+    cutId: z.uuid(),
+    original: zPublishOriginal.nullable()
 });
 
 /**
@@ -464,6 +498,20 @@ export const zCreateDirectorCutHeaders = z.object({
  */
 export const zCreateDirectorCutResponse = zDirectorCutOut;
 
+export const zGetDirectorCutHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+export const zGetDirectorCutPath = z.object({
+    cut_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zGetDirectorCutResponse = zDirectorCutOut;
+
 export const zGetDirectorLibraryHeaders = z.object({
     authorization: z.string().nullish(),
     'x-request-id': z.string().nullish()
@@ -531,6 +579,18 @@ export const zListDirectorTakesPath = z.object({
  * Successful Response
  */
 export const zListDirectorTakesResponse = z.array(zDirectorTakeOut);
+
+export const zWriteDirectorPublishCopyBody = zPublishCopyRequest;
+
+export const zWriteDirectorPublishCopyHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+/**
+ * Successful Response
+ */
+export const zWriteDirectorPublishCopyResponse = zPublishCopy;
 
 export const zCheckDirectorSceneBody = zSceneCheckRequest;
 

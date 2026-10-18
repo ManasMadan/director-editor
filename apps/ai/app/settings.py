@@ -128,6 +128,10 @@ class Settings(GeminiSettings):
     director_tokens_per_speech: int = Field(
         default=3_000, ge=1_000, alias="DIRECTOR_TOKENS_PER_SPEECH"
     )
+    # Writing a cut's YouTube post reads its plan's text, no video.
+    director_tokens_per_publish_copy: int = Field(
+        default=20_000, ge=2_000, alias="DIRECTOR_TOKENS_PER_PUBLISH_COPY"
+    )
 
     # Product analytics (app/analytics.py): plans indexed and take reviews, streamed into
     # this BigQuery dataset's `events` table in GOOGLE_CLOUD_PROJECT, the same table

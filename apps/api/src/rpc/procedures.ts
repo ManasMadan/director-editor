@@ -57,6 +57,8 @@ export interface OrgCaller {
   role: OrgRole;
   /** When the session signed in. */
   signedInAt: Date;
+  /** The shared demo account, which may not publish (its user's `demo` flag). */
+  demo: boolean;
 }
 
 type ErrorParams = ErrorData["params"];
@@ -201,6 +203,7 @@ export function orgCallerFor(auth: Auth, memberships: Memberships) {
       role,
       userId: result.user.id,
       signedInAt: new Date(result.session.createdAt),
+      demo: result.user.demo === true,
     };
   };
 }

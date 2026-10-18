@@ -223,13 +223,73 @@ describe("least privilege", () => {
     });
   });
 
-  it("lets the API read Director's cuts but not change them", async () => {
+  it("lets the API read Director's cuts and record their publishing, and nothing else", async () => {
+    const cutId = await asRole("migrator", async (client) => {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+      const {
+        rows: [plan],
+      } = await client.query<{ id: string }>(
+        `INSERT INTO ai.director_plan (org_id, video_id, source, status, stage, plan, updated_at)
+         VALUES ($1, 'Publish_Cut', 'seed', 'ready', 'ready', '{}', now()) RETURNING id`,
+        [orgA],
+      );
+      await client.query("SELECT set_config('app.user_id', $1, true)", [userId]);
+      const {
+        rows: [file],
+      } = await client.query<{ id: string }>(
+        `INSERT INTO files.file (user_id, purpose, status, filename, declared_type, declared_size, updated_at)
+         VALUES ($1, 'director-cut-video', 'ready', 'cut.mp4', 'video/mp4', 10, now()) RETURNING id`,
+        [userId],
+      );
+      const {
+        rows: [cut],
+      } = await client.query<{ id: string }>(
+        `INSERT INTO ai.director_cut (org_id, plan_id, user_id, title, picks, file_id, duration_ms, updated_at)
+         VALUES ($1, $2, $3, 'Mine', '[]', $4, 1000, now()) RETURNING id`,
+        [orgA, plan?.id, userId, file?.id],
+      );
+      await client.query("COMMIT");
+      return cut?.id;
+    });
+    const publish = (orgId: OrgId) =>
+      tenantTx(api, orgId, (tx) =>
+        tx.directorCut.updateMany({
+          where: { id: cutId },
+          data: {
+            publishStatus: "published",
+            youtubeVideoId: "dQw4w9WgXcQ",
+            visibility: "private",
+          },
+        }),
+      );
+    // Its own workspace's cut, the publish columns and updated_at (Prisma sets it).
+    expect(await publish(orgA)).toEqual({ count: 1 });
+    // Another workspace's: row-level security shows it nothing to update.
+    expect(await publish(orgB)).toEqual({ count: 0 });
     await asRole("app_api", async (client) => {
       await expect(client.query("SELECT id FROM ai.director_cut")).resolves.toMatchObject({
         rowCount: 0,
       });
+      for (const change of [
+        "title = 'Theirs'",
+        "picks = '[]'",
+        "file_id = gen_random_uuid()",
+        "user_id = gen_random_uuid()",
+        "duration_ms = 0",
+      ]) {
+        await expect(
+          client.query(`UPDATE ai.director_cut SET ${change} WHERE false`),
+          change,
+        ).rejects.toThrow(/permission denied/);
+      }
+      await expect(client.query("DELETE FROM ai.director_cut WHERE false")).rejects.toThrow(
+        /permission denied/,
+      );
       await expect(
-        client.query("UPDATE ai.director_cut SET publish_status = 'published' WHERE false"),
+        client.query(
+          "INSERT INTO ai.director_cut (org_id, plan_id, user_id, title, picks, file_id, duration_ms, updated_at) SELECT org_id, plan_id, user_id, title, picks, file_id, duration_ms, now() FROM ai.director_cut WHERE false",
+        ),
       ).rejects.toThrow(/permission denied/);
       await expect(client.query("SELECT id FROM ai.director_plan")).rejects.toThrow(
         /permission denied/,

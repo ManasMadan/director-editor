@@ -53,6 +53,12 @@ const cut = {
   visibility: null,
   createdAt: "2026-01-01T00:00:00Z",
 };
+const copy = {
+  title: "My pen drop",
+  description: "Tried the trend.",
+  hashtags: ["pendrop"],
+  credits: "Inspired by Maya.",
+};
 const scene = {
   direction: "none",
   distanceMeters: null,
@@ -148,6 +154,8 @@ describe("Director's calls", () => {
         "/v1/director/library": [200, { templates: [plan], indexUsed: true }],
         "/v1/director/cuts": request.method === "POST" ? [201, cut] : [200, [cut]],
         [`/v1/director/plans/${VIDEO}/cuts`]: [200, [cut]],
+        [`/v1/director/cuts/${cut.id}`]: [200, cut],
+        "/v1/director/publish-copy": [200, copy],
       };
       const [status, payload] = answers[request.url ?? ""] ?? [200, plan];
       json(response, status, payload);
@@ -183,6 +191,13 @@ describe("Director's calls", () => {
     ).resolves.toEqual(cut);
     await expect(director.listCuts(caller, VIDEO)).resolves.toEqual([cut]);
     await expect(director.listMedia(caller)).resolves.toEqual([cut]);
+    await expect(director.getCut(caller, cut.id)).resolves.toEqual(cut);
+    await expect(
+      director.writePublishCopy(caller, {
+        cutId: cut.id,
+        original: { title: "Pen drop", channel: "Maya" },
+      }),
+    ).resolves.toEqual(copy);
     expect(seen.map(({ method, path }) => `${method} ${path}`)).toEqual([
       "POST /v1/director/plans",
       "GET /v1/director/library",
@@ -193,6 +208,8 @@ describe("Director's calls", () => {
       "POST /v1/director/cuts",
       `GET /v1/director/plans/${VIDEO}/cuts`,
       "GET /v1/director/cuts",
+      `GET /v1/director/cuts/${cut.id}`,
+      "POST /v1/director/publish-copy",
     ]);
   });
 

@@ -246,6 +246,7 @@ themselves, never `bun dev` or `bun dev:full`. See [director.md](director.md).
 | `DIRECTOR_TOKENS_PER_PLAN` | ai | 200000 | Cap per plan: watching the whole short and thinking (at least 10000, at most 2000000, what the Cloud Run indexer accepts). |
 | `DIRECTOR_TOKENS_PER_SCENE_CHECK` | ai | 12000 | Cap per scene check: one camera frame (at least 2000). |
 | `DIRECTOR_TOKENS_PER_REVIEW` | ai | 120000 | Cap per take review: watching one take (at least 10000). |
+| `DIRECTOR_TOKENS_PER_PUBLISH_COPY` | ai | 20000 | Cap per YouTube post Director writes for a video: its plan's text, no video (at least 2000). |
 | `INDEX_MODEL` | ai | `gemini-4-argon` | The model a plan job indexes a short with, unattended, so it can be a different, more thorough model than `DIRECTOR_MODEL`'s live scene checks and reviews. |
 | `INDEX_FALLBACK_MODEL` | ai | `gemini-3.1-pro-preview` | Tried once after `INDEX_MODEL`'s own retries on a plan are spent (a transient failure, not a refusal). |
 | `MEDIA_BUCKET` | ai, indexer | empty in `.env.example` | The Cloud Storage bucket a short's original audio is captured into while it's indexed (`audio/<videoId>.m4a`, yt-dlp then an upload with Application Default Credentials): production's `director-media-…`, the same bucket as `GCS_BUCKET`, which apps/api signs links to. The account indexing (the VM's, or the indexer's on Cloud Run) needs `roles/storage.objectAdmin` on it. Unset: the audio isn't captured; plans are still written. |

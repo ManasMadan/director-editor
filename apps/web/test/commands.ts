@@ -7,6 +7,7 @@
 import { randomInt } from "node:crypto";
 import type { NotificationPayload } from "@repo/jobs";
 import { totp as totpCode } from "@repo/testing/totp";
+import { symmetricEncrypt } from "better-auth/crypto";
 import { Queue } from "bullmq";
 import { Redis } from "ioredis";
 import pg from "pg";
@@ -504,8 +505,111 @@ const fakeLibrary: BrowserCommand<
   }
 };
 
+/** A cut as the AI stand-in answers it, and the YouTube post Gemini writes for it. */
+const fakeCut: BrowserCommand<[cutId: string, state: { cut: object; copy?: object }]> = async (
+  _context,
+  cutId,
+  state,
+) => {
+  const response = await fetch(`${(await services()).aiUrl}/__fake/cuts/${cutId}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(state),
+  });
+  if (!response.ok) {
+    throw new Error(`the AI stand-in answered ${response.status}`);
+  }
+};
+
+const YOUTUBE_UPLOAD = "https://www.googleapis.com/auth/youtube.upload";
+
+/**
+ * Links a Google account allowed to upload to YouTube to the user, as consenting in
+ * the publish sheet would: the mock Google's consent and token exchange give its tokens,
+ * stored the way better-auth stores them (encrypted with BETTER_AUTH_SECRET, which the
+ * full API shares with this process).
+ */
+const linkYouTube: BrowserCommand<[userId: string, email: string]> = async (
+  _context,
+  userId,
+  email,
+) => {
+  const { googleUrl } = await services();
+  const authorize = new URL(`${googleUrl}/o/oauth2/v2/auth`);
+  for (const [name, value] of Object.entries({
+    client_id: "web-tests.apps.googleusercontent.com",
+    redirect_uri: "http://localhost/callback",
+    response_type: "code",
+    login_hint: email,
+    scope: `openid email profile ${YOUTUBE_UPLOAD}`,
+  })) {
+    authorize.searchParams.set(name, value);
+  }
+  const consent = await fetch(authorize, { redirect: "manual" });
+  const code = new URL(String(consent.headers.get("location"))).searchParams.get("code");
+  const tokens = (await (
+    await fetch(`${googleUrl}/token`, {
+      method: "POST",
+      body: new URLSearchParams({ grant_type: "authorization_code", code: String(code) }),
+    })
+  ).json()) as { access_token: string; refresh_token: string; scope: string };
+  const encrypted = (data: string) =>
+    symmetricEncrypt({ key: String(process.env.BETTER_AUTH_SECRET), data });
+  await sqlRows(
+    `INSERT INTO auth.account (account_id, provider_id, user_id, access_token, refresh_token,
+                               access_token_expires_at, scope, updated_at)
+     VALUES ($1, 'google', $2, $3, $4, now() + interval '1 hour', $5, now())`,
+    [
+      email,
+      userId,
+      await encrypted(tokens.access_token),
+      await encrypted(tokens.refresh_token),
+      tokens.scope.split(" ").join(","),
+    ],
+  );
+};
+
+/** Writes a file's bytes into the tests' object storage, where the API reads it from. */
+const storeFile: BrowserCommand<[key: string, base64: string, contentType: string]> = async (
+  _context,
+  key,
+  base64,
+  contentType,
+) => {
+  const storage = createStorage({
+    STORAGE_PROVIDER: "s3",
+    S3_BUCKET: process.env.S3_BUCKET ?? "uploads",
+    S3_REGION: process.env.S3_REGION ?? "us-east-1",
+    S3_ENDPOINT: process.env.S3_ENDPOINT,
+    S3_ACCESS_KEY_ID: process.env.S3_ACCESS_KEY_ID,
+    S3_SECRET_ACCESS_KEY: process.env.S3_SECRET_ACCESS_KEY,
+    S3_FORCE_PATH_STYLE: true,
+  });
+  await storage?.write(key, Buffer.from(base64, "base64"), contentType);
+};
+
+/**
+ * Starts the day's allowance of YouTube uploads afresh (the API's counter in the web
+ * tests' Valkey database, which outlives a run): every test here may publish.
+ */
+const resetPublishAllowance: BrowserCommand<[]> = async () => {
+  const redis = new Redis(REDIS_URL);
+  try {
+    const keys = await redis.keys("publish:uploads:*");
+    if (keys.length) {
+      await redis.del(...keys);
+    }
+  } finally {
+    redis.disconnect();
+  }
+};
+
 export const commands = {
   answeredRequests,
+  resetPublishAllowance,
+  fakeCut,
+  linkYouTube,
+  storeFile,
   fakeLibrary,
   checkUpload,
   fakeDirector,
@@ -533,6 +637,10 @@ declare module "vitest/browser" {
   interface BrowserCommands {
     answeredRequests(part: string): Promise<number>;
     checkUpload(fileId: string, rejectReason?: string): Promise<void>;
+    fakeCut(cutId: string, state: { cut: object; copy?: object }): Promise<void>;
+    resetPublishAllowance(): Promise<void>;
+    linkYouTube(userId: string, email: string): Promise<void>;
+    storeFile(key: string, base64: string, contentType: string): Promise<void>;
     fakeDirector(
       videoId: string,
       state: { plan?: object; takes?: object[]; cuts?: object[]; scene?: object },

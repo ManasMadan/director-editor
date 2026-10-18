@@ -597,6 +597,12 @@
           "DIRECTOR_TAKE_NOT_FOUND",
           "DIRECTOR_TAKE_KIND_MISMATCH",
           "DIRECTOR_CALL_TOO_FAST",
+          "DIRECTOR_CUT_NOT_FOUND",
+          "PUBLISH_DEMO_DISABLED",
+          "PUBLISH_NEEDS_YOUTUBE",
+          "PUBLISH_CUT_NOT_READY",
+          "PUBLISH_NO_CHANNEL",
+          "PUBLISH_QUOTA_EXHAUSTED",
           "DIRECTOR_VIDEO_UNREADABLE",
           "DIRECTOR_ANALYSIS_FAILED",
           "DIRECTOR_REVIEW_FAILED"
@@ -847,6 +853,96 @@
           "height"
         ],
         "title": "PhoneAngle",
+        "type": "object"
+      },
+      "PublishCopy": {
+        "properties": {
+          "credits": {
+            "maxLength": 300,
+            "title": "Credits",
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 3000,
+            "title": "Description",
+            "type": "string"
+          },
+          "hashtags": {
+            "description": "Single words, without the #.",
+            "items": {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 15,
+            "title": "Hashtags",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 91,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "description",
+          "hashtags",
+          "credits"
+        ],
+        "title": "PublishCopy",
+        "type": "object"
+      },
+      "PublishCopyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "cutId": {
+            "format": "uuid",
+            "title": "Cutid",
+            "type": "string"
+          },
+          "original": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublishOriginal"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The original Short, when YouTube still shows it."
+          }
+        },
+        "required": [
+          "cutId",
+          "original"
+        ],
+        "title": "PublishCopyRequest",
+        "type": "object"
+      },
+      "PublishOriginal": {
+        "additionalProperties": false,
+        "description": "The original Short as YouTube shows it, for the credits.",
+        "properties": {
+          "channel": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Channel",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "channel"
+        ],
+        "title": "PublishOriginal",
         "type": "object"
       },
       "SceneCheck": {
@@ -1483,6 +1579,79 @@
         "summary": "Create Director Cut"
       }
     },
+    "/v1/director/cuts/{cut_id}": {
+      "get": {
+        "description": "One of the caller's cuts (DIRECTOR_CUT_NOT_FOUND unless it's theirs).",
+        "operationId": "getDirectorCut",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cut_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Cut Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectorCutOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Get Director Cut"
+      }
+    },
     "/v1/director/library": {
       "get": {
         "description": "The workspace's plans, and whether the caller has indexed their own short.",
@@ -1843,6 +2012,79 @@
           }
         },
         "summary": "List Director Takes"
+      }
+    },
+    "/v1/director/publish-copy": {
+      "post": {
+        "description": "Gemini's YouTube post for one of the caller's cuts: a title, a description and\nhashtags in the Short's language, and the credits to the original.",
+        "operationId": "writeDirectorPublishCopy",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishCopyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishCopy"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Write Director Publish Copy"
       }
     },
     "/v1/director/scene-checks": {

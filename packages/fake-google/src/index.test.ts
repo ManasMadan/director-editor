@@ -237,8 +237,8 @@ describe("the mock Gemini", () => {
 });
 
 describe("the mock YouTube", () => {
-  it("describes any well-formed video", async () => {
-    const videos = await youtube("videos?id=HasaZYkwYds,AbCdEfGhIjK,bad");
+  it("describes any well-formed video YouTube still shows", async () => {
+    const videos = await youtube("videos?id=HasaZYkwYds,AbCdEfGhIjK,bad,GoneVideo01");
     expect(videos.json.items?.map((item) => item.id)).toEqual(["HasaZYkwYds", "AbCdEfGhIjK"]);
     expect(shortOf("AbCdEfGhIjK").title).toBe("Your pasted short");
     expect((await youtube("videos")).json.items).toEqual([]);

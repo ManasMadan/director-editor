@@ -11,6 +11,7 @@ import { env } from "./env";
 import { AnalyticsModule } from "./modules/analytics";
 import { DirectorModule } from "./modules/director";
 import { FilesModule } from "./modules/files";
+import { PublishModule } from "./modules/publish";
 import { RealtimeModule } from "./modules/realtime";
 import { UserModule } from "./modules/user";
 import { NotificationsProducerModule } from "./notifications";
@@ -37,6 +38,7 @@ import { NotificationsProducerModule } from "./notifications";
     FilesModule,
     AnalyticsModule,
     DirectorModule,
+    PublishModule,
   ],
 })
 export class AppModule {}

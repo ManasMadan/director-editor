@@ -51,6 +51,7 @@ from app.indexing import (
     retryable,
 )
 from app.log import log
+from app.publish_copy import PUBLISH_INSTRUCTIONS, tidy
 from app.queues import DirectorQueue
 from app.realtime import publish_to_org
 from app.schemas import (
@@ -61,6 +62,9 @@ from app.schemas import (
     IndexRequest,
     IndexResult,
     PlanStage,
+    PublishCopy,
+    PublishCopyDraft,
+    PublishCopyRequest,
     SceneCheck,
     Shot,
     ShotPlan,
@@ -81,6 +85,10 @@ TAKE_DOWNLOAD_SECONDS = 60.0
 # a video. Past these, the call has failed.
 SCENE_TIMEOUT_SECONDS = 20.0
 WATCH_TIMEOUT_SECONDS = 120.0
+# A YouTube post is written while the member waits in the publish sheet. Under apps/api's
+# own wait for this service (packages/ai-client, 30 s), with room to answer: past that,
+# the tokens would be spent on a post nobody gets.
+COPY_TIMEOUT_SECONDS = 25.0
 # The partial unique index that holds each member to one short of their own (Prisma's
 # ai.prisma, DirectorPlan).
 ONE_USER_INDEX = "director_plan_one_user_index"
@@ -183,6 +191,7 @@ class Budgets:
     per_plan: int
     per_scene_check: int
     per_review: int
+    per_publish_copy: int
 
 
 def _google_provider(settings: GeminiSettings) -> GoogleProvider | GoogleCloudProvider:
@@ -415,6 +424,13 @@ class Director:
             output_type=TakeReview,
             instructions=REVIEW_INSTRUCTIONS,
             model_settings=ModelSettings(thinking="low", timeout=WATCH_TIMEOUT_SECONDS),
+            defer_model_check=True,
+        )
+        self._copywriter = Agent(
+            model,
+            output_type=PublishCopyDraft,
+            instructions=PUBLISH_INSTRUCTIONS,
+            model_settings=ModelSettings(thinking="low", timeout=COPY_TIMEOUT_SECONDS),
             defer_model_check=True,
         )
 
@@ -851,6 +867,54 @@ class Director:
         async with tenant(org_id) as session:
             return [(cut, plan) for cut, plan in (await session.execute(query)).all()]
 
+    async def cut(
+        self, org_id: UUID, user_id: UUID, cut_id: UUID
+    ) -> tuple[DirectorCut, DirectorPlan]:
+        """One of the caller's cuts, with its plan (DIRECTOR_CUT_NOT_FOUND when it isn't
+        theirs, or isn't in this workspace)."""
+        async with tenant(org_id) as session:
+            found = (
+                await session.execute(
+                    select(DirectorCut, DirectorPlan)
+                    .join(DirectorPlan, DirectorCut.plan_id == DirectorPlan.id)
+                    .where(DirectorCut.id == cut_id, DirectorCut.user_id == user_id)
+                )
+            ).one_or_none()
+        if found is None:
+            raise AppError("DIRECTOR_CUT_NOT_FOUND")
+        cut, plan = found
+        return cut, plan
+
+    # ------------------------------------------------------------------------ publishing
+
+    async def publish_copy(
+        self, org_id: UUID, user_id: UUID, body: PublishCopyRequest
+    ) -> PublishCopy:
+        """Gemini's YouTube post for one of the caller's cuts, from its plan
+        (DIRECTOR_CUT_NOT_FOUND, AI_BUDGET_EXCEEDED, UPSTREAM_UNAVAILABLE when Gemini
+        fails)."""
+        cut, plan = await self.cut(org_id, user_id, body.cutId)
+        # A cut is only ever made of a ready plan, and a ready plan stays ready.
+        shots = ShotPlan.model_validate(plan.plan)
+        reservation = await self._reserve(
+            org_id, user_id, "director-publish", self._budgets.per_publish_copy
+        )
+        if reservation is None:
+            raise AppError("AI_BUDGET_EXCEEDED")
+        usage = RunUsage()
+        try:
+            result = await self._copywriter.run(
+                _copy_prompt(shots, cut.title, body),
+                usage=usage,
+                usage_limits=UsageLimits(total_tokens_limit=reservation.tokens),
+            )
+        except Exception:
+            log.exception("writing a post failed", cut_id=str(cut.id))
+            raise AppError("UPSTREAM_UNAVAILABLE", {"service": "gemini"}) from None
+        finally:
+            await settle(reservation, usage.input_tokens, usage.output_tokens)
+        return tidy(result.output, cut.title, shots.title)
+
     async def _download(self, url: str) -> tuple[bytes, TakeContentType]:
         """The take's bytes and type, read from its presigned URL up to MAX_TAKE_BYTES."""
         async with self._http.stream("GET", url, timeout=TAKE_DOWNLOAD_SECONDS) as response:
@@ -918,6 +982,20 @@ class ReviewInterrupted(Exception):
         super().__init__(f"review of take {take_id} interrupted; retrying")
 
 
+def _copy_prompt(plan: ShotPlan, title: str, body: PublishCopyRequest) -> list[str]:
+    """What Gemini writes a cut's post from: the original's plan (the words said in it
+    show its language), the member's title, and the original as YouTube shows it."""
+    said = [line.text for shot in plan.shots for line in shot.script]
+    prompt = [
+        "The original's plan:\n" + plan.model_dump_json(include={"title", "format", "summary"}),
+        "What is said or shown as text in it:\n" + ("\n".join(said) or "(nothing)"),
+        f"The title they gave their video: {title}",
+    ]
+    if body.original is not None:
+        prompt.append(f"The original on YouTube: {body.original.title}, by {body.original.channel}")
+    return prompt
+
+
 def _content_type(header: str) -> TakeContentType:
     kind = header.split(";")[0].strip().lower()
     if kind == "video/webm":
@@ -949,6 +1027,7 @@ def create_director(
             per_plan=settings.director_tokens_per_plan,
             per_scene_check=settings.director_tokens_per_scene_check,
             per_review=settings.director_tokens_per_review,
+            per_publish_copy=settings.director_tokens_per_publish_copy,
         ),
         queue,
         redis,

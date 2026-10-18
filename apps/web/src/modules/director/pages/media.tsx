@@ -11,8 +11,9 @@ import { cn } from "@repo/ui/lib/utils";
 import { Play } from "lucide-react";
 import Link from "next/link";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { DirectorGate } from "@/modules/shorts";
+import { PublishButton } from "../components/publish-sheet";
 import { useObjectUrl } from "../hooks/use-object-url";
 import { webVtt } from "../lib/captions";
 import { cutsByTemplate, templateThumbnail } from "../lib/cuts";
@@ -138,17 +139,24 @@ function CutPlayer({ cut }: { cut: DirectorCut }) {
 
 function CutCard({ cut }: { cut: DirectorCut }) {
   const format = useFormatter();
+  // Where focus goes when the publish sheet closes with nothing left to publish.
+  const heading = useRef<HTMLHeadingElement>(null);
   return (
     <li className="flex flex-col gap-2">
       <div className="aspect-9/16 overflow-hidden rounded-2xl bg-studio-foreground/5">
         <CutPlayer cut={cut} />
       </div>
       <div className="flex flex-col gap-1 px-0.5">
-        <p className="truncate text-sm font-medium">{cut.title}</p>
+        <h3 ref={heading} tabIndex={-1} className="truncate text-sm font-medium outline-none">
+          {cut.title}
+        </h3>
         <p className="text-xs text-studio-foreground/60">
           {format.dateTime(cut.createdAt, { dateStyle: "medium", timeStyle: "short" })}
         </p>
         <PublishChip publish={cut.publish} />
+        <div>
+          <PublishButton cut={cut} heading={heading} />
+        </div>
       </div>
     </li>
   );

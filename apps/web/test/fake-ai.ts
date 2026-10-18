@@ -8,10 +8,16 @@
  * test sets for it (`PUT /__fake/library/<orgId>`, the `fakeLibrary` command), and
  * indexing a short adds to it as the real service does: once per member, a short already
  * there answered with its plan.
+ * A cut's YouTube post, and the cut as publishing reads it, are what a test sets
+ * for it (`PUT /__fake/cuts/<cutId>`, the `fakeCut` command). Where publishing got is
+ * what the API wrote on the cut's row in the tests' database, read back as apps/ai reads
+ * it, so the cut lists change once a publish lands.
  */
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
+import pg from "pg";
+import * as z from "zod";
 
 async function body(request: IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = [];
@@ -57,13 +63,54 @@ function callerOf(request: IncomingMessage): string {
   return claims.sub ?? "";
 }
 
-export async function startFakeAi() {
+/** A cut as this stand-in answers it: any fields, and its id. */
+const cutBody = z.looseObject({ id: z.string() });
+type CutBody = z.infer<typeof cutBody>;
+
+const publishingRow = z.object({
+  id: z.string(),
+  publishStatus: z.string(),
+  youtubeVideoId: z.string().nullable(),
+  visibility: z.string().nullable(),
+});
+
+/** Where each of these cuts' publishing got, by id, for those with a row in the database. */
+async function publishingOf(database: pg.Pool, ids: string[]) {
+  const { rows } = await database.query(
+    `SELECT id::text, publish_status AS "publishStatus", youtube_video_id AS "youtubeVideoId",
+            visibility
+       FROM ai.director_cut WHERE id::text = ANY($1)`,
+    [ids],
+  );
+  return new Map(
+    z
+      .array(publishingRow)
+      .parse(rows)
+      .map(({ id, ...publishing }) => [id, publishing]),
+  );
+}
+
+/** A cut, or a list of them, with where publishing got, from the database. */
+async function withPublishing(database: pg.Pool, body: unknown): Promise<unknown> {
+  const many = z.array(cutBody).safeParse(body);
+  const cuts: CutBody[] = many.success ? many.data : [cutBody.parse(body)];
+  const stored = await publishingOf(
+    database,
+    cuts.map((cut) => cut.id),
+  );
+  const overlaid = cuts.map((cut) => ({ ...cut, ...stored.get(cut.id) }));
+  return many.success ? overlaid : overlaid[0];
+}
+
+export async function startFakeAi(databaseUrl: string) {
+  const database = new pg.Pool({ connectionString: databaseUrl, max: 2 });
   const shorts = new Map<string, DirectorShort>();
   const short = (videoId: string) => {
     const found = shorts.get(videoId) ?? { takes: [], cuts: [] };
     shorts.set(videoId, found);
     return found;
   };
+  const publishable = new Map<string, FakeCut>();
   const libraries = new Map<string, Library>();
   const library = (orgId: string) => {
     const found = libraries.get(orgId) ?? { templates: [], indexUsed: false };
@@ -90,9 +137,18 @@ export async function startFakeAi() {
     }
     const director =
       directorRoute(route, input, short) ??
-      cutRoute(route, input, callerOf(request), shorts, short);
+      cutRoute(route, input, callerOf(request), shorts, short) ??
+      publishRoute(route, input, publishable);
     if (director) {
-      return reply(director.status, director.body);
+      const read = director.status === 200 && /^GET \/v1\/director\/cuts/.test(route);
+      if (!read) {
+        return reply(director.status, director.body);
+      }
+      // A query that fails answers as the real service would, not with a request that hangs.
+      return withPublishing(database, director.body).then(
+        (cuts) => reply(director.status, cuts),
+        () => fail(500, "INTERNAL"),
+      );
     }
     fail(404, "NOT_FOUND");
   });
@@ -100,7 +156,10 @@ export async function startFakeAi() {
   return {
     url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
     secret: `web-tests-ai-${randomUUID()}`,
-    close: () => new Promise((resolve) => server.close(resolve)),
+    close: async () => {
+      await new Promise((resolve) => server.close(resolve));
+      await database.end();
+    },
   };
 }
 
@@ -272,4 +331,33 @@ function cutRoute(
   }
   const cuts = /^GET \/v1\/director\/plans\/([\w-]{11})\/cuts$/.exec(route);
   return cuts?.[1] ? { status: 200, body: own(short(cuts[1]).cuts) } : null;
+}
+
+/** A cut as a test set it, and the post Gemini writes for it (none: Gemini fails). */
+interface FakeCut {
+  cut: Record<string, unknown>;
+  copy?: Record<string, unknown>;
+}
+
+/** A cut's routes: reading it, and Gemini's YouTube post for it. */
+function publishRoute(
+  route: string,
+  input: Record<string, unknown>,
+  cuts: Map<string, FakeCut>,
+): { status: number; body?: unknown } | null {
+  const set = /^PUT \/__fake\/cuts\/([\w-]+)$/.exec(route);
+  if (set?.[1]) {
+    cuts.set(set[1], input as unknown as FakeCut);
+    return { status: 204 };
+  }
+  const read = /^GET \/v1\/director\/cuts\/([\w-]+)$/.exec(route);
+  if (read?.[1]) {
+    const found = cuts.get(read[1]);
+    return found ? { status: 200, body: found.cut } : failure(404, "DIRECTOR_CUT_NOT_FOUND");
+  }
+  if (route === "POST /v1/director/publish-copy") {
+    const copy = cuts.get(String(input.cutId))?.copy;
+    return copy ? { status: 200, body: copy } : failure(502, "UPSTREAM_UNAVAILABLE");
+  }
+  return null;
 }
