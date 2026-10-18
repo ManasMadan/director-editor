@@ -16,14 +16,14 @@ paths:
   contract (zod, with lengths and ranges), queue payloads with `parseJob`, env with
   t3-env in `src/env.ts`, Python input with constrained Pydantic models. Webhook
   bodies and third-party responses are untrusted too.
-- Authorization is the procedure builder (`authed`, `fresh`, `inOrg`, `orgAdmin` in
+- Authorization is the procedure builder (`authed`, `inOrg` in
   `apps/api/src/rpc/procedures.ts`) plus the service's own check for anything finer
-  (ownership). A new procedure on tenant data is at least `inOrg`;
-  anything that manages the workspace is `orgAdmin`.
+  (ownership). A new procedure on tenant data is at least `inOrg`. A workspace has one
+  member, its owner; a procedure that needs a role adds its builder to `procedures.ts`, with tests.
 - A role is parsed with `parseOrgRole` from `@repo/contracts/roles`, never cast from the
   stored string (better-auth joins several with commas, and anything can be written
-  there), and checked by an allow-list (`canManageWorkspace`, or `role === "owner"`),
-  never by excluding one role: a role the code doesn't know must grant nothing.
+  there), and checked by an allow-list (`role === "owner"`), never by excluding one
+  role: a role the code doesn't know must grant nothing.
 - Tenant isolation is enforced by Postgres RLS, not by `where: { orgId }`. Query tenant
   data only through `withTenant`/`tenantTx` (or `tenant(org_id)` in Python) with the
   `orgId` from the procedure context, never from the input.

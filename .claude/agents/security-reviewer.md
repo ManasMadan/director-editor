@@ -25,9 +25,8 @@ full and trace every new entry point to where its data is stored or sent. Read
 
 1. **Authorization on every procedure.** Each new or changed procedure in
    `apps/api/src/modules/*/*.router.ts` uses the right builder from
-   `apps/api/src/rpc/procedures.ts`: `inOrg` for tenant data, `orgAdmin` for managing
-   the workspace, `fresh` for account and security changes, `base` only
-   for public data. Object-level checks: the row belongs to the caller's org or user,
+   `apps/api/src/rpc/procedures.ts`: `inOrg` for tenant data, `authed` for the
+   account's own, `base` only for public data. Object-level checks: the row belongs to the caller's org or user,
    enforced by RLS (`withTenant`/`tenantTx`/`withUser`) with the id from context, not
    from input. Fastify routes outside oRPC (`*.routes.ts`) do their own auth; check it.
 2. **Input validation.** Every input is a zod schema with bounds (lengths, ranges,

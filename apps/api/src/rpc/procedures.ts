@@ -4,7 +4,6 @@
  *
  *   base    error mapping (AppError → typed contract error) + client version gate
  *   authed  + a valid session (UNAUTHENTICATED otherwise); `context.user`, `context.session`
- *   fresh   + signed in within FRESH_SESSION_AGE ("sudo mode"; FRESH_SESSION_REQUIRED)
  *   inOrg   a signed-in member of the active organization; `context.orgId` (tenant for
  *           row-level security), `context.userId`, `context.role`
  *
@@ -24,11 +23,10 @@
 
 import { implement, ORPCError, ValidationError } from "@orpc/server";
 import { contract, type ErrorData, type ProcedureMeta, type RateLimit } from "@repo/contracts/api";
-import { FRESH_SESSION_AGE } from "@repo/contracts/auth";
 import { ERROR_CODES, type ErrorCode, isErrorCode } from "@repo/contracts/errors";
 import type { OrgId, UserId } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
-import { canManageWorkspace, type OrgRole } from "@repo/contracts/roles";
+import type { OrgRole } from "@repo/contracts/roles";
 import {
   AppError,
   createRateLimiter,
@@ -241,14 +239,6 @@ export function createProcedures(auth: Auth, memberships: Memberships, redis: Re
     },
   );
 
-  // Sensitive account changes, like better-auth's own fresh-session rule.
-  const fresh = authed.use(async ({ context, next }) => {
-    if (Date.now() - new Date(context.session.createdAt).getTime() >= FRESH_SESSION_AGE * 1000) {
-      throw new AppError("FRESH_SESSION_REQUIRED");
-    }
-    return next();
-  });
-
   const inOrg = base.use(
     async ({
       context,
@@ -264,15 +254,7 @@ export function createProcedures(auth: Auth, memberships: Memberships, redis: Re
     },
   );
 
-  /** Organization owners and admins only (settings, members, audit log). */
-  const orgAdmin = inOrg.use(async ({ context, next }) => {
-    if (!canManageWorkspace(context.role)) {
-      throw new AppError("FORBIDDEN");
-    }
-    return next();
-  });
-
-  return { os, base, authed, fresh, inOrg, orgAdmin };
+  return { os, base, authed, inOrg };
 }
 
 export type Procedures = ReturnType<typeof createProcedures>;

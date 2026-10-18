@@ -736,6 +736,22 @@ describe("organizations and the audit trail", () => {
     });
   });
 
+  it("an owner deletes a team workspace: its members lose access at once, and it's recorded", async () => {
+    const { owner, member, orgId } = await team();
+    const { id: ownerId } = await owner.session.rpc.user.me();
+    // The member's role is cached by now: the deletion has to forget it.
+    await expectError(member.session.rpc.director.library(), LET_IN);
+
+    expect(
+      (await owner.session.auth("/organization/delete", { organizationId: orgId })).status,
+    ).toBe(200);
+    await expectError(member.session.rpc.director.library(), "NO_ACTIVE_ORGANIZATION");
+    const deleted = await outbox("org_id = $1::uuid AND name = 'org.deleted.v1'", [orgId]);
+    expect(deleted).toEqual([
+      expect.objectContaining({ actor_id: ownerId, payload: { organizationId: orgId } }),
+    ]);
+  });
+
   it("won't let a client mark a workspace as someone's personal one", async () => {
     const { session } = await signedInUser();
     const slug = `team-${randomUUID().slice(0, 8)}`;

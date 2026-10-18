@@ -33,8 +33,3 @@ export function parseOrgRole(stored: string | null | undefined): OrgRole | null 
     STRENGTH[role] > STRENGTH[strongest] ? role : strongest,
   );
 }
-
-/** Owners and admins manage the workspace: settings, members, keys, the audit log. */
-export function canManageWorkspace(role: OrgRole | null | undefined): boolean {
-  return role === "owner" || role === "admin";
-}

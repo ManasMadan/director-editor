@@ -309,15 +309,18 @@ const signInElsewhere: BrowserCommand<
 };
 
 /**
- * The next PUT to a URL containing `part` is answered with `status`, as when storage
- * refuses an upload; later requests go through again.
+ * The local object storage's host: this checkout's (a stack of its own moves its port,
+ * docs/environment.md), else the default one.
  */
-const refuseNextPut: BrowserCommand<[part: string, status: number]> = async (
-  { page },
-  part,
-  status,
-) => {
-  const matches = (url: URL) => url.href.includes(part);
+const storageHost = () => new URL(process.env.S3_ENDPOINT ?? "http://localhost:59000").host;
+
+/**
+ * The next PUT to the object storage is answered with `status`, as when storage refuses
+ * an upload; later requests go through again.
+ */
+const refuseNextPut: BrowserCommand<[status: number]> = async ({ page }, status) => {
+  const storage = storageHost();
+  const matches = (url: URL) => url.host === storage;
   const handler = async (route: Route) => {
     if (route.request().method() !== "PUT") {
       return route.fallback();
@@ -340,7 +343,7 @@ const storageCors: BrowserCommand<[]> = async ({ page }) => {
     return;
   }
   withStorageCors.add(page);
-  const storage = new URL(process.env.S3_ENDPOINT ?? "http://localhost:59000").host;
+  const storage = storageHost();
   await page.route(
     (url) => url.host === storage,
     async (route) => {
@@ -493,7 +496,7 @@ declare module "vitest/browser" {
     ): Promise<void>;
     publishRealtime(channel: string, message: { type: string }): Promise<void>;
     storageCors(): Promise<void>;
-    refuseNextPut(part: string, status: number): Promise<void>;
+    refuseNextPut(status: number): Promise<void>;
     signInElsewhere(
       email: string,
       password: string,

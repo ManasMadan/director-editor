@@ -12,7 +12,6 @@ import {
   enterTenant,
   tenantTx,
   transaction,
-  type userTx,
   withTenant,
   withUser,
 } from "../src";
@@ -65,7 +64,6 @@ describe("row-level security", () => {
     expectTypeOf<Parameters<typeof withTenant>[1]>().toEqualTypeOf<OrgId>();
     expectTypeOf<Parameters<typeof tenantTx>[1]>().toEqualTypeOf<OrgId>();
     expectTypeOf<Parameters<typeof withUser>[1]>().toEqualTypeOf<UserId>();
-    expectTypeOf<Parameters<typeof userTx>[1]>().toEqualTypeOf<UserId>();
     expectTypeOf<UserId>().not.toExtend<Parameters<typeof withTenant>[1]>();
     expectTypeOf<OrgId>().not.toExtend<Parameters<typeof withUser>[1]>();
     expectTypeOf<string>().not.toExtend<Parameters<typeof tenantTx>[1]>();
@@ -110,7 +108,7 @@ describe("row-level security", () => {
     const tenant = withTenant(api, orgA);
     // The type allows no arguments (so real calls don't compile); the runtime also throws.
     expect(() => tenant.$transaction()).toThrow(/tenantTx/);
-    expect(() => withUser(api, userId).$transaction()).toThrow(/userTx/);
+    expect(() => withUser(api, userId).$transaction()).toThrow(/scopes the user first/);
   });
 
   it("never leaks across tenants under concurrent pooled requests", async () => {

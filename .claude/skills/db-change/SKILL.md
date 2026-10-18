@@ -24,7 +24,7 @@ description: Change the database schema safely (new table or column, index, RLS 
    Tables in `app` and `auth` get `app_api`'s grants automatically (default privileges
    in the init migration); any other role or schema needs an explicit `GRANT`, as
    narrow as the service needs (see the `files` and `webhooks` migrations). Per-user tables use
-   `user_id` and `app.user_id` (`withUser`/`userTx`).
+   `user_id` and `app.user_id` (`withUser`).
    Editing a migration Prisma already applied makes the next `bun run db:migrate` ask to
    reset the local database, which deletes local data: ask the user first.
 4. `bun run db:lint` (Squawk). Fix what it flags; a statement that is safe in context

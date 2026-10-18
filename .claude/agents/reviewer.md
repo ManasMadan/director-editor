@@ -31,8 +31,7 @@ broken pagination, off-by-one on limits. Then:
    No HTTP, Redis or queue awaits inside a transaction. New tenant tables have forced
    RLS, a policy and grants in the same migration (hand those to `migration-reviewer`).
 2. **Procedures.** The builder in `apps/api/src/rpc/procedures.ts` fits the data
-   (`inOrg` for tenant data, `orgAdmin` for admin actions, `fresh` for account
-   changes). Routers are thin; logic is in services; Prisma only in repositories.
+   (`inOrg` for tenant data, `authed` for the account's own). Routers are thin; logic is in services; Prisma only in repositories.
 3. **Errors.** Expected failures throw `AppError` with a code from
    `packages/contracts/src/errors.ts`. New codes have `errors.<CODE>` in every
    `packages/i18n/messages/*.json`. Clients branch on codes, never on messages.

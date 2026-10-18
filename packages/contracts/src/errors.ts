@@ -37,7 +37,6 @@ export const ERROR_CODES = {
   FEATURE_DISABLED: 404,
   /** 400, not 426: that one requires an Upgrade header naming a protocol to switch to. */
   CLIENT_OUTDATED: 400,
-  FRESH_SESSION_REQUIRED: 403,
   /** safeFetch refused the address (private, internal, or not https). */
   DESTINATION_NOT_ALLOWED: 422,
   RESPONSE_TOO_LARGE: 502,

@@ -41,7 +41,7 @@ names.
    `write` for changes. Service: each change and its domain event (`emitEvent`, events
    declared in `packages/contracts/src/events.ts`, described under
    `workspace.audit.events` in i18n) in one `tenantTx`. Router: one line per procedure;
-   `inOrg`, `orgAdmin` or `fresh` from `apps/api/src/rpc/procedures.ts`.
+   `inOrg` or `authed` from `apps/api/src/rpc/procedures.ts`.
 5. **Client.** One hook per procedure under `packages/client/src/api/<name>/`; a write
    updates or invalidates the queries it changes, like
    `packages/client/src/api/director/index-short.ts` (an optimistic update keeps its pure

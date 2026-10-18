@@ -33,8 +33,7 @@ ships with it.
 - A password reset signs out every device.
 - "Sudo mode": listing devices, adding a passkey and unlinking a social account need a
   session younger than `FRESH_SESSION_AGE` (2 hours, `packages/contracts/src/auth.ts`);
-  after that the web app asks the user to sign in again. API procedures get the same
-  rule from the `fresh` builder (`FRESH_SESSION_REQUIRED`). Password, 2FA and account
+  after that the web app asks the user to sign in again. Password, 2FA and account
   deletion always ask for the password.
 - `trustedOrigins` (CSRF) is `WEB_URL`.
 
@@ -45,8 +44,8 @@ Every user gets a personal workspace at sign-up, so organization-scoped features
 sessions start in the user's first workspace. The web app shows no workspace UI: there
 is no switcher, member list or invitation. A workspace holds one member
 (`WORKSPACE_MEMBER_LIMIT` in `packages/contracts/src/auth-settings.ts`): better-auth's
-`membershipLimit` refuses a second member, and an invitation is refused before it's
-created while members and pending invitations already fill the workspace. Only sign-up
+`membershipLimit` refuses a second member, and every invitation is refused before it's
+created (no invitation email exists). Only sign-up
 makes the personal workspace (slug `personal-<user id>`, `metadata.personal`); a client
 creating or updating a workspace with either is refused.
 
@@ -63,9 +62,7 @@ In the API:
 |---|---|
 | `base` | anyone (and refuses clients older than `MINIMUM_CLIENT_VERSION`) |
 | `authed` | a valid session |
-| `fresh` | a session signed in within `FRESH_SESSION_AGE` |
 | `inOrg` | a member of the session's active organization; sets `context.orgId` for row-level security |
-| `orgAdmin` | `inOrg` with role owner or admin |
 
 Membership is re-checked on every organization-scoped request (cached in Redis for five
 minutes, `apps/api/src/auth/memberships.ts`), and every membership change clears the
