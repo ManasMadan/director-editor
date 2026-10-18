@@ -1,4 +1,4 @@
-import { zSceneCheck, zShotPlan } from "@repo/ai-client/schemas";
+import { zShotPlan } from "@repo/ai-client/schemas";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as z from "zod";
 import { CATALOG, shortOf } from "./catalog";
@@ -116,36 +116,6 @@ describe("the mock Gemini", () => {
     expect(pasted.shots[0]?.sceneLandmark).toBe("tree");
   });
 
-  it("walks the member to the landmark, then says they're in place", async () => {
-    const shot = { title: "The hook", sceneLandmark: "tree" };
-    const frame = { inlineData: { mimeType: "image/jpeg", data: "/9j/AAAA" } };
-    const checks = [];
-    // Twice through: once arrived, the walk starts over for the next take.
-    for (let i = 0; i < 4; i++) {
-      checks.push(
-        zSceneCheck.parse(argsOf((await gemini(ask("inPlace", [shotPart(shot), frame]))).json)),
-      );
-    }
-    expect(checks.map((check) => [check.inPlace, check.direction])).toEqual([
-      [false, "left"],
-      [false, "left"],
-      [true, "none"],
-      [false, "left"],
-    ]);
-    // It can't see the frame, so it never claims where the landmark is in it.
-    expect(checks.every((check) => check.landmark === null)).toBe(true);
-    const anywhere = zSceneCheck.parse(
-      argsOf(
-        (await gemini(ask("inPlace", [shotPart({ title: "Free", sceneLandmark: null })]))).json,
-      ),
-    );
-    expect(anywhere).toMatchObject({ inPlace: true, landmark: null });
-    const unknown = zSceneCheck.parse(
-      argsOf((await gemini(ask("inPlace", [{ text: "hello" }]))).json),
-    );
-    expect(unknown.inPlace).toBe(true);
-  });
-
   it("reviews a take: the shot's length from just after it starts, or nothing for a photo", async () => {
     const take = {
       inlineData: {
@@ -213,8 +183,8 @@ describe("the mock Gemini", () => {
       { fileData: { file_uri: "https://www.youtube.com/watch" } },
     ]);
     expect(zShotPlan.parse(argsOf((await gemini(odd)).json)).shots.length).toBeGreaterThan(0);
-    const noShot = ask("inPlace", [{ text: 'The shot:\n{"nope": 1}' }, {}]);
-    expect(zSceneCheck.parse(argsOf((await gemini(noShot)).json)).inPlace).toBe(true);
+    const noShot = ask("bestStartSeconds", [{ text: 'The shot:\n{"nope": 1}' }, {}]);
+    expect(zTakeReview.parse(argsOf((await gemini(noShot)).json)).feedback).toContain("this shot");
     expect((await gemini({ contents: [] })).status).toBe(400);
   });
 

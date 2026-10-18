@@ -29,10 +29,8 @@ import {
   locatedSchema,
   type MatchCutAlignment,
   matchCutAlignmentSchema,
-  type SceneCheck,
   type ServedShotPlan,
   type ShotPlan,
-  sceneCheckSchema,
   shotPlanSchema,
 } from "@repo/contracts/api";
 import type { UploadPurpose } from "@repo/contracts/files";
@@ -188,16 +186,6 @@ export class DirectorService {
 
   private planRow(userId: UserId, orgId: OrgId, videoId: VideoId) {
     return callAi((ai) => ai.director.getPlan(aiCaller(userId, orgId), videoId));
-  }
-
-  async checkScene(
-    userId: UserId,
-    orgId: OrgId,
-    input: { videoId: VideoId; shotIndex: number; image: string },
-  ): Promise<SceneCheck> {
-    return sceneCheckSchema.parse(
-      await callAi((ai) => ai.director.checkScene(aiCaller(userId, orgId), input)),
-    );
   }
 
   /** Where a thing Director named is in one camera frame, for a mark on the shoot screen. */

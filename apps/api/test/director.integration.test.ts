@@ -289,16 +289,6 @@ async function aiRoute(request: IncomingMessage, response: ServerResponse) {
     const plan = find(planMatch[1] ?? "");
     return plan ? send(response, 200, planOut(plan)) : fail(404, "DIRECTOR_PLAN_NOT_FOUND");
   }
-  if (route === "POST /v1/director/scene-checks") {
-    return send(response, 200, {
-      inPlace: false,
-      instruction: "Move about five meters left, to the tree.",
-      direction: "left",
-      distanceMeters: 5,
-      landmark: { label: "tree", box: { x: 0.1, y: 0.2, width: 0.3, height: 0.6 } },
-      lighting: "good",
-    });
-  }
   if (route === "POST /v1/director/takes") {
     lastSourceUrl = String(body.sourceUrl);
     const take = {
@@ -708,21 +698,6 @@ describe("Director's library", () => {
 });
 
 describe("Director", () => {
-  it("passes on the scene check, and parses what comes back", async () => {
-    const { session } = await signedIn();
-    const image = "/9j/".padEnd(200, "A");
-    await expect(
-      session.rpc.director.checkScene({ videoId: VIDEO, shotIndex: 0, image }),
-    ).resolves.toMatchObject({
-      direction: "left",
-      landmark: { label: "tree" },
-    });
-    await expectError(
-      session.rpc.director.checkScene({ videoId: VIDEO, shotIndex: 0, image: "short" }),
-      "VALIDATION_FAILED",
-    );
-  });
-
   it("adds a take from the member's own ready upload, handing the AI service a read of it", async () => {
     const { session, me } = await signedIn();
     await session.rpc.director.index({ url: VIDEO });

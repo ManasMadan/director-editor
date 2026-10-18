@@ -57,7 +57,7 @@ MAX_ASSET_ID = 40
 ASSET_ID_PATTERN = r"^[a-z0-9]+(-[a-z0-9]+)*$"
 # A colour on an edit: "#RRGGBB".
 COLOR_PATTERN = r"^#[0-9A-Fa-f]{6}$"
-# A camera frame for a scene check, base64: a 640-pixel JPEG is 40-120 kB.
+# A camera frame for a locate, base64: a 640-pixel JPEG is 40-120 kB.
 MAX_FRAME_BASE64 = 400_000
 # The most one plan may reserve (DIRECTOR_TOKENS_PER_PLAN's ceiling): a whole workspace's
 # default monthly allowance, far past what a three-minute short needs.
@@ -90,7 +90,6 @@ type CameraMove = Literal[
     "tilt-up",
     "tilt-down",
 ]
-type Direction = Literal["none", "left", "right", "forward", "back", "turn-left", "turn-right"]
 # What a shot's take is: a clip or a photo.
 type ShotKind = Literal["video", "photo"]
 # What the edit uses of it: the member on camera (as every shot was before modes), only
@@ -783,16 +782,6 @@ class IndexResult(BaseModel):
     usage: TokenUsage = Field(description="What the run used, for the worker to count.")
 
 
-class SceneCheckRequest(BaseModel):
-    model_config = REQUEST
-
-    videoId: str = Field(pattern=VIDEO_ID_PATTERN)
-    shotIndex: int = Field(ge=0, lt=MAX_SHOTS)
-    image: str = Field(
-        min_length=100, max_length=MAX_FRAME_BASE64, description="A JPEG camera frame, base64."
-    )
-
-
 # A line Director says aloud (packages/contracts' DIRECTOR_SPEECH_MAX_LENGTH): a guide, a
 # cue or a script line, never a speech.
 MAX_SPEECH_TEXT = 500
@@ -806,26 +795,6 @@ class SpeechRequest(BaseModel):
 
     text: str = Field(min_length=1, max_length=MAX_SPEECH_TEXT, description="The line to say.")
     voice: SpeechVoice
-
-
-class SceneLandmark(BaseModel):
-    label: str = Field(min_length=1, max_length=40)
-    box: Box
-
-
-class SceneCheck(BaseModel):
-    inPlace: bool = Field(description="The frame already looks like the shot's scene.")
-    instruction: str = Field(
-        min_length=1,
-        max_length=160,
-        description='One short spoken direction: "Move about five meters left, to the tree."',
-    )
-    direction: Direction
-    distanceMeters: float | None = Field(ge=0, le=50)
-    landmark: SceneLandmark | None = Field(
-        description="Where the scene's landmark is in this frame, when it is in it."
-    )
-    lighting: Literal["good", "too-dark", "too-bright", "backlit"]
 
 
 # What Director may point at on the member's camera (packages/contracts'

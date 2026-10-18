@@ -27,7 +27,6 @@ const PROCEDURE_ACTIVITIES: Readonly<Record<string, ActivityName>> = {
   "director.create": "director.create_requested",
   "director.editPlan": "director.plan_edited",
   "director.plan": "director.plan_opened",
-  "director.checkScene": "director.scene_checked",
   "director.addTake": "director.take_recorded",
   "director.saveCut": "director.cut_saved",
   "director.media": "director.media_viewed",
@@ -37,7 +36,6 @@ const PROCEDURE_ACTIVITIES: Readonly<Record<string, ActivityName>> = {
 
 /** A field kept only when it's there and of its type; anything else is left out. */
 const text = z.string().max(200).optional().catch(undefined);
-const flag = z.boolean().optional().catch(undefined);
 const count = z.number().int().optional().catch(undefined);
 
 const inputFacts = z
@@ -56,8 +54,6 @@ const outputFacts = z
   .object({
     id: text,
     status: text,
-    inPlace: flag,
-    lighting: text,
     publish: z.object({ youtubeVideoId: text }).optional().catch(undefined),
   })
   .catch({});
@@ -88,14 +84,13 @@ export function procedureTarget(procedure: string, input: unknown, output?: unkn
 
 /**
  * Reads a screen asks for on a timer while something is in progress (a plan polled as
- * it's indexed, the media page, a scene checked every few seconds): logged at most once
+ * it's indexed, the media page): logged at most once
  * per person, thing and THROTTLE_WINDOW_MS when they succeed, so a timeline shows that
  * someone opened them, not every poll. A failure is always logged.
  */
 const THROTTLED: ReadonlySet<ActivityName> = new Set<ActivityName>([
   "director.plan_opened",
   "director.media_viewed",
-  "director.scene_checked",
 ]);
 const THROTTLE_WINDOW_MS = 5 * MINUTE_MS;
 

@@ -47,7 +47,7 @@ TypeScript client is `packages/ai-client`.
 - `app/errors.py`: `AppError("CODE", params)`; the status comes from the catalog.
 - What the app builds at startup is `services()` in `app/main.py` (typed; routes and
   tests use it instead of Starlette's untyped `app.state`).
-- `app/director.py`: plans, scene checks and take reviews; `app/plan_repair.py` fixes
+- `app/director.py`: plans, locates (marks on the camera) and take reviews; `app/plan_repair.py` fixes
   inconsistent shot plans; `app/audio.py` captures a short's original audio;
   `app/speech.py` speaks a guide line with Gemini's text-to-speech (`TTS_MODEL`);
   `app/assets.py` draws the default images of a plan's assets with Nano Banana

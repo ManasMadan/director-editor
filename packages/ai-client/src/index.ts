@@ -19,7 +19,6 @@ import {
   alignDirectorMatchCut,
   askDirectorEditor,
   brainstormDirectorTemplate,
-  checkDirectorScene,
   chooseDirectorAsset,
   chooseDirectorTake,
   clipDirectorAttempt,
@@ -58,7 +57,6 @@ import type {
   PlanEditRequest,
   PublishCopyRequest,
   ReviseRequest,
-  SceneCheckRequest,
   SpeechRequest,
   TakeChoice,
 } from "./generated/types.gen";
@@ -238,9 +236,6 @@ function directorCalls(forCall: ClientFor) {
       return unwrap(
         getDirectorPlan({ client: await forCall(caller), path: { video_id: videoId } }),
       );
-    },
-    async checkScene(caller: AiCaller, body: SceneCheckRequest) {
-      return unwrap(checkDirectorScene({ client: await forCall(caller), body }));
     },
     async locate(caller: AiCaller, body: LocateRequest) {
       return unwrap(locateDirectorTarget({ client: await forCall(caller), body }));

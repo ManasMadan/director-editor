@@ -74,7 +74,7 @@ gives the fullest experience. Allow the camera and the microphone when the brows
 |---|---|---|
 | Vertex AI: Gemini 4 Argon (`gemini-4-argon`) | Watches a Short from its YouTube URL and writes the shot plan | `apps/ai/app/indexing.py` (`index_short`), `apps/ai/app/director.py` (the prompt, `create_local_indexer`) |
 | Vertex AI: Gemini 3.1 Pro (`gemini-3.1-pro-preview`) | The indexing fallback, once Gemini 4 Argon's retries are spent | `apps/ai/app/indexing.py`, `INDEX_FALLBACK_MODEL` in `apps/ai/app/settings.py` |
-| Vertex AI: Gemini 3.8 Flash (`gemini-3.8-flash`) | Scene checks from a camera frame, and take reviews (best part, score, feedback); Director's YouTube post <!-- verify after publish merges --> | `apps/ai/app/director.py` (`check_scene`, `review`) |
+| Vertex AI: Gemini 3.8 Flash (`gemini-3.8-flash`) | Finding what Director points at in a camera frame, and take reviews (best part, score, feedback); Director's YouTube post <!-- verify after publish merges --> | `apps/ai/app/director.py` (`locate`, `review`) |
 | Vertex AI: Gemini Live (`gemini-live-2.5-flash-native-audio`) | Director live: the voice-to-voice conversation that directs the whole shoot, showing shots and flipping the camera through tool calls | `apps/api/src/modules/live/` (the relay), `apps/web/src/modules/director/lib/live-session.ts` (the browser's side) |
 | Vertex AI: Gemini 3.8 Flash TTS (`gemini-3.8-flash-tts`) | A line in Director's voice (`director.speak`), for when Gemini Live can't run | `apps/ai/app/speech.py`, `apps/api/src/modules/director/director.service.ts` (`speak`, which keeps each line in storage) |
 | Vertex AI: Veo 3.1 Lite (`veo-3.1-lite-generate-001`) | A few seconds' "how this shot looks" preview clip for each shot of the 6 starter templates | `apps/ai/scripts/seed_media.py`; linked by `apps/api/src/modules/director/seed-media.ts` |
@@ -190,7 +190,7 @@ need a key: they start a local stand-in for Google's APIs themselves.
 |---|---|
 | `apps/web` | Next.js, render-only: the library, template, camera, editor and My media (`src/modules/director`), the landing page (`src/modules/marketing`) |
 | `apps/api` | NestJS on Fastify: auth (better-auth), the oRPC API, the YouTube link check, the Gemini Live relay (`src/modules/live`) |
-| `apps/ai` | Python, FastAPI and Pydantic AI on Gemini: indexing, scene checks, take reviews, speech, and the BullMQ worker; `app/indexer.py` is the Cloud Run indexer, `evals/` the indexing evaluation, `scripts/` the starter templates' builders |
+| `apps/ai` | Python, FastAPI and Pydantic AI on Gemini: indexing, locates, take reviews, speech, and the BullMQ worker; `app/indexer.py` is the Cloud Run indexer, `evals/` the indexing evaluation, `scripts/` the starter templates' builders |
 | `apps/worker` | Outbox relay, audit log, upload checks (type and ClamAV), scheduled jobs |
 | `apps/notifications` | Email: sign-in codes and security alerts |
 | `apps/webhooks` | Inbound webhooks (the mail server's bounces) |

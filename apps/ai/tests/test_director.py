@@ -49,7 +49,6 @@ from app.schemas import (
     Located,
     PublishCopy,
     ReviseResult,
-    SceneCheck,
 )
 from app.session_recordings import create_session_pass
 from app.settings import get_settings
@@ -233,14 +232,6 @@ NO_SPEECH_PLAN: dict[str, object] = {
             ],
         }
     ],
-}
-SCENE: dict[str, object] = {
-    "inPlace": False,
-    "instruction": "Move about five meters left, to the tree.",
-    "direction": "left",
-    "distanceMeters": 5,
-    "landmark": {"label": "tree", "box": {"x": 0.05, "y": 0.2, "width": 0.3, "height": 0.7}},
-    "lighting": "good",
 }
 REVIEW: dict[str, object] = {
     "bestStartSeconds": 1.25,
@@ -1079,7 +1070,7 @@ def _broken_director() -> Director:
         Budgets(
             monthly=Allowance(2_000_000, 300_000),
             per_plan=PLAN_TOKENS,
-            per_scene_check=12_000,
+            per_locate=12_000,
             per_review=120_000,
             per_publish_copy=20_000,
         ),
@@ -1583,66 +1574,6 @@ def test_a_re_plan_needs_a_ready_plan_and_gemini(
     spend_the_month(org)
     broke = revise(client, org, user)
     assert (broke.status_code, error_of(broke).code) == (429, "AI_BUDGET_EXCEEDED")
-
-
-# ------------------------------------------------------------------------------- scene checks
-
-
-def check(
-    client: TestClient, org: UUID, user: UUID, shot: int = 0, image: str = FRAME
-) -> httpx.Response:
-    return client.post(
-        "/v1/director/scene-checks",
-        json={"videoId": VIDEO, "shotIndex": shot, "image": image},
-        headers=headers(org, user),
-    )
-
-
-def test_a_scene_check_says_where_to_go(
-    client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
-) -> None:
-    org, user = new_org()
-    _ = ready_plan(client, org, user)
-    gemini[1][GEMINI_PATH] = gemini_output(SCENE, tokens=500)
-    response = check(client, org, user)
-    assert response.status_code == 200, response.text
-    scene = SceneCheck.model_validate_json(response.content)
-    assert (scene.direction, scene.distanceMeters) == ("left", 5)
-    # The frame reaches Gemini inline, with the shot's scene.
-    sent = gemini[0].received[-1][1]
-    assert b'"mime_type": "image/jpeg"' in sent
-    assert b"In front of a mirror" in sent
-    assert usage(org, "director-scene") == 500
-
-
-def test_a_scene_check_needs_a_ready_plan_a_real_shot_and_a_jpeg(client: TestClient) -> None:
-    org, user = new_org()
-    _ = index_plan(client, org, user)
-    assert error_of(check(client, org, user)).code == "DIRECTOR_PLAN_NOT_READY"
-    plan_id = plan_of(client, org, user).id
-    on_app_loop(client, lambda: director().analyze(org, plan_id, user))
-    assert error_of(check(client, org, user, shot=5)).code == "DIRECTOR_SHOT_NOT_FOUND"
-    png = base64.b64encode(b"\x89PNG" + b"\x00" * 200).decode()
-    assert error_of(check(client, org, user, image=png)).code == "VALIDATION_FAILED"
-    assert error_of(check(client, org, user, image="%" * 200)).code == "VALIDATION_FAILED"
-
-
-def test_a_failed_scene_check_is_an_upstream_failure(
-    client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
-) -> None:
-    org, user = new_org()
-    _ = ready_plan(client, org, user)
-    gemini[1][GEMINI_PATH] = gemini_error(503, "UNAVAILABLE")
-    response = check(client, org, user)
-    assert (response.status_code, error_of(response).code) == (502, "UPSTREAM_UNAVAILABLE")
-
-
-def test_a_scene_check_with_no_budget_left_is_refused(client: TestClient) -> None:
-    org, user = new_org()
-    _ = ready_plan(client, org, user)
-    spend_the_month(org)
-    response = check(client, org, user)
-    assert (response.status_code, error_of(response).code) == (429, "AI_BUDGET_EXCEEDED")
 
 
 # ------------------------------------------------------------------------------- marks

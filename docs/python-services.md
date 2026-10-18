@@ -21,7 +21,7 @@ every query is scoped to that organization by row-level security
 | `GET /health/live`, `GET /health/ready` | probes (ready: the process serves requests) |
 | `GET /health/dependencies` | Postgres and Redis answer (dashboards, start-up scripts) |
 | `POST /v1/director/plans`, `GET /v1/director/plans/{video_id}` | ask for a short's shot plan (queued), and read it |
-| `POST /v1/director/scene-checks` | check one camera frame against a shot |
+| `POST /v1/director/locate` | find a thing in one camera frame, for a mark on the screen |
 | `POST /v1/director/takes`, `GET /v1/director/plans/{video_id}/takes` | record a take (its review is queued), and list them |
 
 Errors have the API's own wire shape (`app/errors.py`), oRPC's error JSON as
@@ -41,7 +41,7 @@ instead of guessing. The API passes `AI_BUDGET_EXCEEDED`, `FEATURE_DISABLED`,
 
 Every model call reserves tokens before it runs and settles what it used however it
 ends (`app/usage.py`): a workspace has `AI_MONTHLY_TOKENS_PER_ORG` a month, and each
-call is capped at its feature's share (`DIRECTOR_TOKENS_PER_PLAN`, `_PER_SCENE_CHECK`,
+call is capped at its feature's share (`DIRECTOR_TOKENS_PER_PLAN`, `_PER_LOCATE`,
 `_PER_REVIEW`). The reservation is taken under a per-workspace lock, so concurrent calls
 can't all fit into the same remainder; nothing left is a normal `AI_BUDGET_EXCEEDED`
 response. `ai.usage` is append-only for this service, so a reservation is one row and

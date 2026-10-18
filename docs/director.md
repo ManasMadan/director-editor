@@ -49,7 +49,7 @@ to a service account, and usage bills through Cloud Billing rather than the Gemi
 Unset `GOOGLE_VERTEX` to call the Gemini API directly instead. Production refuses a
 plain-HTTP `GOOGLE_BASE_URL` or `YOUTUBE_API_URL` (the mock Google's protocol, not a real
 endpoint). A plan job (watching a short unattended) indexes it with `INDEX_MODEL`, a
-separate, more thorough model from `DIRECTOR_MODEL`'s live scene checks and reviews;
+separate, more thorough model from `DIRECTOR_MODEL`'s live locates and reviews;
 `INDEX_FALLBACK_MODEL` is tried once after `INDEX_MODEL`'s own retries on a transient
 failure are spent. The plan's `stage` says how far it got, stored and announced as each
 is reached: `queued` when it's asked for, `watching` while Gemini watches the short,
@@ -66,7 +66,7 @@ themselves (`startFakeGoogle` from `packages/fake-google`, e.g.
 videos (their pictures and the embedded player are YouTube's own, the answers are mock
 data): the first, "GRWM for the office in summer time!", is the short the demo recreates
 (`packages/fake-google/src/catalog.ts`, `plans.ts`), the other five stand in for shorts,
-and any pasted link opens too. Its scene checks and take reviews are in
+and any pasted link opens too. Its locates and take reviews are in
 `packages/fake-google/src/gemini.ts`.
 
 ## The screens (apps/web)
@@ -333,11 +333,9 @@ objects from storage. Its library (the seeds and its own Short) stays.
   in one request once base64 has grown it; the recorder aims at 1.5 Mbit/s.
 - YouTube's free quota is 10,000 units a day; checking a link costs 1, and each video's
   answer is cached for an hour.
-- Token caps per plan, scene check and review come out of the workspace's monthly AI
+- Token caps per plan, locate and review come out of the workspace's monthly AI
   allowance (`AI_MONTHLY_TOKENS_PER_ORG`).
 - Stitching happens in the browser and takes as long as the short plays.
-- A camera left on the setup screen asks Gemini where to go at most twelve times a shot,
-  and stops once it says you're in place.
 
 ## Trying it in a browser
 

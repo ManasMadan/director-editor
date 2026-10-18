@@ -39,7 +39,7 @@ def test_every_route_needs_the_api_s_token(client: TestClient) -> None:
     for method, path in [
         ("post", "/v1/director/plans"),
         ("get", "/v1/director/plans/dQw4w9WgXcQ"),
-        ("post", "/v1/director/scene-checks"),
+        ("post", "/v1/director/locate"),
         ("post", "/v1/director/takes"),
         ("get", "/v1/director/plans/dQw4w9WgXcQ/takes"),
     ]:
@@ -57,7 +57,7 @@ def test_every_route_needs_the_api_s_token(client: TestClient) -> None:
 def test_invalid_input_is_a_validation_error(client: TestClient) -> None:
     org, user = new_org()
     response = client.post(
-        "/v1/director/scene-checks", json={"videoId": ""}, headers=headers(org, user)
+        "/v1/director/locate", json={"target": ""}, headers=headers(org, user)
     )
     assert response.status_code == 422
     error = error_of(response)
@@ -65,8 +65,7 @@ def test_invalid_input_is_a_validation_error(client: TestClient) -> None:
     # Where the contract's errorData has them, not among the message params.
     assert error.data.params == {}
     assert {tuple(issue.path) for issue in error.data.issues or []} == {
-        ("videoId",),
-        ("shotIndex",),
+        ("target",),
         ("image",),
     }
 
@@ -76,7 +75,7 @@ def test_requests_are_strict(client: TestClient) -> None:
     for path, request in [
         ("/v1/director/plans", {"videoId": "dQw4w9WgXcQ", "force": True}),
         ("/v1/director/plans", {"videoId": 5}),
-        ("/v1/director/scene-checks", {"videoId": "dQw4w9WgXcQ", "shotIndex": "0", "image": "x"}),
+        ("/v1/director/locate", {"target": 5, "image": "x"}),
     ]:
         response = client.post(path, json=request, headers=headers(org, user))
         assert response.status_code == 422, request

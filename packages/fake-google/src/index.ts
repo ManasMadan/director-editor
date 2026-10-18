@@ -21,7 +21,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { buffer, text } from "node:stream/consumers";
 import * as z from "zod";
 import { CHAT_API_PATH, chatAnswer } from "./chat";
-import { answer, generateRequest, generateResponse, promptTokens, type SceneSteps } from "./gemini";
+import { answer, generateRequest, generateResponse, promptTokens } from "./gemini";
 import { createLive } from "./live";
 
 export { LIVE_API_PATH } from "./live";
@@ -68,7 +68,6 @@ async function gemini(
   request: IncomingMessage,
   response: ServerResponse,
   model: string,
-  seen: SceneSteps,
   apiKey: string,
 ) {
   if (request.headers["x-goog-api-key"] !== apiKey) {
@@ -76,7 +75,7 @@ async function gemini(
   }
   const raw = await body(request);
   const parsed = generateRequest.safeParse(JSON.parse(raw || "{}"));
-  const args = parsed.success ? answer(parsed.data, seen) : null;
+  const args = parsed.success ? answer(parsed.data) : null;
   if (!parsed.success || !args) {
     return refuse(response, 400, "INVALID_ARGUMENT");
   }
@@ -129,7 +128,7 @@ function modelRoute(
   request: IncomingMessage,
   response: ServerResponse,
   url: URL,
-  context: { seen: SceneSteps; apiKey: string; liveToken: string; trouble: { chatDown: boolean } },
+  context: { apiKey: string; liveToken: string; trouble: { chatDown: boolean } },
 ): boolean {
   if (request.method !== "POST") {
     return false;
@@ -141,7 +140,7 @@ function modelRoute(
   }
   const asked = GEMINI.exec(url.pathname);
   if (asked) {
-    gemini(request, response, String(asked[1]), context.seen, context.apiKey).catch(failed);
+    gemini(request, response, String(asked[1]), context.apiKey).catch(failed);
     return true;
   }
   return false;
@@ -184,7 +183,6 @@ export async function startFakeGoogle({
   youtubeAudited = false,
   liveToken = apiKey,
 }: FakeGoogleOptions) {
-  const seen: SceneSteps = new Map();
   const oauth = createOAuth();
   // Known once the server listens; upload sessions link back to it.
   const address = { url: "" };
@@ -200,7 +198,7 @@ export async function startFakeGoogle({
   const server = createServer((request, response) => {
     // A server's request always has its URL; node types it as maybe missing.
     const url = new URL(String(request.url), "http://fake-google.local");
-    if (modelRoute(request, response, url, { seen, apiKey, liveToken, trouble })) {
+    if (modelRoute(request, response, url, { apiKey, liveToken, trouble })) {
       return;
     }
     const read = YOUTUBE.exec(url.pathname);

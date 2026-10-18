@@ -1,8 +1,8 @@
 /**
  * A stand-in for the Python AI service (apps/ai), answering the API the way the real one
  * does. The API checks the contract (packages/ai-client validates every response), and
- * apps/ai's own tests cover the service itself. Director's plans, takes, cuts and scene
- * checks are what a test sets for its short (`PUT /__fake/director/<videoId>`, the
+ * apps/ai's own tests cover the service itself. Director's plans, takes and cuts
+ * are what a test sets for its short (`PUT /__fake/director/<videoId>`, the
  * `fakeDirector` command); cuts the editor saves are added, each the caller's own (the
  * `userId` of a cut a test sets), as My media lists them. A workspace's library is what a
  * test sets for it (`PUT /__fake/library/<orgId>`, the `fakeLibrary` command), and
@@ -51,7 +51,6 @@ interface DirectorShort {
   plan?: Record<string, unknown>;
   takes: Record<string, unknown>[];
   cuts: Record<string, unknown>[];
-  scene?: Record<string, unknown>;
 }
 
 /** Who the API says is calling: the subject of its token (checked by the real service). */
@@ -255,10 +254,6 @@ function directorRoute(
   const takes = /^GET \/v1\/director\/plans\/([\w-]{11})\/takes$/.exec(route);
   if (takes?.[1]) {
     return { status: 200, body: short(takes[1]).takes };
-  }
-  if (route === "POST /v1/director/scene-checks") {
-    const scene = short(String(input.videoId)).scene;
-    return scene ? { status: 200, body: scene } : notFound("DIRECTOR_PLAN_NOT_FOUND");
   }
   if (route === "POST /v1/director/takes") {
     const take = {

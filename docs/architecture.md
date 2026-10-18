@@ -43,7 +43,7 @@ flowchart LR
 | `apps/worker` | the outbox relay, audit log, upload checks, realtime nudges, scheduled housekeeping | Postgres, Valkey, object storage, ClamAV |
 | `apps/notifications` | every email (sign-in codes, security alerts) | Postgres, Valkey, the mail server |
 | `apps/webhooks` | inbound provider webhooks (the mail server's bounces) | Postgres, Valkey |
-| `apps/ai` + `ai-worker` | Director: indexing (shot plans), scene checks, take reviews and spoken lines with Gemini | Postgres, Valkey, Gemini on Vertex AI, the Cloud Run indexer, Cloud Storage (the original's audio), BigQuery |
+| `apps/ai` + `ai-worker` | Director: indexing (shot plans), locating marks, take reviews and spoken lines with Gemini | Postgres, Valkey, Gemini on Vertex AI, the Cloud Run indexer, Cloud Storage (the original's audio), BigQuery |
 | `apps/ai` as `director-indexer` | indexes one Short per request on Cloud Run, off the cluster (`app/indexer.py`); no database | Gemini on Vertex AI, Cloud Storage |
 
 Services never import each other (`lint:boundaries`, rule `no-app-imports-app`). They

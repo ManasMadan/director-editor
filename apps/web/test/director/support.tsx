@@ -5,9 +5,9 @@
  * router stand-in), against an in-memory API when it calls one (the client package's
  * stand-in, as its own hooks' tests use), plus the browser's camera and recorder faked.
  *
- *   const api = standIn((os) => ({ director: { checkScene: os.director.checkScene.handler(…) } }));
- *   const hook = await renderHook(() => useSceneGuide(video, options), { api });
- *   await expect.poll(() => hook.current.scene).toEqual(answer);
+ *   const api = standIn((os) => ({ director: { locate: os.director.locate.handler(…) } }));
+ *   const hook = await renderHook(() => useMarks(options), { api });
+ *   await expect.poll(() => hook.current.marks).toEqual(answer);
  *
  * The pages' and components' tests: shorts, plans and takes as the AI stand-in serves them
  * (test/fake-ai.ts), and the phone's hardware: a camera that keeps drawing, and the tilt.

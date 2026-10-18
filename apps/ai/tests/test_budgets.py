@@ -49,7 +49,7 @@ def test_settling_records_what_the_run_used_instead_of_what_it_reserved(
 
     async def run() -> None:
         reservation = await reserve(
-            org, user, "director-scene", "m", most=1_000, allowance=ALLOWANCE
+            org, user, "director-locate", "m", most=1_000, allowance=ALLOWANCE
         )
         assert reservation is not None
         await settle(reservation, 300, 50)

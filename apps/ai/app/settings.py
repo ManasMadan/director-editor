@@ -64,7 +64,7 @@ class GeminiSettings(BaseSettings):
     vertex_location: str = Field(default="global", min_length=1, alias="VERTEX_LOCATION")
     # Indexing (a plan job, never a live request) uses its own model: one picked for
     # watching an arbitrary short unattended, not the one DIRECTOR_MODEL names for the
-    # scene checks and reviews a member waits on. INDEX_FALLBACK_MODEL stands in once a
+    # locates and reviews a member waits on. INDEX_FALLBACK_MODEL stands in once a
     # plan's retries on INDEX_MODEL are all spent (app/indexing.py's index_short).
     index_model: str = Field(default="gemini-4-argon", min_length=1, alias="INDEX_MODEL")
     index_fallback_model: str = Field(
@@ -115,13 +115,13 @@ class Settings(GeminiSettings):
     # that watches a YouTube video from its URL. Unset: Director off. There is no local
     # stand-in, on purpose: a plan or a review that no model wrote would be made up.
     director_model: str | None = Field(default=None, min_length=1, alias="DIRECTOR_MODEL")
-    # A plan watches the whole short (about 300 tokens a second) and thinks; a scene check
+    # A plan watches the whole short (about 300 tokens a second) and thinks; a locate
     # looks at one frame; a review watches one take.
     director_tokens_per_plan: int = Field(
         default=200_000, ge=10_000, le=MAX_PLAN_TOKENS, alias="DIRECTOR_TOKENS_PER_PLAN"
     )
-    director_tokens_per_scene_check: int = Field(
-        default=12_000, ge=2_000, alias="DIRECTOR_TOKENS_PER_SCENE_CHECK"
+    director_tokens_per_locate: int = Field(
+        default=12_000, ge=2_000, alias="DIRECTOR_TOKENS_PER_LOCATE"
     )
     director_tokens_per_review: int = Field(
         default=120_000, ge=10_000, alias="DIRECTOR_TOKENS_PER_REVIEW"

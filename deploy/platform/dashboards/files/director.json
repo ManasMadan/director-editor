@@ -127,7 +127,7 @@
     {
       "id": 6,
       "type": "timeseries",
-      "title": "Takes and scene checks",
+      "title": "Takes and reviews",
       "gridPos": { "x": 0, "y": 16, "w": 16, "h": 8 },
       "datasource": { "type": "loki", "uid": "${datasource}" },
       "fieldConfig": {
@@ -138,7 +138,7 @@
         {
           "refId": "A",
           "legendFormat": "{{activity}} {{outcome}}",
-          "expr": "sum by (activity, outcome) (count_over_time({namespace=\"$namespace\"} |= \"director.\" | json | activity=\"director.take_recorded\" or activity=\"director.take_reviewed\" or activity=\"director.scene_checked\" [$__interval]))"
+          "expr": "sum by (activity, outcome) (count_over_time({namespace=\"$namespace\"} |= \"director.\" | json | activity=\"director.take_recorded\" or activity=\"director.take_reviewed\" [$__interval]))"
         }
       ]
     },

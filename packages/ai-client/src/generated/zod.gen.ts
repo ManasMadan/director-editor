@@ -238,16 +238,6 @@ export const zCutPick = z.object({
     takeId: z.uuid()
 });
 
-export const zDirection = z.enum([
-    'none',
-    'left',
-    'right',
-    'forward',
-    'back',
-    'turn-left',
-    'turn-right'
-]);
-
 /**
  * DirectorCutCreate
  */
@@ -845,40 +835,6 @@ export const zPublishOriginal = z.object({
 export const zPublishCopyRequest = z.object({
     cutId: z.uuid(),
     original: zPublishOriginal.nullable()
-});
-
-/**
- * SceneCheckRequest
- */
-export const zSceneCheckRequest = z.object({
-    image: z.string().min(100).max(400000),
-    shotIndex: z.int().gte(0).lt(12),
-    videoId: z.string().regex(/^[A-Za-z0-9_-]{11}$/)
-});
-
-/**
- * SceneLandmark
- */
-export const zSceneLandmark = z.object({
-    box: zBox,
-    label: z.string().min(1).max(40)
-});
-
-/**
- * SceneCheck
- */
-export const zSceneCheck = z.object({
-    direction: zDirection,
-    distanceMeters: z.number().gte(0).lte(50).nullable(),
-    inPlace: z.boolean(),
-    instruction: z.string().min(1).max(160),
-    landmark: zSceneLandmark.nullable(),
-    lighting: z.enum([
-        'good',
-        'too-dark',
-        'too-bright',
-        'backlit'
-    ])
 });
 
 /**
@@ -1570,18 +1526,6 @@ export const zWriteDirectorPublishCopyHeaders = z.object({
  * Successful Response
  */
 export const zWriteDirectorPublishCopyResponse = zPublishCopy;
-
-export const zCheckDirectorSceneBody = zSceneCheckRequest;
-
-export const zCheckDirectorSceneHeaders = z.object({
-    authorization: z.string().nullish(),
-    'x-request-id': z.string().nullish()
-});
-
-/**
- * Successful Response
- */
-export const zCheckDirectorSceneResponse = zSceneCheck;
 
 export const zSpeakDirectorLineBody = zSpeechRequest;
 

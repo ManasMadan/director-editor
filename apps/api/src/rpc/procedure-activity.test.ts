@@ -86,15 +86,15 @@ describe("a procedure call's activity line", () => {
     const call = procedureActivity(record, clock(), (key) => !seen.has(key) && !!seen.add(key));
     const check = (shotIndex: number, next: () => Promise<unknown> = async () => ({})) =>
       runWithContext({ requestId: "r", userId: "u-1" }, () =>
-        call({ next, path: ["director", "checkScene"], input: { videoId: "v1", shotIndex } }),
+        call({ next, path: ["director", "plan"], input: { videoId: "v1", shotIndex } }),
       );
     await check(0);
     await check(0);
     await check(1);
     await check(0, () => Promise.reject(new Error("boom"))).catch(() => undefined);
     expect([...seen]).toEqual([
-      "u-1|director.scene_checked|v1|0",
-      "u-1|director.scene_checked|v1|1",
+      "u-1|director.plan_opened|v1|0",
+      "u-1|director.plan_opened|v1|1",
     ]);
     expect(record.mock.calls.map(([line]) => [line.target?.shotIndex, line.outcome])).toEqual([
       [0, undefined],
@@ -107,7 +107,7 @@ describe("a procedure call's activity line", () => {
     expect(record).toHaveBeenCalledTimes(5);
   });
 
-  it("keeps a publish's YouTube id and a scene check's verdict", () => {
+  it("keeps a publish's YouTube id", () => {
     expect(
       procedureTarget(
         "publish.upload",
@@ -122,23 +122,6 @@ describe("a procedure call's activity line", () => {
       cutId: "c-1",
       resultId: "c-1",
       youtubeVideoId: "yt-1",
-    });
-    expect(
-      procedureTarget(
-        "director.checkScene",
-        { videoId: "v1", shotIndex: 0, image: "data" },
-        {
-          inPlace: false,
-          lighting: "too-dark",
-          instruction: "Move left",
-        },
-      ),
-    ).toEqual({
-      procedure: "director.checkScene",
-      videoId: "v1",
-      shotIndex: 0,
-      inPlace: false,
-      lighting: "too-dark",
     });
   });
 
