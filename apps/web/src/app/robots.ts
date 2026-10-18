@@ -15,6 +15,7 @@ export default function robots(): MetadataRoute.Robots {
         "/library",
         "/shorts",
         "/director",
+        "/media",
         "/settings",
         "/sign-",
         "/verify-email",

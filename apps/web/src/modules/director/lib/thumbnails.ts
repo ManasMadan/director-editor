@@ -1,8 +1,7 @@
 /**
- * What a take looks and sounds like on the editor's timeline, worked out in the browser
- * from the take itself: frames along its kept part, and the loudness of its sound.
+ * What a take looks like on the editor's board, worked out in the browser from the take
+ * itself: frames along its kept part.
  */
-import { peaks } from "./track";
 
 /** A timeline thumbnail's size: 9:16, twice the strip's CSS height for sharp screens. */
 const THUMB_HEIGHT = 128;
@@ -54,20 +53,4 @@ export async function videoFrames(url: string, times: readonly number[]): Promis
   video.removeAttribute("src");
   video.load();
   return frames;
-}
-
-/**
- * The take's sound between `from` and `to` seconds as `count` bars, or null when it has
- * none (a take filmed to the original's audio records no microphone).
- */
-export async function soundPeaks(
-  take: Blob,
-  from: number,
-  to: number,
-  count: number,
-): Promise<number[] | null> {
-  // An offline context decodes without the autoplay rules a live one waits on.
-  const decoder = new OfflineAudioContext(1, 1, 44_100);
-  const sound = await decoder.decodeAudioData(await take.arrayBuffer()).catch(() => null);
-  return sound ? peaks(sound.getChannelData(0), sound.sampleRate, from, to, count) : null;
 }

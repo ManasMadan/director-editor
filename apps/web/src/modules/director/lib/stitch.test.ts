@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coverRect, OUTPUT_HEIGHT, OUTPUT_WIDTH, totalSeconds } from "./stitch";
+import { coverRect, MAX_SECONDS, OUTPUT_HEIGHT, OUTPUT_WIDTH, totalSeconds } from "./stitch";
 
 describe("the stitcher's arithmetic", () => {
   it("covers the 9:16 frame with a picture of any shape, cropping its middle", () => {
@@ -13,6 +13,11 @@ describe("the stitcher's arithmetic", () => {
     const zoomed = coverRect(720, 1280, 1.1);
     expect(zoomed.w).toBeCloseTo(OUTPUT_WIDTH * 1.1);
     expect(zoomed.x).toBeCloseTo(-OUTPUT_WIDTH * 0.05);
+  });
+
+  it("renders a 3-minute Short small enough to save", () => {
+    expect(MAX_SECONDS).toBeGreaterThan(3 * 60);
+    expect(MAX_SECONDS).toBeLessThan(3.5 * 60);
   });
 
   it("adds up each cut's time in the edit", () => {

@@ -3,14 +3,15 @@
 import { useState } from "react";
 import type { CaptionStyle } from "../lib/captions";
 import { type History, historyOf, push, redo, undo } from "../lib/history";
+import type { Picks } from "../lib/picks";
 
 /** What the member decides in the editor, all of it undoable. */
 export interface EditChoices {
   style: CaptionStyle;
-  /** Caption text the member rewrote, by line key (lib/edit.ts editLines). */
-  texts: Record<string, string>;
-  /** Whether the takes' own sound goes into the short. */
+  /** Whether the takes' own sound goes into the video. */
   sound: boolean;
+  /** The takes the member picked over Director's, by shot (lib/picks.ts). */
+  picks: Picks;
 }
 
 export function useEditHistory(initial: EditChoices) {

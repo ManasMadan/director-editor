@@ -1,6 +1,6 @@
 /**
  * Stand-ins for the camera's footage, made in the page: a canvas to draw on, a short
- * video recorded from one, a photo, a WAV of chosen samples, and reading a pixel back.
+ * video recorded from one, a photo, and reading a pixel back.
  */
 
 export function canvasOf(width: number, height: number) {
@@ -57,33 +57,6 @@ export function photoOf(color: string, width = 90, height = 160): Promise<Blob> 
   return new Promise((resolve, reject) =>
     canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("no photo"))), "image/png"),
   );
-}
-
-/** Mono 16-bit PCM WAV of `samples` (from -1 to 1) at `rate`. */
-export function wavOf(samples: readonly number[], rate: number): Blob {
-  const view = new DataView(new ArrayBuffer(44 + samples.length * 2));
-  const text = (at: number, value: string) => {
-    for (let i = 0; i < value.length; i++) {
-      view.setUint8(at + i, value.charCodeAt(i));
-    }
-  };
-  text(0, "RIFF");
-  view.setUint32(4, 36 + samples.length * 2, true);
-  text(8, "WAVE");
-  text(12, "fmt ");
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, rate, true);
-  view.setUint32(28, rate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  text(36, "data");
-  view.setUint32(40, samples.length * 2, true);
-  for (const [at, sample] of samples.entries()) {
-    view.setInt16(44 + at * 2, Math.round(sample * 32_767), true);
-  }
-  return new Blob([view.buffer], { type: "audio/wav" });
 }
 
 /** The colour at (`x`, `y`) of a picture, as [red, green, blue]. */

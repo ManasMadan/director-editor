@@ -35,6 +35,7 @@ export type FileId = z.infer<typeof fileIdSchema>;
 export const directorPlanIdSchema = z.uuid().brand<"DirectorPlanId">();
 
 export const directorTakeIdSchema = z.uuid().brand<"DirectorTakeId">();
+export type DirectorTakeId = z.infer<typeof directorTakeIdSchema>;
 
 export const directorCutIdSchema = z.uuid().brand<"DirectorCutId">();
 

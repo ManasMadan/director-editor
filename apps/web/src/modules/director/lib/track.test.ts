@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { peaks, rulerTicks, timecode } from "./track";
+import { columnWidth, timecode } from "./track";
 
-describe("the timeline", () => {
+describe("the editor's board", () => {
   it("reads the clock as minutes and seconds", () => {
     expect(timecode(0)).toBe("00:00");
     expect(timecode(9.99)).toBe("00:09");
@@ -10,23 +10,13 @@ describe("the timeline", () => {
     expect(timecode(-2)).toBe("00:00");
   });
 
-  it("ticks every half second, labelling whole ones, to the next whole second", () => {
-    expect(rulerTicks(1.2)).toEqual([
-      { seconds: 0, label: true },
-      { seconds: 0.5, label: false },
-      { seconds: 1, label: true },
-      { seconds: 1.5, label: false },
-      { seconds: 2, label: true },
-    ]);
-    expect(rulerTicks(0)).toEqual([{ seconds: 0, label: true }]);
-  });
-
-  it("turns a take's sound into bars against its loudest", () => {
-    const samples = new Float32Array([0, 0.1, -0.5, 0.25, 0, 0, 0.2, -0.1]);
-    const bars = peaks(samples, 4, 0, 2, 4);
-    expect(bars.map((bar) => Math.round(bar * 100) / 100)).toEqual([0.2, 1, 0, 0.4]);
-    expect(peaks(samples, 4, 1, 2, 2)).toEqual([0, 1]);
-    expect(peaks(new Float32Array(8), 4, 0, 2, 2)).toEqual([0, 0]);
-    expect(peaks(samples, 4, 0, 2, 0)).toEqual([]);
+  it("makes a shot's column as wide as it is long, within bounds", () => {
+    expect(columnWidth(3)).toBe(192);
+    expect(columnWidth(4.5)).toBe(288);
+    // From about two seconds up a column grows with its shot; shorter ones stay tappable.
+    expect(columnWidth(2)).toBe(128);
+    expect(columnWidth(1.5)).toBe(120);
+    expect(columnWidth(0.5)).toBe(120);
+    expect(columnWidth(30)).toBe(360);
   });
 });

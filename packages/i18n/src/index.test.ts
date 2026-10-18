@@ -9,6 +9,7 @@ import {
   negotiateLocale,
   timeZoneOrUtc,
 } from "./index";
+import { loosely } from "./loosely";
 
 describe("negotiateLocale", () => {
   it("picks exact, then base-language matches, then the default", () => {
@@ -136,10 +137,12 @@ describe("catalog completeness", () => {
 
   it("describes every domain event in the audit log", async () => {
     const { eventNames, unauditedEvents } = await import("@repo/contracts/events");
-    const t = await createI18n(bundledMessages).getTranslator("en");
+    // Loosely: the key is built at run time, and typing it against the whole catalog is
+    // deeper than TypeScript goes at the catalog's size.
+    const t = loosely(await createI18n(bundledMessages).getTranslator("en"));
     for (const name of eventNames.filter((event) => !unauditedEvents.has(event))) {
-      const key = `workspace.audit.events.${name}` as Parameters<typeof t>[0];
-      expect(t.has(key), `missing workspace.audit.events.${name}`).toBe(true);
+      const key = `workspace.audit.events.${name}`;
+      expect(t.has(key), `missing ${key}`).toBe(true);
     }
   });
 });

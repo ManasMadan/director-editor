@@ -115,6 +115,50 @@ describe("stitching the short", () => {
     expect(revoke).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    ["a video", { kind: "video", source: "clip", startSeconds: 0, endSeconds: 1 }],
+    ["a photo", { kind: "photo", source: "photo", seconds: 1 }],
+  ] as const)(
+    "stops when cancelled in the middle of %s, recording nothing more",
+    async (_, part) => {
+      const segment: Segment =
+        part.kind === "video" ? { ...part, source: clip } : { ...part, source: photo };
+      const cancel = new AbortController();
+      const stop = vi.spyOn(MediaRecorder.prototype, "stop");
+      const pause = vi.spyOn(HTMLMediaElement.prototype, "pause");
+      const rendering = stitch([segment, { kind: "photo", source: photo, seconds: 1 }], {
+        audio,
+        withSound: false,
+        onProgress: (done) => {
+          if (done > 0.05) {
+            cancel.abort();
+          }
+        },
+        captions: CAPTIONS,
+        signal: cancel.signal,
+      });
+      await expect(rendering).rejects.toThrow(expect.objectContaining({ name: "AbortError" }));
+      expect(stop).toHaveBeenCalledOnce();
+      if (part.kind === "video") {
+        expect(pause).toHaveBeenCalled();
+      }
+    },
+  );
+
+  it("starts nothing once already cancelled", async () => {
+    const draw = vi.spyOn(CanvasRenderingContext2D.prototype, "drawImage");
+    await expect(
+      stitch([{ kind: "photo", source: photo, seconds: 1 }], {
+        audio,
+        withSound: false,
+        onProgress: vi.fn(),
+        captions: CAPTIONS,
+        signal: AbortSignal.abort(),
+      }),
+    ).rejects.toThrow(expect.objectContaining({ name: "AbortError" }));
+    expect(draw).not.toHaveBeenCalled();
+  });
+
   it("fails in a browser that can't record video, or has no canvas", async () => {
     const options = { audio, withSound: false, onProgress: vi.fn(), captions: CAPTIONS };
     const supported = vi.spyOn(MediaRecorder, "isTypeSupported").mockReturnValue(false);

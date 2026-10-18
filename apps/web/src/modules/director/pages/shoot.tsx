@@ -410,7 +410,7 @@ function useCallTools(props: StudioShot, session: Session, link: CallLink) {
     },
     previous_shot: () => {
       if (setup && props.index > 0) {
-        router.push(shotPage(props.videoId, props.index - 1, props.audio));
+        router.push(shotPage(props.videoId, props.index - 1, props.audio, props.retake));
       }
     },
   };
@@ -593,10 +593,12 @@ function Shoot({
   videoId,
   shot,
   audio,
+  back,
 }: {
   videoId: string;
   shot: string | undefined;
   audio: string | undefined;
+  back?: string | undefined;
 }) {
   const t = useTranslations("director");
   const common = useTranslations("common");
@@ -633,6 +635,7 @@ function Shoot({
       index={index}
       count={ready.shots.length}
       audio={parseAudio(audio, ready)}
+      retake={back === "edit"}
       call={call}
       ring={ring}
       link={link}
@@ -645,6 +648,8 @@ export function ShootPage(props: {
   videoId: string;
   shot: string | undefined;
   audio: string | undefined;
+  /** "edit": a retake asked for from the editor, which goes back there once kept. */
+  back?: string | undefined;
 }) {
   return (
     <DirectorGate>

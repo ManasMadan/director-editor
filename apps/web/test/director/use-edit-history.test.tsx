@@ -1,8 +1,10 @@
+import { directorTakeIdSchema } from "@repo/contracts/ids";
 import { describe, expect, it } from "vitest";
 import { type EditChoices, useEditHistory } from "@/modules/director/hooks/use-edit-history";
 import { renderHook } from "./support";
 
-const initial: EditChoices = { style: "pop", texts: {}, sound: true };
+const initial: EditChoices = { style: "pop", sound: true, picks: {} };
+const take = directorTakeIdSchema.parse(crypto.randomUUID());
 
 describe("useEditHistory", () => {
   it("undoes and redoes each change, and a new change drops what was undone", async () => {
@@ -12,10 +14,10 @@ describe("useEditHistory", () => {
 
     hook.current.change({ sound: false });
     await expect.poll(() => hook.current.choices).toEqual({ ...initial, sound: false });
-    hook.current.change({ texts: { "0:0": "Hello" } });
+    hook.current.change({ picks: { 0: take } });
     await expect
       .poll(() => hook.current.choices)
-      .toEqual({ ...initial, sound: false, texts: { "0:0": "Hello" } });
+      .toEqual({ ...initial, sound: false, picks: { 0: take } });
     expect([hook.current.canUndo, hook.current.canRedo]).toEqual([true, false]);
 
     hook.current.undo();

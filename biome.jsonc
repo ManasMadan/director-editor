@@ -117,6 +117,7 @@
       // or real Google services: all are in docs/testing.md's "Skipped tests" table.
       "includes": [
         "apps/web/e2e/captcha.spec.ts",
+        "apps/web/e2e/editor.spec.ts",
         "apps/web/e2e/google.spec.ts",
         "apps/web/e2e/library.spec.ts"
       ],
