@@ -112,6 +112,8 @@ const STEPS_AHEAD = 4;
  * time. The API keeps each line it speaks for everyone, so this is paid once per line,
  * not per member. Only while Director talks: on a call Gemini Live does, and with the
  * voice off nothing is said. A line that can't be had now is asked for again when said.
+ * The lines are the ones it was first given: the shoot screen mounts it afresh for each
+ * shot, and one that kept it across shots would warm only the first.
  */
 function useStepsAhead(voice: Voice, lines: readonly string[], speak: boolean) {
   const ahead = useRef(lines.slice(0, STEPS_AHEAD));
