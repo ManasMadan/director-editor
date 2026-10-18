@@ -29,7 +29,8 @@ export const DEMO_EMAIL = "demo@director.mmadan.in";
 
 /**
  * The auth endpoints the demo account may not use: changing its password, deleting it,
- * turning on two-step verification, linking someone's Google account to it, ending other
+ * turning on two-step verification, linking someone's Google account or passkey to it
+ * (either would outlive the demo password being changed or withdrawn), ending other
  * people's sessions on it, and making, renaming, leaving or deleting a workspace. (Its
  * email can't change and its password can't be reset: both need a code sent to its
  * address, which nobody trying it reads.) hook-paths.test.ts checks each is an endpoint.
@@ -39,6 +40,8 @@ export const DEMO_LOCKED_PATHS: ReadonlySet<string> = new Set([
   "/delete-user",
   "/two-factor/enable",
   "/link-social",
+  "/passkey/generate-register-options",
+  "/passkey/verify-registration",
   "/revoke-session",
   "/revoke-sessions",
   "/revoke-other-sessions",
@@ -69,9 +72,15 @@ export function refuseForDemo(user: unknown) {
  */
 const DEMO_PROFILE_FIELDS: ReadonlySet<string> = new Set(["locale", "timezone", "updatedAt"]);
 
-/** Refuses a profile edit by the demo account that changes more than DEMO_PROFILE_FIELDS. */
+/**
+ * Refuses a profile edit by the demo account that changes more than DEMO_PROFILE_FIELDS. A
+ * field sent with the value it already has isn't a change: the settings form sends the name
+ * along with a new language or time zone.
+ */
 export function refuseDemoProfileChange(change: Record<string, unknown>, user: unknown) {
-  const changes = Object.entries(change).filter(([, value]) => value !== undefined);
+  const changes = Object.entries(change).filter(
+    ([field, value]) => value !== undefined && value !== fieldOf(user, field),
+  );
   if (changes.some(([field]) => !DEMO_PROFILE_FIELDS.has(field))) {
     refuseForDemo(user);
   }

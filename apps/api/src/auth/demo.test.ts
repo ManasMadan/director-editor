@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ownSessionOnly, refuseDemoProfileChange, refuseForDemo } from "./demo";
 
-const DEMO = { id: "u", demo: true };
+const DEMO = { id: "u", demo: true, name: "Director Demo" };
 const SOMEONE = { id: "v", demo: false };
 const locked = expect.objectContaining({
   body: expect.objectContaining({ code: "DEMO_ACCOUNT_LOCKED" }),
@@ -25,6 +25,12 @@ describe("the demo account's profile", () => {
     expect(() => refuseDemoProfileChange({ name: undefined, timezone: "UTC" }, DEMO)).not.toThrow();
     expect(() => refuseDemoProfileChange({ name: "Defaced", updatedAt: at }, DEMO)).toThrow(locked);
     expect(() => refuseDemoProfileChange({ name: "Renamed" }, SOMEONE)).not.toThrow();
+  });
+
+  it("lets the settings form send the name it already has with a new language", () => {
+    expect(() =>
+      refuseDemoProfileChange({ name: "Director Demo", locale: "en", timezone: "UTC" }, DEMO),
+    ).not.toThrow();
   });
 });
 
