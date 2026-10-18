@@ -64,6 +64,10 @@ app = FastAPI(
     title="ai-indexer",
     version="0.1.0",
     lifespan=lifespan,
+    # Private, and only ever called by the worker: nothing to browse, no schema to hand out.
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
     responses={"default": {"model": ErrorResponse, "description": "An error."}},
 )
 install_error_handlers(app)

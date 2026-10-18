@@ -246,15 +246,24 @@ class LocalIndexer:
 class RemoteIndexer:
     """Sends the request to the Cloud Run indexer at `url` (app/indexer.py), as this
     machine's service account: an ID token for `url` from the metadata server, which
-    Cloud Run's IAM and the indexer itself both check."""
+    Cloud Run's IAM and the indexer itself both check.
+
+    Stage timing: the indexer can't reach this worker's realtime channel, so `watched`
+    (the plan's `writing` stage) is called only once its answer arrives, just before the
+    plan is saved; `watching` covers the whole remote run, the audio capture included."""
 
     def __init__(self, url: str, http: httpx.AsyncClient) -> None:
         self._url = url
         self._http = http
 
     async def index(self, request: IndexRequest, *, watched: Watched) -> IndexResult:
+        unknown = _all_reserved(request)
         try:
             token = await id_token(self._url)
+        except httpx.HTTPError as error:
+            # Nothing was sent: no token from the metadata server, so nothing ran.
+            raise _unreachable("the metadata server", error, NOTHING_USED) from error
+        try:
             response = await self._http.post(
                 f"{self._url}/v1/index",
                 content=request.model_dump_json(),
@@ -262,36 +271,58 @@ class RemoteIndexer:
                 timeout=INDEX_REQUEST_SECONDS,
             )
         except httpx.HTTPError as error:
-            # The indexer, or the metadata server for its token, couldn't be reached or
-            # answered with an error of its own: the next attempt may get through.
-            log.warning("couldn't reach the indexer", error=f"{type(error).__name__}: {error}")
-            raise IndexFailed(
-                "DIRECTOR_ANALYSIS_FAILED", retryable=True, usage=NOTHING_USED, cause=str(error)
-            ) from error
-        if response.is_success:
+            # Never connected: nothing ran. Once the request was sent (a timeout, a dropped
+            # connection), what the indexer did and used is unknown: the whole reservation
+            # counts.
+            used = NOTHING_USED if isinstance(error, _NEVER_SENT) else unknown
+            raise _unreachable("the indexer", error, used) from error
+        if not response.is_success:
+            raise _refused(response, unknown)
+        try:
             result = IndexResult.model_validate_json(response.content)
-            await watched()
-            return result
-        raise _refused(response)
+        except ValidationError as error:
+            # Another version of the indexer (it's deployed by hand): what it answered
+            # can't be stored, and asking again would get the same.
+            log.warning("the indexer's answer isn't an IndexResult", errors=error.error_count())
+            raise IndexFailed(
+                "DIRECTOR_ANALYSIS_FAILED", retryable=False, usage=unknown, cause=str(error)
+            ) from error
+        await watched()
+        return result
 
 
-def _refused(response: httpx.Response) -> IndexFailed:
+# Errors that mean the request never reached the indexer.
+_NEVER_SENT = (httpx.ConnectError, httpx.ConnectTimeout)
+
+
+def _unreachable(what: str, error: httpx.HTTPError, used: TokenUsage) -> IndexFailed:
+    """A run that couldn't get an answer: worth trying again, the next may get through."""
+    log.warning("couldn't reach " + what, error=f"{type(error).__name__}: {error}")
+    return IndexFailed("DIRECTOR_ANALYSIS_FAILED", retryable=True, usage=used, cause=str(error))
+
+
+def _all_reserved(request: IndexRequest) -> TokenUsage:
+    """A run's usage when it can't be known: everything it was allowed."""
+    return TokenUsage(inputTokens=request.maxTokens, outputTokens=0)
+
+
+def _refused(response: httpx.Response, unknown: TokenUsage) -> IndexFailed:
     """The indexer's error answer as the run's failure. Its own (this service's error
-    shape) says why and what the run used; anything else is Cloud Run's (its IAM refusing
-    this account, the service down or busy). Either is worth a retry only for an outage."""
+    shape) says why and what the run used; anything else is Cloud Run's: its IAM refusing
+    this account or the service busy (nothing ran), or the service failing or timing out
+    (a 5xx: the run's outcome, and usage, unknown). Either is worth a retry only for an
+    outage."""
     status = response.status_code
     try:
         error: ErrorResponse | None = ErrorResponse.model_validate_json(response.content)
     except ValidationError:
         error = None
-    code = _plan_error(error.code) if error else "DIRECTOR_ANALYSIS_FAILED"
-    usage = (
-        TokenUsage.model_validate(
-            {key: error.data.params.get(key, 0) for key in ("inputTokens", "outputTokens")}
-        )
-        if error
-        else NOTHING_USED
-    )
+    if error is None:
+        code: IndexFailure = "DIRECTOR_ANALYSIS_FAILED"
+        usage = unknown if status >= 500 else NOTHING_USED
+    else:
+        code = _plan_error(error.code)
+        usage = _usage_in(error, unknown)
     log.warning("the indexer failed a short", status=status, code=error.code if error else None)
     return IndexFailed(
         code,
@@ -301,11 +332,23 @@ def _refused(response: httpx.Response) -> IndexFailed:
     )
 
 
+def _usage_in(error: ErrorResponse, unknown: TokenUsage) -> TokenUsage:
+    """What the indexer says the run used (its error's params), or `unknown` when they
+    don't say it in a form this version reads."""
+    try:
+        return TokenUsage.model_validate(
+            {key: error.data.params.get(key, 0) for key in ("inputTokens", "outputTokens")}
+        )
+    except ValidationError:
+        log.warning("the indexer's error doesn't say what the run used", code=error.code)
+        return unknown
+
+
 def _plan_error(code: ErrorCode) -> IndexFailure:
     """The indexer's code, when it's a reason a plan fails with (anything else, such as
     its refusing this caller, is this service's own failure)."""
     return (
         "DIRECTOR_VIDEO_UNAVAILABLE"
         if code == "DIRECTOR_VIDEO_UNAVAILABLE"
-        else ("DIRECTOR_ANALYSIS_FAILED")
+        else "DIRECTOR_ANALYSIS_FAILED"
     )

@@ -5,9 +5,12 @@ and the worker's dispatch."""
 
 import asyncio
 import base64
+import contextlib
 import os
+import socket
 import subprocess
 import sys
+import threading
 import time
 from collections.abc import Callable, Generator, Iterator
 from contextlib import AbstractContextManager, contextmanager
@@ -18,21 +21,30 @@ import httpx2 as httpx
 import jwt
 import pytest
 from fastapi.testclient import TestClient
+from httpx import AsyncClient as HttpClient
 from psycopg.types.json import Jsonb
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from app import analytics
 from app.db.models import DirectorPlan
-from app.director import Director, ReviewInterrupted, index_lock_key
+from app.director import (
+    Budgets,
+    Director,
+    ReviewInterrupted,
+    create_director_model,
+    index_lock_key,
+)
 from app.errors import AppError
-from app.indexing import PLANNER_RETRIES, IndexFailed
-from app.queues import JobLike
+from app.indexing import PLANNER_RETRIES, IndexFailed, Watched
+from app.queues import DirectorQueue, JobLike
 from app.schemas import (
     DirectorCutOut,
     DirectorLibraryOut,
     DirectorPlanOut,
     DirectorTakeOut,
+    IndexRequest,
+    IndexResult,
     SceneCheck,
 )
 from app.settings import get_settings
@@ -780,6 +792,8 @@ def test_a_short_that_needs_more_than_a_plan_may_spend_fails_it(
 # ------------------------------------------------------------------------------- the indexer
 
 REMOTE_USAGE = {"inputTokens": 4_000, "outputTokens": 500}
+# DIRECTOR_TOKENS_PER_PLAN in the tests (.env.example's): what a plan reserves.
+PLAN_TOKENS = 200_000
 INDEXED: dict[str, object] = {
     "plan": PLAN,
     "model": "gemini-on-cloud-run",
@@ -888,8 +902,25 @@ def test_with_an_indexer_url_the_cloud_run_indexer_writes_the_plan(
         (401, error_body("UNAUTHENTICATED", 401, {}), "DIRECTOR_ANALYSIS_FAILED", 0),
         # Cloud Run's own refusal (IAM), before the indexer: not this service's error shape.
         (403, {"error": "Forbidden"}, "DIRECTOR_ANALYSIS_FAILED", 0),
+        # What it used doesn't parse (another version of the indexer): the whole
+        # reservation counts, since the run's real usage is unknown.
+        (
+            422,
+            error_body("DIRECTOR_VIDEO_UNAVAILABLE", 422, {"inputTokens": "many"}),
+            "DIRECTOR_VIDEO_UNAVAILABLE",
+            PLAN_TOKENS,
+        ),
+        # A success that isn't an IndexResult: the same, and not worth a retry either.
+        (200, {}, "DIRECTOR_ANALYSIS_FAILED", PLAN_TOKENS),
     ],
-    ids=["video unavailable", "analysis failed", "token refused", "not an invoker"],
+    ids=[
+        "video unavailable",
+        "analysis failed",
+        "token refused",
+        "not an invoker",
+        "usage unreadable",
+        "result unreadable",
+    ],
 )
 def test_a_refusal_from_the_indexer_fails_the_plan_without_a_retry(
     monkeypatch: pytest.MonkeyPatch,
@@ -923,7 +954,10 @@ def test_a_refusal_from_the_indexer_fails_the_plan_without_a_retry(
             ),
             7,
         ),
-        (503, {"error": "Service Unavailable"}, 0),
+        # Cloud Run's own 503 or 504 may come after the indexer started (or finished) a
+        # run: its usage is unknown, so the whole reservation counts.
+        (503, {"error": "Service Unavailable"}, PLAN_TOKENS),
+        # Refused before reaching the indexer: nothing ran.
         (429, {"error": "Too Many Requests"}, 0),
     ],
     ids=["gemini down", "cloud run down", "cloud run busy"],
@@ -963,6 +997,98 @@ def test_an_indexer_or_metadata_server_that_can_t_be_reached_is_retried(
         with pytest.raises(IndexFailed):
             on_app_loop(test, lambda: director().analyze(org, plan.id, user, final=False))
         assert plan_of(test, org, user).status == "analyzing"
+    # Neither request reached the indexer: nothing ran, nothing counts.
+    assert usage(org, "director-plan") == 0
+
+
+@contextmanager
+def _hanging_up() -> Generator[str]:
+    """An indexer that reads the request and closes the connection without answering (it
+    crashed mid-run): what it did, and used, is unknown."""
+    listener = socket.create_server(("127.0.0.1", 0))
+
+    def accept() -> None:
+        with contextlib.suppress(OSError):
+            while True:
+                with listener.accept()[0] as connection:
+                    _ = connection.recv(65536)
+
+    threading.Thread(target=accept, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{listener.getsockname()[1]}"
+    finally:
+        listener.close()
+
+
+def test_an_indexer_that_hangs_up_mid_run_counts_the_whole_reservation(
+    monkeypatch: pytest.MonkeyPatch, extra_env: dict[str, str], identity: Identity
+) -> None:
+    with (
+        _hanging_up() as url,
+        _client_with_env(monkeypatch, {**extra_env, "INDEXER_URL": url}) as test,
+    ):
+        org, user = new_org()
+        plan = index_plan(test, org, user)
+        with pytest.raises(IndexFailed):
+            on_app_loop(test, lambda: director().analyze(org, plan.id, user, final=False))
+        assert plan_of(test, org, user).status == "analyzing"
+    assert usage(org, "director-plan") == PLAN_TOKENS
+
+
+class _Broken:
+    """An indexer with a bug: it gets as far as Gemini's answer, then fails in a way no
+    IndexFailed describes (the kind of thing a database error in a stage update is)."""
+
+    async def index(self, request: IndexRequest, *, watched: Watched) -> IndexResult:
+        await watched()
+        raise RuntimeError(f"a bug indexing {request.videoId}")
+
+
+def _broken_director() -> Director:
+    """The service's own Director, its indexer swapped for one with a bug."""
+    from app.main import services
+
+    settings = get_settings()
+    model = create_director_model(settings)
+    assert model is not None
+    return Director(
+        model,
+        GEMINI_MODEL,
+        _Broken(),
+        GEMINI_MODEL,
+        Budgets(
+            monthly=2_000_000, per_plan=PLAN_TOKENS, per_scene_check=12_000, per_review=120_000
+        ),
+        DirectorQueue(str(settings.redis_url)),
+        services().redis,
+        HttpClient(),
+        None,
+    )
+
+
+def test_an_unexpected_failure_fails_the_plan_on_the_last_attempt(client: TestClient) -> None:
+    """Whatever goes wrong, a plan never stays `analyzing` (still counting as the member's
+    one short) once its last attempt is over."""
+    org, user = new_org()
+    plan = index_plan(client, org, user)
+    broken = _broken_director()
+    with pytest.raises(RuntimeError, match="a bug"):
+        on_app_loop(client, lambda: broken.analyze(org, plan.id, user, final=False))
+    assert (plan_of(client, org, user).status, plan_of(client, org, user).stage) == (
+        "analyzing",
+        "writing",
+    )
+    with pytest.raises(RuntimeError, match="a bug"):
+        on_app_loop(client, lambda: broken.analyze(org, plan.id, user))
+    failed = plan_of(client, org, user)
+    assert (failed.status, failed.stage, failed.error) == (
+        "failed",
+        "failed",
+        "DIRECTOR_ANALYSIS_FAILED",
+    )
+    # Its usage unknown, each attempt counts its whole reservation.
+    assert usage(org, "director-plan") == 2 * PLAN_TOKENS
+    assert library(client, org, user).indexUsed is False
 
 
 # ------------------------------------------------------------------------------- the library

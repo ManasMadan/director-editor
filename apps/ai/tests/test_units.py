@@ -16,6 +16,7 @@ from app.auth import verify
 from app.director import create_director_model, create_index_model
 from app.errors import AppError
 from app.indexing import youtube_video
+from app.schemas import MAX_PLAN_TOKENS, IndexRequest
 from app.settings import IndexerSettings, Settings
 from tests.tokens import SECRET, service_token
 
@@ -174,6 +175,25 @@ def test_production_refuses_plain_http_for_the_indexer_and_google_s_certificates
         _indexer_settings(**production, GOOGLE_CERTS_URL="http://127.0.0.1:1/certs")
     with pytest.raises(ValidationError, match="INDEXER_URL must be HTTPS"):
         _settings(NODE_ENV="production", INDEXER_URL="http://indexer.test")
+
+
+def test_the_media_bucket_is_a_bucket_name() -> None:
+    assert _settings(MEDIA_BUCKET="director-media-1053522546520").media_bucket
+    for wrong in ("gs://director-media", "Director_Media", "a", "-starts-with-a-dash"):
+        with pytest.raises(ValidationError, match="MEDIA_BUCKET"):
+            _settings(MEDIA_BUCKET=wrong)
+
+
+def test_a_plan_s_token_cap_has_a_ceiling() -> None:
+    """The indexer runs whatever cap the worker sends: bounded like the setting it comes
+    from, so a bad request can't ask for an unbounded run."""
+    request = {"videoId": "dQw4w9WgXcQ", "orgId": str(ORG), "planId": str(USER)}
+    assert IndexRequest.model_validate({**request, "maxTokens": MAX_PLAN_TOKENS})
+    with pytest.raises(ValidationError, match="maxTokens"):
+        IndexRequest.model_validate({**request, "maxTokens": MAX_PLAN_TOKENS + 1})
+    assert _settings(DIRECTOR_TOKENS_PER_PLAN=str(MAX_PLAN_TOKENS)).director_tokens_per_plan
+    with pytest.raises(ValidationError, match="DIRECTOR_TOKENS_PER_PLAN"):
+        _settings(DIRECTOR_TOKENS_PER_PLAN=str(MAX_PLAN_TOKENS + 1))
 
 
 def test_the_indexer_url_is_an_origin() -> None:

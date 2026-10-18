@@ -44,7 +44,6 @@ from app.db.models import DirectorCut, DirectorPlan, DirectorTake
 from app.db.session import tenant
 from app.errors import AppError
 from app.indexing import (
-    NOTHING_USED,
     Indexer,
     IndexFailed,
     LocalIndexer,
@@ -67,6 +66,7 @@ from app.schemas import (
     ShotPlan,
     ShotPlanDraft,
     TakeReview,
+    TokenUsage,
 )
 from app.settings import GeminiSettings, Settings
 from app.usage import Feature, Reservation, reserve, settle
@@ -544,22 +544,23 @@ class Director:
         request = IndexRequest(
             videoId=video_id, orgId=org_id, planId=plan_id, maxTokens=reservation.tokens
         )
-        used = NOTHING_USED
         try:
-            result = await self._indexer.index(
-                request, watched=lambda: self._reach(org_id, plan_id, "writing")
-            )
-            used = result.usage
+            result = await self._index_and_settle(request, reservation)
+            await self._save_plan(org_id, plan_id, result)
         except IndexFailed as failure:
-            used = failure.usage
             if final or not failure.retryable:
                 await self._fail_plan(org_id, plan_id, failure.code)
             if failure.retryable:
                 raise
             return
-        finally:
-            await settle(reservation, used.inputTokens, used.outputTokens)
-        await self._save_plan(org_id, plan_id, result)
+        except Exception:
+            # A bug, or an outage of this service's own (the database, Redis) mid-run: let
+            # BullMQ try again, but never leave the plan `analyzing` after the last
+            # attempt, where it would still count as the member's one short of their own.
+            log.exception("indexing a short failed unexpectedly", plan_id=str(plan_id))
+            if final:
+                await self._fail_plan(org_id, plan_id, "DIRECTOR_ANALYSIS_FAILED")
+            raise
         # Only here, once the plan is stored: a run that fails or is retried isn't one.
         self._events.record(
             AnalyticsEvent(
@@ -569,6 +570,26 @@ class Director:
                 detail={"model": result.model, "audio": result.audio.status},
             )
         )
+
+    async def _index_and_settle(
+        self, request: IndexRequest, reservation: Reservation
+    ) -> IndexResult:
+        """The indexer's result, with what the run used settled against the reservation
+        however it ends. A run that ends some way that doesn't say (an unexpected error)
+        keeps its whole reservation: that errs on the side of the budget."""
+        used = TokenUsage(inputTokens=reservation.tokens, outputTokens=0)
+        try:
+            result = await self._indexer.index(
+                request, watched=lambda: self._reach(reservation.org_id, request.planId, "writing")
+            )
+        except IndexFailed as failure:
+            used = failure.usage
+            raise
+        else:
+            used = result.usage
+        finally:
+            await settle(reservation, used.inputTokens, used.outputTokens)
+        return result
 
     async def _start_watching(self, org_id: UUID, plan_id: UUID) -> tuple[str, UUID | None] | None:
         """Marks the plan as being watched: its short and who asked for it, or None when

@@ -116,6 +116,12 @@ def test_the_indexer_is_alive(indexer: TestClient) -> None:
     assert (response.status_code, body(response)) == (200, {"status": "ok"})
 
 
+def test_the_indexer_publishes_no_api_docs(indexer: TestClient) -> None:
+    for path in ("/openapi.json", "/docs", "/redoc"):
+        response = indexer.get(path)
+        assert (response.status_code, error_of(response).code) == (404, "NOT_FOUND"), path
+
+
 def test_the_indexer_writes_the_plan_for_the_account_that_may_call_it(
     indexer: TestClient,
     identity: Identity,

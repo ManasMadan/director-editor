@@ -15,6 +15,8 @@ from typing import Literal, Self
 from pydantic import AnyHttpUrl, Field, PostgresDsn, RedisDsn, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.schemas import MAX_PLAN_TOKENS
+
 # A URL's origin and nothing after it: the indexer's URL is also the audience of the ID
 # token the worker calls it with, which Cloud Run compares with the service's URL as is.
 ORIGIN_PATTERN = r"^https?://[^/\s]+$"
@@ -69,7 +71,9 @@ class GeminiSettings(BaseSettings):
     # The Cloud Storage bucket a short's original audio is captured into while it's
     # indexed (app/audio.py, `audio/<videoId>.m4a`), with Application Default Credentials;
     # the same bucket as apps/api's GCS_BUCKET, which signs links to it. Unset: no capture.
-    media_bucket: str | None = Field(default=None, min_length=1, alias="MEDIA_BUCKET")
+    media_bucket: str | None = Field(
+        default=None, pattern=r"^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$", alias="MEDIA_BUCKET"
+    )
 
     @model_validator(mode="after")
     def _production_uses_real_providers(self) -> Self:
@@ -107,7 +111,7 @@ class Settings(GeminiSettings):
     # A plan watches the whole short (about 300 tokens a second) and thinks; a scene check
     # looks at one frame; a review watches one take.
     director_tokens_per_plan: int = Field(
-        default=200_000, ge=10_000, alias="DIRECTOR_TOKENS_PER_PLAN"
+        default=200_000, ge=10_000, le=MAX_PLAN_TOKENS, alias="DIRECTOR_TOKENS_PER_PLAN"
     )
     director_tokens_per_scene_check: int = Field(
         default=12_000, ge=2_000, alias="DIRECTOR_TOKENS_PER_SCENE_CHECK"

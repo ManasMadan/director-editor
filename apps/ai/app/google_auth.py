@@ -12,14 +12,13 @@ call, so one setting moves Application Default Credentials and these together; o
 tests set it, to a local stand-in.
 """
 
-import asyncio
 import os
+import time
+from collections.abc import Callable
 
 import httpx
-from google.auth.exceptions import TransportError
-from google.auth.transport.requests import Request
-from google.oauth2 import id_token as google_id_token
-from pydantic import BaseModel, Field
+from google.auth import jwt
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
 from app.errors import AppError
 from app.log import log
@@ -30,6 +29,13 @@ METADATA_TIMEOUT_SECONDS = 5.0
 # Who signs Google's ID tokens (google-auth checks the signature and the audience; the
 # issuer is left to the caller).
 GOOGLE_ISSUERS = frozenset({"https://accounts.google.com", "accounts.google.com"})
+# How long Google's keys are kept, and how long fetching them may take: the indexer
+# checks every request, and must neither fetch them each time nor hang on them.
+CERTS_CACHE_SECONDS = 300.0
+CERTS_TIMEOUT_SECONDS = 10.0
+# The VM's clock and Cloud Run's can differ by a second or two; a token "issued in the
+# future" by that much is still good.
+CLOCK_SKEW_SECONDS = 10
 _FLAVOR = {"Metadata-Flavor": "Google"}
 
 
@@ -68,16 +74,47 @@ class _IdClaims(BaseModel):
     email_verified: bool
 
 
+_CERTS = TypeAdapter(dict[str, str])
+# Google's keys, by certificate URL: when each was fetched, and the keys. Google publishes
+# a key well before it signs with it, so a few minutes' cache never misses a new one.
+_certs_cache: dict[str, tuple[float, dict[str, str]]] = {}
+
+
+async def google_certs(
+    certs_url: str, *, now: Callable[[], float] = time.monotonic
+) -> dict[str, str]:
+    """Google's ID-token keys (key id to PEM), fetched once per CERTS_CACHE_SECONDS rather
+    than for every request checked. httpx's errors, or a ValidationError for an answer
+    that isn't Google's format, when they can't be had."""
+    cached = _certs_cache.get(certs_url)
+    if cached is not None and now() - cached[0] < CERTS_CACHE_SECONDS:
+        return cached[1]
+    async with httpx.AsyncClient(timeout=CERTS_TIMEOUT_SECONDS) as http:
+        response = (await http.get(certs_url)).raise_for_status()
+    certs = _CERTS.validate_json(response.content)
+    _certs_cache[certs_url] = (now(), certs)
+    return certs
+
+
 async def verify_invoker(token: str, *, audience: str, invoker: str, certs_url: str) -> None:
     """Passes only for an ID token Google signed (its keys at `certs_url`), for
     `audience`, naming `invoker` as a verified email. UNAUTHENTICATED for anything that
     isn't such a token, FORBIDDEN for another account's, UPSTREAM_UNAVAILABLE when
     Google's keys can't be fetched."""
     try:
-        claims = await asyncio.to_thread(_verified_claims, token, audience, certs_url)
-    except TransportError as error:
-        log.warning("couldn't fetch google's certificates", error=str(error))
+        certs = await google_certs(certs_url)
+    except (httpx.HTTPError, ValidationError) as error:
+        log.warning("couldn't fetch google's certificates", error=type(error).__name__)
         raise AppError("UPSTREAM_UNAVAILABLE", {"service": "google"}) from None
+    try:
+        # google-auth's own check (what its id_token.verify_token does once it has the
+        # keys): the signature, the audience, and the token's times, allowing a little
+        # drift between the caller's clock and this one's.
+        claims = _IdClaims.model_validate(
+            jwt.decode(  # pyright: ignore[reportUnknownMemberType]  # google-auth's jwt module is untyped
+                token, certs=certs, audience=audience, clock_skew_in_seconds=CLOCK_SKEW_SECONDS
+            )
+        )
     except ValueError as error:
         # Malformed, expired, signed by another key, for another audience, or missing a
         # claim (pydantic's ValidationError is a ValueError too).
@@ -89,11 +126,3 @@ async def verify_invoker(token: str, *, audience: str, invoker: str, certs_url: 
     if claims.email != invoker or not claims.email_verified:
         log.warning("refused a caller that isn't the invoker", email=claims.email)
         raise AppError("FORBIDDEN")
-
-
-def _verified_claims(token: str, audience: str, certs_url: str) -> _IdClaims:
-    """google-auth's check, blocking (it fetches the certificates with requests)."""
-    verified = google_id_token.verify_token(
-        token, Request(), audience=audience, certs_url=certs_url
-    )
-    return _IdClaims.model_validate(verified)

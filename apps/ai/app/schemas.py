@@ -47,6 +47,9 @@ MAX_SCRIPT_LINES = 20
 MAX_POSE_KEYPOINTS = 13
 # A camera frame for a scene check, base64: a 640-pixel JPEG is 40-120 kB.
 MAX_FRAME_BASE64 = 400_000
+# The most one plan may reserve (DIRECTOR_TOKENS_PER_PLAN's ceiling): a whole workspace's
+# default monthly allowance, far past what a three-minute short needs.
+MAX_PLAN_TOKENS = 2_000_000
 
 type KeypointName = Literal[
     "nose",
@@ -296,7 +299,9 @@ class IndexRequest(BaseModel):
     orgId: UUID = Field(strict=False)
     planId: UUID = Field(strict=False)
     maxTokens: int = Field(
-        ge=1, description="The run's token cap: what the worker reserved for it."
+        ge=1,
+        le=MAX_PLAN_TOKENS,
+        description="The run's token cap: what the worker reserved for it.",
     )
 
 

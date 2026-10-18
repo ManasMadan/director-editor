@@ -3,6 +3,7 @@ process or Cloud Storage call, except for the two default implementations themse
 which run for real against a harmless process and a fake Cloud Storage client."""
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -76,6 +77,31 @@ async def test_fetch_audio_refuses_a_malformed_video_id(malformed: str) -> None:
         pytest.fail("never uploads for an id that failed validation")
 
     assert await fetch_audio(malformed, BUCKET, run=run, upload=upload) is None
+
+
+async def test_fetch_audio_gives_up_on_a_yt_dlp_that_hangs() -> None:
+    async def hangs(args: list[str]) -> tuple[int, bytes]:
+        await asyncio.Event().wait()
+        return 0, b""
+
+    async def upload(bucket: str, key: str, path: Path) -> None:
+        pytest.fail("never uploads what yt-dlp never finished")
+
+    assert await fetch_audio(VIDEO, BUCKET, run=hangs, upload=upload, give_up_after=0.05) is None
+
+
+async def test_run_yt_dlp_kills_the_process_when_it_is_given_up_on(tmp_path: Path) -> None:
+    pid_file = tmp_path / "pid"
+    sleeper = (
+        "import os, pathlib, time; "
+        f"pathlib.Path({str(pid_file)!r}).write_text(str(os.getpid())); time.sleep(60)"
+    )
+    # Long enough for the process to start and say who it is, far short of its minute.
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(run_yt_dlp([sys.executable, "-c", sleeper]), timeout=3)
+    # Killed and reaped: no process with that id is left behind.
+    with pytest.raises(ProcessLookupError):
+        os.kill(int(pid_file.read_text()), 0)
 
 
 async def test_run_yt_dlp_runs_a_real_subprocess_and_reports_its_exit() -> None:

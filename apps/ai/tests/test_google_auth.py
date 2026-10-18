@@ -2,6 +2,7 @@
 that speak the real protocol (tests/fakes.py's `serve_identity`): ID and access tokens
 from the metadata server, and the indexer's check of the ID token it is called with."""
 
+import time
 from collections.abc import Iterator
 
 import jwt
@@ -10,7 +11,13 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from pydantic import TypeAdapter
 
 from app.errors import AppError
-from app.google_auth import access_token, id_token, verify_invoker
+from app.google_auth import (
+    CERTS_CACHE_SECONDS,
+    access_token,
+    google_certs,
+    id_token,
+    verify_invoker,
+)
 from tests.fakes import (
     ACCESS_TOKEN,
     CERTS_PATH,
@@ -121,5 +128,38 @@ async def test_certificates_that_can_t_be_fetched_are_an_upstream_failure(
             audience=AUDIENCE,
             invoker=SERVICE_ACCOUNT,
             certs_url=f"{identity.url}/no-certs-here",
+        )
+    assert unavailable.value.code == "UPSTREAM_UNAVAILABLE"
+
+
+async def test_google_s_certificates_are_fetched_once_while_fresh(identity: Identity) -> None:
+    """Fetched on the first token and kept for CERTS_CACHE_SECONDS, not fetched again for
+    every request the indexer checks."""
+    for _ in range(3):
+        await _verify(identity, identity.token(AUDIENCE))
+    assert identity.requests.count(CERTS_PATH) == 1
+    url = f"{identity.url}{CERTS_PATH}"
+    _ = await google_certs(url, now=lambda: time.monotonic() + CERTS_CACHE_SECONDS - 1)
+    assert identity.requests.count(CERTS_PATH) == 1
+    _ = await google_certs(url, now=lambda: time.monotonic() + CERTS_CACHE_SECONDS + 1)
+    assert identity.requests.count(CERTS_PATH) == 2
+
+
+async def test_a_token_from_a_clock_a_little_ahead_passes(identity: Identity) -> None:
+    """A few seconds between the VM's clock and Cloud Run's must not refuse every call."""
+    now = int(time.time())
+    await _verify(identity, identity.token(AUDIENCE, iat=now + 5, exp=now + 3605))
+
+
+async def test_certificates_that_aren_t_google_s_format_are_an_upstream_failure(
+    identity: Identity,
+) -> None:
+    # The metadata server's "/" answers plain text, not a JSON map of keys.
+    with pytest.raises(AppError) as unavailable:
+        await verify_invoker(
+            identity.token(AUDIENCE),
+            audience=AUDIENCE,
+            invoker=SERVICE_ACCOUNT,
+            certs_url=f"{identity.url}/",
         )
     assert unavailable.value.code == "UPSTREAM_UNAVAILABLE"
