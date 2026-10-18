@@ -187,7 +187,7 @@ export function DirectorsCut({
             className="flex h-13 flex-[1.4] items-center justify-center gap-2 rounded-full bg-studio-foreground font-semibold text-studio shadow-xl transition-transform active:scale-95 disabled:opacity-70"
           >
             {sending ? (
-              <GeminiLoader label={shoot("sending")} size="sm" />
+              <GeminiLoader as="span" label={shoot("sending")} size="sm" />
             ) : (
               <Check className="size-5" aria-hidden />
             )}
