@@ -38,7 +38,7 @@ const metadataSchema = z.object({
 type Metadata = z.infer<typeof metadataSchema>;
 
 /** A finished upload, for tests to check what reached YouTube. */
-export interface YouTubeUpload extends Metadata {
+interface YouTubeUpload extends Metadata {
   id: string;
   email: string;
   contentType: string;

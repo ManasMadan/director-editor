@@ -32,16 +32,16 @@ const errors = errorsOf(
  */
 export const YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload";
 /** What marks a video as a Short in its title. */
-export const SHORTS_TAG = "#Shorts";
+const SHORTS_TAG = "#Shorts";
 /** YouTube's longest title, #Shorts included. */
 const YOUTUBE_TITLE_MAX_LENGTH = 100;
 export const PUBLISH_TITLE_MAX_LENGTH = YOUTUBE_TITLE_MAX_LENGTH - SHORTS_TAG.length - 1;
 export const PUBLISH_DESCRIPTION_MAX_LENGTH = 3_000;
-export const PUBLISH_CREDITS_MAX_LENGTH = 300;
-export const PUBLISH_HASHTAGS_MAX = 15;
-export const PUBLISH_HASHTAG_MAX_LENGTH = 40;
+const PUBLISH_CREDITS_MAX_LENGTH = 300;
+const PUBLISH_HASHTAGS_MAX = 15;
+const PUBLISH_HASHTAG_MAX_LENGTH = 40;
 /** YouTube's longest description, in UTF-8 bytes. */
-export const YOUTUBE_DESCRIPTION_MAX_BYTES = 5_000;
+const YOUTUBE_DESCRIPTION_MAX_BYTES = 5_000;
 
 // YouTube refuses a title or description with angle brackets in it (invalidTitle,
 // invalidDescription).
@@ -77,7 +77,7 @@ export function youtubeTitle(title: string) {
 }
 
 /** The original Short's link, as the description ends with it. */
-export const shortLink = (videoId: VideoId) => `https://youtube.com/shorts/${videoId}`;
+const shortLink = (videoId: VideoId) => `https://youtube.com/shorts/${videoId}`;
 
 /**
  * The description YouTube gets: the member's text, then the hashtags, then the credits

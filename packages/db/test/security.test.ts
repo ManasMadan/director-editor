@@ -258,7 +258,11 @@ describe("least privilege", () => {
       tenantTx(api, orgId, (tx) =>
         tx.directorCut.updateMany({
           where: { id: cutId },
-          data: { publishStatus: "published", youtubeVideoId: "dQw4w9WgXcQ", visibility: "private" },
+          data: {
+            publishStatus: "published",
+            youtubeVideoId: "dQw4w9WgXcQ",
+            visibility: "private",
+          },
         }),
       );
     // Its own workspace's cut, the publish columns and updated_at (Prisma sets it).

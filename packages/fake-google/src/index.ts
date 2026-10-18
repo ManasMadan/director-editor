@@ -22,8 +22,6 @@ import { type Answer, createOAuth, type OAuth } from "./oauth";
 import { youtube } from "./youtube";
 import { createYouTubeUploads } from "./youtube-upload";
 
-export type { YouTubeUpload } from "./youtube-upload";
-
 export interface FakeGoogleOptions {
   apiKey: string;
   port?: number;
