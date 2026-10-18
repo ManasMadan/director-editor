@@ -49,6 +49,7 @@ model User {
   shortReactions       ShortReaction[]
   invitations          Invitation[]
   recordings           RecordingSession[]
+  directorVersions     DirectorVersion[]
 
   @@map("user")
   @@schema("auth")
@@ -164,6 +165,7 @@ model Organization {
   shortReactions       ShortReaction[]
   invitations          Invitation[]
   recordings           RecordingSession[]
+  directorVersions     DirectorVersion[]
 
   @@map("organization")
   @@schema("auth")

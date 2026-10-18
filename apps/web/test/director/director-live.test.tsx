@@ -7,6 +7,7 @@
  * are a canvas and a tone; the audio graph, the worklet and the API are the browser's
  * and the app's own.
  */
+import { EMPTY_VERSION } from "@repo/contracts/api";
 import { useSearchParams } from "next/navigation";
 import { Activity, type ReactNode, useState } from "react";
 import { flushSync } from "react-dom";
@@ -228,8 +229,10 @@ describe("Director live on the shoot screen", () => {
   it("shows Director's changes to a shot, none mid-take, and hands them to a fresh connection", async () => {
     canvasCamera();
     const { page, socket } = await shoot();
-    // Nothing changed yet: the connection hears nothing about it.
-    expect(socket.sentOf("context")).toEqual([]);
+    // Nothing changed yet: the connection hears the empty version.
+    await expect
+      .poll(() => socket.sentOf("context").at(-1))
+      .toEqual({ type: "context", version: EMPTY_VERSION });
     socket.say({
       type: "tool",
       id: "t1",
@@ -257,10 +260,13 @@ describe("Director live on the shoot screen", () => {
     FakeSocket.last.open();
     expect(FakeSocket.last.sent[0]).toEqual({
       type: "context",
-      adaptations: [
-        { shot: 0, where: "Hall" },
-        { shot: 1, where: "On the balcony", line: "Cheese!" },
-      ],
+      version: {
+        ...EMPTY_VERSION,
+        shots: [
+          { shot: 0, where: "Hall" },
+          { shot: 1, where: "On the balcony", line: "Cheese!" },
+        ],
+      },
     });
   });
 
@@ -600,7 +606,7 @@ describe("Director live's hook", () => {
     shotIndex,
     video: { current: cameraVideo() },
     onTool: vi.fn(),
-    adaptations: [],
+    version: EMPTY_VERSION,
   });
 
   it("does nothing before Director is there", async () => {

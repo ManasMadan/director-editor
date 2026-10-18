@@ -165,8 +165,8 @@ function relayFor(
   return new LiveRelay(client, {
     url: upstream.url,
     auth: upstream.auth,
-    setup: (shot, handle, adaptation) =>
-      setupMessage(upstream.model, call.plan, shot, { handle, adaptation }),
+    setup: (shot, handle, version) =>
+      setupMessage(upstream.model, call.plan, shot, { handle, version }),
     plan: call.plan,
     shot: call.shot,
     resumed: call.resumed,

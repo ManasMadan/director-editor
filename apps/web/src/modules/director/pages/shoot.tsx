@@ -4,8 +4,8 @@ import "../live.css";
 import { useApiErrorMessage } from "@repo/client";
 import { useDirectorPlanQuery } from "@repo/client/api/director/plan";
 import { useSystemInfoQuery } from "@repo/client/api/system/info";
-import type { Shot, ShotPlan } from "@repo/contracts/api";
-import type { LiveAdaptation, LiveToolCall, LiveToolResult } from "@repo/contracts/live";
+import type { MemoryNote, Shot, ShotPlan, YourVersion } from "@repo/contracts/api";
+import type { LiveToolCall, LiveToolResult } from "@repo/contracts/live";
 import { required } from "@repo/contracts/objects";
 import {
   AlertDialog,
@@ -28,6 +28,7 @@ import { DirectorGate, YouTubeEmbed } from "@/modules/shorts";
 import { DirectorCaptions, DirectorOrb, useLiveFailure } from "../components/director-captions";
 import { MarksLayer } from "../components/marks-layer";
 import { MatchGhost } from "../components/match-ghost";
+import { MemoryChips } from "../components/memory-chips";
 import {
   DoneButton,
   PausedVeil,
@@ -57,14 +58,20 @@ import { useMemory } from "../hooks/use-memory";
 import { type RollShoot, useRollShoot } from "../hooks/use-roll-shoot";
 import { useWakeLock } from "../hooks/use-screen";
 import { nextPage, type Phase, type StudioShot, shotPage, useStudio } from "../hooks/use-studio";
+import { useYourVersion, type YourVersionState } from "../hooks/use-your-version";
 import { type AudioMode, parseAudio } from "../lib/audio";
 import { activeStep } from "../lib/timeline";
 import {
-  type Adaptations,
-  adaptationList,
+  adaptationOf,
   adapted,
   type ChangedRow,
-  NO_ADAPTATIONS,
+  forgotten,
+  nextFilmed,
+  ROW_FIELD,
+  remembered,
+  restored,
+  restoredRow,
+  skipped,
   yourVersion,
 } from "../lib/your-version";
 
@@ -393,6 +400,11 @@ interface Screen {
   props: StudioShot;
   /** The card's rows Director changed for the member. */
   changed: ReadonlySet<ChangedRow>;
+  /** What Director remembers, as chips; × forgets one. */
+  notes: readonly MemoryNote[];
+  onForget: (note: MemoryNote) => void;
+  /** ↺ on a changed row of the card. */
+  onRestore: (row: ChangedRow) => void;
   studio: Studio;
   camera: Camera;
   live: DirectorLive;
@@ -420,7 +432,9 @@ function Overlay(screen: Screen) {
           </div>
         </div>
         <SlowerLine live={live} />
-        {setup ? <ShotCard shot={shot} index={index} changed={changed} /> : null}
+        {setup ? (
+          <ShotCard shot={shot} index={index} changed={changed} onRestore={screen.onRestore} />
+        ) : null}
         {setup ? <LiveNotice live={live} liveOn={liveOn} /> : null}
       </div>
       <CountdownNumber seconds={studio.countdown} />
@@ -439,6 +453,7 @@ function Overlay(screen: Screen) {
         ) : (
           <DirectorCaptions captions={live.captions} level={live.level} />
         )}
+        {setup ? <MemoryChips notes={screen.notes} onForget={screen.onForget} /> : null}
         {setup && liveOn ? <TellBox live={live} /> : null}
         <Controls shot={shot} studio={studio} camera={camera} roll={roll} onFlip={onFlip} />
       </div>
@@ -449,36 +464,87 @@ function Overlay(screen: Screen) {
 type ToolHandler = (id: string, call: LiveToolCall) => void;
 
 interface ToolScreen extends Pick<Screen, "props" | "studio" | "camera" | "live"> {
-  /** Puts Director's change to a shot on the member's version of it. */
-  adapt: (change: LiveAdaptation) => void;
+  /** The member's version: Director's changes go on it. */
+  yours: YourVersionState;
   marks: Marks;
   /** Director's mark on the roll: what came of it. */
   mark: (call: Extract<LiveToolCall, { name: "mark" }>) => Promise<LiveToolResult>;
 }
 
+type Go = (href: ReturnType<typeof nextPage>) => void;
+
+/**
+ * Where the member goes after shot `index` in their version: the next shot they film,
+ * or the editor once none is left (skipped shots and gaps aren't filmed).
+ */
+function pageAfter(props: StudioShot, version: YourVersion) {
+  if (props.retake) {
+    return nextPage(props);
+  }
+  const next = nextFilmed(version, props.index, props.count);
+  return nextPage({ ...props, index: next === null ? props.count - 1 : next - 1 });
+}
+
+/** Director left a shot out: if it's this one, the screen moves on past it. */
+function skip(index: number, { props, yours }: ToolScreen, go: Go): LiveToolResult {
+  const version = yours.change((now) => skipped(now, index));
+  if (index === props.index) {
+    go(pageAfter(props, version));
+  }
+  return "done";
+}
+
+/** The tools that change the member's version: shown at once, kept, and Director told. */
+function versionResult(
+  call: Extract<LiveToolCall, { name: "adapt_shot" | "restore_shot" | "remember" | "forget" }>,
+  { yours }: ToolScreen,
+): LiveToolResult {
+  switch (call.name) {
+    case "adapt_shot": {
+      const { name: _, ...change } = call;
+      yours.change((now) => adapted(now, change));
+      return "done";
+    }
+    case "restore_shot":
+      yours.change((now) => restored(now, call.shot));
+      return "done";
+    case "remember":
+      yours.change((now) => remembered(now, { kind: call.kind, note: call.note }));
+      return "done";
+    case "forget":
+      yours.change((now) => forgotten(now, call.note));
+      return "done";
+  }
+}
+
 /** What each of Director's tools does on screen, and what came of it. */
 function toolResult(
   call: Exclude<LiveToolCall, { name: "point_at" | "mark" }>,
-  { props, camera, adapt }: ToolScreen,
-  go: (href: ReturnType<typeof shotPage>) => void,
-): LiveToolResult {
+  screen: ToolScreen,
+  go: Go,
+): LiveToolResult | Promise<LiveToolResult> {
+  const { props, camera, yours } = screen;
   switch (call.name) {
     case "go_to_shot":
       if (call.shot !== props.index) {
         go(shotPage(props.videoId, call.shot, props.audio, props.retake));
       }
       return "done";
-    case "adapt_shot": {
-      const { name: _, ...change } = call;
-      adapt(change);
-      return "done";
-    }
     case "switch_camera":
       if (camera.state !== "live") {
         return "no_camera";
       }
       camera.face(call.to);
       return "done";
+    case "skip_shot":
+      return skip(call.shot, screen, go);
+    case "replan":
+      return yours.replan(call.instruction).then(
+        (): LiveToolResult => "done",
+        (): LiveToolResult => "failed",
+      );
+    default:
+      return versionResult(call, screen);
   }
 }
 
@@ -504,10 +570,8 @@ function useTools(tools: { current: ToolHandler }, screen: ToolScreen) {
         void marks.point(id, call.target, call.label).then((result) => live.answer(id, result));
         return;
       }
-      screen.live.answer(
-        id,
-        toolResult(call, screen, (href) => router.push(href)),
-      );
+      const answer = toolResult(call, screen, (href) => router.push(href));
+      void Promise.resolve(answer).then((result) => screen.live.answer(id, result));
     };
   });
 }
@@ -535,6 +599,43 @@ function useMemberFlip(camera: Camera, live: DirectorLive) {
   };
 }
 
+/** The chip's × and the card's ↺: the member's own changes to their version, told to Director. */
+function versionTaps(yours: YourVersionState, live: DirectorLive, index: number) {
+  return {
+    notes: yours.version.notes,
+    onForget: (note: MemoryNote) => {
+      yours.change((now) => forgotten(now, note.note));
+      live.forgot(note);
+    },
+    onRestore: (row: ChangedRow) => {
+      yours.change((now) => restoredRow(now, index, ROW_FIELD[row]));
+      live.restored(index, ROW_FIELD[row]);
+    },
+  };
+}
+
+/**
+ * The member's version of the plan, and of the shot on screen; Director live hears each
+ * new version as it lands, through `shared` (set once Director live exists).
+ */
+function useShotVersion(videoId: string, plan: ShotPlan, index: number) {
+  const shared = useRef<(next: YourVersion) => void>(() => undefined);
+  const yours = useYourVersion(videoId, (next) => shared.current(next));
+  const shot = required(plan.shots[index], "the shot");
+  return { shared, yours, version: yourVersion(shot, adaptationOf(yours.version, index)) };
+}
+
+/**
+ * Director's voice would talk over the 3-2-1 and end up in the take: it's held (dropped,
+ * and not captioned) from the first number to the take's end. Set before the screen
+ * paints, so nothing Director says once the review shows is dropped as if mid-take.
+ */
+function useQuietTakes(live: DirectorLive, studio: Studio) {
+  const { hold } = live;
+  const quiet = studio.phase === "countdown" || studio.phase === "recording";
+  useLayoutEffect(() => hold(quiet), [hold, quiet]);
+}
+
 interface ShootProps {
   videoId: string;
   plan: ShotPlan;
@@ -552,9 +653,7 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
   const camera = useCamera(audio === "voice");
   // Moving on after a kept take goes through the leave guard (made below, from the take).
   const guard = useRef<Pick<ReturnType<typeof useLeaveGuard>, "go">>({ go: () => undefined });
-  // The member's version of each shot Director changed, for this shoot.
-  const [adaptations, setAdaptations] = useState<Adaptations>(NO_ADAPTATIONS);
-  const version = yourVersion(required(plan.shots[index], "the shot"), adaptations[index]);
+  const { shared, yours, version } = useShotVersion(videoId, plan, index);
   const props: StudioShot = {
     videoId,
     shot: version.shot,
@@ -571,7 +670,10 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
     shotIndex: index,
     video: camera.video,
     onTool: (id, call) => tools.current(id, call),
-    adaptations: adaptationList(adaptations),
+    version: yours.version,
+  });
+  useLayoutEffect(() => {
+    shared.current = live.share;
   });
   const studio = useStudio(props, camera, {
     onCountdown: () => live.take("countdown"),
@@ -579,7 +681,7 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
     onRecording: () => live.take("recording"),
     onRecorded: () => live.take("recorded"),
     onDiscarded: () => live.take("discarded"),
-    onKept: () => guard.current.go(nextPage(props)),
+    onKept: () => guard.current.go(pageAfter(props, yours.version)),
   });
   const leaving = useLeaveGuard({
     guarded: studio.phase !== "setup",
@@ -595,24 +697,40 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
     shot: index,
     setup: studio.phase === "setup",
   });
-  useTools(tools, {
+  useTools(tools, { props, studio, camera, live, yours, marks, mark: (c) => mark.current(c) });
+  const onFlip = useMemberFlip(camera, live);
+  useQuietTakes(live, studio);
+  useWakeLock();
+  const taps = versionTaps(yours, live, index);
+  return {
     props,
-    studio,
+    changed: version.changed,
+    taps,
     camera,
     live,
-    adapt: (change) => setAdaptations((now) => adapted(now, change)),
+    studio,
+    onFlip,
+    leaving,
     marks,
-    mark: (call) => mark.current(call),
-  });
-  const onFlip = useMemberFlip(camera, live);
-  const { hold } = live;
-  const quiet = studio.phase === "countdown" || studio.phase === "recording";
-  // Director's voice would talk over the 3-2-1 and end up in the take: it's held (dropped,
-  // and not captioned) from the first number to the take's end. Set before the screen
-  // paints, so nothing Director says once the review shows is dropped as if mid-take.
-  useLayoutEffect(() => hold(quiet), [hold, quiet]);
-  useWakeLock();
-  return { props, changed: version.changed, camera, live, studio, onFlip, leaving, marks, mark };
+    mark,
+  };
+}
+
+/** The camera's picture, full bleed, mirrored for the front camera as a mirror would be. */
+function CameraPicture({ camera }: { camera: Camera }) {
+  return (
+    <video
+      ref={camera.video}
+      autoPlay
+      muted
+      playsInline
+      aria-hidden
+      className={cn(
+        "absolute inset-0 size-full object-cover",
+        camera.facing === "front" && "-scale-x-100",
+      )}
+    />
+  );
 }
 
 /** "Leave? This take isn't kept yet.", with Leave and Stay. */
@@ -691,17 +809,7 @@ function ShootScreen(shootProps: ShootProps) {
   return (
     <div className="fixed inset-0 overflow-hidden bg-studio text-studio-foreground">
       <div className="relative mx-auto h-full w-full max-w-[calc(100dvh*9/16)] overflow-hidden">
-        <video
-          ref={camera.video}
-          autoPlay
-          muted
-          playsInline
-          aria-hidden
-          className={cn(
-            "absolute inset-0 size-full object-cover",
-            camera.facing === "front" && "-scale-x-100",
-          )}
-        />
+        <CameraPicture camera={camera} />
         {started && !blocked ? (
           <MarksLayer
             marks={shoot.marks.marks}
@@ -724,6 +832,7 @@ function ShootScreen(shootProps: ShootProps) {
           <Overlay
             props={shoot.props}
             changed={shoot.changed}
+            {...shoot.taps}
             studio={studio}
             camera={camera}
             live={live}

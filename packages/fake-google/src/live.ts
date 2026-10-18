@@ -12,11 +12,12 @@
  * system instruction and each move's brief: "say my line" reads that shot's line, the
  * member's own when they changed it. A member's turn that names a tool's cue gets that
  * tool call: "go to shot 2" calls go_to_shot, "switch to the back camera" calls
- * switch_camera, and "what if I do it with my grandma" gets a word about it and then
- * adapt_shot; while the roll records, "here goes" marks an attempt's start and "how was
- * that" its end. Once a tool's answer comes back it says whether it worked (and nothing
- * after a start mark: it's quiet while the member goes). Microphone audio and camera
- * frames are only counted. `goAway()` warns every open connection that it's
+ * switch_camera, "what if I do it with my grandma" gets a word about it and then
+ * adapt_shot, "I'm switching indoors" and "one angle is fine" remember and replan, and
+ * "skip this one" calls skip_shot; while the roll records, "here goes" marks an
+ * attempt's start and "how was that" its end. Once a tool's answer comes back it says
+ * whether it worked (and nothing after a start mark: it's quiet while the member goes).
+ * Microphone audio and camera frames are only counted. `goAway()` warns every open connection that it's
  * about to close, as Vertex does before its ten-minute limit.
  */
 import type { IncomingMessage } from "node:http";
@@ -105,9 +106,43 @@ function answerTo(text: string): string {
   return text.startsWith("[") ? "Okay!" : `You said: ${text}`;
 }
 
-/** The tool call a member's turn asks for, if it names one; `shot` is the one it's on, from 1. */
-function toolCallFor(text: string, shot: number): { name: string; args: object } | null {
-  // The roll: "here goes" starts an attempt, "how was that" ends it.
+type ToolCall = { name: string; args: object };
+
+/**
+ * The constraints Director remembers and re-plans by, said once: indoors and one angle
+ * hold for every shot that's left; "skip this one" leaves the shot out.
+ */
+function versionCallsFor(text: string, shot: number): ToolCall[] {
+  if (
+    /\b(?:switching indoors|inside only|(?:fine|happy) (?:shooting |filming )?inside)\b/i.test(text)
+  ) {
+    return [
+      { name: "remember", args: { kind: "place", note: "Indoors" } },
+      { name: "replan", args: { instruction: "film every shot indoors" } },
+    ];
+  }
+  if (/\bone angle\b/i.test(text)) {
+    return [
+      { name: "remember", args: { kind: "angles", note: "One angle" } },
+      { name: "replan", args: { instruction: "one position, front camera" } },
+    ];
+  }
+  if (/\bskip this one\b/i.test(text)) {
+    return [{ name: "skip_shot", args: { shot } }];
+  }
+  return [];
+}
+
+/** The tool calls a member's turn asks for, if it names any; `shot` is the one it's on, from 1. */
+function toolCallsFor(text: string, shot: number): ToolCall[] {
+  const versionCalls = versionCallsFor(text, shot);
+  return versionCalls.length > 0
+    ? versionCalls
+    : [toolCallFor(text, shot)].filter((call) => call !== null);
+}
+
+/** The one tool call a member's turn asks for, if it names one. */
+function toolCallFor(text: string, shot: number): ToolCall | null {
   if (/\bhere goes\b/i.test(text)) {
     return { name: "mark", args: { event: "start" } };
   }
@@ -217,17 +252,20 @@ class Conversation {
     if (!content.turnComplete) {
       return;
     }
-    const tool = toolCallFor(text, this.shot());
-    if (tool) {
-      if (tool.name === "adapt_shot") {
+    const tools = toolCallsFor(text, this.shot());
+    if (tools.length > 0) {
+      if (tools[0]?.name === "adapt_shot") {
         say(this.socket, "Ooh, I love that. Let's put it on your card.");
       }
-      this.ids.toolCalls += 1;
-      const id = `call-${this.ids.toolCalls}`;
-      if (tool.name === "mark" && "event" in tool.args && tool.args.event === "start") {
-        this.starts.add(id);
-      }
-      send(this.socket, { toolCall: { functionCalls: [{ id, ...tool }] } });
+      const functionCalls = tools.map((tool) => {
+        this.ids.toolCalls += 1;
+        const id = `call-${this.ids.toolCalls}`;
+        if (tool.name === "mark" && "event" in tool.args && tool.args.event === "start") {
+          this.starts.add(id);
+        }
+        return { id, ...tool };
+      });
+      send(this.socket, { toolCall: { functionCalls } });
     } else if (/\bmy line\b/i.test(text)) {
       const line = lineIn(this.brief);
       say(this.socket, line ? `It's: "${line}"` : "No line in this one, just the moves.");

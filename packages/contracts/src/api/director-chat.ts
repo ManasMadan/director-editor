@@ -28,6 +28,7 @@ import {
   DIRECTOR_FRAME_MIN_LENGTH,
   DIRECTOR_MAX_SHOTS,
 } from "./director";
+import { MEMORY_KINDS, memoryNoteSchema, yourVersionSchema } from "./your-version";
 
 /** The last lines said, so Director carries on: an exchange or four. */
 export const DIRECTOR_CHAT_RECENT_LINES = 8;
@@ -52,6 +53,12 @@ const directorChatTurn = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("camera"), facing }),
   z.object({ kind: z.literal("take"), state: z.enum(LIVE_TAKE_STATES) }),
   z.object({ kind: z.literal("roll"), state: z.enum(LIVE_ROLL_STATES) }),
+  /** The member took a chip away: Director lets it go. */
+  z.object({
+    kind: z.literal("forgot"),
+    memory: z.enum(MEMORY_KINDS),
+    note: memoryNoteSchema.shape.note,
+  }),
 ]);
 export type DirectorChatTurn = z.infer<typeof directorChatTurn>;
 
@@ -63,6 +70,11 @@ const directorChatInput = z.object({
   frame: z.base64().min(DIRECTOR_FRAME_MIN_LENGTH).max(DIRECTOR_FRAME_MAX_LENGTH).optional(),
   /** The member's version of each shot Director changed so far. */
   adaptations: z.array(liveAdaptation).max(DIRECTOR_MAX_SHOTS),
+  /**
+   * The member's whole version: what Director remembers, the shots changed, skipped and
+   * left as gaps. Its shots win over `adaptations` when both are sent.
+   */
+  version: yourVersionSchema.optional(),
   /** The last lines said, oldest first. */
   recent: z
     .array(

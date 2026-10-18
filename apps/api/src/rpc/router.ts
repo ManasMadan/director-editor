@@ -15,6 +15,7 @@ import { RealtimeService, realtimeRouter } from "../modules/realtime";
 import { RecordingService, recordingRouter } from "../modules/recording";
 import { systemRouter } from "../modules/system";
 import { AvatarService, userRouter } from "../modules/user";
+import { YourVersionService, yourVersionRouter } from "../modules/your-version";
 import type { Procedures } from "./procedures";
 
 export function createRouter(procedures: Procedures, app: INestApplicationContext) {
@@ -27,6 +28,7 @@ export function createRouter(procedures: Procedures, app: INestApplicationContex
     assets: assetsRouter(procedures, app.get(AssetsService)),
     publish: publishRouter(procedures, app.get(PublishService)),
     recording: recordingRouter(procedures, app.get(RecordingService)),
+    yourVersion: yourVersionRouter(procedures, app.get(YourVersionService)),
   });
 }
 

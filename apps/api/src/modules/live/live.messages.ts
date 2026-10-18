@@ -73,5 +73,12 @@ export const toolArgsSchemas = {
     where: z.string().optional(),
     action: z.string().optional(),
     line: z.string().optional(),
+    framing: z.string().optional(),
+    camera: z.enum(["front", "back"]).optional(),
   }),
+  restore_shot: z.object({ shot: z.number().int() }),
+  skip_shot: z.object({ shot: z.number().int(), why: z.string().optional() }),
+  replan: z.object({ instruction: z.string() }),
+  remember: z.object({ kind: z.string(), note: z.string() }),
+  forget: z.object({ note: z.string() }),
 };

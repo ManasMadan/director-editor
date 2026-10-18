@@ -10,6 +10,7 @@ import {
   DIRECTOR_MAX_SHOTS,
   type DirectorPlan,
   directorPlanSchema,
+  EMPTY_VERSION,
   type Shot,
 } from "@repo/contracts/api";
 import { orgIdSchema, userIdSchema } from "@repo/contracts/ids";
@@ -33,7 +34,7 @@ import {
 } from "./live.gateway";
 import { CLIENT_MAX_PAYLOAD_BYTES } from "./live.messages";
 import { QUIET_MS } from "./live.pacer";
-import { PERSONA_VERSION } from "./live.persona";
+import { PERSONA, PERSONA_VERSION } from "./live.persona";
 import { systemInstruction } from "./live.setup";
 
 /**
@@ -62,6 +63,11 @@ const PERSONA_RULES = [
   "When the app says the roll is on",
   "call mark with event start",
   "you can't pause or resume anything yourself",
+  "call remember with a chip",
+  "never bring up something it rules out again",
+  "confirm what changed in one line",
+  "call skip_shot: the screen moves on by itself",
+  "Never replan during a take",
 ];
 
 const shot: Shot = {
@@ -1076,11 +1082,13 @@ describe("the member's version of a shot", () => {
       },
     });
     expect(await fake.message(2)).toEqual(
-      toolResponse("1", "adapt_shot", { error: "say what changed: where, action or line" }),
+      toolResponse("1", "adapt_shot", {
+        error: "say what changed: where, action, line, framing or camera",
+      }),
     );
     expect(await fake.message(3)).toEqual(
       toolResponse("2", "adapt_shot", {
-        error: "each of where, action and line is one to 300 characters",
+        error: "each of where, action, line and framing is one to 300 characters",
       }),
     );
     expect(await fake.message(4)).toMatchObject(
@@ -1102,10 +1110,9 @@ describe("the member's version of a shot", () => {
     const browser = api.call();
     await fake.message(0);
     await browser.opened;
-    // Shot 2 has nothing changed: it stays the original.
     browser.send({
       type: "context",
-      adaptations: [{ shot: 1 }, { shot: 0, where: "On the balcony" }],
+      version: { ...EMPTY_VERSION, shots: [{ shot: 0, where: "On the balcony" }] },
     });
     // The relay reads it a few turns of the event loop later.
     for (let turn = 0; turn < 50; turn += 1) {
@@ -1113,12 +1120,12 @@ describe("the member's version of a shot", () => {
     }
     fake.send({ setupComplete: {} });
     expect(turnOf(await fake.message(1))).toEqual({
-      text: '[Their version of this shot (it replaces the original where it differs):\n- Where: "On the balcony"]',
+      text: '[Their version of this shot (it replaces the original where it differs):\n- Where: "On the balcony"\nShots already changed for them: 1.]',
       answer: false,
     });
     expect(turnOf(await fake.message(2)).text).toContain("Say hi");
     browser.send({ type: "shot", shot: 1 });
-    expect(turnOf(await fake.message(3)).text).not.toContain("Their version");
+    expect(turnOf(await fake.message(3)).text).not.toContain("Their version of this shot");
   });
 
   it("takes the shoot's changes back from the browser, for a fresh connection to know", async () => {
@@ -1126,15 +1133,215 @@ describe("the member's version of a shot", () => {
     const { fake, browser } = await liveCall();
     browser.send({
       type: "context",
-      adaptations: [
-        { shot: 0, where: "By the window" },
-        { shot: 1, line: "Yes!" },
-      ],
+      version: {
+        ...EMPTY_VERSION,
+        shots: [
+          { shot: 0, where: "By the window" },
+          { shot: 1, line: "Yes!" },
+        ],
+      },
     });
     // The next connection's setup describes this shot as the member has it.
     vi.advanceTimersByTime(ROTATE_AFTER_MS);
     const setup = (await fake.on(1, 0)) as { setup: { systemInstruction: object } };
     expect(JSON.stringify(setup.setup.systemInstruction)).toContain('- Where: \\"By the window\\"');
+  });
+});
+
+describe("a place change said once", () => {
+  const onTheStreet = (title: string): Shot => ({
+    ...shot,
+    title,
+    scene: "On a busy street",
+    sceneLandmark: "street",
+    framing: { ...shot.framing, note: "The street behind you." },
+    steps: [{ atSeconds: 0, instruction: "Look at the lens", cameraMove: "static" }],
+    pose: { description: "Facing the lens", keypoints: [] },
+  });
+  const streetPlan = directorPlanSchema.parse({
+    ...readyPlan,
+    plan: {
+      title: "Head nods",
+      format: "Skit",
+      summary: "Three nods, three meanings.",
+      audio: "speech",
+      durationSeconds: 9,
+      shots: [onTheStreet("The hello"), onTheStreet("The nod"), onTheStreet("The wave")],
+    },
+  });
+  const indoors = {
+    notes: [{ kind: "place" as const, note: "Indoors" }],
+    shots: [0, 1, 2].map((index) => ({
+      shot: index,
+      where: "In your living room",
+      framing: "The sofa behind you, window light on your face",
+    })),
+    skipped: [],
+    gaps: [],
+  };
+
+  it("holds for every shot that's left: none of them brings the street up again", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { fake, browser } = await liveCall({ plan: () => Promise.resolve(streetPlan) });
+    browser.send({ type: "text", text: "I'm switching indoors" });
+    await fake.message(2);
+    // Director remembers it and re-plans every shot by it, as the persona tells it to.
+    fake.send({
+      toolCall: {
+        functionCalls: [
+          { id: "g1", name: "remember", args: { kind: "place", note: "Indoors" } },
+          { id: "g2", name: "replan", args: { instruction: "film every shot indoors" } },
+        ],
+      },
+    });
+    await browser.message(1);
+    // The screen keeps director.revise's answer, hands it over, then says it's done.
+    browser.send({ type: "context", version: indoors });
+    browser.send({ type: "tool_result", id: "tool-1", result: "done" });
+    browser.send({ type: "tool_result", id: "tool-2", result: "done" });
+    expect(JSON.stringify(await fake.message(4))).toContain("Indoors");
+    for (const next of [1, 2]) {
+      browser.send({ type: "shot", shot: next });
+      const brief = turnOf(await fake.message(4 + next)).text;
+      expect(brief).toContain("In your living room");
+      expect(brief).toContain('- place: "Indoors"');
+      expect(brief).not.toMatch(/street|outdoor/i);
+    }
+    // A fresh connection is briefed the same way.
+    vi.advanceTimersByTime(ROTATE_AFTER_MS);
+    const setup = JSON.stringify(await fake.on(1, 0));
+    expect(setup).toContain("In your living room");
+    expect(setup).not.toMatch(/busy street|street behind/i);
+  });
+
+  it("is plan-wide in the persona unless they say just this shot", () => {
+    expect(PERSONA).toContain("A change of place or setup holds for every shot that's left");
+    expect(PERSONA).toContain('unless they say "just this shot"');
+  });
+});
+
+describe("memory, skipping and re-planning", () => {
+  const INSIDE = { kind: "place", note: "Inside" } as const;
+
+  it("hands remember, forget, skip, restore and replan to the browser with the plan's shots", async () => {
+    const { fake, browser } = await liveCall();
+    fake.send({
+      toolCall: {
+        functionCalls: [
+          { id: "g1", name: "remember", args: { kind: "place", note: " Inside " } },
+          { id: "g2", name: "forget", args: { note: "Inside" } },
+          { id: "g3", name: "skip_shot", args: { shot: 2, why: "no market" } },
+          { id: "g4", name: "restore_shot", args: { shot: 1 } },
+          { id: "g5", name: "replan", args: { instruction: "one position, front camera" } },
+        ],
+      },
+    });
+    expect(await browser.message(0)).toMatchObject({ call: { name: "remember", ...INSIDE } });
+    expect(await browser.message(1)).toMatchObject({ call: { name: "forget", note: "Inside" } });
+    expect(await browser.message(2)).toMatchObject({
+      call: { name: "skip_shot", shot: 1, why: "no market" },
+    });
+    expect(await browser.message(3)).toMatchObject({ call: { name: "restore_shot", shot: 0 } });
+    expect(await browser.message(4)).toMatchObject({
+      call: { name: "replan", instruction: "one position, front camera" },
+    });
+  });
+
+  it("answers at once what doesn't fit: a shot the plan hasn't got, a kind it doesn't know", async () => {
+    const { fake, browser } = await liveCall();
+    fake.send({
+      toolCall: {
+        functionCalls: [
+          { id: "1", name: "skip_shot", args: { shot: 7 } },
+          { id: "2", name: "remember", args: { kind: "mood", note: "Happy" } },
+          { id: "3", name: "replan", args: {} },
+          { id: "4", name: "restore_shot" },
+        ],
+      },
+    });
+    expect(await fake.message(2)).toMatchObject(
+      toolResponse("1", "skip_shot", { result: "not_found", why: expect.anything() }),
+    );
+    expect(await fake.message(3)).toEqual(
+      toolResponse("2", "remember", { error: "the arguments don't fit remember" }),
+    );
+    expect(await fake.message(4)).toEqual(
+      toolResponse("3", "replan", { error: "the arguments don't fit replan" }),
+    );
+    expect(await fake.message(5)).toEqual(
+      toolResponse("4", "restore_shot", { error: "the arguments don't fit restore_shot" }),
+    );
+    expect(browser.received).toEqual([]);
+  });
+
+  it("gives a re-plan time to finish, and Director the new version once it has", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { fake, browser } = await liveCall();
+    fake.send({
+      toolCall: {
+        functionCalls: [{ id: "g1", name: "replan", args: { instruction: "one angle" } }],
+      },
+    });
+    await browser.message(0);
+    // Past an ordinary tool's five seconds, still waiting.
+    vi.advanceTimersByTime(10 * SECOND_MS);
+    browser.send({
+      type: "context",
+      version: {
+        notes: [{ kind: "angles", note: "One angle" }],
+        shots: [{ shot: 1, where: "Right here", camera: "front" }],
+        skipped: [],
+        gaps: [0],
+      },
+    });
+    browser.send({ type: "tool_result", id: "tool-1", result: "done" });
+    const answer = await fake.message(2);
+    expect(answer).toMatchObject(toolResponse("g1", "replan", { result: "done" }));
+    const said = JSON.stringify(answer);
+    expect(said).toContain("One angle");
+    expect(said).toContain("Gaps the edit fills, so nobody films them: shot 1.");
+  });
+
+  it("says a re-plan that failed failed", async () => {
+    const { fake, browser } = await liveCall();
+    fake.send({
+      toolCall: { functionCalls: [{ id: "g1", name: "replan", args: { instruction: "x" } }] },
+    });
+    await browser.message(0);
+    browser.send({ type: "tool_result", id: "tool-1", result: "failed" });
+    expect(await fake.message(2)).toMatchObject(
+      toolResponse("g1", "replan", { result: "failed", why: expect.anything() }),
+    );
+  });
+
+  it("carries what Director remembers into every shot, and tells it of a chip taken away", async () => {
+    const { fake, browser } = await liveCall();
+    browser.send({ type: "context", version: { ...EMPTY_VERSION, notes: [INSIDE], skipped: [0] } });
+    browser.send({ type: "shot", shot: 1 });
+    const brief = turnOf(await fake.message(2)).text;
+    expect(brief).toContain('- place: "Inside"');
+    expect(brief).toContain("wins over the original");
+    expect(brief).toContain("Shots they skipped (not in their video, don't bring them up): 1.");
+    expect(brief).toContain("change it for them with adapt_shot first");
+    browser.send({ type: "forgot", ...INSIDE });
+    expect(turnOf(await fake.message(3))).toEqual({
+      text: '[They removed "Inside" from what you remember: it no longer holds. Acknowledge it in a few words.]',
+      answer: true,
+    });
+    browser.send({ type: "restored", shot: 1, row: "where" });
+    expect(turnOf(await fake.message(4))).toEqual({
+      text: "[They put the original back for where they film it in shot 2.]",
+      answer: false,
+    });
+  });
+
+  it("briefs a fresh connection with what Director remembers", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { fake, browser } = await liveCall();
+    browser.send({ type: "context", version: { ...EMPTY_VERSION, notes: [INSIDE] } });
+    vi.advanceTimersByTime(ROTATE_AFTER_MS);
+    const setup = (await fake.on(1, 0)) as { setup: { systemInstruction: object } };
+    expect(JSON.stringify(setup.setup.systemInstruction)).toContain("<memory>");
   });
 });
 
@@ -1737,10 +1944,10 @@ describe("the call's configuration", () => {
     const plan = readyPlan.plan;
     expect(plan).not.toBeNull();
     if (plan) {
-      const text = systemInstruction(plan, 1);
+      const text = systemInstruction(plan, 1, EMPTY_VERSION);
       expect(text).toContain("Shot 2 of 2: The sip");
       expect(text).toContain("nothing is said in this shot");
-      expect(() => systemInstruction(plan, 2)).toThrow(RangeError);
+      expect(() => systemInstruction(plan, 2, EMPTY_VERSION)).toThrow(RangeError);
     }
   });
 });

@@ -1248,3 +1248,86 @@ class ClipRequest(BaseModel):
         ge=0, le=MAX_PART_MS, description="Director's end mark; None: to the footage's end."
     )
     pauses: list[ClipPause] = Field(max_length=MAX_CLIP_PAUSES)
+
+
+# ------------------------------------------------------------------------- your version
+# The member's version of a template (packages/contracts src/api/your-version.ts): what
+# Director remembers from the conversation, how it changed each shot for them, and the
+# shots they skipped or left as gaps for the editor. apps/api keeps it; this service only
+# re-plans it (Director.revise) from one instruction.
+
+type MemoryKind = Literal["place", "people", "props", "time", "angles", "comfort", "style", "other"]
+MAX_MEMORY_NOTE = 60
+MAX_MEMORY_NOTES = 12
+MAX_VERSION_ROW = 300
+MAX_REVISE_INSTRUCTION = 300
+MAX_REVISE_SUMMARY = 300
+
+type VersionRow = Annotated[str, Field(min_length=1, max_length=MAX_VERSION_ROW)]
+type ShotIndex = Annotated[int, Field(ge=0, lt=MAX_SHOTS)]
+
+
+class MemoryNote(BaseModel):
+    model_config = REQUEST
+
+    kind: MemoryKind
+    note: str = Field(min_length=1, max_length=MAX_MEMORY_NOTE)
+
+
+class ShotVersion(BaseModel):
+    """A shot as the member's version changes it; a field left out is the original's."""
+
+    model_config = REQUEST
+
+    shot: ShotIndex
+    where: VersionRow | None = None
+    action: VersionRow | None = None
+    line: VersionRow | None = None
+    framing: VersionRow | None = None
+    camera: Literal["front", "back"] | None = None
+
+
+class YourVersion(BaseModel):
+    model_config = REQUEST
+
+    notes: list[MemoryNote] = Field(max_length=MAX_MEMORY_NOTES)
+    shots: list[ShotVersion] = Field(max_length=MAX_SHOTS)
+    skipped: list[ShotIndex] = Field(max_length=MAX_SHOTS)
+    gaps: list[ShotIndex] = Field(max_length=MAX_SHOTS)
+
+
+class ReviseRequest(BaseModel):
+    model_config = REQUEST
+
+    instruction: str = Field(min_length=1, max_length=MAX_REVISE_INSTRUCTION)
+    version: YourVersion
+
+
+class RevisedShotDraft(BaseModel):
+    """One shot as Gemini re-plans it. Every field is required and nullable, with no
+    default, so Vertex AI takes the schema (see the top of this module)."""
+
+    shot: int = Field(description="The shot's number, from 1.")
+    status: Literal["film", "skip", "gap"] = Field(
+        description="film: they film it; skip: left out; gap: not filmed, the editor fills it."
+    )
+    where: str | None = Field(description="Where they film it now, or null for no change.")
+    action: str | None = Field(description="What they do now, or null for no change.")
+    line: str | None = Field(description="Their line now, word for word, or null for no change.")
+    framing: str | None = Field(description="The framing in a few words, or null for no change.")
+    camera: Literal["front", "back"] | None = Field(
+        description="The camera they film it on now, or null for no change."
+    )
+
+
+class RevisionDraft(BaseModel):
+    """Gemini's re-plan: the model's output type (no list bounds; app/revise.py applies
+    it to the version, dropping shots the plan doesn't have)."""
+
+    shots: list[RevisedShotDraft]
+    summary: str = Field(description="What changed, in one short friendly sentence.")
+
+
+class ReviseResult(BaseModel):
+    version: YourVersion
+    summary: str = Field(max_length=MAX_REVISE_SUMMARY)

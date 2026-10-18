@@ -20,13 +20,14 @@ import {
   type DirectorChatTurn,
   type DirectorSpeech,
   type DirectorVoice,
+  type MemoryNote,
+  type YourVersion,
 } from "@repo/contracts/api";
 import type { ErrorCode } from "@repo/contracts/errors";
 import { type VideoId, videoIdSchema } from "@repo/contracts/ids";
 import {
   type Facing,
   LIVE_VOICE,
-  type LiveAdaptation,
   type LiveRollState,
   type LiveTakeState,
   type LiveTool,
@@ -76,7 +77,8 @@ export interface SlowTarget {
   shot: number;
   held: boolean;
   video: RefObject<HTMLVideoElement | null>;
-  adaptations: () => LiveAdaptation[];
+  /** The member's version so far: every turn carries it. */
+  version: () => YourVersion;
   api: SlowLineApi;
   events: SlowEvents;
 }
@@ -191,7 +193,8 @@ class SlowLine {
       turn: next,
       frame: this.muted ? undefined : await frameOf(this.target.video.current),
       rolling: this.rolling,
-      adaptations: this.target.adaptations(),
+      adaptations: this.target.version().shots,
+      version: this.target.version(),
       recent: [...this.recent],
       answers: this.answers,
     };
@@ -287,5 +290,11 @@ export function startSlowSession(target: SlowTarget) {
     },
     /** Paused: nothing of the member goes to Director (dictation, the camera). */
     mute: (on: boolean) => line.mute(on),
+    /** The member's version rides along with every turn: nothing to send now. */
+    share: () => undefined,
+    /** The member took a chip away: Director acknowledges it in its next words. */
+    forgot: (note: MemoryNote) => line.turn({ kind: "forgot", memory: note.kind, note: note.note }),
+    /** A row put back is in the version the next turn carries. */
+    restored: () => undefined,
   };
 }

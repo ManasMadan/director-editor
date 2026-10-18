@@ -211,3 +211,24 @@ model RecordingPause {
   @@map("recording_pause")
   @@schema("app")
 }
+
+/// A member's version of a Director template: what Director remembers from the
+/// conversation, the shots it changed for them, and the shots they skipped or left as gaps
+/// (@repo/contracts yourVersionSchema, parsed when read). One per member and template.
+model DirectorVersion {
+  id           String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  orgId        String       @map("org_id") @db.Uuid
+  userId       String       @map("user_id") @db.Uuid
+  /// The template's YouTube video id (11 characters).
+  videoId      String       @map("video_id")
+  version      Json
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId, videoId])
+  @@index([userId])
+  @@map("director_version")
+  @@schema("app")
+}

@@ -147,6 +147,11 @@ class Settings(GeminiSettings):
     director_tokens_per_asset: int = Field(
         default=6_000, ge=2_000, alias="DIRECTOR_TOKENS_PER_ASSET"
     )
+    # Re-planning the member's version (app/revise.py) reads the plan's text and their
+    # version, no video.
+    director_tokens_per_revise: int = Field(
+        default=30_000, ge=2_000, alias="DIRECTOR_TOKENS_PER_REVISE"
+    )
 
     # Product analytics (app/analytics.py): plans indexed and take reviews, streamed into
     # this BigQuery dataset's `events` table in GOOGLE_CLOUD_PROJECT, the same table

@@ -251,13 +251,18 @@ those, or after half an hour, Director goes and the browser hears why.
 
 ### Tools
 
-Gemini has four tools, none of which can start or stop a take:
+Gemini has nine tools, none of which can start or stop a take:
 
 | Tool | What the shoot screen does |
 |---|---|
 | `go_to_shot` (`shot`, from 1) | shows that shot; the camera and Director carry on |
 | `switch_camera` (`to`: front or back) | flips the camera |
-| `adapt_shot` (`shot`, from 1; `where`, `action`, `line`, each a sentence or two) | puts the member's version of that shot on the card: the changed rows glow once and say "changed for you"; what's left out stays as it was |
+| `adapt_shot` (`shot`, from 1; `where`, `action`, `line`, `framing`, each a sentence or two; `camera`) | puts the member's version of that shot on the card: the changed rows glow once, say "changed for you" and have ↺ to put the original back; what's left out stays as it was |
+| `restore_shot` (`shot`) | puts the original shot back, and films it again if it was skipped |
+| `skip_shot` (`shot`, `why`) | leaves the shot out of the member's video and moves on to the next shot they film |
+| `replan` (`instruction`) | re-plans every shot that's left with `director.revise` (Gemini, in the AI service), keeps the result, and answers with the new version for Director to confirm in one line |
+| `remember` (`kind`, `note`: one to three words) | adds a chip above the text box; × on it forgets it and Director acknowledges |
+| `forget` (`note`) | takes the chip away |
 | `point_at` (`target`: what to find; `label`: two or three words) | finds it in the current frame and pins a labelled box on it ("Director's marks" below), or answers `not_found` and draws nothing |
 
 The relay checks the arguments (a shot the plan has; for `adapt_shot`, at least one
@@ -266,10 +271,17 @@ with an id. The browser answers with what really happened: `done`, or refused be
 take is under way (counting down, recording, being watched back or sent) or the camera
 is off, or (a mark) that the thing isn't in view. Only then does Gemini hear the result;
 an answer that doesn't come within five seconds (twelve for a mark, which looks at the
-picture first) is reported as unknown. A change the browser showed is kept for the shoot: the
-next connection's setup, and each move to that shot, describe the member's version. A
-browser that connects again (its silent retry, or Try again) hands its changes back
-first, in a `context` message.
+picture first, thirty for a re-plan) is reported as unknown.
+
+The member's version (what Director remembers, how each shot changed, the shots skipped
+or left as gaps) is kept per member and template in `app.director_version`, through the
+`yourVersion` procedures, so a reload carries on with it. The browser hands it to the
+relay as it connects and after every change, in a `context` message. Every brief
+Director gets (the setup, each move to a shot) describes the shot as the member has it
+and what Director remembers, so a place change said once ("I'm switching indoors")
+holds for every shot that's left and the old place never comes up again. The persona
+makes a change of place or setup plan-wide unless the member says "just this shot". The
+editor leaves skipped shots and gaps out of the video and lists them above its board.
 
 ### Director's marks
 

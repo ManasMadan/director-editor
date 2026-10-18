@@ -15,6 +15,7 @@ import { realtimeContract } from "./realtime";
 import { recordingContract } from "./recording";
 import { systemContract } from "./system";
 import { userContract } from "./user";
+import { yourVersionContract } from "./your-version";
 
 export const contract = populateContractRouterPaths({
   system: systemContract,
@@ -25,6 +26,7 @@ export const contract = populateContractRouterPaths({
   assets: assetsContract,
   publish: publishContract,
   recording: recordingContract,
+  yourVersion: yourVersionContract,
 });
 
 export type Contract = typeof contract;
@@ -39,3 +41,4 @@ export * from "./realtime";
 export * from "./recording";
 export * from "./system";
 export * from "./user";
+export * from "./your-version";

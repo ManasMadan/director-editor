@@ -158,6 +158,30 @@ describe("Director's slower line", () => {
     }
   });
 
+  it("briefs with the member's whole version, and hears a chip taken away", async () => {
+    const proxy = await recorded();
+    try {
+      const version = {
+        notes: [{ kind: "place" as const, note: "Indoors" }],
+        shots: [{ shot: 0, where: "In your living room" }],
+        skipped: [],
+        gaps: [],
+      };
+      await chatAt(proxy.url).reply(plan, said("ok", { version }));
+      const system = requestSchema.parse(proxy.bodies[0]).systemInstruction.parts[0]?.text;
+      expect(system).toContain("In your living room");
+      expect(system).toContain('- place: "Indoors"');
+      expect(system).not.toContain("kitchen counter");
+      await chatAt(proxy.url).reply(
+        plan,
+        said("", { turn: { kind: "forgot", memory: "place", note: "Indoors" }, version }),
+      );
+      expect(JSON.stringify(proxy.bodies.at(-1))).toContain('removed \\"Indoors\\"');
+    } finally {
+      await proxy.close();
+    }
+  });
+
   it("tells Gemini to mark attempts while the roll records, and hears the roll's changes", async () => {
     const proxy = await recorded();
     try {

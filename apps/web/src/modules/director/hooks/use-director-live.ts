@@ -2,14 +2,15 @@
 
 import { useDirectorChatMutation } from "@repo/client/api/director/chat";
 import { useSpeakMutation } from "@repo/client/api/director/speak";
+import type { MemoryNote, YourVersion } from "@repo/contracts/api";
 import type { ErrorCode } from "@repo/contracts/errors";
 import type {
   Facing,
-  LiveAdaptation,
   LiveRollState,
   LiveTakeState,
   LiveToolCall,
   LiveToolResult,
+  RestorableRow,
 } from "@repo/contracts/live";
 import { SECOND_MS } from "@repo/contracts/time";
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -66,8 +67,8 @@ interface Options {
   video: RefObject<HTMLVideoElement | null>;
   /** Director asked for something; answer with `answer(id, result)`. */
   onTool: (id: string, call: LiveToolCall) => void;
-  /** What Director changed in the shots so far, for a fresh connection to know. */
-  adaptations: LiveAdaptation[];
+  /** The member's version so far, for a fresh connection (or the slower line) to know. */
+  version: YourVersion;
 }
 
 /** What the session hears, kept in the hook's state. */
@@ -131,7 +132,7 @@ interface Refs {
   held: RefObject<boolean>;
   retry: RefObject<number>;
   retried: RefObject<boolean>;
-  latest: RefObject<Pick<Options, "onTool" | "shotIndex" | "adaptations"> & { api: SlowLineApi }>;
+  latest: RefObject<Pick<Options, "onTool" | "shotIndex" | "version"> & { api: SlowLineApi }>;
 }
 
 type Setters = Pick<
@@ -169,7 +170,7 @@ function useSlowerLine(refs: Refs, setters: Setters) {
       shot: latest.current.shotIndex,
       held: held.current,
       video,
-      adaptations: () => latest.current.adaptations,
+      version: () => latest.current.version,
       // Read when each turn goes, so the mutations are always the hook's current ones.
       api: {
         chat: (input) => latest.current.api.chat(input),
@@ -215,7 +216,7 @@ function useConnect(refs: Refs, setters: Setters) {
         shot,
         held: held.current,
         video,
-        adaptations: () => latest.current.adaptations,
+        version: () => latest.current.version,
         events: {
           onLive: () => {
             retried.current = false;
@@ -303,6 +304,18 @@ function useSlowLineApi(): SlowLineApi {
   return { chat: chat.mutateAsync, speak: speak.mutateAsync };
 }
 
+/** What the member changed in their version, for Director to hear on either line. */
+function versionOf(session: RefObject<LiveControls | null>) {
+  return {
+    /** The member's version changed: Director is briefed with it. */
+    share: (next: YourVersion) => session.current?.share(next),
+    /** The member took a chip away: Director lets it go and says so. */
+    forgot: (note: MemoryNote) => session.current?.forgot(note),
+    /** The member put a row of the card back to the original's. */
+    restored: (shot: number, row: RestorableRow) => session.current?.restored(shot, row),
+  };
+}
+
 /** What the screen tells whichever line Director is on, with the captions that go with it. */
 function sessionControls(
   session: RefObject<LiveControls | null>,
@@ -348,7 +361,7 @@ function sessionControls(
  * member taps Reconnect. Only what neither line can fix (signed out, the plan gone)
  * makes Director "unavailable", with the reason, until the member taps to try again.
  */
-export function useDirectorLive({ videoId, shotIndex, video, onTool, adaptations }: Options) {
+export function useDirectorLive({ videoId, shotIndex, video, onTool, version }: Options) {
   const live = useSessionState();
   const [wanted, setWanted] = useState(false);
   const session = useRef<LiveControls | null>(null);
@@ -356,9 +369,9 @@ export function useDirectorLive({ videoId, shotIndex, video, onTool, adaptations
   const retry = useRef(0);
   const retried = useRef(false);
   const api = useSlowLineApi();
-  const latest = useRef({ onTool, shotIndex, adaptations, api });
+  const latest = useRef({ onTool, shotIndex, version, api });
   useLayoutEffect(() => {
-    latest.current = { onTool, shotIndex, adaptations, api };
+    latest.current = { onTool, shotIndex, version, api };
   });
   const { setState, setFailure, setCaptions, setSpeaking, setHearing, setLine, setAway } = live;
 
@@ -403,6 +416,7 @@ export function useDirectorLive({ videoId, shotIndex, video, onTool, adaptations
       connect(true);
     },
     ...sessionControls(session, setCaptions),
+    ...versionOf(session),
     /** Holds Director's voice (drops it unplayed, uncaptioned) from the 3-2-1 to the take's end. */
     hold: useCallback((on: boolean) => {
       held.current = on;
