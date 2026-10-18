@@ -2467,6 +2467,9 @@ def test_the_worker_runs_both_director_jobs(
     }
     with pytest.raises(ValidationError):
         on_app_loop(client, lambda: process(Job("unknown", {})))
+    # Without the pass (never, beside Director) a session-pass job can't run.
+    with pytest.raises(RuntimeError, match="without the pass"):
+        on_app_loop(client, lambda: director_processor(director())(session))
 
 
 def test_the_worker_runs_reviews_from_their_own_queue(
