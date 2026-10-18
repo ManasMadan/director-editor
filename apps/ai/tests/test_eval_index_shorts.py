@@ -147,7 +147,7 @@ def test_shorts_json_has_the_6_seeds_6_hard_cases_and_4_that_need_more() -> None
     assert expected["OvRozQobeuI"] == Expectation(
         layout="split", stills=1, captions=True, endCard=True
     )
-    assert expected["IFBBmwsGpUw"].shotKinds == ["voiceover"]
+    assert expected["IFBBmwsGpUw"].modes == ["voice-over"]
     assert all(short.expect == Expectation() for short in shorts[:12])
 
 
@@ -233,7 +233,7 @@ CAPTIONS: dict[str, object] = {
     "highlightColor": None,
 }
 EVERYTHING = Expectation(
-    layout="split", stills=1, shotKinds=["voiceover"], captions=True, gaps=True, endCard=True
+    layout="split", stills=1, modes=["voice-over"], captions=True, gaps=True, endCard=True
 )
 
 
@@ -241,7 +241,7 @@ def test_judge_names_what_a_short_expects_that_its_plan_hasn_t() -> None:
     assert judge(ShotPlan.model_validate(PLAN), EVERYTHING) == [
         "no split layout",
         "0 of 1 stills to make",
-        "no voiceover shot",
+        "no voice-over shot",
         "no captions",
         "no B-roll gap",
         "no end card",
@@ -250,7 +250,7 @@ def test_judge_names_what_a_short_expects_that_its_plan_hasn_t() -> None:
 
 def test_judge_passes_a_plan_with_everything_its_short_expects() -> None:
     plan = plan_with(
-        {"kind": "voiceover"},
+        {"mode": "voice-over"},
         assets=[ASSET],
         edits=[
             SPLIT,
@@ -397,8 +397,9 @@ def test_describe_a_passing_short() -> None:
     line = describe(result(plan=plan, repaired=["durationSeconds", "shots[].steps (count)"]))
 
     assert line == (
-        "PASS 22k0fZarxh8 talking-head shots=1 script=yes pose=yes model=gemini-4-argon "
-        "12.3s assets=0 edits=0 repaired=durationSeconds, shots[].steps (count)"
+        "PASS 22k0fZarxh8 talking-head shots=1 assets=0 edits=0 script=yes pose=yes "
+        "model=gemini-4-argon "
+        "12.3s repaired=durationSeconds, shots[].steps (count)"
     )
 
 
@@ -406,8 +407,9 @@ def test_describe_a_short_that_failed_the_judgement() -> None:
     line = describe(result(problems=["shot 1: no scene", "shot 2: no step"]))
 
     assert line == (
-        "FAIL 22k0fZarxh8 talking-head shots=1 script=no pose=no model=gemini-4-argon "
-        "12.3s assets=0 edits=0 repaired=none problems=shot 1: no scene; shot 2: no step"
+        "FAIL 22k0fZarxh8 talking-head shots=1 assets=0 edits=0 script=no pose=no "
+        "model=gemini-4-argon "
+        "12.3s repaired=none problems=shot 1: no scene; shot 2: no step"
     )
 
 
@@ -415,7 +417,7 @@ def test_describe_a_short_that_failed_to_index() -> None:
     line = describe(result(plan=None, model=None, error="ModelHTTPError: status_code: 500"))
 
     assert line == (
-        "FAIL 22k0fZarxh8 talking-head shots=0 script=no pose=no model=none 12.3s "
+        "FAIL 22k0fZarxh8 talking-head shots=0 assets=0 edits=0 script=no pose=no model=none 12.3s "
         "error=ModelHTTPError: status_code: 500"
     )
 

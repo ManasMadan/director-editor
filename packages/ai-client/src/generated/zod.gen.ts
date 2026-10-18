@@ -611,10 +611,11 @@ export const zScriptLine = z.object({
     text: z.string().min(1).max(240)
 });
 
-export const zShotKind = z.enum([
-    'video',
-    'photo',
-    'voiceover',
+export const zShotKind = z.enum(['video', 'photo']);
+
+export const zShotMode = z.enum([
+    'on-camera',
+    'voice-over',
     'asset'
 ]);
 
@@ -671,6 +672,7 @@ export const zShot = z.object({
     durationSeconds: z.number().gte(0.5).lte(60),
     framing: zFraming,
     kind: zShotKind,
+    mode: zShotMode.optional().default('on-camera'),
     phoneAngle: zPhoneAngle,
     pose: zTargetPose,
     purpose: z.string().min(1).max(240),

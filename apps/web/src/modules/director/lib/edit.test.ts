@@ -5,6 +5,7 @@ import { clipAt, clipsOf, complete, editLines, editSeconds } from "./edit";
 
 const shot = (kind: Shot["kind"], durationSeconds: number, script: Shot["script"] = []): Shot => ({
   kind,
+  mode: "on-camera",
   title: kind,
   purpose: "p",
   sourceStartSeconds: 0,

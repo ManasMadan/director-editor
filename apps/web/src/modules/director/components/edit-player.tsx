@@ -1,6 +1,5 @@
 "use client";
 
-import { directorTakeKind } from "@repo/contracts/api";
 import type { DirectorTakeId } from "@repo/contracts/ids";
 import { GeminiLoader } from "@repo/ui/components/gemini-loader";
 import { cn } from "@repo/ui/lib/utils";
@@ -162,7 +161,7 @@ function ClipMedia({
   time: number;
   register: (element: HTMLVideoElement | null) => void;
 }) {
-  if (directorTakeKind[clip.shot.kind] === "photo") {
+  if (clip.shot.kind === "photo") {
     const progress = active ? Math.min(1, (time - clip.at) / clip.seconds) : 0;
     return (
       // A blob: URL, which Next's image component can't load.

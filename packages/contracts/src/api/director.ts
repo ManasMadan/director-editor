@@ -108,28 +108,16 @@ const sceneDirections = [
 
 const seconds = z.number().min(0).max(DIRECTOR_MAX_SHOT_SECONDS);
 
-/**
- * video and photo are filmed; a voiceover shot uses only the member's voice (the picture
- * is an asset or B-roll); an asset shot needs no filming at all (an end card, a
- * full-screen graphic).
- */
-const shotKinds = ["video", "photo", "voiceover", "asset"] as const;
-export type ShotKind = (typeof shotKinds)[number];
-export type TakeKind = "video" | "photo";
-/**
- * The take each kind of shot is recorded as (apps/ai's TAKE_KIND): a voice-over is a
- * video take whose sound alone is used, and an asset shot, which needs no filming, takes
- * a photo that stands in until the editor places the asset.
- */
-export const directorTakeKind = {
-  video: "video",
-  photo: "photo",
-  voiceover: "video",
-  asset: "photo",
-} as const satisfies Record<ShotKind, TakeKind>;
-
 const shotSchema = z.object({
-  kind: z.enum(shotKinds),
+  /** What its take is: a clip or a photo. */
+  kind: z.enum(["video", "photo"]),
+  /**
+   * What the edit uses of it: the member on camera; only their voice (a voice-over, the
+   * picture an asset or B-roll, from a video take); or nothing, an asset taking its place
+   * (an end card, a full-screen graphic: a photo take stands in until the editor places
+   * it). A plan written before modes is all on camera.
+   */
+  mode: z.enum(["on-camera", "voice-over", "asset"]).default("on-camera"),
   title: z.string(),
   purpose: z.string(),
   /** Where it appears in the original. */
@@ -175,7 +163,7 @@ export type Shot = z.infer<typeof shotSchema>;
 // shot's source range; the editor maps them onto the member's takes through the shots'
 // source ranges. An asset is never the original's picture: its reference describes it
 // precisely enough to make a fresh one, from its prompt.
-export const DIRECTOR_MAX_ASSETS = 12;
+const DIRECTOR_MAX_ASSETS = 12;
 const DIRECTOR_MAX_EDITS = 40;
 const sourceSeconds = z.number().min(0).max(SHORT_MAX_SECONDS);
 const sourceEnd = z.number().min(0.1).max(SHORT_MAX_SECONDS);
@@ -194,7 +182,6 @@ const assetKinds = [
   "sfx",
   "end-card",
 ] as const;
-export type AssetKind = (typeof assetKinds)[number];
 const entrances = ["cut", "fade", "slide", "pop", "draw"] as const;
 
 const assetSchema = z.object({
@@ -304,7 +291,6 @@ const editSchema = z.discriminatedUnion("type", [
   /** A moment to fill with B-roll or a cutaway: what it shows, for as long as it lasts. */
   z.object({ type: z.literal("gap"), ...timed, description: z.string() }),
 ]);
-export type Edit = z.infer<typeof editSchema>;
 
 export const shotPlanSchema = z.object({
   title: z.string(),

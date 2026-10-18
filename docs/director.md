@@ -148,6 +148,21 @@ YouTube video's picture: indexing captures only its audio track
 ([how-it-works.md](how-it-works.md#the-originals-audio)), which a plan links as
 `audio.url`.
 
+A plan also lists what a Short needs beyond the member filming themselves: its `assets`
+(a chart under the speaker, a headline card, an end card, B-roll, music), each with a
+reference describing the original's piece precisely enough to make a fresh one and the
+prompt to make it from, and its `edits` (a split screen, captions, a grade, overlays,
+transitions, speed, an end card, gaps for B-roll), timed in the original's seconds. A
+shot's `mode` says what the edit uses of its take: the member `on-camera`, only their
+voice (`voice-over`, a video take), or nothing (`asset`, a photo take standing in until
+the editor places the asset). Right
+after a plan is saved, the worker draws a default image for each still among its assets
+with Nano Banana (`ASSET_MODEL`, the `assets` job, `apps/ai/app/assets.py`): at most 5 a
+plan and 30 a day per member (`ai.images_today`), each counted in `ai.usage`, kept in
+`MEDIA_BUCKET` under the plan, and linked on the template's own page (`director.plan`) as
+each asset's `image`. A seeded template's come with its media (`seeds:assets`, then
+`seeds:media`).
+
 ## Phones
 
 `getUserMedia` and DeviceOrientation need a secure context: `http://localhost` on the
@@ -163,13 +178,15 @@ iOS asks before a page may read the tilt: the level shows a button for that.
   `director_plan_one_user_index` and read through `ai.index_used`),
   `ai.director_take` (each member's own; never replaced, the best-scored is picked),
   `ai.director_cut` (a member's rendered video of a plan and how far publishing it got),
+  `ai.director_asset` (the default image of each still a plan's assets name, and how far
+  drawing it got),
   `app.short_reaction` (the removed feed's likes and saves: nothing reads it, and a
   later migration drops it), and the continuous recording's `app.recording_session`,
   `recording_part`, `recording_slice`, `recording_attempt` and `recording_pause`
   ([how-it-works.md](how-it-works.md#continuous-recording)); all under row-level security. Plans are a JSON
   column validated by `ShotPlan` on the way in and out.
 - AI service: `apps/ai/app/director.py` (the three Gemini calls, their token budgets and
-  failures), queue `ai-director` (`plan`, `review-take`) in `packages/jobs`.
+  failures), queue `ai-director` (`plan`, `assets`, `review-take`) in `packages/jobs`.
 - Seed templates: `packages/contracts/src/director-seeds.json`, the 6 seed Shorts
   (`apps/ai/app/seeds/seeds.json`) indexed for real on Vertex AI and committed. Rebuild it
   with `bun run --filter @repo/ai seeds:build` whenever the plan schema changes (and check

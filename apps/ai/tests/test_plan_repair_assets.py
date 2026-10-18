@@ -86,13 +86,19 @@ def test_a_plan_written_before_assets_and_edits_reads_with_neither() -> None:
     assert (old.assets, old.edits) == ([], [])
 
 
-def test_voiceover_and_asset_shots_are_kept() -> None:
+def test_voice_over_and_asset_shots_keep_their_mode() -> None:
     shots = [
-        shot(kind="voiceover", sourceStartSeconds=0, sourceEndSeconds=6, durationSeconds=6),
-        shot(kind="asset", sourceStartSeconds=6, sourceEndSeconds=8, durationSeconds=2),
+        shot(mode="voice-over", sourceStartSeconds=0, sourceEndSeconds=6, durationSeconds=6),
+        shot(kind="photo", mode="asset", sourceStartSeconds=6, sourceEndSeconds=8),
+        # A shot written before modes is filmed on camera.
+        shot(sourceStartSeconds=8, sourceEndSeconds=10),
     ]
     repaired = repair_plan(plan(shots=shots), video_seconds=None)
-    assert [each.kind for each in repaired.shots] == ["voiceover", "asset"]
+    assert [(each.kind, each.mode) for each in repaired.shots] == [
+        ("video", "voice-over"),
+        ("photo", "asset"),
+        ("video", "on-camera"),
+    ]
 
 
 def test_asset_ids_are_made_into_unique_slugs_and_edits_follow_them() -> None:

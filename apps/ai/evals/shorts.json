@@ -105,7 +105,7 @@
     "channel": "be10X",
     "kind": "voiceover-infographic",
     "why": "A full-frame infographic drawn on as a voice-over talks: nothing for the viewer to film but their voice, and the image to recreate.",
-    "expect": { "stills": 1, "shotKinds": ["voiceover"], "captions": true }
+    "expect": { "stills": 1, "modes": ["voice-over"], "captions": true }
   },
   {
     "videoId": "b5G8cbgh7K0",

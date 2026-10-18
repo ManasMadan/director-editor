@@ -44,7 +44,7 @@ from app.schemas import (
     VIDEO_ID_PATTERN,
     LayoutEdit,
     LayoutKind,
-    ShotKind,
+    ShotMode,
     ShotPlan,
     ShotPlanDraft,
     TextEdit,
@@ -60,13 +60,13 @@ USAGE_ERROR = 2
 class Expectation(BaseModel):
     """What a Short's plan must have beyond filmable shots, from looking at the Short:
     a layout edit of this kind, at least this many stills to make (an image, a card, an end
-    card), a shot of each of these kinds, captions, a B-roll gap, an end card."""
+    card), a shot in each of these modes, captions, a B-roll gap, an end card."""
 
     model_config = ConfigDict(strict=True, extra="forbid")
 
     layout: LayoutKind | None = None
     stills: int = Field(default=0, ge=0)
-    shotKinds: list[ShotKind] = Field(default_factory=list[ShotKind])
+    modes: list[ShotMode] = Field(default_factory=list[ShotMode])
     captions: bool = False
     gaps: bool = False
     endCard: bool = False
@@ -121,6 +121,14 @@ class ShortResult(BaseModel):
         return len(self.plan.shots) if self.plan else 0
 
     @property
+    def assets(self) -> int:
+        return len(self.plan.assets) if self.plan else 0
+
+    @property
+    def edits(self) -> int:
+        return len(self.plan.edits) if self.plan else 0
+
+    @property
     def has_script(self) -> bool:
         return self.plan is not None and any(shot.script for shot in self.plan.shots)
 
@@ -169,8 +177,8 @@ def _missing(plan: ShotPlan, expect: Expectation) -> list[str]:
         (expect.layout is None or expect.layout in layouts, f"no {expect.layout} layout"),
         (len(stills) >= expect.stills, f"{len(stills)} of {expect.stills} stills to make"),
         *[
-            (any(shot.kind == kind for shot in plan.shots), f"no {kind} shot")
-            for kind in expect.shotKinds
+            (any(shot.mode == mode for shot in plan.shots), f"no {mode} shot")
+            for mode in expect.modes
         ],
         (captions or not expect.captions, "no captions"),
         ("gap" in edits or not expect.gaps, "no B-roll gap"),
@@ -255,13 +263,12 @@ def describe(result: ShortResult) -> str:
     """One Short's line: pass or fail, what its plan holds, and what went wrong."""
     line = (
         f"{'PASS' if result.passed else 'FAIL'} {result.short.videoId} {result.short.kind} "
-        f"shots={result.shots} script={_yes(result.has_script)} pose={_yes(result.has_pose)} "
+        f"shots={result.shots} assets={result.assets} edits={result.edits} "
+        f"script={_yes(result.has_script)} pose={_yes(result.has_pose)} "
         f"model={result.model or 'none'} {result.seconds:.1f}s"
     )
     if result.error is not None:
         return f"{line} error={result.error}"
-    if result.plan is not None:
-        line += f" assets={len(result.plan.assets)} edits={len(result.plan.edits)}"
     line += f" repaired={', '.join(result.repaired) or 'none'}"
     if result.problems:
         line += f" problems={'; '.join(result.problems)}"

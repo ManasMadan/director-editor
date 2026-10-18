@@ -91,10 +91,14 @@ type CameraMove = Literal[
     "tilt-down",
 ]
 type Direction = Literal["none", "left", "right", "forward", "back", "turn-left", "turn-right"]
-# video and photo are filmed; a voiceover shot uses only the member's voice (the picture
-# is an asset or B-roll); an asset shot needs no filming at all (an end card, a
-# full-screen graphic).
-type ShotKind = Literal["video", "photo", "voiceover", "asset"]
+# What a shot's take is: a clip or a photo.
+type ShotKind = Literal["video", "photo"]
+# What the edit uses of it: the member on camera (as every shot was before modes), only
+# their voice (a voice-over, the picture an asset or B-roll: a video take), or nothing,
+# the asset taking its place (an end card, a full-screen graphic: a photo take stands
+# in until the editor places the asset). Beside `kind` rather than in it: a new value of
+# `kind` would break the API's clients, which a new field doesn't.
+type ShotMode = Literal["on-camera", "voice-over", "asset"]
 type AssetKind = Literal[
     "image", "cutout", "text-card", "background", "broll", "music", "sfx", "end-card"
 ]
@@ -175,6 +179,11 @@ class ScriptLine(BaseModel):
 
 class Shot(BaseModel):
     kind: ShotKind
+    mode: ShotMode = Field(
+        default="on-camera",
+        description="on-camera: the viewer films it; voice-over: only their voice is used; "
+        "asset: nothing is filmed, an asset takes its place.",
+    )
     title: str = Field(min_length=1, max_length=80)
     purpose: str = Field(
         min_length=1,
@@ -488,6 +497,11 @@ class ShotDraft(BaseModel):
     """
 
     kind: ShotKind
+    mode: ShotMode = Field(
+        default="on-camera",
+        description="on-camera: the viewer films it; voice-over: only their voice is used; "
+        "asset: nothing is filmed, an asset takes its place.",
+    )
     title: str = Field(min_length=1, max_length=80)
     purpose: str = Field(
         min_length=1,

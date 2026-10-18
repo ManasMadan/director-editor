@@ -10,6 +10,7 @@
       "shots": [
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Intro in the Market",
           "purpose": "hook: introduce the cultural observation in a lively setting, curious and friendly",
           "sourceStartSeconds": 0.0,
@@ -86,6 +87,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Demonstrating Variation 1",
           "purpose": "setup: demonstrate the first variation, playful and clear",
           "sourceStartSeconds": 5.3,
@@ -152,6 +154,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Real Examples of Variation 1",
           "purpose": "reveal: real-life examples of the first head nod, warm and authentic",
           "sourceStartSeconds": 8.9,
@@ -207,6 +210,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Demonstrating Variation 2",
           "purpose": "setup: introduce and demonstrate the second variation, upbeat",
           "sourceStartSeconds": 13.3,
@@ -268,6 +272,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Real Examples of Variation 2",
           "purpose": "reveal: real-life clips of the quick nod, lively and candid",
           "sourceStartSeconds": 15.3,
@@ -323,6 +328,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Demonstrating Variation 3",
           "purpose": "setup: show the third variation, energetic",
           "sourceStartSeconds": 19.0,
@@ -384,6 +390,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Real Examples of Variation 3",
           "purpose": "reveal: show locals doing the rapid head waggle, cheerful",
           "sourceStartSeconds": 21.3,
@@ -439,6 +446,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Explanation & Variation 4 Demo",
           "purpose": "setup: explain the confusion and demonstrate the fourth variation, relatable and expressive",
           "sourceStartSeconds": 24.6,
@@ -520,6 +528,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Real Example of Variation 4",
           "purpose": "reveal: show a real example of the fourth nod, charming",
           "sourceStartSeconds": 32.0,
@@ -580,6 +589,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Outro in the Market",
           "purpose": "payoff: wrap up with a sweet personal takeaway while doing the nod yourself, endearing",
           "sourceStartSeconds": 33.4,
@@ -712,6 +722,7 @@
       "shots": [
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "The New Arrival",
           "purpose": "hook: introduce the new arrival and spark curiosity",
           "sourceStartSeconds": 0.0,
@@ -762,6 +773,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Surprised Reaction",
           "purpose": "setup: show the first toy's surprised reaction",
           "sourceStartSeconds": 2.7,
@@ -807,6 +819,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Knocking on the Box",
           "purpose": "setup: build anticipation with a cute interaction",
           "sourceStartSeconds": 3.9,
@@ -852,6 +865,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Heart Eyes",
           "purpose": "setup: show excitement for the new friend inside",
           "sourceStartSeconds": 5.2,
@@ -897,6 +911,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Sliding Off the Sleeve",
           "purpose": "setup: begin the unboxing",
           "sourceStartSeconds": 6.7,
@@ -942,6 +957,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Opening the Cardboard Box",
           "purpose": "setup: continue the unboxing build-up",
           "sourceStartSeconds": 9.3,
@@ -987,6 +1003,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "First Peek Inside",
           "purpose": "reveal: first peek at the new toy inside the box",
           "sourceStartSeconds": 11.5,
@@ -1032,6 +1049,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Removing the Plastic Shell",
           "purpose": "reveal: free the toy from its packaging",
           "sourceStartSeconds": 12.6,
@@ -1077,6 +1095,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Powering On",
           "purpose": "reveal: bring the new toy to life and show its expressions",
           "sourceStartSeconds": 15.5,
@@ -1127,6 +1146,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Grumpy Face Close-Up",
           "purpose": "setup: highlight a funny grumpy expression",
           "sourceStartSeconds": 24.2,
@@ -1172,6 +1192,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Making Her Happy",
           "purpose": "payoff: cheer the robot up for a sweet, happy ending",
           "sourceStartSeconds": 25.5,
@@ -1302,6 +1323,7 @@
       "shots": [
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "The Fork Bite Hook",
           "purpose": "hook: mouthwatering close-up of the finished cake being cut to grab attention immediately",
           "sourceStartSeconds": 0.0,
@@ -1357,6 +1379,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Separate and Crush Cookies",
           "purpose": "setup: fast-paced preparation of the main cookie ingredient",
           "sourceStartSeconds": 4.0,
@@ -1422,6 +1445,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Mix the Batter",
           "purpose": "setup: showing how quickly the batter comes together in one bowl",
           "sourceStartSeconds": 8.6,
@@ -1492,6 +1516,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Prep Mould and Microwave",
           "purpose": "setup: prepping the pan and cooking the cake without an oven",
           "sourceStartSeconds": 13.6,
@@ -1557,6 +1582,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Unmould the Cake",
           "purpose": "reveal: unmoulding the cooked cake cleanly",
           "sourceStartSeconds": 18.2,
@@ -1607,6 +1633,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Pour Ganache and Garnish",
           "purpose": "payoff: glossy chocolate pour and garnish for a bakery-style finish",
           "sourceStartSeconds": 20.1,
@@ -1707,6 +1734,7 @@
       "shots": [
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "BTS Bus Window",
           "purpose": "hook: behind-the-scenes setup, curious",
           "sourceStartSeconds": 0.0,
@@ -1787,6 +1815,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "BTS Roadside Car Pass",
           "purpose": "setup: behind-the-scenes action, energetic",
           "sourceStartSeconds": 4.3,
@@ -1887,6 +1916,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "BTS Cycling",
           "purpose": "setup: behind-the-scenes action, dynamic",
           "sourceStartSeconds": 10.0,
@@ -1967,6 +1997,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Result: Window Reveal",
           "purpose": "reveal: the resulting cinematic shot from the bus, smooth",
           "sourceStartSeconds": 12.7,
@@ -2006,6 +2037,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Result: Car Whip Pan",
           "purpose": "payoff: the resulting dynamic car transition, exciting",
           "sourceStartSeconds": 16.3,
@@ -2050,6 +2082,7 @@
         },
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Result: Cycling Reveal",
           "purpose": "payoff: final seamless transition to the cycling shot, carefree",
           "sourceStartSeconds": 21.6,
@@ -2155,6 +2188,7 @@
       "shots": [
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Misty Path Walk with Quote",
           "purpose": "hook and payoff: moody, reflective setup that builds to a determined motivational message",
           "sourceStartSeconds": 0.0,
@@ -2286,6 +2320,7 @@
       "shots": [
         {
           "kind": "video",
+          "mode": "on-camera",
           "title": "Full Partner Dance Routine",
           "purpose": "hook and payoff: playful, energetic partner dance routine from start to finish.",
           "sourceStartSeconds": 0.0,

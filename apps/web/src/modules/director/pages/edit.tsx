@@ -6,12 +6,7 @@ import { useApiErrorMessage } from "@repo/client";
 import { useDirectorPlanQuery } from "@repo/client/api/director/plan";
 import { useSaveCutMutation } from "@repo/client/api/director/save-cut";
 import { useDirectorShotsQuery } from "@repo/client/api/director/shots";
-import {
-  type DirectorCut,
-  type DirectorShot,
-  directorTakeKind,
-  type ShotPlan,
-} from "@repo/contracts/api";
+import type { DirectorCut, DirectorShot, ShotPlan } from "@repo/contracts/api";
 import { uploadPurposes } from "@repo/contracts/files";
 import type { DirectorTakeId } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
@@ -62,7 +57,7 @@ function loadedTake(media: Map<DirectorTakeId, MediaState>, clip: Clip) {
 function segmentsOf(clips: readonly Clip[], media: Map<DirectorTakeId, MediaState>): Segment[] {
   return clips.map((clip) => {
     const take = required(loadedTake(media, clip), "a loaded take");
-    return directorTakeKind[clip.shot.kind] === "video"
+    return clip.shot.kind === "video"
       ? { kind: "video", source: take.blob, startSeconds: clip.from, endSeconds: clip.to }
       : { kind: "photo", source: take.blob, seconds: clip.seconds };
   });

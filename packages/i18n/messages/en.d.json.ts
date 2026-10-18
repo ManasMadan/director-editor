@@ -576,9 +576,7 @@ declare const messages: {
     "inOrder": "Film them in this order",
     "kind": {
       "video": "Video",
-      "photo": "Photo",
-      "voiceover": "Voice-over",
-      "asset": "Graphic"
+      "photo": "Photo"
     },
     "seconds": "{seconds, number, ::.#} s",
     "camera": {

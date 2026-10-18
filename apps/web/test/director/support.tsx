@@ -167,6 +167,7 @@ export class FakeRecorder {
 export function shot(overrides: Partial<Shot> = {}): Shot {
   return {
     kind: "video",
+    mode: "on-camera",
     title: "The walk-in",
     purpose: "Opens the short",
     sourceStartSeconds: 0,
@@ -194,6 +195,7 @@ export const newVideoId = () => crypto.randomUUID().replaceAll("-", "").slice(0,
 export function planShot(overrides: Partial<Shot> = {}): Shot {
   return {
     kind: "video",
+    mode: "on-camera",
     title: "Walk in",
     purpose: "Set the scene.",
     sourceStartSeconds: 1.2,
@@ -239,6 +241,7 @@ export function take(overrides: Partial<Omit<DirectorTake, "createdAt">> & { fil
     id: crypto.randomUUID(),
     shotIndex: 0,
     kind: "video",
+    mode: "on-camera",
     status: "ready",
     error: null,
     bestStartMs: null,

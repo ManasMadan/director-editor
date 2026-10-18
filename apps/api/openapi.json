@@ -9582,11 +9582,18 @@
                                         "kind": {
                                           "enum": [
                                             "video",
-                                            "photo",
-                                            "voiceover",
-                                            "asset"
+                                            "photo"
                                           ],
                                           "type": "string"
+                                        },
+                                        "mode": {
+                                          "enum": [
+                                            "on-camera",
+                                            "voice-over",
+                                            "asset"
+                                          ],
+                                          "type": "string",
+                                          "default": "on-camera"
                                         },
                                         "title": {
                                           "type": "string"
@@ -12074,11 +12081,18 @@
                                   "kind": {
                                     "enum": [
                                       "video",
-                                      "photo",
-                                      "voiceover",
-                                      "asset"
+                                      "photo"
                                     ],
                                     "type": "string"
+                                  },
+                                  "mode": {
+                                    "enum": [
+                                      "on-camera",
+                                      "voice-over",
+                                      "asset"
+                                    ],
+                                    "type": "string",
+                                    "default": "on-camera"
                                   },
                                   "title": {
                                     "type": "string"
@@ -14549,11 +14563,18 @@
                                   "kind": {
                                     "enum": [
                                       "video",
-                                      "photo",
-                                      "voiceover",
-                                      "asset"
+                                      "photo"
                                     ],
                                     "type": "string"
+                                  },
+                                  "mode": {
+                                    "enum": [
+                                      "on-camera",
+                                      "voice-over",
+                                      "asset"
+                                    ],
+                                    "type": "string",
+                                    "default": "on-camera"
                                   },
                                   "title": {
                                     "type": "string"
