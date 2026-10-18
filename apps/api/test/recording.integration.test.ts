@@ -543,6 +543,70 @@ describe("deleting a session", () => {
     );
     await expectError(rpc.session({ sessionId }), "RECORDING_NOT_FOUND");
   });
+
+  it("deletes only a take of the member's own, whatever file its attempt names", async () => {
+    const { rpc, sessionId, org } = await recording();
+    const attempt = await mark(rpc, sessionId, "start", 1, 0);
+    const other = await recording();
+    const otherAttempt = await mark(other.rpc, other.sessionId, "start", 1, 0);
+    const theirs = await takeOf(other.me, other.org, other.sessionId, otherAttempt.id);
+    const [avatar] = await sql<{ id: string }>(
+      `INSERT INTO files.file (user_id, purpose, status, filename, declared_type, declared_size, updated_at)
+       VALUES ((SELECT user_id FROM app.recording_session WHERE id = $1), 'avatar', 'ready', 'me.png',
+               'image/png', 10, now()) RETURNING id`,
+      [sessionId],
+    );
+    // A bug that pointed the attempts at someone else's take and at a file that's no take.
+    await sql("UPDATE app.recording_attempt SET file_id = $1 WHERE id = $2", [
+      theirs.file,
+      attempt.id,
+    ]);
+    const second = await mark(rpc, sessionId, "start", 2, 5_000);
+    await sql("UPDATE app.recording_attempt SET file_id = $1 WHERE id = $2", [
+      required(avatar, "a file").id,
+      second.id,
+    ]);
+    expect(await rpc.remove({ sessionId })).toEqual({ removed: true });
+
+    expect(
+      await sql("SELECT id FROM files.file WHERE id = ANY($1::uuid[])", [
+        [theirs.file, required(avatar, "a file").id],
+      ]),
+    ).toHaveLength(2);
+    expect(await sql("SELECT id FROM ai.director_take WHERE id = $1", [theirs.take])).toHaveLength(
+      1,
+    );
+    expect(org).not.toBe(other.org);
+  });
+
+  it("lets the API write only the columns ending an attempt changes", async () => {
+    const { rpc, sessionId, org } = await recording();
+    const attempt = await mark(rpc, sessionId, "start", 1, 0);
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("app_api") });
+    await client.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.org_id', $1, true)", [org]);
+      const ended = await client.query(
+        "UPDATE app.recording_attempt SET end_ms = 4000, status = 'waiting', note = 'ok', updated_at = now() WHERE id = $1",
+        [attempt.id],
+      );
+      expect(ended.rowCount).toBe(1);
+      await client.query("COMMIT");
+      for (const column of [
+        "file_id = NULL",
+        "take_id = NULL",
+        "clip_start_ms = 0",
+        "org_id = org_id",
+      ]) {
+        await expect(
+          client.query(`UPDATE app.recording_attempt SET ${column} WHERE id = $1`, [attempt.id]),
+        ).rejects.toThrow(/permission denied/);
+      }
+    } finally {
+      await client.end();
+    }
+  });
 });
 
 describe("keeping footage a video was saved from", () => {

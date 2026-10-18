@@ -200,6 +200,9 @@ async function takeRoute(
     bestEndMs: null,
     score: null,
     feedback: null,
+    reason: null,
+    chosen: false,
+    origin: "shoot",
     createdAt: new Date().toISOString(),
   });
 }
@@ -280,6 +283,12 @@ async function recorded(
   await sql(`INSERT INTO auth."user" (id, name, email, updated_at) VALUES ($1, 'U', $2, now())`, [
     user,
     `${user}@test.dev`,
+  ]);
+  // The member records in their own workspace (the trigger that deletes an attempt's take
+  // checks it's a member's of the attempt's workspace).
+  await sql("INSERT INTO auth.member (organization_id, user_id, role) VALUES ($1, $2, 'owner')", [
+    org,
+    user,
   ]);
   const [plan] = await sql<{ id: string }>(
     `INSERT INTO ai.director_plan (org_id, video_id, source, status, stage, updated_at)
