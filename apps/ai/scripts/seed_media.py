@@ -66,6 +66,7 @@ from app.assets import default_assets, drawn_aspect_ratio, image_prompt
 from app.log import configure_logging, log
 from app.schemas import Shot, ShotPlan
 from app.settings import Settings, get_settings
+from app.storyboards import GENERIC_PERSON, shot_directions, storyboard_prompt
 from scripts.build_seeds import (
     APP_ROOT,
     TEMPLATES_PATH,
@@ -99,10 +100,6 @@ QUOTA_RETRY_SECONDS = 20.0
 GCLOUD_TOKEN = ("gcloud", "auth", "print-access-token")
 PREVIEW_NEGATIVE_PROMPT = "text, captions, subtitles, logos, watermarks, brand names"
 
-_GENERIC_PERSON = (
-    "Anyone in it is a generic, anonymous adult, not a likeness of any real or recognisable person."
-)
-_NO_TEXT = "No text, captions, labels, logos, brand names, watermarks or panel numbers anywhere."
 _MOVES = {
     "up": "up",
     "down": "down",
@@ -160,34 +157,11 @@ class Job:
 # --------------------------------------------------------------------------------- prompts
 
 
-def _directions(shot: Shot) -> list[str]:
-    lens = "front (selfie)" if shot.camera == "front" else "rear"
-    return [
-        f"Where: {shot.scene}",
-        f"Framing: a {shot.framing.shotSize} shot on the phone's {lens} camera, held at "
-        f"{shot.phoneAngle.height} height. {shot.framing.note}",
-        f"In it: {shot.pose.description}",
-        f"Feeling: {shot.purpose}",
-    ]
-
-
 def _camera(shot: Shot) -> str:
     moves = list(
         dict.fromkeys(_MOVES[s.cameraMove] for s in shot.steps if s.cameraMove != "static")
     )
     return f"The camera moves {', then '.join(moves)}." if moves else "The camera holds still."
-
-
-def storyboard_prompt(shot: Shot) -> str:
-    return "\n".join(
-        [
-            "A single storyboard frame for one shot of a vertical 9:16 phone video, drawn as "
-            "a clean pencil and grey-marker sketch on white paper.",
-            *_directions(shot),
-            _GENERIC_PERSON,
-            _NO_TEXT,
-        ]
-    )
 
 
 def preview_seconds(shot: Shot) -> Literal[4, 6]:
@@ -200,9 +174,9 @@ def preview_prompt(shot: Shot, seconds: int) -> str:
     return "\n".join(
         [
             f"A {seconds}-second vertical 9:16 phone video, handheld, in natural light.",
-            *_directions(shot),
+            *shot_directions(shot),
             _camera(shot),
-            _GENERIC_PERSON,
+            GENERIC_PERSON,
             "No on-screen text, captions, logos or watermarks.",
         ]
     )

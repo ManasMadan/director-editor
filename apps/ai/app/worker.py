@@ -24,9 +24,11 @@ from redis.asyncio import Redis
 
 from app.activity import Target, log_activity
 from app.contracts.ai_director_assets_job import AiDirectorAssetsJob
+from app.contracts.ai_director_create_plan_job import AiDirectorCreatePlanJob
 from app.contracts.ai_director_job_name import AiDirectorJobName
 from app.contracts.ai_director_plan_job import AiDirectorPlanJob
 from app.contracts.ai_director_review_take_job import AiDirectorReviewTakeJob
+from app.create import Creator, create_creator
 from app.db.session import close_engine, open_engine
 from app.director import Director, create_director
 from app.heartbeat import beat
@@ -46,7 +48,9 @@ from app.telemetry import start_telemetry
 # being skipped as if it had run.
 DIRECTOR_JOB_NAME = TypeAdapter[AiDirectorJobName](AiDirectorJobName)
 
-type AnyJob = AiDirectorPlanJob | AiDirectorAssetsJob | AiDirectorReviewTakeJob
+type AnyJob = (
+    AiDirectorPlanJob | AiDirectorAssetsJob | AiDirectorCreatePlanJob | AiDirectorReviewTakeJob
+)
 
 
 def _bound(job: JobLike, data: AnyJob) -> AbstractContextManager[None]:
@@ -86,7 +90,9 @@ async def run_job(job: JobLike, final: bool, work: Callable[[], Awaitable[None]]
     log_activity("job.finished", target=target, duration_ms=(time.monotonic() - started) * 1000)
 
 
-def director_processor(director: Director) -> Callable[[JobLike], Awaitable[None]]:
+def director_processor(
+    director: Director, creator: Creator | None = None
+) -> Callable[[JobLike], Awaitable[None]]:
     """Runs one `ai-director` job; on its last attempt, a failure is final."""
     attempts = SETTINGS[DIRECTOR].options.attempts
 
@@ -111,6 +117,24 @@ def director_processor(director: Director) -> Callable[[JobLike], Awaitable[None
                     final,
                     lambda: director.make_assets(
                         assets.payload.orgId, assets.payload.planId, final=final
+                    ),
+                )
+        elif name == "create-plan":
+            created = AiDirectorCreatePlanJob.model_validate(job.data)
+            if creator is None:
+                # Built from the same settings as Director, so never missing beside it.
+                raise RuntimeError("a create-plan job without the creator")
+            writer = creator
+            with _bound(job, created):
+                await run_job(
+                    job,
+                    final,
+                    lambda: writer.write(
+                        created.payload.orgId,
+                        created.payload.planId,
+                        [str(url) for url in created.payload.photoUrls],
+                        _user(created),
+                        final=final,
                     ),
                 )
         else:
@@ -144,7 +168,12 @@ async def main() -> None:
     director = create_director(settings, director_queue, redis, http)
     # Each job is a model watching a video for tens of seconds: a few at once per worker.
     director_worker: RunningWorker | None = (
-        start_worker(DIRECTOR, director_processor(director), str(settings.redis_url), concurrency=3)
+        start_worker(
+            DIRECTOR,
+            director_processor(director, create_creator(settings, director_queue, redis, http)),
+            str(settings.redis_url),
+            concurrency=3,
+        )
         if director
         else None
     )

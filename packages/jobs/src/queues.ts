@@ -156,6 +156,16 @@ export const queues = {
        */
       assets: z.object({ planId: directorPlanIdSchema, orgId: orgIdSchema }),
       /**
+       * Write a plan a member described (their brief, on the plan) with the photos they
+       * added: `photoUrls` are presigned reads of them, like a review's `sourceUrl`, only
+       * ever in this queue.
+       */
+      "create-plan": z.object({
+        planId: directorPlanIdSchema,
+        orgId: orgIdSchema,
+        photoUrls: z.array(z.url()).max(4),
+      }),
+      /**
        * Review a take. `sourceUrl` is a presigned read of the take's file (apps/api signs
        * it for 30 minutes): the AI service has no storage credentials of its own, and the
        * URL only ever sits in this queue, never in a table.

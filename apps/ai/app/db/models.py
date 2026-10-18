@@ -102,6 +102,8 @@ class DirectorPlan(Base):
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     video_id: Mapped[str] = mapped_column(Text)
     source: Mapped[PlanSource] = mapped_column(Text, server_default=text("'user'::text"))
+    # A created plan's brief (app/create.py's Brief, as JSON); None for every other plan.
+    brief: Mapped[dict[str, object] | None] = mapped_column(JSONB)
     status: Mapped[PlanStatus] = mapped_column(Text, server_default=text("'pending'::text"))
     stage: Mapped[PlanStage] = mapped_column(Text, server_default=text("'queued'::text"))
     error: Mapped[str | None] = mapped_column(Text)

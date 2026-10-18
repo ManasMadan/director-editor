@@ -256,7 +256,8 @@
               "default",
               "created",
               "upload",
-              "stock"
+              "stock",
+              "storyboard"
             ],
             "title": "Origin",
             "type": "string"
@@ -667,6 +668,153 @@
         "title": "Box",
         "type": "object"
       },
+      "BrainstormReply": {
+        "properties": {
+          "questionsLeft": {
+            "description": "How many more Director may ask.",
+            "maximum": 3.0,
+            "minimum": 0.0,
+            "title": "Questionsleft",
+            "type": "integer"
+          },
+          "ready": {
+            "description": "Enough is known to write the shots; reply then says so, with no question.",
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "reply": {
+            "description": "One or two short sentences: a reaction and at most one question.",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Reply",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reply",
+          "ready",
+          "questionsLeft"
+        ],
+        "title": "BrainstormReply",
+        "type": "object"
+      },
+      "BrainstormRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/BriefTurn"
+            },
+            "maxItems": 8,
+            "title": "Messages",
+            "type": "array"
+          },
+          "photos": {
+            "items": {
+              "$ref": "#/components/schemas/BriefPhoto"
+            },
+            "maxItems": 4,
+            "title": "Photos",
+            "type": "array"
+          },
+          "text": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "messages",
+          "photos"
+        ],
+        "title": "BrainstormRequest",
+        "type": "object"
+      },
+      "Brief": {
+        "description": "What a created plan was written from, as stored on it: the photos by their file id.",
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/BriefTurn"
+            },
+            "maxItems": 8,
+            "title": "Messages",
+            "type": "array"
+          },
+          "photos": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 4,
+            "title": "Photos",
+            "type": "array"
+          },
+          "text": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "messages",
+          "photos"
+        ],
+        "title": "Brief",
+        "type": "object"
+      },
+      "BriefPhoto": {
+        "additionalProperties": false,
+        "properties": {
+          "fileId": {
+            "format": "uuid",
+            "title": "Fileid",
+            "type": "string"
+          },
+          "url": {
+            "description": "A presigned read of the photo (a ready director-brief-photo upload).",
+            "maxLength": 4000,
+            "pattern": "^https?://",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fileId",
+          "url"
+        ],
+        "title": "BriefPhoto",
+        "type": "object"
+      },
+      "BriefTurn": {
+        "additionalProperties": false,
+        "properties": {
+          "role": {
+            "enum": [
+              "member",
+              "director"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "text"
+        ],
+        "title": "BriefTurn",
+        "type": "object"
+      },
       "CameraMove": {
         "enum": [
           "static",
@@ -811,6 +959,40 @@
           "durationMs"
         ],
         "title": "ClipSlice",
+        "type": "object"
+      },
+      "CreatePlanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/BriefTurn"
+            },
+            "maxItems": 8,
+            "title": "Messages",
+            "type": "array"
+          },
+          "photos": {
+            "items": {
+              "$ref": "#/components/schemas/BriefPhoto"
+            },
+            "maxItems": 4,
+            "title": "Photos",
+            "type": "array"
+          },
+          "text": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "messages",
+          "photos"
+        ],
+        "title": "CreatePlanRequest",
         "type": "object"
       },
       "CutPick": {
@@ -1058,6 +1240,17 @@
             "title": "Audiostatus",
             "type": "string"
           },
+          "brief": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Brief"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the member asked for, on a created plan."
+          },
           "createdAt": {
             "format": "date-time",
             "title": "Createdat",
@@ -1103,7 +1296,8 @@
           "source": {
             "enum": [
               "seed",
-              "user"
+              "user",
+              "created"
             ],
             "title": "Source",
             "type": "string"
@@ -1128,6 +1322,15 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "storyboards": {
+            "description": "A created plan's storyboard card for each shot that has one, on a plan read on its own (getDirectorPlan); empty otherwise.",
+            "items": {
+              "$ref": "#/components/schemas/StoryboardOut"
+            },
+            "maxItems": 12,
+            "title": "Storyboards",
+            "type": "array"
           },
           "updatedAt": {
             "format": "date-time",
@@ -1455,6 +1658,8 @@
           "DIRECTOR_INDEX_LIMIT",
           "DIRECTOR_IMAGE_LIMIT",
           "DIRECTOR_ASSET_NOT_FOUND",
+          "DIRECTOR_CREATE_LIMIT",
+          "DIRECTOR_PLAN_NOT_EDITABLE",
           "DIRECTOR_VIDEO_UNAVAILABLE",
           "DIRECTOR_TOO_LONG",
           "DIRECTOR_PLAN_NOT_FOUND",
@@ -1482,6 +1687,7 @@
           "RECORDING_SLICE_INVALID",
           "DIRECTOR_VIDEO_UNREADABLE",
           "DIRECTOR_ANALYSIS_FAILED",
+          "DIRECTOR_CREATE_FAILED",
           "DIRECTOR_REVIEW_FAILED",
           "RECORDING_CLIP_FAILED"
         ],
@@ -2295,6 +2501,25 @@
         "title": "PhoneAngle",
         "type": "object"
       },
+      "PlanEditRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "plan": {
+            "$ref": "#/components/schemas/ShotPlan"
+          },
+          "videoId": {
+            "pattern": "^[A-Za-z0-9_-]{11}$",
+            "title": "Videoid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "videoId",
+          "plan"
+        ],
+        "title": "PlanEditRequest",
+        "type": "object"
+      },
       "PublishCopy": {
         "properties": {
           "credits": {
@@ -2896,6 +3121,46 @@
         "title": "StockCredit",
         "type": "object"
       },
+      "StoryboardOut": {
+        "description": "A created plan's storyboard card for one shot (app/create.py).",
+        "properties": {
+          "objectKey": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objectkey"
+          },
+          "shotIndex": {
+            "exclusiveMaximum": 12.0,
+            "minimum": 0.0,
+            "title": "Shotindex",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "generating",
+              "ready",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shotIndex",
+          "status",
+          "objectKey"
+        ],
+        "title": "StoryboardOut",
+        "type": "object"
+      },
       "TargetPose": {
         "properties": {
           "description": {
@@ -3182,6 +3447,79 @@
         "summary": "Ready"
       }
     },
+    "/v1/director/brainstorm": {
+      "post": {
+        "description": "Director's next turn while a member describes a template: a reaction and at most\none question, or ready to write their shots.",
+        "operationId": "brainstormDirectorTemplate",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrainstormRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrainstormReply"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Brainstorm Director Template"
+      }
+    },
     "/v1/director/clips": {
       "post": {
         "description": "Cuts a recorded attempt out of its session's footage into a take: Director's marks\nsnapped to the first and last words, never across a pause (RECORDING_CLIP_FAILED when\nthere's nothing to cut; UPSTREAM_UNAVAILABLE while the footage can't be reached).",
@@ -3254,6 +3592,150 @@
           }
         },
         "summary": "Clip Director Attempt"
+      }
+    },
+    "/v1/director/created": {
+      "post": {
+        "description": "A plan of the member's own, from their brief and photos, queued to be written\n(DIRECTOR_CREATE_LIMIT past the day's limit).",
+        "operationId": "createDirectorTemplate",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectorPlanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Create Director Template"
+      },
+      "put": {
+        "description": "Saves the member's changes to the shots of a plan they described.",
+        "operationId": "editDirectorTemplate",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanEditRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectorPlanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Edit Director Template"
       }
     },
     "/v1/director/cuts": {
@@ -3751,7 +4233,7 @@
     },
     "/v1/director/plans/{video_id}": {
       "get": {
-        "description": "The workspace's plan for a short, with the default images of its assets.",
+        "description": "The workspace's plan for a short, with the default images of its assets (and a\ncreated plan's storyboard cards).",
         "operationId": "getDirectorPlan",
         "parameters": [
           {

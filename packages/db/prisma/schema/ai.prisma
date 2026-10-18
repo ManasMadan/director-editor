@@ -44,10 +44,15 @@ model DirectorPlan {
   /// Who indexed it. A member indexes one short of their own (source user, not failed):
   /// the partial unique index below holds that, two requests racing included.
   createdBy    String?               @map("created_by") @db.Uuid
-  /// The YouTube video id (11 characters).
+  /// The YouTube video id (11 characters); a created plan's is a random id of the same
+  /// shape, so every route, take and cut keyed by it works the same.
   videoId      String                @map("video_id")
-  /// seed (copied into every workspace, never anyone's index) | user
+  /// seed (copied into every workspace, never anyone's index) | user | created (described
+  /// by a member, counted apart from their one index)
   source       String                @default("user")
+  /// A created plan's brief: what the member typed, their answers to Director and their
+  /// photos' file ids ({text, messages, photos}).
+  brief        Json?
   /// pending (queued) | analyzing | ready | failed
   status       String                @default("pending")
   /// How far indexing got, for the library: queued | watching | writing | ready | failed
@@ -166,8 +171,9 @@ model DirectorAsset {
   userId       String?               @map("user_id") @db.Uuid
   /// The asset's id in the plan ("chart").
   assetId      String                @map("asset_id")
-  /// default (made after indexing, shared by the workspace), or one of a member's own from
-  /// the asset picker: created (drawn from their prompt), upload or stock.
+  /// default (made after indexing, shared by the workspace); one of a member's own from
+  /// the asset picker: created (drawn from their prompt), upload or stock; or storyboard
+  /// (a created plan's card for a shot, its asset id the shot's storyboard id).
   origin       String                @default("default")
   /// pending (queued) | generating | ready | failed
   status       String                @default("pending")

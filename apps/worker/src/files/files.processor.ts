@@ -176,6 +176,7 @@ export class FilesProcessor extends JobProcessor {
           throw new Rejected("FILE_UNREADABLE");
         }
       case "director-take-photo":
+      case "director-brief-photo":
         try {
           const body = await sharp(bytes, { limitInputPixels: MAX_INPUT_PIXELS, failOn: "error" })
             .rotate() // apply the EXIF orientation before it's dropped

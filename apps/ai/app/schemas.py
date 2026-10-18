@@ -588,7 +588,7 @@ class ShotPlanDraft(BaseModel):
 # The database checks them too (director_plan_status_check, director_take_status_check,
 # director_plan_stage_check, ...).
 PlanStatus = Literal["pending", "analyzing", "ready", "failed"]
-PlanSource = Literal["seed", "user"]
+PlanSource = Literal["seed", "user", "created"]
 PlanStage = Literal["queued", "watching", "writing", "ready", "failed"]
 AudioStatus = Literal["ready", "failed", "none"]
 TakeStatus = Literal["pending", "reviewing", "ready", "failed"]
@@ -621,6 +621,88 @@ class AssetImageOut(BaseModel):
     )
 
 
+# ------------------------------------------------------------- created templates
+# A template a member describes (app/create.py): what they typed, their talk with
+# Director (at most three questions from it), and up to four photos of theirs.
+MAX_BRIEF_TEXT = 1_000
+MAX_BRIEF_TURNS = 8
+MAX_BRIEF_TURN = 500
+MAX_BRIEF_PHOTOS = 4
+MAX_PHOTO_URL = 4_000
+
+
+class BriefTurn(BaseModel):
+    model_config = REQUEST
+
+    role: Literal["member", "director"]
+    text: str = Field(min_length=1, max_length=MAX_BRIEF_TURN)
+
+
+class Brief(BaseModel):
+    """What a created plan was written from, as stored on it: the photos by their file id."""
+
+    text: str = Field(min_length=1, max_length=MAX_BRIEF_TEXT)
+    messages: list[BriefTurn] = Field(max_length=MAX_BRIEF_TURNS)
+    photos: list[UUID] = Field(max_length=MAX_BRIEF_PHOTOS)
+
+
+class BriefPhoto(BaseModel):
+    model_config = REQUEST
+
+    # A JSON string, so not strict (strict wants a UUID object, which JSON can't carry).
+    fileId: UUID = Field(strict=False)
+    url: str = Field(
+        pattern=r"^https?://",
+        max_length=MAX_PHOTO_URL,
+        description="A presigned read of the photo (a ready director-brief-photo upload).",
+    )
+
+
+class BrainstormRequest(BaseModel):
+    model_config = REQUEST
+
+    text: str = Field(min_length=1, max_length=MAX_BRIEF_TEXT)
+    messages: list[BriefTurn] = Field(max_length=MAX_BRIEF_TURNS)
+    photos: list[BriefPhoto] = Field(max_length=MAX_BRIEF_PHOTOS)
+
+
+class BrainstormReplyDraft(BaseModel):
+    """Director's next turn in the brainstorm: the model's output type."""
+
+    reply: str = Field(
+        min_length=1,
+        max_length=300,
+        description="One or two short sentences: a reaction and at most one question.",
+    )
+    ready: bool = Field(
+        description="Enough is known to write the shots; reply then says so, with no question."
+    )
+
+
+class BrainstormReply(BrainstormReplyDraft):
+    questionsLeft: int = Field(ge=0, le=3, description="How many more Director may ask.")
+
+
+class CreatePlanRequest(BrainstormRequest):
+    pass
+
+
+class PlanEditRequest(BaseModel):
+    model_config = REQUEST
+
+    videoId: str = Field(pattern=VIDEO_ID_PATTERN)
+    # Not strict: a plan's numbers arrive as JSON (an int where a float is meant).
+    plan: ShotPlan = Field(strict=False)
+
+
+class StoryboardOut(BaseModel):
+    """A created plan's storyboard card for one shot (app/create.py)."""
+
+    shotIndex: int = Field(ge=0, lt=MAX_SHOTS)
+    status: AssetImageStatus
+    objectKey: str | None = Field(max_length=200)
+
+
 class DirectorPlanOut(BaseModel):
     id: UUID
     videoId: str
@@ -642,6 +724,15 @@ class DirectorPlanOut(BaseModel):
         description="The default images made for the plan's assets, on a plan read on its "
         "own (getDirectorPlan); empty in the library and for a seeded template, whose are "
         "committed with it.",
+    )
+    storyboards: list[StoryboardOut] = Field(
+        default_factory=list[StoryboardOut],
+        max_length=MAX_SHOTS,
+        description="A created plan's storyboard card for each shot that has one, on a plan "
+        "read on its own (getDirectorPlan); empty otherwise.",
+    )
+    brief: Brief | None = Field(
+        default=None, description="What the member asked for, on a created plan."
     )
     createdAt: datetime
     updatedAt: datetime
@@ -870,7 +961,9 @@ class DirectorCutOut(BaseModel):
 # of theirs or editing another of the slot's images), their upload, or a stock picture
 # apps/api copied into storage. Each is a row of ai.director_asset; which one the slot
 # uses is the member's newest choice (ai.director_asset_choice).
-AssetOrigin = Literal["default", "created", "upload", "stock"]
+# A created plan's storyboard cards (app/storyboards.py) are images of the same table, by
+# origin "storyboard"; they belong to no slot, so the picker never serves one.
+AssetOrigin = Literal["default", "created", "upload", "stock", "storyboard"]
 StockProviderName = Literal["pexels", "pixabay"]
 MAX_ASSET_PROMPT = 2_000
 MAX_ASSET_INSTRUCTION = 500

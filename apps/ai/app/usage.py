@@ -33,6 +33,7 @@ type Feature = Literal[
     "director-publish",
     "director-asset",
     "director-align",
+    "director-create",
 ]
 
 

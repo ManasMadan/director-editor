@@ -5,6 +5,7 @@
   "enum": [
     "plan",
     "assets",
+    "create-plan",
     "review-take"
   ]
 }
