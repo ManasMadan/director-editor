@@ -7,10 +7,14 @@
  *
  * What it says is scripted: each complete text turn gets a short spoken answer (a
  * transcript and a moment of silent audio), the app's own notes in square brackets get
- * a line about what they say, and a member's turn that names a tool's cue gets that tool
- * call: "go to shot 2" calls go_to_shot, "switch to the back camera" calls switch_camera.
- * Once the tool's answer comes back it says whether it worked. Microphone audio and
- * camera frames are only counted. `goAway()` warns every open connection that it's
+ * a line about what they say (a quiet nudge, the first and the second), and a note it
+ * should only know gets no answer. It keeps the shot it was briefed on, from the setup's
+ * system instruction and each move's brief: "say my line" reads that shot's line, the
+ * member's own when they changed it. A member's turn that names a tool's cue gets that
+ * tool call: "go to shot 2" calls go_to_shot, "switch to the back camera" calls
+ * switch_camera, and "what if I do it with my grandma" gets a word about it and then
+ * adapt_shot. Once the tool's answer comes back it says whether it worked. Microphone
+ * audio and camera frames are only counted. `goAway()` warns every open connection that it's
  * about to close, as Vertex does before its ten-minute limit.
  */
 import type { IncomingMessage } from "node:http";
@@ -27,6 +31,7 @@ const clientMessage = z.object({
   setup: z
     .object({
       model: z.string(),
+      systemInstruction: z.object({ parts: z.array(z.object({ text: z.string() })) }).optional(),
       sessionResumption: z.object({ handle: z.string().optional() }).optional(),
     })
     .optional(),
@@ -69,7 +74,24 @@ const NOTE_ANSWERS: [RegExp, (match: RegExpExecArray) => string][] = [
   [/^\[They flipped to the front/, () => "And we're back on you!"],
   [/^\[They've moved on to shot (\d+)/, (match) => `Shot ${match[1]}! Let's do it.`],
   [/^\[The take just ended/, () => "Nice one! Maybe hold the last moment a beat longer."],
+  [/^\[They called the countdown off/, () => "All good? Go whenever you're ready."],
+  [/^\[They've been quiet for/, () => "Want to give it a go?"],
+  [/^\[They've been quiet again/, () => "I'll wait. Just say when."],
 ];
+
+/**
+ * The line of the shot a brief describes: the member's own, if they changed it, or the
+ * script's lines together.
+ */
+function lineIn(brief: string): string | null {
+  const theirs = [...brief.matchAll(/^- Their line: "(.*)"$/gm)].at(-1);
+  if (theirs) {
+    // Quoted as JSON in the brief.
+    return z.string().parse(JSON.parse(`"${theirs[1]}"`));
+  }
+  const script = [...brief.matchAll(/^- \d+(?:\.\d+)?s to \d+(?:\.\d+)?s: "(.*)"$/gm)];
+  return script.length > 0 ? script.map((line) => line[1]).join(" ") : null;
+}
 
 function answerTo(text: string): string {
   for (const [pattern, answer] of NOTE_ANSWERS) {
@@ -81,11 +103,18 @@ function answerTo(text: string): string {
   return text.startsWith("[") ? "Okay!" : `You said: ${text}`;
 }
 
-/** The tool call a member's turn asks for, if it names one. */
-function toolCallFor(text: string): { name: string; args: object } | null {
-  const shot = /\bgo to shot (\d+)\b/i.exec(text);
-  if (shot) {
-    return { name: "go_to_shot", args: { shot: Number(shot[1]) } };
+/** The tool call a member's turn asks for, if it names one; `shot` is the one it's on, from 1. */
+function toolCallFor(text: string, shot: number): { name: string; args: object } | null {
+  const twist = /\bwhat if I (?:do (?:it|this one) )?with my (\w+)/i.exec(text);
+  if (twist) {
+    return {
+      name: "adapt_shot",
+      args: { shot, action: `You and your ${twist[1]} do it together` },
+    };
+  }
+  const another = /\bgo to shot (\d+)\b/i.exec(text);
+  if (another) {
+    return { name: "go_to_shot", args: { shot: Number(another[1]) } };
   }
   const camera = /\b(?:switch|flip) to the (front|back) camera\b/i.exec(text);
   if (camera) {
@@ -131,6 +160,8 @@ class Conversation {
     private readonly session: LiveSession,
     private readonly resumable: boolean,
     private readonly ids: Ids,
+    /** The shot it was last briefed on, as the app described it. */
+    private brief: string,
   ) {
     this.handOver();
     socket.on("message", (data) => {
@@ -167,18 +198,39 @@ class Conversation {
   private turn(content: NonNullable<ClientMessage["clientContent"]>) {
     const text = content.turns.flatMap((turn) => turn.parts.map((part) => part.text)).join("\n");
     this.session.turns.push(text);
+    this.learn(text);
     if (!content.turnComplete) {
       return;
     }
-    const tool = toolCallFor(text);
+    const tool = toolCallFor(text, this.shot());
     if (tool) {
+      if (tool.name === "adapt_shot") {
+        say(this.socket, "Ooh, I love that. Let's put it on your card.");
+      }
       this.ids.toolCalls += 1;
       const id = `call-${this.ids.toolCalls}`;
       send(this.socket, { toolCall: { functionCalls: [{ id, ...tool }] } });
+    } else if (/\bmy line\b/i.test(text)) {
+      const line = lineIn(this.brief);
+      say(this.socket, line ? `It's: "${line}"` : "No line in this one, just the moves.");
     } else {
       say(this.socket, answerTo(text));
     }
     this.handOver();
+  }
+
+  /** A move to another shot briefs it afresh; the member's version adds to the brief. */
+  private learn(text: string) {
+    if (text.includes("<shot>")) {
+      this.brief = text;
+    } else if (text.startsWith("[Their version of this shot")) {
+      this.brief += `\n${text.slice(1, -1)}`;
+    }
+  }
+
+  /** The shot it's on, from 1. */
+  private shot(): number {
+    return Number(/\bShot (\d+) of \d+/.exec(this.brief)?.[1] ?? 1);
   }
 }
 
@@ -211,7 +263,8 @@ export function createLive({ accessToken }: { accessToken: string }) {
         session.open = false;
       });
       send(socket, { setupComplete: {} });
-      new Conversation(socket, session, setup.sessionResumption !== undefined, ids);
+      const brief = setup.systemInstruction?.parts.map((part) => part.text).join("\n") ?? "";
+      new Conversation(socket, session, setup.sessionResumption !== undefined, ids, brief);
     });
   });
 

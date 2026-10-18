@@ -125,6 +125,79 @@ describe("the mock Live API", () => {
     ]);
   });
 
+  it("reads the line of the shot it's on, the member's own once they've changed it", async () => {
+    const live = await connect();
+    const brief = (shot: number, script: string) =>
+      `<shot>\nShot ${shot} of 3: The nod.\nScript:\n${script}\n</shot>`;
+    live.send({
+      setup: {
+        model: "m",
+        systemInstruction: {
+          parts: [{ text: brief(1, '- 0s to 2s: "This one\'s"\n- 2.5s to 4s: "a yes."') }],
+        },
+      },
+    });
+    await live.nth(0);
+    live.send(turn("can you say my line again?"));
+    await vi.waitFor(() => expect(saidIn(live.received)).toEqual([`It's: "This one's a yes."`]));
+    // A shot without a line, then one the member changed: the version comes as it joins.
+    live.send(turn(`[They've moved on to shot 2.]\n${brief(2, "- nothing is said in this shot")}`));
+    live.send(turn("my line?"));
+    live.send(turn(`[They've moved on to shot 3.]\n${brief(3, '- 0s to 1s: "Hi."')}`, false));
+    live.send(
+      turn(
+        '[Their version of this shot (it replaces the original where it differs):\n- Their line: "Nan says \\"yes\\"."]',
+        false,
+      ),
+    );
+    live.send(turn("say my line"));
+    await vi.waitFor(() =>
+      expect(saidIn(live.received).slice(1)).toEqual([
+        "Shot 2! Let's do it.",
+        "No line in this one, just the moves.",
+        'It\'s: "Nan says "yes"."',
+      ]),
+    );
+  });
+
+  it("comments on the member's twist and puts it on the card of the shot they're on", async () => {
+    const live = await connect();
+    live.send({ setup: { model: "m" } });
+    await live.nth(0);
+    live.send(turn("what if I do this one with my grandma instead?"));
+    // A word about it first (a moment of sound, then the words), then the change.
+    await live.nth(3);
+    expect(saidIn(live.received)).toEqual(["Ooh, I love that. Let's put it on your card."]);
+    expect(live.received[3]).toEqual({
+      toolCall: {
+        functionCalls: [
+          {
+            id: expect.any(String),
+            name: "adapt_shot",
+            args: { shot: 1, action: "You and your grandma do it together" },
+          },
+        ],
+      },
+    });
+  });
+
+  it("nudges once on a quiet note, says it'll wait on the second, and keeps the rest to itself", async () => {
+    const live = await connect();
+    live.send({ setup: { model: "m" } });
+    await live.nth(0);
+    live.send(turn("[They've been quiet for 15 seconds. One light nudge, a few words.]"));
+    live.send(turn("[They keep getting cut off, probably by noise.]", false));
+    live.send(turn("[They've been quiet again, the second time on this shot.]"));
+    live.send(turn("[They called the countdown off: no take this time.]"));
+    await vi.waitFor(() =>
+      expect(saidIn(live.received)).toEqual([
+        "Want to give it a go?",
+        "I'll wait. Just say when.",
+        "All good? Go whenever you're ready.",
+      ]),
+    );
+  });
+
   it("resumes from a handle, and warns open connections that they'll close", async () => {
     const live = await connect();
     live.send({ setup: { model: "m", sessionResumption: { handle: "fake-handle-1" } } });
