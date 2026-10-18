@@ -39,6 +39,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.activity import Target, log_activity, outcome_of
+from app.aligning import Aligner, LocalAligner, RemoteAligner, create_locator
 from app.analytics import Analytics, AnalyticsEvent, Recorder, create_analytics
 from app.assets import CHANGED, Artist, AssetMaker, create_checker
 from app.contracts.error_response import ErrorCode
@@ -60,6 +61,7 @@ from app.realtime import publish_to_org
 from app.schemas import (
     MAX_SHOT_SECONDS,
     Box,
+    AlignRequest,
     CutPick,
     DirectorCutCreate,
     DirectorTakeCreate,
@@ -67,6 +69,8 @@ from app.schemas import (
     IndexResult,
     Located,
     LocateDraft,
+    MatchCutAlignment,
+    MatchCutRequest,
     PlanStage,
     PublishCopy,
     PublishCopyDraft,
@@ -282,6 +286,7 @@ class Budgets:
     per_scene_check: int
     per_review: int
     per_publish_copy: int
+    per_alignment: int = 12_000
 
 
 def _google_provider(settings: GeminiSettings) -> GoogleProvider | GoogleCloudProvider:
@@ -513,6 +518,7 @@ class Director:
         http: httpx.AsyncClient,
         analytics: Analytics | None,
         assets: AssetMaker | None = None,
+        aligner: Aligner | None = None,
     ) -> None:
         # The short names the caller built each model from, not `model.model_name`: on
         # Vertex that property is the full resource name (create_google_model), and the
@@ -529,6 +535,8 @@ class Director:
         self._redis = redis
         self._http = http
         self._events = Recorder(analytics)
+        # Match cuts are lined up here unless ALIGNER_URL sends them to Cloud Run.
+        self._aligner = aligner or LocalAligner(create_locator(model))
         self._scout = Agent(
             model,
             output_type=SceneCheck,
@@ -1186,6 +1194,41 @@ class Director:
         credits = await self.picker.stock_credits(org_id, user_id, plan.id)
         return tidy(result.output, cut.title, shots.title, stock_credits=credits)
 
+    # ------------------------------------------------------------------------ match cuts
+
+    async def align_match_cut(
+        self, org_id: UUID, user_id: UUID, body: MatchCutRequest
+    ) -> MatchCutAlignment:
+        """Lines up a match cut between two of the caller's takes (apps/api checked they're
+        theirs and signed the reads): where to cut and how to move the incoming clip
+        (AI_BUDGET_EXCEEDED, UPSTREAM_UNAVAILABLE when Gemini, the takes or the Cloud Run
+        aligner can't be reached)."""
+        reservation = await self._reserve(
+            org_id, user_id, "director-align", self._budgets.per_alignment
+        )
+        if reservation is None:
+            raise AppError("AI_BUDGET_EXCEEDED")
+        used = TokenUsage(inputTokens=0, outputTokens=0)
+        try:
+            result = await self._aligner.align(
+                AlignRequest(
+                    anchor=body.anchor,
+                    outgoing=body.outgoing,
+                    incoming=body.incoming,
+                    maxTokens=reservation.tokens,
+                )
+            )
+            used = result.usage
+        except AppError as error:
+            # What a failed run used, when it got as far as Gemini, still counts.
+            used = TokenUsage(
+                inputTokens=_param(error, "inputTokens"), outputTokens=_param(error, "outputTokens")
+            )
+            raise
+        finally:
+            await settle(reservation, used.inputTokens, used.outputTokens)
+        return result.alignment
+
     async def _download(self, url: str) -> tuple[bytes, TakeContentType]:
         """The take's bytes and type, read from its presigned URL up to MAX_TAKE_BYTES."""
         async with self._http.stream("GET", url, timeout=TAKE_DOWNLOAD_SECONDS) as response:
@@ -1284,6 +1327,11 @@ def _content_type(header: str) -> TakeContentType:
     raise ValueError(f"not a take's type: {kind}")
 
 
+def _param(error: AppError, name: str) -> int:
+    value = error.params.get(name)
+    return value if isinstance(value, int) else 0
+
+
 def _tokens(usage: TokenUsage) -> Target:
     """What a run used, as an activity line's fields."""
     return {"inputTokens": usage.inputTokens, "outputTokens": usage.outputTokens}
@@ -1312,12 +1360,14 @@ def create_director(
             per_scene_check=settings.director_tokens_per_scene_check,
             per_review=settings.director_tokens_per_review,
             per_publish_copy=settings.director_tokens_per_publish_copy,
+            per_alignment=settings.director_tokens_per_alignment,
         ),
         queue,
         redis,
         http,
         create_analytics(settings),
         create_asset_maker(settings, redis),
+        RemoteAligner(settings.aligner_url, http) if settings.aligner_url else None,
     )
 
 

@@ -4,10 +4,11 @@ Loaded lazily (`get_settings()`), so tools that only import the app, like the Op
 export, don't need a full environment. A missing or malformed value stops the service
 at its first use, with a readable message.
 
-Three processes read it: the service and its worker (`Settings`), the Cloud Run indexer
-(`IndexerSettings`, app/indexer.py) and the Cloud Run clipper (`ClipperSettings`,
-app/clipper.py), which have no database, Redis or caller secret of their own. What
-indexing a short needs, in the service or the indexer, is `GeminiSettings`.
+Four processes read it: the service and its worker (`Settings`), the Cloud Run indexer
+(`IndexerSettings`, app/indexer.py), the Cloud Run clipper (`ClipperSettings`,
+app/clipper.py) and the Cloud Run aligner (`AlignerSettings`, app/aligner.py), which have
+no database, Redis or caller secret of their own. What indexing a short needs, in the
+service or the indexer, is `GeminiSettings`; the aligner needs Gemini too.
 """
 
 from functools import lru_cache
@@ -16,7 +17,7 @@ from typing import Literal, Self
 from pydantic import AnyHttpUrl, Field, PostgresDsn, RedisDsn, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.schemas import MAX_PLAN_TOKENS
+from app.schemas import MAX_ALIGN_TOKENS, MAX_PLAN_TOKENS
 
 # A URL's origin and nothing after it: the indexer's URL is also the audience of the ID
 # token the worker calls it with, which Cloud Run compares with the service's URL as is.
@@ -162,10 +163,24 @@ class Settings(GeminiSettings):
     # production: a member's footage is never decoded in this service there, which holds
     # the secrets and the database. Unset elsewhere: they're cut here, the same way.
     clipper_url: str | None = Field(default=None, pattern=ORIGIN_PATTERN, alias="CLIPPER_URL")
+    # Lining up a match cut (app/aligning.py) shows Gemini two frames, small.
+    director_tokens_per_alignment: int = Field(
+        default=12_000, ge=2_000, le=MAX_ALIGN_TOKENS, alias="DIRECTOR_TOKENS_PER_ALIGNMENT"
+    )
+    # The Cloud Run aligner (app/aligner.py), where match cuts are sent to be lined up,
+    # with an ID token for this URL from the metadata server. Unset: they're lined up
+    # here, in this service, the same way.
+    aligner_url: str | None = Field(default=None, pattern=ORIGIN_PATTERN, alias="ALIGNER_URL")
 
     @model_validator(mode="after")
     def _indexer_is_https_in_production(self) -> Self:
         self._refuse_plain_http_indexer(self.indexer_url)
+        if (
+            self.node_env == "production"
+            and self.aligner_url
+            and not self.aligner_url.startswith("https:")
+        ):
+            raise ValueError("ALIGNER_URL must be HTTPS in production")
         return self
 
     @model_validator(mode="after")
@@ -263,6 +278,36 @@ class ClipperSettings(BaseSettings):
         return self
 
 
+class AlignerSettings(GeminiSettings):
+    """The Cloud Run aligner (app/aligner.py): no database, Redis or storage of its own;
+    the takes come by presigned reads, and the service counts what it used."""
+
+    # The model that locates the anchor: the service's DIRECTOR_MODEL.
+    director_model: str = Field(min_length=1, alias="DIRECTOR_MODEL")
+    # Its own URL (the service's ALIGNER_URL): the only audience its callers' ID tokens
+    # may name.
+    aligner_url: str = Field(pattern=ORIGIN_PATTERN, alias="ALIGNER_URL")
+    # The one service account allowed to call it (the VM's, which the service runs as).
+    aligner_invoker: str = Field(pattern=r"^[^@\s]+@[^@\s]+$", alias="ALIGNER_INVOKER")
+    # Where Google publishes the keys its ID tokens are signed with; only tests point it
+    # elsewhere, which production refuses.
+    google_certs_url: AnyHttpUrl = Field(
+        default=AnyHttpUrl(GOOGLE_CERTS_URL), alias="GOOGLE_CERTS_URL"
+    )
+
+    @model_validator(mode="after")
+    def _aligner_reaches_gemini_safely(self) -> Self:
+        if self.google_vertex and not self.google_cloud_project:
+            raise ValueError("GOOGLE_VERTEX=true needs GOOGLE_CLOUD_PROJECT")
+        if not self.google_vertex and not self.google_api_key:
+            raise ValueError("the aligner needs GOOGLE_API_KEY or GOOGLE_VERTEX=true")
+        if self.node_env == "production" and (
+            not self.aligner_url.startswith("https:") or self.google_certs_url.scheme != "https"
+        ):
+            raise ValueError("ALIGNER_URL and GOOGLE_CERTS_URL must be HTTPS in production")
+        return self
+
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()  # pyright: ignore[reportCallIssue]  # values come from the environment
@@ -276,3 +321,8 @@ def get_indexer_settings() -> IndexerSettings:
 @lru_cache
 def get_clipper_settings() -> ClipperSettings:
     return ClipperSettings()  # pyright: ignore[reportCallIssue]  # values come from the environment
+
+
+@lru_cache
+def get_aligner_settings() -> AlignerSettings:
+    return AlignerSettings()  # pyright: ignore[reportCallIssue]  # values come from the environment

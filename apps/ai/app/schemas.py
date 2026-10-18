@@ -965,6 +965,96 @@ class AssetChoiceCreate(BaseModel):
     candidateId: UUID | None = Field(strict=False, description="None goes back to the default.")
 
 
+# ------------------------------------------------------------------------- match cuts
+# A match cut keeps one thing (the anchor: "the watch on the left wrist") on the same spot
+# while the world changes between two clips (app/aligning.py). apps/api sends presigned
+# reads of the two takes and where the cut falls in each; the answer moves the cut to
+# where the anchor's motion matches and says how to transform the incoming clip so the
+# anchor lands where it was. Positions are in the finished video's 720x1280 frame.
+MAX_ANCHOR = 120
+MAX_TAKE_MS = MAX_SHOT_SECONDS * 1000
+# A 360x640 JPEG of a boundary frame, base64: 20-60 kB.
+MAX_ALIGN_FRAME_BASE64 = 300_000
+# The most one alignment may reserve (DIRECTOR_TOKENS_PER_ALIGNMENT's ceiling).
+MAX_ALIGN_TOKENS = 100_000
+
+
+class MatchCutClip(BaseModel):
+    model_config = REQUEST
+
+    url: str = Field(
+        pattern=r"^https?://", max_length=4_000, description="A presigned read of the take."
+    )
+    atMs: int = Field(
+        ge=0,
+        le=MAX_TAKE_MS,
+        description="Where the cut falls in the take: the outgoing clip's end, the incoming's"
+        " start.",
+    )
+
+
+class MatchCutRequest(BaseModel):
+    model_config = REQUEST
+
+    anchor: str = Field(min_length=1, max_length=MAX_ANCHOR, description="What lines up.")
+    outgoing: MatchCutClip
+    incoming: MatchCutClip
+
+
+class AlignRequest(MatchCutRequest):
+    """What the service sends the Cloud Run aligner (app/aligner.py): the cut, and the
+    tokens it reserved for the run, which the run is capped at."""
+
+    maxTokens: int = Field(ge=1, le=MAX_ALIGN_TOKENS)
+
+
+class AnchorPoint(BaseModel):
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+
+
+class MatchCutTransform(BaseModel):
+    """How to draw the incoming clip: scaled by `scale` and turned `rotation` degrees
+    clockwise about the frame's centre, then moved `x`, `y` pixels (of the 720x1280
+    frame). Identity is scale 1 and the rest 0."""
+
+    x: float = Field(ge=-720, le=720)
+    y: float = Field(ge=-1280, le=1280)
+    scale: float = Field(ge=0.25, le=4)
+    rotation: float = Field(ge=-180, le=180)
+
+
+class MatchCutAlignment(BaseModel):
+    """`aligned`: the anchor was found in both clips and the transform lines it up;
+    `not-found`: Gemini couldn't see it in one of them, and the cut stays a plain cut
+    (identity, the cut where it was asked)."""
+
+    status: Literal["aligned", "not-found"]
+    outgoingEndMs: int = Field(ge=0, le=MAX_TAKE_MS)
+    incomingStartMs: int = Field(ge=0, le=MAX_TAKE_MS)
+    transform: MatchCutTransform
+    offsetBeforePx: float = Field(ge=0, description="How far the anchor jumped unaligned.")
+    offsetPx: float = Field(ge=0, description="How far it still moves at the cut, aligned.")
+    scaleDiff: float = Field(ge=0, description="The anchor's size change left, a fraction.")
+    rotationDiff: float = Field(ge=0, description="Its turn left at the cut, in degrees.")
+    cropPercent: float = Field(ge=0, le=100, description="How much of the frame's side is lost.")
+    withinTolerance: bool
+    anchor: AnchorPoint | None = Field(description="The anchor's centre at the cut.")
+    outgoingFrame: str | None = Field(
+        max_length=MAX_ALIGN_FRAME_BASE64, description="The last frame before the cut, JPEG."
+    )
+    incomingFrame: str | None = Field(
+        max_length=MAX_ALIGN_FRAME_BASE64, description="The first after it, aligned, JPEG."
+    )
+
+
+class AlignResult(BaseModel):
+    """The Cloud Run aligner's answer: the alignment and what the run used."""
+
+    alignment: MatchCutAlignment
+    usage: TokenUsage
+
+
 # ------------------------------------------------------------------------- publishing
 # The YouTube post for a cut: Gemini drafts it (PublishCopyDraft, the model's output
 # type) and app/publish_copy.py tidies the draft into PublishCopy, which is what apps/api's

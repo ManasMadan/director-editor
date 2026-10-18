@@ -32,6 +32,7 @@ type Feature = Literal[
     "director-speech",
     "director-publish",
     "director-asset",
+    "director-align",
 ]
 
 

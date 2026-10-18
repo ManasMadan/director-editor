@@ -52,6 +52,8 @@ from app.schemas import (
     HealthResponse,
     Located,
     LocateRequest,
+    MatchCutAlignment,
+    MatchCutRequest,
     PublishCopy,
     PublishCopyRequest,
     SceneCheck,
@@ -439,3 +441,14 @@ async def choose_director_asset(
     """The image the caller's video uses in the slot (none: its default)."""
     await director.picker.choose(caller.org_id, caller.user_id, video_id, asset_id, body)
     return Response(status_code=204)
+
+
+@app.post("/v1/director/match-cuts", operation_id="alignDirectorMatchCut")
+async def align_director_match_cut(
+    body: MatchCutRequest, caller: CallerDep, director: DirectorDep
+) -> MatchCutAlignment:
+    """Lines up a match cut between two takes: Gemini locates the anchor in the frames
+    either side of the cut, OpenCV refines it, and the answer says where to cut and how
+    to move the incoming clip so the anchor stays put (status `not-found` when it can't
+    be seen in both)."""
+    return await director.align_match_cut(caller.org_id, caller.user_id, body)
