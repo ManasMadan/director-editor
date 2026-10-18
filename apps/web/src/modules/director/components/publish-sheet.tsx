@@ -6,6 +6,7 @@ import { usePublishCopyMutation } from "@repo/client/api/publish/copy";
 import { usePublishMutation } from "@repo/client/api/publish/upload";
 import {
   type DirectorCut,
+  fitsYouTube,
   PUBLISH_TITLE_MAX_LENGTH,
   type PublishCopy,
   type PublishVisibility,
@@ -38,23 +39,35 @@ import { hashtagsOf, hashtagsText, youtubeShortUrl } from "../lib/publish";
 /** What the member settled on: the post, and who may watch it. */
 type Draft = PublishCopy & { visibility: PublishVisibility };
 
-const draftSchema = publishCopySchema.extend({ visibility: z.enum(publishVisibilities) });
+// What the API takes, checked here first: the same byte limit on the description too.
+const draftSchema = publishCopySchema
+  .extend({ visibility: z.enum(publishVisibilities) })
+  .refine(fitsYouTube);
 const stashKey = (cut: DirectorCut) => `director.publish.${cut.id}`;
 
 /**
  * Keeps the draft while the browser goes to Google to allow uploads to YouTube, so the
- * publish picks up where it was when it comes back (`?publish=<cut id>`).
+ * publish picks up where it was when it comes back (`?publish=<cut id>`). Without
+ * session storage (blocked, or full) the member writes it again: nothing else changes.
  */
 function stash(cut: DirectorCut, draft: Draft) {
-  sessionStorage.setItem(stashKey(cut), JSON.stringify(draft));
+  try {
+    sessionStorage.setItem(stashKey(cut), JSON.stringify(draft));
+  } catch {
+    // Nowhere to keep it: the sheet opens with Director's post again on the way back.
+  }
 }
 
-/** The draft kept before going to Google, taken (it's used once). */
+/** The draft kept before going to Google, taken (it's used once); none when unreadable. */
 function unstash(cut: DirectorCut): Draft | null {
-  const kept = sessionStorage.getItem(stashKey(cut));
-  sessionStorage.removeItem(stashKey(cut));
-  const parsed = draftSchema.safeParse(JSON.parse(kept ?? "null"));
-  return parsed.success ? parsed.data : null;
+  try {
+    const kept = sessionStorage.getItem(stashKey(cut));
+    sessionStorage.removeItem(stashKey(cut));
+    const parsed = draftSchema.safeParse(JSON.parse(kept ?? "null"));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The cut's video, to watch before publishing it; nothing while its link can't be had. */
@@ -246,10 +259,21 @@ function useDraft(cut: DirectorCut, resumed: Draft | null) {
   return copy.isError ? { draft: fallback, failed: true } : { draft: null, failed: false };
 }
 
-function PublishBody({ cut, resumed }: { cut: DirectorCut; resumed: Draft | null }) {
+function PublishBody({
+  cut,
+  resumed: kept,
+  onResumed,
+}: {
+  cut: DirectorCut;
+  resumed: Draft | null;
+  /** The kept draft has been sent: the next time the sheet opens, it starts afresh. */
+  onResumed: () => void;
+}) {
   const t = useTranslations("director.publish");
   const errorMessage = useApiErrorMessage();
   const publish = usePublishMutation();
+  // As the sheet opened: the button forgets the kept draft once it's sent.
+  const [resumed] = useState(kept);
   const { draft, failed } = useDraft(cut, resumed);
   const [asked, setAsked] = useState<PublishVisibility>("unlisted");
   const send = (chosen: Draft, { again }: { again: boolean }) => {
@@ -274,6 +298,7 @@ function PublishBody({ cut, resumed }: { cut: DirectorCut; resumed: Draft | null
   useEffect(() => {
     if (resumed && !sentAgain.current) {
       sentAgain.current = true;
+      onResumed();
       send(resumed, { again: true });
     }
   });
@@ -300,16 +325,9 @@ function PublishBody({ cut, resumed }: { cut: DirectorCut; resumed: Draft | null
   );
 }
 
-/**
- * Publish, for a cut in My media: a sheet with the video and the post Director wrote for
- * it, to edit and send to the member's YouTube channel. A published cut links to YouTube
- * instead. Back from Google with `?publish=<this cut>`, it opens again and carries on.
- */
-export function PublishButton({ cut }: { cut: DirectorCut }) {
+/** What opens the sheet, by where the cut's publishing stands. */
+function Trigger({ cut, onOpen }: { cut: DirectorCut; onOpen: () => void }) {
   const t = useTranslations("director.publish");
-  const returning = useSearchParams().get("publish") === cut.id;
-  const [resumed] = useState(() => (returning ? unstash(cut) : null));
-  const [open, setOpen] = useState(returning);
   const { status, youtubeVideoId } = cut.publish;
   if (status === "published") {
     return youtubeVideoId ? <WatchLink youtubeVideoId={youtubeVideoId} size="sm" /> : null;
@@ -319,10 +337,26 @@ export function PublishButton({ cut }: { cut: DirectorCut }) {
     return null;
   }
   return (
+    <Button size="sm" onClick={onOpen}>
+      {t("open")}
+    </Button>
+  );
+}
+
+/**
+ * Publish, for a cut in My media: a sheet with the video and the post Director wrote for
+ * it, to edit and send to the member's YouTube channel. A published cut links to YouTube
+ * instead. Back from Google with `?publish=<this cut>`, it opens again and carries on.
+ * The sheet stays open, saying how it went, while My media catches up with the cut.
+ */
+export function PublishButton({ cut }: { cut: DirectorCut }) {
+  const t = useTranslations("director.publish");
+  const returning = useSearchParams().get("publish") === cut.id;
+  const [resumed, setResumed] = useState(() => (returning ? unstash(cut) : null));
+  const [open, setOpen] = useState(returning);
+  return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>
-        {t("open")}
-      </Button>
+      <Trigger cut={cut} onOpen={() => setOpen(true)} />
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[calc(100dvh-2rem)] gap-5 overflow-y-auto sm:max-w-md">
           <DialogHeader>
@@ -330,7 +364,9 @@ export function PublishButton({ cut }: { cut: DirectorCut }) {
             <DialogDescription>{t("description")}</DialogDescription>
           </DialogHeader>
           <Preview cut={cut} />
-          {open ? <PublishBody cut={cut} resumed={resumed} /> : null}
+          {open ? (
+            <PublishBody cut={cut} resumed={resumed} onResumed={() => setResumed(null)} />
+          ) : null}
         </DialogContent>
       </Dialog>
     </>

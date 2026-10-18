@@ -73,7 +73,7 @@ async function start(): Promise<Services> {
 
   await prepareTemplate();
   const database = await createTestDatabase();
-  const ai = await startFakeAi();
+  const ai = await startFakeAi(database.urlFor("postgres"));
   const google = await startFakeGoogle({ apiKey: "web-tests-youtube-key" });
 
   const logs = join(ROOT, "logs");

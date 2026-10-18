@@ -11,8 +11,9 @@ import {
   fileIdSchema,
   videoIdSchema,
 } from "@repo/contracts/ids";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
+import { MediaPage } from "@/modules/director";
 import { PublishButton } from "@/modules/director/components/publish-sheet";
 import { cleanup, renderPage } from "../render";
 import { currentSession, signUp } from "../users";
@@ -95,6 +96,46 @@ const open = async (cut: DirectorCut, url = "/media") => {
 const publishButton = () => page.getByRole("button", { name: "Publish to YouTube" });
 
 describe("publishing a cut", { tags: ["files"] }, () => {
+  // Each test may publish: the day's allowance starts afresh for each.
+  beforeEach(() => commands.resetPublishAllowance());
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("keeps saying how it went while My media catches up with the cut", async () => {
+    const { cut, user } = await aCut();
+    await commands.linkYouTube(user.id, user.email);
+    // The cut in My media's list too, as the AI service lists the member's cuts.
+    await commands.fakeDirector(cut.videoId, {
+      cuts: [
+        {
+          ...cut,
+          picks: [],
+          publishStatus: "none",
+          youtubeVideoId: null,
+          visibility: null,
+          createdAt: cut.createdAt.toISOString(),
+          userId: user.id,
+        },
+      ],
+    });
+    await renderPage(<MediaPage />, { url: "/media" });
+    await userEvent.click(page.getByRole("button", { name: "Publish", exact: true }));
+    await expect.element(page.getByLabelText("Title")).toHaveValue(COPY.title);
+    await userEvent.click(page.getByRole("button", { name: "Public" }));
+    const listed = await commands.answeredRequests("director/media");
+    await userEvent.click(publishButton());
+    const published = page.getByText("It's on YouTube, private: only you can watch it.");
+    await expect.element(published).toBeVisible();
+    // My media read the list again, the cut published in it now: the sheet still says so.
+    await expect.poll(() => commands.answeredRequests("director/media")).toBeGreaterThan(listed);
+    await expect.element(page.getByText("Private on YouTube")).toBeInTheDocument();
+    await expect.element(published).toBeVisible();
+    await expect
+      .element(page.getByText("You asked for public, but YouTube keeps", { exact: false }))
+      .toBeVisible();
+  });
+
   it("publishes Gemini's post as the member edited it, and says YouTube kept it private", async () => {
     const { cut, user } = await aCut();
     await commands.linkYouTube(user.id, user.email);
@@ -160,6 +201,47 @@ describe("publishing a cut", { tags: ["files"] }, () => {
     expect(await commands.hardNavigations()).toHaveLength(1);
     expect(sessionStorage.getItem(`director.publish.${cut.id}`)).toBeNull();
     await expect.element(page.getByLabelText("Title")).toHaveValue("Kept for later");
+
+    // Closed and opened again: Director's post, and nothing sent until the member says so.
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(page.getByRole("button", { name: "Publish", exact: true }));
+    await expect.element(page.getByLabelText("Title")).toHaveValue(COPY.title);
+    await expect
+      .element(page.getByText("Director needs your permission", { exact: false }))
+      .not.toBeInTheDocument();
+  });
+
+  it("still asks Google when there's nowhere to keep the draft", async () => {
+    const { cut } = await aCut();
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("full", "QuotaExceededError");
+    });
+    await open(cut);
+    await expect.element(page.getByLabelText("Title")).toHaveValue(COPY.title);
+    await userEvent.click(publishButton());
+    await expect
+      .poll(async () => (await commands.hardNavigations())[0])
+      .toMatch(/^https:\/\/accounts\.google\.com\//);
+  });
+
+  it("opens with Director's post when what was kept can't be read", async () => {
+    const { cut } = await aCut();
+    sessionStorage.setItem(`director.publish.${cut.id}`, "{not json");
+    await open(cut, `/media?publish=${cut.id}`);
+    await expect.element(page.getByLabelText("Title")).toHaveValue(COPY.title);
+    expect(sessionStorage.getItem(`director.publish.${cut.id}`)).toBeNull();
+  });
+
+  it("checks a long post against YouTube's limit in bytes, as the API will", async () => {
+    const { cut } = await aCut();
+    await open(cut);
+    await expect.element(page.getByLabelText("Title")).toHaveValue(COPY.title);
+    // Within the length limit, but three bytes a character.
+    await userEvent.fill(page.getByLabelText("Description"), "あ".repeat(1_700));
+    await userEvent.click(publishButton());
+    await expect
+      .element(page.getByText("YouTube won't take this as it is.", { exact: false }))
+      .toBeVisible();
   });
 
   it("lets the member write the post when Gemini can't, and checks it first", async () => {

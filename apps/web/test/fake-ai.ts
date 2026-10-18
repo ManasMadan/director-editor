@@ -9,11 +9,14 @@
  * indexing a short adds to it as the real service does: once per member, a short already
  * there answered with its plan.
  * A cut's YouTube post, and the cut as publishing reads it, are what a test sets
- * for it (`PUT /__fake/cuts/<cutId>`, the `fakeCut` command).
+ * for it (`PUT /__fake/cuts/<cutId>`, the `fakeCut` command). Where publishing got is
+ * what the API wrote on the cut's row in the tests' database, read back as apps/ai reads
+ * it, so the cut lists change once a publish lands.
  */
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
+import pg from "pg";
 
 async function body(request: IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = [];
@@ -59,7 +62,30 @@ function callerOf(request: IncomingMessage): string {
   return claims.sub ?? "";
 }
 
-export async function startFakeAi() {
+/** A cut with where its publishing got, from the database, when it has a row there. */
+async function withPublishing(database: pg.Pool, cuts: unknown): Promise<unknown> {
+  if (!Array.isArray(cuts)) {
+    const [one] = (await withPublishing(database, [cuts])) as unknown[];
+    return one;
+  }
+  const listed = cuts as Record<string, unknown>[];
+  const { rows } = await database.query<{
+    id: string;
+    publishStatus: string;
+    youtubeVideoId: string | null;
+    visibility: string | null;
+  }>(
+    `SELECT id::text, publish_status AS "publishStatus", youtube_video_id AS "youtubeVideoId",
+            visibility
+       FROM ai.director_cut WHERE id::text = ANY($1)`,
+    [listed.map((cut) => String(cut.id))],
+  );
+  const stored = new Map(rows.map(({ id, ...publishing }) => [id, publishing]));
+  return listed.map((cut) => ({ ...cut, ...stored.get(String(cut.id)) }));
+}
+
+export async function startFakeAi(databaseUrl: string) {
+  const database = new pg.Pool({ connectionString: databaseUrl, max: 2 });
   const shorts = new Map<string, DirectorShort>();
   const short = (videoId: string) => {
     const found = shorts.get(videoId) ?? { takes: [], cuts: [] };
@@ -96,7 +122,11 @@ export async function startFakeAi() {
       cutRoute(route, input, callerOf(request), shorts, short) ??
       publishRoute(route, input, publishable);
     if (director) {
-      return reply(director.status, director.body);
+      const read = director.status === 200 && /^GET \/v1\/director\/cuts/.test(route);
+      return reply(
+        director.status,
+        read ? await withPublishing(database, director.body) : director.body,
+      );
     }
     fail(404, "NOT_FOUND");
   });
@@ -104,7 +134,10 @@ export async function startFakeAi() {
   return {
     url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
     secret: `web-tests-ai-${randomUUID()}`,
-    close: () => new Promise((resolve) => server.close(resolve)),
+    close: async () => {
+      await new Promise((resolve) => server.close(resolve));
+      await database.end();
+    },
   };
 }
 

@@ -536,8 +536,25 @@ const storeFile: BrowserCommand<[key: string, base64: string, contentType: strin
   await storage?.write(key, Buffer.from(base64, "base64"), contentType);
 };
 
+/**
+ * Starts the day's allowance of YouTube uploads afresh (the API's counter in the web
+ * tests' Valkey database, which outlives a run): every test here may publish.
+ */
+const resetPublishAllowance: BrowserCommand<[]> = async () => {
+  const redis = new Redis(REDIS_URL);
+  try {
+    const keys = await redis.keys("publish:uploads:*");
+    if (keys.length) {
+      await redis.del(...keys);
+    }
+  } finally {
+    redis.disconnect();
+  }
+};
+
 export const commands = {
   answeredRequests,
+  resetPublishAllowance,
   fakeCut,
   linkYouTube,
   storeFile,
@@ -567,6 +584,7 @@ declare module "vitest/browser" {
     answeredRequests(part: string): Promise<number>;
     checkUpload(fileId: string, rejectReason?: string): Promise<void>;
     fakeCut(cutId: string, state: { cut: object; copy?: object }): Promise<void>;
+    resetPublishAllowance(): Promise<void>;
     linkYouTube(userId: string, email: string): Promise<void>;
     storeFile(key: string, base64: string, contentType: string): Promise<void>;
     fakeDirector(
