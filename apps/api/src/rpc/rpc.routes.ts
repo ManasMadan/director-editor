@@ -21,13 +21,17 @@ import { OpenAPIHandler } from "@orpc/openapi/fastify";
 import { RPCHandler } from "@orpc/server/fastify";
 import { runWithContext, sendError } from "@repo/nest-common";
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { RecordActivity } from "../activity";
 import { contextFor, toHeaders } from "../http-context";
 import { openApiDocument } from "./openapi";
+import { procedureActivity } from "./procedure-activity";
 import { type LogError, toContractError } from "./procedures";
 import type { AppRouter } from "./router";
 
 export interface MountOptions {
   logError: LogError;
+  /** Writes each call's activity line (procedure-activity.ts). */
+  recordActivity: RecordActivity;
   publicUrl: string;
   release: string;
   exposeDocs: boolean;
@@ -97,13 +101,15 @@ function mountDocs(fastify: FastifyInstance) {
 
 export async function mountRpc(fastify: FastifyInstance, router: AppRouter, options: MountOptions) {
   const mapErrors = contractErrors(options);
+  // Outside the error mapping, so a failed call is logged with the code its client gets.
+  const logCalls = procedureActivity(options.recordActivity);
   const rpc = new RPCHandler(router, {
-    clientInterceptors: [mapErrors],
+    clientInterceptors: [logCalls, mapErrors],
     // Keeps idle event streams alive through proxies (Cloudflare closes idle ones at 100s).
     eventIteratorKeepAliveInterval: 20_000,
   });
   const rest = new OpenAPIHandler(router, {
-    clientInterceptors: [mapErrors],
+    clientInterceptors: [logCalls, mapErrors],
     eventIteratorKeepAliveInterval: 20_000,
   });
 

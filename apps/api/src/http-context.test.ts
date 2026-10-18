@@ -1,9 +1,17 @@
+import type { IncomingMessage } from "node:http";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { describe, expect, it } from "vitest";
-import { contextFor, fromWebResponse, toHeaders, toWebRequest } from "./http-context";
+import {
+  actorContext,
+  contextFor,
+  fromWebResponse,
+  toHeaders,
+  toWebRequest,
+  upgradeContext,
+} from "./http-context";
 
 const request = (headers: FastifyRequest["headers"]) =>
-  ({ id: "req-1", headers }) as FastifyRequest;
+  ({ id: "req-1", ip: "203.0.113.9", headers }) as FastifyRequest;
 
 describe("a request's context", () => {
   it("takes the language from x-locale, then Accept-Language, else English", () => {
@@ -11,14 +19,53 @@ describe("a request's context", () => {
       requestId: "req-1",
       locale: "en",
       clientVersion: undefined,
+      ip: "203.0.113.9",
+      userAgent: undefined,
     });
     expect(contextFor(request({ "accept-language": "en-GB", "x-app-version": "2.0.0" }))).toEqual({
       requestId: "req-1",
       locale: "en",
       clientVersion: "2.0.0",
+      ip: "203.0.113.9",
+      userAgent: undefined,
     });
     // A language the app doesn't have.
     expect(contextFor(request({ "x-locale": "es", "accept-language": "es-MX" })).locale).toBe("en");
+  });
+
+  it("knows where the request came from: the resolved address and the user agent", () => {
+    expect(contextFor(request({ "user-agent": "Mozilla/5.0" }))).toMatchObject({
+      ip: "203.0.113.9",
+      userAgent: "Mozilla/5.0",
+    });
+  });
+});
+
+describe("a WebSocket upgrade's context", () => {
+  it("has its own request id, the address a trusted proxy forwarded, and the user agent", () => {
+    const upgrade = {
+      headers: { "x-forwarded-for": "198.51.100.7", "user-agent": "Mozilla/5.0" },
+      socket: { remoteAddress: "127.0.0.1" },
+      connection: { remoteAddress: "127.0.0.1" },
+    } as unknown as IncomingMessage;
+    expect(upgradeContext(["loopback"])(upgrade)).toEqual({
+      requestId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      ip: "198.51.100.7",
+      userAgent: "Mozilla/5.0",
+    });
+  });
+});
+
+describe("a session's actor", () => {
+  it("is the user's id, email and name, and whether it's the demo account", () => {
+    const user = { id: "u-1", email: "ada@example.com", name: "Ada" };
+    expect(actorContext({ ...user, demo: true })).toEqual({
+      userId: "u-1",
+      email: "ada@example.com",
+      name: "Ada",
+      demo: true,
+    });
+    expect(actorContext({ ...user, demo: null }).demo).toBe(false);
   });
 });
 

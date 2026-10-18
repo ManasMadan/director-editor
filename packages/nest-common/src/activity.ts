@@ -23,6 +23,8 @@ import {
 } from "@repo/logger/activity";
 import { currentContext } from "./context";
 
+export type { ActivityOutcome, ActivityTarget };
+
 export interface Activity<Name extends string = string> {
   activity: Name;
   /** "ok" unless said otherwise. */

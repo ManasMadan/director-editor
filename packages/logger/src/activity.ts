@@ -30,7 +30,7 @@ export type ActivityActor = z.infer<typeof activityActor>;
  * so Grafana reads each as `target_<key>`. Never message content, a URL with a
  * signature, or anything a person typed.
  */
-export const activityTarget = z.record(
+const activityTarget = z.record(
   z.string(),
   z.union([z.string(), z.number(), z.boolean(), z.null()]),
 );

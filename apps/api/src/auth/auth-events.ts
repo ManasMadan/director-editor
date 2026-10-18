@@ -31,7 +31,9 @@ export function sessionMethod(path: string | undefined): SessionMethod {
   if (path.startsWith("/two-factor/")) {
     return "two-factor";
   }
-  if (path.startsWith("/email-otp/")) {
+  // A code sent by email signs in at /sign-in/email-otp, and verifies an address (and
+  // signs in) under /email-otp/.
+  if (path === "/sign-in/email-otp" || path.startsWith("/email-otp/")) {
     return "email-code";
   }
   if (path.startsWith("/admin/impersonate")) {

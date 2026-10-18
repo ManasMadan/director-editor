@@ -33,5 +33,6 @@ export const auth = createAuth({
   redis,
   notifications: inert.notifications,
   memberships: createMemberships(db, redis),
+  activity: () => undefined,
   database: memoryAdapter({}),
 });

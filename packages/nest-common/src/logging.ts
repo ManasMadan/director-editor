@@ -37,6 +37,15 @@ export function createRequestIdGenerator(trustedProxies: string[]) {
   };
 }
 
+/**
+ * The client's address for a request Fastify never routes (a WebSocket upgrade), resolved
+ * as Fastify resolves `request.ip`: X-Forwarded-For counts only from a trusted proxy.
+ */
+export function createClientAddress(trustedProxies: string[]) {
+  const isTrusted = proxyAddr.compile(trustedProxies);
+  return (req: IncomingMessage): string => proxyAddr(req, isTrusted);
+}
+
 export const LoggerModule = {
   forRoot(config: LoggerConfig): DynamicModule {
     return PinoLoggerModule.forRoot({

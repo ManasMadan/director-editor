@@ -8,6 +8,7 @@ describe("the API reference page", () => {
     const fastify = Fastify();
     await mountRpc(fastify, {} as AppRouter, {
       logError: () => undefined,
+      recordActivity: () => undefined,
       publicUrl: "https://api.example.com",
       release: "1.0.0",
       exposeDocs: false,

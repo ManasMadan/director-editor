@@ -9,8 +9,19 @@
 
 import { rawBodies, runWithContext, updateContext } from "@repo/nest-common";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { contextFor, fromWebResponse, toHeaders, toWebRequest } from "../http-context";
+import type { RecordActivity } from "../activity";
+import {
+  actorContext,
+  contextFor,
+  fromWebResponse,
+  toHeaders,
+  toWebRequest,
+} from "../http-context";
 import type { Auth } from "./auth";
+import { failedAuthActivity } from "./auth-activity";
+
+/** Where better-auth is served; its endpoints are named without it. */
+const AUTH_PREFIX = "/api/auth";
 
 /**
  * better-auth's error, in the envelope every other error has (status, request id,
@@ -40,7 +51,23 @@ export function authErrorBody(body: Buffer, status: number, requestId: string) {
   };
 }
 
-export function mountAuth(fastify: FastifyInstance, auth: Auth, baseUrl: string) {
+/** Who is signed in, when the request carries a session: on the context, for its logs. */
+async function knowCaller(auth: Auth, request: FastifyRequest, headers: Headers) {
+  if (!request.headers.cookie?.includes("session_token")) {
+    return;
+  }
+  const session = await auth.api.getSession({ headers });
+  if (session) {
+    updateContext(actorContext(session.user));
+  }
+}
+
+export function mountAuth(
+  fastify: FastifyInstance,
+  auth: Auth,
+  baseUrl: string,
+  activity: RecordActivity,
+) {
   const handle = (request: FastifyRequest, reply: FastifyReply) =>
     // Same request context as the rest of the API: logs, queued emails and audit
     // events from auth flows carry the request id and the acting user.
@@ -51,18 +78,24 @@ export function mountAuth(fastify: FastifyInstance, auth: Auth, baseUrl: string)
       // which any client can write. Replace it with the address Fastify resolved through
       // TRUSTED_PROXIES, so only a trusted gateway can vouch for the client IP.
       headers.set("x-forwarded-for", request.ip);
-      if (request.headers.cookie?.includes("session_token")) {
-        const session = await auth.api.getSession({ headers });
-        if (session) {
-          updateContext({ userId: session.user.id });
-        }
-      }
+      await knowCaller(auth, request, headers);
       const response = await auth.handler(toWebRequest(request, url, headers));
       const answer = await fromWebResponse(reply, response);
       const error =
         answer && response.status >= 400
           ? authErrorBody(answer, response.status, request.id)
           : null;
+      // A sign-in that failed writes nothing better-auth's hooks would see: logged here.
+      const failed = failedAuthActivity({
+        path: url.pathname.slice(AUTH_PREFIX.length),
+        status: response.status,
+        code: error?.code,
+        location: response.headers.get("location"),
+        body: request.body,
+      });
+      if (failed) {
+        activity(failed);
+      }
       if (error) {
         reply.removeHeader("content-length");
         return reply.type("application/json").send(error);
@@ -72,7 +105,7 @@ export function mountAuth(fastify: FastifyInstance, auth: Auth, baseUrl: string)
 
   fastify.register((scope, _options, done) => {
     rawBodies(scope);
-    scope.route({ method: ["GET", "POST"], url: "/api/auth/*", handler: handle });
+    scope.route({ method: ["GET", "POST"], url: `${AUTH_PREFIX}/*`, handler: handle });
     done();
   });
 }

@@ -1,13 +1,18 @@
 /**
  * What every HTTP entry point (oRPC, REST, better-auth) knows about a request before any
- * handler runs: its id, the client's language and app version. Handlers run inside
- * `runWithContext(contextFor(request), ...)`; the user and organization are added once
- * the session is resolved.
+ * handler runs: its id, the client's language and app version, and where it came from
+ * (the address Fastify resolved through TRUSTED_PROXIES, and the user agent, for activity
+ * lines). Handlers run inside `runWithContext(contextFor(request), ...)`; the user and
+ * organization are added once the session is resolved.
  */
 
-import type { IncomingHttpHeaders } from "node:http";
+import type { IncomingHttpHeaders, IncomingMessage } from "node:http";
 import { type Locale, negotiateLocale } from "@repo/i18n";
-import type { RequestContext } from "@repo/nest-common";
+import {
+  createClientAddress,
+  createRequestIdGenerator,
+  type RequestContext,
+} from "@repo/nest-common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 export function contextFor(request: FastifyRequest): RequestContext & { locale: Locale } {
@@ -19,7 +24,27 @@ export function contextFor(request: FastifyRequest): RequestContext & { locale: 
     requestId: request.id,
     locale: negotiateLocale(header("x-locale") ?? header("accept-language")),
     clientVersion: header("x-app-version"),
+    ip: request.ip,
+    userAgent: header("user-agent"),
   };
+}
+
+/**
+ * The same for a WebSocket upgrade (the live call), which Fastify never routes: its id and
+ * address resolved as Fastify resolves them (a trusted proxy's, else its own).
+ */
+export function upgradeContext(trustedProxies: string[]) {
+  const requestId = createRequestIdGenerator(trustedProxies);
+  const address = createClientAddress(trustedProxies);
+  return (request: IncomingMessage): RequestContext => {
+    const userAgent = request.headers["user-agent"];
+    return { requestId: requestId(request), ip: address(request), userAgent };
+  };
+}
+
+/** Who a resolved session's user is, for the request context (and its activity lines). */
+export function actorContext(user: { id: string; email: string; name: string; demo?: unknown }) {
+  return { userId: user.id, email: user.email, name: user.name, demo: user.demo === true };
 }
 
 /**
