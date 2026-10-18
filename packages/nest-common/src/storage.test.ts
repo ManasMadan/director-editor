@@ -104,6 +104,8 @@ class FakeGcsClient implements GcsClientLike {
   /** The generation each download asked for (undefined: whatever is live). */
   readonly downloads: (string | number | undefined)[] = [];
   metadata: { size?: string | number; contentType?: string; generation?: string | number } = {};
+  /** What deleting an object answers: GCS's error for one already gone, or another. */
+  deleteFails: Error | null = null;
 
   bucket(name: string) {
     expect(name).toBe("director-media");
@@ -128,9 +130,19 @@ class FakeGcsClient implements GcsClientLike {
       },
       save: async () => undefined,
       rename: async () => undefined,
-      delete: async () => undefined,
+      delete: async () => {
+        if (this.deleteFails) {
+          throw this.deleteFails;
+        }
+        return undefined;
+      },
     };
   }
+}
+
+/** An error as `@google-cloud/storage` throws it: an ApiError carrying the HTTP status. */
+function gcsError(code: number, message: string) {
+  return Object.assign(new Error(message), { code });
 }
 
 describe("GcsStorage", () => {
@@ -258,6 +270,15 @@ describe("GcsStorage", () => {
     await expect(storage.write("files/a", Buffer.from("x"), "image/jpeg")).resolves.toBeUndefined();
     await expect(storage.move("quarantine/a", "files/a")).resolves.toBeUndefined();
     await expect(storage.delete("files/a")).resolves.toBeUndefined();
+  });
+
+  it("deletes an object that's already gone as done, and fails on anything else", async () => {
+    const client = new FakeGcsClient();
+    const storage = new GcsStorage({ bucket: "director-media", client });
+    client.deleteFails = gcsError(404, "No such object: director-media/files/a");
+    await expect(storage.delete("files/a")).resolves.toBeUndefined();
+    client.deleteFails = gcsError(403, "Forbidden");
+    await expect(storage.delete("files/a")).rejects.toThrow("Forbidden");
   });
 
   it("gives a direct gs:// reference another Google service can read with its own credentials", () => {

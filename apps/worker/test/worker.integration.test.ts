@@ -15,6 +15,8 @@ import {
   createRedis,
   DATABASE,
   type Database,
+  type GcsFile,
+  GcsStorage,
   type PinoLogger,
   S3Storage,
 } from "@repo/nest-common";
@@ -24,7 +26,7 @@ import { type Clamd, clamdFor } from "@repo/testing/fake-clamd";
 import { Queue } from "bullmq";
 import pg from "pg";
 import sharp from "sharp";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { FilesProcessor as Files } from "../src/files/files.processor";
 import type { MaintenanceProcessor as Maintenance } from "../src/maintenance/maintenance.processor";
 import type { OutboxRelay as Relay } from "../src/outbox/relay.service";
@@ -62,6 +64,11 @@ async function asRole<T>(role: string, fn: (client: pg.Client) => Promise<T>): P
   } finally {
     await client.end();
   }
+}
+
+/** A logger that keeps quiet and remembers its warnings. */
+function quietLog() {
+  return { info: vi.fn(), warn: vi.fn() };
 }
 
 /** Emits events the way apps/api does: an outbox row plus a NOTIFY, in one transaction. */
@@ -529,10 +536,67 @@ describe("maintenance", () => {
 
     // With files off there's no storage to clean.
     const { FilesCleanup } = await import("../src/files/files.cleanup");
-    expect(await new FilesCleanup(app.get<Database>(DATABASE), null).run()).toEqual({
+    expect(
+      await new FilesCleanup(
+        app.get<Database>(DATABASE),
+        null,
+        quietLog() as unknown as PinoLogger,
+      ).run(),
+    ).toEqual({
       stale: 0,
       objects: 0,
     });
+  });
+
+  it("clears a queued key whose object is already gone, and one key's failure holds up no other", async () => {
+    // GCS answers 404 for an object that isn't there (deleted by an earlier run that
+    // died before clearing its row); a bucket refusing a key is a failure of that key.
+    const present = new Set(["files/present", "files/also-present"]);
+    const refused = "files/refused";
+    const fakeFile = (key: string): GcsFile => ({
+      getSignedUrl: () => Promise.reject(new Error("unused")),
+      getMetadata: () => Promise.reject(new Error("unused")),
+      download: () => Promise.reject(new Error("unused")),
+      save: () => Promise.reject(new Error("unused")),
+      rename: () => Promise.reject(new Error("unused")),
+      delete: async () => {
+        if (key === refused) {
+          throw Object.assign(new Error("Forbidden"), { code: 403 });
+        }
+        if (!present.delete(key)) {
+          throw Object.assign(new Error(`No such object: media/${key}`), { code: 404 });
+        }
+        return [];
+      },
+    });
+    const gcs = new GcsStorage({ bucket: "media", client: { bucket: () => ({ file: fakeFile }) } });
+    const keys = ["files/gone", "files/present", refused, "files/also-present"];
+    await asRole("postgres", async (client) => {
+      await client.query("DELETE FROM files.object_deletion");
+      await client.query("INSERT INTO files.object_deletion (key) SELECT unnest($1::text[])", [
+        keys,
+      ]);
+    });
+    const log = quietLog();
+    const { FilesCleanup } = await import("../src/files/files.cleanup");
+    const result = await new FilesCleanup(
+      app.get<Database>(DATABASE),
+      gcs,
+      log as unknown as PinoLogger,
+    ).run();
+    expect(result.objects).toBe(3);
+    expect(present.size).toBe(0);
+    const left = await asRole("postgres", (client) =>
+      client.query<{ key: string }>("SELECT key FROM files.object_deletion"),
+    );
+    // The refused key stays queued for the next run, and is logged by itself.
+    expect(left.rows).toEqual([{ key: refused }]);
+    expect(log.warn).toHaveBeenCalledTimes(1);
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ key: refused }),
+      "deleting a stored object failed",
+    );
+    await asRole("postgres", (client) => client.query("DELETE FROM files.object_deletion"));
   });
 
   it("deletes the demo guests whose day is over, with their workspaces, plans and footage", {
