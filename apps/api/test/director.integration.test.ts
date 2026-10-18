@@ -265,6 +265,30 @@ function choicesRoute(
   return { status: 204, body: undefined };
 }
 
+/** A match cut the AI service lines up: a plain cut, whatever it's sent. */
+function matchCutRoute(route: string) {
+  return route === "POST /v1/director/match-cuts"
+    ? {
+        status: 200,
+        body: {
+          status: "not-found",
+          outgoingEndMs: 1500,
+          incomingStartMs: 0,
+          transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+          offsetBeforePx: 0,
+          offsetPx: 0,
+          scaleDiff: 0,
+          rotationDiff: 0,
+          cropPercent: 0,
+          withinTolerance: false,
+          anchor: null,
+          outgoingFrame: null,
+          incomingFrame: null,
+        },
+      }
+    : null;
+}
+
 /** The AI ledger's turns of the slower line: refused once the workspace's month is spent. */
 function chatLedgerRoute(route: string, who: { org: string }) {
   if (route === "POST /v1/director/chat-reservations") {
@@ -297,7 +321,8 @@ async function aiRoute(request: IncomingMessage, response: ServerResponse) {
     libraryRoute(route, who, body) ??
     directorCutRoute(route, who, body) ??
     choicesRoute(route, who, body) ??
-    chatLedgerRoute(route, who);
+    chatLedgerRoute(route, who) ??
+    matchCutRoute(route);
   if (answer) {
     return send(response, answer.status, answer.body);
   }
@@ -1039,6 +1064,54 @@ describe("Director's shots and cuts", () => {
       session.rpc.director.saveCut({ ...input, picks: { 0: SOMEONE_ELSES_TAKE } }),
       "DIRECTOR_TAKE_NOT_FOUND",
     );
+  });
+
+  it("hands the AI service each take of a match cut with the type it's stored as", async () => {
+    const { session, me } = await signedIn();
+    readyTemplate(String(me.activeOrganizationId), "MatchCuts01");
+    const take = async (type: "video/webm" | "video/mp4") => {
+      const { file } = await session.rpc.files.createUpload({
+        purpose: "director-take-video",
+        filename: type === "video/webm" ? "take.webm" : "take.mp4",
+        contentType: type,
+        size: 1000,
+      });
+      await sql(
+        "UPDATE files.file SET status = 'ready', content_type = $2, size = 1000, ready_at = now() WHERE id = $1",
+        [file.id, type],
+      );
+      const added = await session.rpc.director.addTake({
+        videoId: "MatchCuts01",
+        shotIndex: 0,
+        kind: "video",
+        fileId: file.id,
+      });
+      // Reviewed, as the AI service would have it by now.
+      const stored = takes.find((each) => each.id === added.id);
+      if (stored) {
+        stored.score = 80;
+      }
+      return { take: added.id, file: file.id };
+    };
+    const [outgoing, incoming] = [await take("video/webm"), await take("video/mp4")];
+    const align = () =>
+      session.rpc.director.alignMatchCut({
+        videoId: "MatchCuts01",
+        anchor: "the watch",
+        outgoing: { takeId: outgoing.take, atMs: 1500 },
+        incoming: { takeId: incoming.take, atMs: 0 },
+      });
+    await align();
+    expect(aiCalls.at(-1)).toMatchObject({
+      route: "POST /v1/director/match-cuts",
+      body: {
+        outgoing: { atMs: 1500, contentType: "video/webm" },
+        incoming: { atMs: 0, contentType: "video/mp4" },
+      },
+    });
+    // A take's file that's no video (it never is): no type to read it as, so no take.
+    await sql("UPDATE files.file SET content_type = 'image/jpeg' WHERE id = $1", [incoming.file]);
+    await expectError(align(), "DIRECTOR_TAKE_NOT_FOUND");
   });
 
   it("refuses a cut of someone else's file, or of a file that isn't a cut", async () => {

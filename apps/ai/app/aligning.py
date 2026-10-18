@@ -38,6 +38,7 @@ from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RunUsage, UsageLimits
 
+from app.clipping import DEMUXERS, JAIL
 from app.errors import AppError
 from app.google_auth import id_token
 from app.log import log
@@ -49,6 +50,7 @@ from app.schemas import (
     MatchCutAlignment,
     MatchCutRequest,
     MatchCutTransform,
+    TakeVideoType,
     TokenUsage,
 )
 
@@ -161,17 +163,33 @@ def create_locator(model: Model) -> Agent[None, AnchorSightingsDraft]:
 # ------------------------------------------------------------------------ frames
 
 
-async def read_frames(url: str, start_seconds: float, seconds: float) -> list[Frame]:
-    """The clip's frames from `start_seconds` for `seconds`, at FPS, each fitted to the
-    9:16 working frame (covering it, cropped in the middle) as BGR pixels."""
-    # No shell: each argument reaches ffmpeg as its own argv entry, never interpreted.
-    process = await asyncio.create_subprocess_exec(
+# What ffmpeg may open for a take: its presigned URL's own protocol and what that runs on,
+# nothing a file's contents could name (a local file, another protocol).
+PROTOCOLS = {"https": "https,tls,tcp", "http": "http,tcp"}
+
+
+def frame_command(
+    url: str, content_type: TakeVideoType, start_seconds: float, seconds: float
+) -> list[str]:
+    """ffmpeg reading the take's frames, in the jail (app/jail.py: no secrets, bounded
+    resources), as the type it was stored as (never probed: an MP4 that's really a
+    playlist isn't followed), over its URL's protocol only. The clipper reads footage the
+    same way (app/clipping.py)."""
+    scheme = url.split(":", 1)[0].lower()
+    if scheme not in PROTOCOLS:
+        raise AppError("UPSTREAM_UNAVAILABLE", {"service": "storage"})
+    return [
+        *JAIL,
         "ffmpeg",
         "-nostdin",
         "-loglevel",
         "error",
+        "-protocol_whitelist",
+        PROTOCOLS[scheme],
         "-ss",
         f"{start_seconds:.3f}",
+        "-f",
+        DEMUXERS[content_type],
         "-i",
         url,
         "-t",
@@ -185,14 +203,28 @@ async def read_frames(url: str, start_seconds: float, seconds: float) -> list[Fr
         "-pix_fmt",
         "bgr24",
         "-",
+    ]
+
+
+async def read_frames(
+    url: str, content_type: TakeVideoType, start_seconds: float, seconds: float
+) -> list[Frame]:
+    """The clip's frames from `start_seconds` for `seconds`, at FPS, each fitted to the
+    9:16 working frame (covering it, cropped in the middle) as BGR pixels."""
+    # No shell: each argument reaches ffmpeg as its own argv entry, never interpreted.
+    process = await asyncio.create_subprocess_exec(
+        *frame_command(url, content_type, start_seconds, seconds),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
     try:
         stdout, stderr = await asyncio.wait_for(process.communicate(), FFMPEG_SECONDS)
-    except TimeoutError:
+    except (TimeoutError, asyncio.CancelledError) as stopped:
+        # Given up on (too slow, or the other side's read failed): killed, never left running.
         process.kill()
         _ = await process.wait()
+        if isinstance(stopped, asyncio.CancelledError):
+            raise
         raise AppError("UPSTREAM_UNAVAILABLE", {"service": "storage"}) from None
     size = WIDTH * HEIGHT * 3
     if process.returncode != 0 or len(stdout) < size:
@@ -555,8 +587,18 @@ class LocalAligner:
     async def align(self, request: AlignRequest) -> AlignResult:
         out_start = max(0.0, request.outgoing.atMs / 1000 - WINDOW_SECONDS)
         outgoing, incoming = await asyncio.gather(
-            read_frames(request.outgoing.url, out_start, request.outgoing.atMs / 1000 - out_start),
-            read_frames(request.incoming.url, request.incoming.atMs / 1000, WINDOW_SECONDS),
+            read_frames(
+                request.outgoing.url,
+                request.outgoing.contentType,
+                out_start,
+                request.outgoing.atMs / 1000 - out_start,
+            ),
+            read_frames(
+                request.incoming.url,
+                request.incoming.contentType,
+                request.incoming.atMs / 1000,
+                WINDOW_SECONDS,
+            ),
         )
         usage = RunUsage()
         try:

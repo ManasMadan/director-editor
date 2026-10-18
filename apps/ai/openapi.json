@@ -973,12 +973,7 @@
             "type": "string"
           },
           "contentType": {
-            "enum": [
-              "video/webm",
-              "video/mp4"
-            ],
-            "title": "Contenttype",
-            "type": "string"
+            "$ref": "#/components/schemas/TakeVideoType"
           },
           "endMs": {
             "anyOf": [
@@ -2826,6 +2821,11 @@
             "title": "Atms",
             "type": "integer"
           },
+          "contentType": {
+            "$ref": "#/components/schemas/TakeVideoType",
+            "default": "video/mp4",
+            "description": "What the take is stored as: ffmpeg reads it as that."
+          },
           "url": {
             "description": "A presigned read of the take.",
             "maxLength": 4000,
@@ -3787,6 +3787,13 @@
         ],
         "title": "TakeChoice",
         "type": "object"
+      },
+      "TakeVideoType": {
+        "enum": [
+          "video/webm",
+          "video/mp4"
+        ],
+        "type": "string"
       },
       "TargetPose": {
         "properties": {

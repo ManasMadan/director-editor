@@ -93,6 +93,8 @@ type CameraMove = Literal[
 ]
 # What a shot's take is: a clip or a photo.
 type ShotKind = Literal["video", "photo"]
+# A video take as stored: what the browser recorded, or the clipper cut.
+type TakeVideoType = Literal["video/webm", "video/mp4"]
 # What the edit uses of it: the member on camera (as every shot was before modes), only
 # their voice (a voice-over, the picture an asset or B-roll: a video take), or nothing,
 # the asset taking its place (an end card, a full-screen graphic: a photo take stands
@@ -1245,6 +1247,10 @@ class MatchCutClip(BaseModel):
         description="Where the cut falls in the take: the outgoing clip's end, the incoming's"
         " start.",
     )
+    # An API from before this sends none; most takes are the clipper's MP4s.
+    contentType: TakeVideoType = Field(
+        default="video/mp4", description="What the take is stored as: ffmpeg reads it as that."
+    )
 
 
 class MatchCutRequest(BaseModel):
@@ -1400,7 +1406,7 @@ class ClipRequest(BaseModel):
 
     # A JSON string, so not strict (strict wants a UUID object, which JSON can't carry).
     attemptId: UUID = Field(strict=False, description="For the logs.")
-    contentType: Literal["video/webm", "video/mp4"]
+    contentType: TakeVideoType
     slices: list[ClipSlice] = Field(
         min_length=1, max_length=MAX_PART_SLICES, description="The part's, from its first."
     )

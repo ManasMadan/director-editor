@@ -238,18 +238,6 @@ export const zClipSlice = z.object({
 });
 
 /**
- * ClipRequest
- */
-export const zClipRequest = z.object({
-    attemptId: z.uuid(),
-    contentType: z.enum(['video/webm', 'video/mp4']),
-    endMs: z.int().gte(0).lte(1260000).nullable(),
-    pauses: z.array(zClipPause).max(200),
-    slices: z.array(zClipSlice).min(1).max(150),
-    startMs: z.int().gte(0).lte(1260000)
-});
-
-/**
  * CreatePlanRequest
  */
 export const zCreatePlanRequest = z.object({
@@ -713,23 +701,6 @@ export const zLocated = z.object({
 });
 
 /**
- * MatchCutClip
- */
-export const zMatchCutClip = z.object({
-    atMs: z.int().gte(0).lte(60000),
-    url: z.string().max(4000).regex(/^https?:\/\//)
-});
-
-/**
- * MatchCutRequest
- */
-export const zMatchCutRequest = z.object({
-    anchor: z.string().min(1).max(120),
-    incoming: zMatchCutClip,
-    outgoing: zMatchCutClip
-});
-
-/**
  * MatchCutTransform
  *
  * How to draw the incoming clip: scaled by `scale` and turned `rotation` degrees
@@ -1030,6 +1001,38 @@ export const zStoryboardOut = z.object({
 export const zTakeChoice = z.object({
     shotIndex: z.int().gte(0).lt(12),
     takeId: z.uuid().nullable()
+});
+
+export const zTakeVideoType = z.enum(['video/webm', 'video/mp4']);
+
+/**
+ * ClipRequest
+ */
+export const zClipRequest = z.object({
+    attemptId: z.uuid(),
+    contentType: zTakeVideoType,
+    endMs: z.int().gte(0).lte(1260000).nullable(),
+    pauses: z.array(zClipPause).max(200),
+    slices: z.array(zClipSlice).min(1).max(150),
+    startMs: z.int().gte(0).lte(1260000)
+});
+
+/**
+ * MatchCutClip
+ */
+export const zMatchCutClip = z.object({
+    atMs: z.int().gte(0).lte(60000),
+    contentType: zTakeVideoType.optional().default('video/mp4'),
+    url: z.string().max(4000).regex(/^https?:\/\//)
+});
+
+/**
+ * MatchCutRequest
+ */
+export const zMatchCutRequest = z.object({
+    anchor: z.string().min(1).max(120),
+    incoming: zMatchCutClip,
+    outgoing: zMatchCutClip
 });
 
 /**

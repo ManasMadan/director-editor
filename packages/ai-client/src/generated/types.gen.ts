@@ -566,10 +566,7 @@ export type ClipRequest = {
      * For the logs.
      */
     attemptId: string;
-    /**
-     * Contenttype
-     */
-    contentType: 'video/webm' | 'video/mp4';
+    contentType: TakeVideoType;
     /**
      * Endms
      *
@@ -1473,6 +1470,10 @@ export type MatchCutClip = {
      */
     atMs: number;
     /**
+     * What the take is stored as: ffmpeg reads it as that.
+     */
+    contentType?: TakeVideoType;
+    /**
      * Url
      *
      * A presigned read of the take.
@@ -1971,6 +1972,8 @@ export type TakeChoice = {
      */
     takeId: string | null;
 };
+
+export type TakeVideoType = 'video/webm' | 'video/mp4';
 
 /**
  * TargetPose

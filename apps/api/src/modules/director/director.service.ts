@@ -101,6 +101,7 @@ const PURPOSE: Record<DirectorTake["kind"], UploadPurpose> = {
 };
 // What the worker stores a take as (apps/worker files processor).
 const takeContentType = z.enum(["video/webm", "video/mp4", "image/jpeg"]);
+const takeVideoType = z.enum(["video/webm", "video/mp4"]);
 
 // The AI service's JSON carries dates as strings; the contract's schemas want Dates. A
 // plan's audio comes as its stored object's key, which only this API turns into a link.
@@ -393,13 +394,18 @@ export class DirectorService {
       if (take?.kind !== "video" || take.status !== "ready") {
         throw new AppError("DIRECTOR_TAKE_NOT_FOUND");
       }
-      const { url } = await this.files.readUrl(
+      const { file, url } = await this.files.readUrl(
         userId,
         take.fileId,
         PURPOSE.video,
         TAKE_READ_EXPIRES_S,
       );
-      return { url, atMs: side.atMs };
+      // The AI service reads it as this type and no other (a ready video take's always one).
+      const contentType = takeVideoType.safeParse(file.contentType);
+      if (!contentType.success) {
+        throw new AppError("DIRECTOR_TAKE_NOT_FOUND");
+      }
+      return { url, atMs: side.atMs, contentType: contentType.data };
     };
     const [outgoing, incoming] = await Promise.all([read(input.outgoing), read(input.incoming)]);
     return matchCutAlignmentSchema.parse(
