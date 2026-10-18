@@ -47,11 +47,13 @@ import { AppError, InjectPinoLogger, PinoLogger } from "@repo/nest-common";
 import * as z from "zod";
 import { env } from "../../env";
 import { aiCaller, callAi } from "../ai";
+import { AnalyticsService } from "../analytics";
 import { FilesService } from "../files";
 import { chatUpstream, createGoogleAuth, DirectorChat } from "../live";
 import { RecordingService } from "../recording";
 import { ShortsService } from "../shorts";
 import { type AssetImageRow, planAssetImages, withAssetImages } from "./asset-images";
+import { chatTurnDetail } from "./chat-turn";
 import { seedAssetImages, seedMediaKeys, withMediaLinks, withSeedAssets } from "./seed-media";
 import { shotsOf } from "./shots";
 
@@ -144,6 +146,7 @@ export class DirectorService {
     private readonly shorts: ShortsService,
     private readonly files: FilesService,
     private readonly recording: RecordingService,
+    private readonly analytics: AnalyticsService,
     @InjectPinoLogger(DirectorService.name) log: PinoLogger,
   ) {
     this.chatLine = new DirectorChat(
@@ -208,7 +211,15 @@ export class DirectorService {
     if (plan.status !== "ready" || !plan.plan) {
       throw new AppError("DIRECTOR_PLAN_NOT_FOUND");
     }
-    return this.chatLine.reply(plan.plan, input);
+    const asked = performance.now();
+    const reply = await this.chatLine.reply(plan.plan, input);
+    this.analytics.record("director_turn", {
+      userId,
+      videoId: input.videoId,
+      templateId: plan.plan.format,
+      detail: chatTurnDetail(input, reply, performance.now() - asked),
+    });
+    return reply;
   }
 
   /**

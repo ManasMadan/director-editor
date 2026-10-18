@@ -514,7 +514,9 @@ slow or failing BigQuery never holds up the action that triggered it
 (`packages/nest-common/src/analytics.ts`, `apps/ai/app/analytics.py`).
 
 `director_turn` is one row per turn Director finishes on the live line
-(`apps/api/src/modules/live/live.turns.ts`): the member, the short (`video_id`) and its
+(`apps/api/src/modules/live/live.turns.ts`) or the slower line (`chat-turn.ts` in the
+director module, with `line` `chat`, `input` `said` or `app:<what>`, and `latencyMs` the
+reply's time on our side): the member, the short (`video_id`) and its
 format (`template_id`), and in `detail` the line (`live`), the shot, what started the turn
 (`voice`, `text`, or `app` for the app's own notes), the tools Director called, whether the
 member cut in, whether Director spoke, and `latencyMs`, the member's wait from the last
