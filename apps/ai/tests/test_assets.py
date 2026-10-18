@@ -17,7 +17,7 @@ from psycopg.types.json import Jsonb
 
 from app.assets import MAX_DEFAULT_ASSETS, AssetsInterrupted, images_lock_key
 from app.plan_repair import repair_plan
-from app.schemas import ShotPlanDraft
+from app.schemas import DirectorPlanOut, ShotPlanDraft
 from app.settings import get_settings
 from app.worker import director_processor
 from tests.fakes import (
@@ -34,11 +34,13 @@ from tests.fakes import (
     gemini_image,
     gemini_output,
     serve,
+    serve_files,
     vertex_text_only,
 )
 from tests.support import (
     ENV,
     as_org,
+    headers,
     migrator,
     new_org,
     on_app_loop,
@@ -47,6 +49,8 @@ from tests.support import (
     stored_job,
     subscribe,
 )
+from tests.test_create import KITCHEN, WRITTEN, brief, creator
+from tests.test_create import plan_of as plan_of_created
 from tests.test_director import (
     PLAN,
     VIDEO,
@@ -618,3 +622,46 @@ def test_a_stored_plan_with_assets_and_edits_reads_back_whole(client: TestClient
     assert served.plan == stored
     assert served.plan is not None
     assert [edit.type for edit in served.plan.edits] == ["layout", "text"]
+
+
+def test_a_created_plan_s_storyboard_cards_are_drawn_and_follow_their_shots(
+    client: TestClient, google: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    org, user = new_org()
+    with serve_files({"/kitchen.jpg": ("image/jpeg", KITCHEN)}) as storage:
+        response = client.post(
+            "/v1/director/created", json=brief(storage), headers=headers(org, user)
+        )
+        plan = DirectorPlanOut.model_validate_json(response.content)
+        google[1][GEMINI_PATH] = gemini_output(WRITTEN)
+        on_app_loop(
+            client,
+            lambda: creator().write(org, plan.id, [storage.url + "/kitchen.jpg"], user),
+        )
+    # Four shots with the same directions are one card, drawn once.
+    [(card, status, _key, _error)] = images(org, plan.id)
+    assert status == "pending"
+    make(client, org, plan.id)
+    [prompt] = drawings(google[0])
+    assert b"storyboard frame" in prompt
+    assert b'"aspectRatio": "9:16"' in prompt
+    served = plan_of_created(client, org, user, plan.videoId)
+    key = f"director-assets/{plan.id}/{card}.png"
+    assert [(each.shotIndex, each.objectKey) for each in served.storyboards] == [
+        (index, key) for index in range(4)
+    ]
+    # The member sends the first shot somewhere new: only that shot needs a new card.
+    assert served.plan is not None
+    shots = [shot.model_dump(mode="json") for shot in served.plan.shots]
+    edited = {
+        **served.plan.model_dump(mode="json"),
+        "shots": [{**shots[0], "scene": "At the window"}, *shots[1:]],
+    }
+    response = client.put(
+        "/v1/director/created",
+        json={"videoId": plan.videoId, "plan": edited},
+        headers=headers(org, user),
+    )
+    saved = DirectorPlanOut.model_validate_json(response.content)
+    assert [each.shotIndex for each in saved.storyboards] == [1, 2, 3]
+    assert [row[1] for row in images(org, plan.id)] == ["ready", "pending"]
