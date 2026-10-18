@@ -13,6 +13,7 @@ import type {
   Facing,
   LiveAdaptation,
   LiveClientMessage,
+  LiveRollState,
   LiveTakeState,
   LiveToolCall,
   LiveToolResult,
@@ -75,6 +76,8 @@ interface Session {
   /** What the API said went wrong, just before it closed the socket. */
   error: ErrorCode | null;
   over: boolean;
+  /** The roll is paused: Director neither sees nor hears the member until it resumes. */
+  muted: boolean;
 }
 
 function send(socket: WebSocket, message: LiveClientMessage) {
@@ -109,6 +112,9 @@ async function sendFrame(
   socket: WebSocket,
   video: RefObject<HTMLVideoElement | null>,
 ) {
+  if (session.muted) {
+    return;
+  }
   try {
     const camera = required(video.current, "the camera");
     const frame = await captureFrame(camera, FRAME_WIDTH, FRAME_QUALITY);
@@ -218,7 +224,11 @@ function connect(
       send(socket, { type: "context", adaptations: changed });
     }
     tellShot(session);
-    session.microphone?.listen((pcm) => send(socket, { type: "audio", pcm16: encodePcm16(pcm) }));
+    session.microphone?.listen((pcm) => {
+      if (!session.muted) {
+        send(socket, { type: "audio", pcm16: encodePcm16(pcm) });
+      }
+    });
     startFrames(session, socket, video);
   };
   socket.onmessage = (event: MessageEvent<unknown>) => receive(session, event.data, events);
@@ -245,6 +255,7 @@ export function startSession(target: Target & { shot: number; held: boolean }) {
     toldShot: target.shot,
     error: null,
     over: false,
+    muted: false,
   };
   session.player.hold(target.held);
   let socket: WebSocket | null = null;
@@ -299,6 +310,12 @@ export function startSession(target: Target & { shot: number; held: boolean }) {
     camera: (facing: Facing) => noteCamera(session, target.video, facing),
     /** Where the member's take is. */
     take: (state: LiveTakeState) => whenLive((live) => send(live, { type: "take", state })),
+    /** Where the roll is. */
+    roll: (state: LiveRollState) => whenLive((live) => send(live, { type: "roll", state })),
+    /** Paused: nothing of the member goes to Director (their microphone, their camera). */
+    mute: (on: boolean) => {
+      session.muted = on;
+    },
   };
 }
 

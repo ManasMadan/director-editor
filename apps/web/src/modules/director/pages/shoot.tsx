@@ -28,6 +28,13 @@ import { DirectorGate, YouTubeEmbed } from "@/modules/shorts";
 import { DirectorCaptions, DirectorOrb, useLiveFailure } from "../components/director-captions";
 import { MarksLayer } from "../components/marks-layer";
 import {
+  DoneButton,
+  PausedVeil,
+  RecIndicator,
+  RollProgress,
+  SavingFootage,
+} from "../components/roll-parts";
+import {
   CountdownNumber,
   FlipButton,
   GLASS,
@@ -45,6 +52,7 @@ import { type DirectorLive, useDirectorLive } from "../hooks/use-director-live";
 import { useLeaveGuard } from "../hooks/use-leave-guard";
 import { type Marks, useShotMarks } from "../hooks/use-marks";
 import { useMemory } from "../hooks/use-memory";
+import { type RollShoot, useRollShoot } from "../hooks/use-roll-shoot";
 import { useWakeLock } from "../hooks/use-screen";
 import { nextPage, type Phase, type StudioShot, shotPage, useStudio } from "../hooks/use-studio";
 import { type AudioMode, parseAudio } from "../lib/audio";
@@ -86,17 +94,31 @@ function OriginalAudio({ videoId, shot }: { videoId: string; shot: Shot }) {
  * time it says the browser will ask for the camera and microphone next, so the prompt
  * never comes cold.
  */
+function introOf(first: boolean, roll: boolean) {
+  if (roll) {
+    return first ? "intro.rollFirst" : "intro.rollAgain";
+  }
+  return first ? "intro.first" : "intro.again";
+}
+
 function StartCard({
   first,
+  roll,
+  leftoverMs,
   ready,
   onStart,
 }: {
   first: boolean;
+  /** The shoot records as one roll (else take by take, on the shutter). */
+  roll: boolean;
+  /** Footage an earlier visit left on this device, being sent now. */
+  leftoverMs: number;
   /** Whether it's known yet if Director can join here. */
   ready: boolean;
   onStart: () => void;
 }) {
   const t = useTranslations("director.shoot");
+  const leftover = Math.ceil(leftoverMs / 1000);
   return (
     <div className="absolute inset-x-4 bottom-[max(1.5rem,env(safe-area-inset-bottom))] flex flex-col gap-3">
       <section
@@ -107,8 +129,13 @@ function StartCard({
           {t("intro.title")}
         </h1>
         <p className="mt-2 text-[15px] leading-snug text-studio-foreground/85">
-          {first ? t("intro.first") : t("intro.again")}
+          {t(introOf(first, roll))}
         </p>
+        {leftover > 0 ? (
+          <p role="status" className="mt-2 text-sm text-studio-foreground/80">
+            {t("roll.leftover", { seconds: leftover })}
+          </p>
+        ) : null}
       </section>
       <button
         type="button"
@@ -271,11 +298,13 @@ function Controls({
   shot,
   studio,
   camera,
+  roll,
   onFlip,
 }: {
   shot: Shot;
   studio: Studio;
   camera: Camera;
+  roll: RollShoot;
   onFlip: () => void;
 }) {
   const t = useTranslations("director.shoot.shutter");
@@ -284,16 +313,45 @@ function Controls({
   return (
     <div className="flex items-center justify-between px-6">
       <FlipButton onFlip={onFlip} disabled={!live || studio.phase !== "setup"} />
-      <Shutter
-        mode={mode}
-        label={t(mode)}
-        progress={studio.seconds / shot.durationSeconds}
-        disabled={!live}
-        onClick={studio.actions.shutter}
-      />
+      {roll.rolling ? (
+        // The roll records everything: Done takes the shutter's place.
+        <DoneButton
+          onDone={roll.done}
+          disabled={roll.phase !== "recording" && roll.phase !== "paused"}
+        />
+      ) : (
+        <Shutter
+          mode={mode}
+          label={t(mode)}
+          progress={studio.seconds / shot.durationSeconds}
+          disabled={!live}
+          onClick={studio.actions.shutter}
+        />
+      )}
       <span aria-hidden className="size-12" />
     </div>
   );
+}
+
+/** The top band's left: the roll's indicator and progress strip, or the shot's progress. */
+function TopLeft({ props, studio, roll }: Pick<Screen, "props" | "studio" | "roll">) {
+  if (roll.rolling) {
+    return (
+      <div className="flex items-center gap-2">
+        <RecIndicator
+          elapsedMs={roll.elapsedMs}
+          paused={roll.phase === "paused"}
+          onPause={roll.pause}
+          onResume={roll.resume}
+        />
+        <RollProgress index={props.index} states={roll.states} onGo={roll.go} />
+      </div>
+    );
+  }
+  if (studio.phase === "recording") {
+    return <RecordingPill seconds={studio.seconds} />;
+  }
+  return <ShotProgress index={props.index} count={props.count} />;
 }
 
 /** While a take records: Director stays quiet, and the line (or the step) stays near the lens. */
@@ -326,25 +384,23 @@ interface Screen {
   camera: Camera;
   live: DirectorLive;
   liveOn: boolean;
+  roll: RollShoot;
   onFlip: () => void;
   onLeave: (event: { preventDefault: () => void }) => void;
 }
 
 /** Everything over the picture once the shoot has started, in a top and a bottom band. */
-function Overlay({ props, changed, studio, camera, live, liveOn, onFlip, onLeave }: Screen) {
+function Overlay(screen: Screen) {
+  const { props, changed, studio, camera, live, liveOn, roll, onFlip, onLeave } = screen;
   const t = useTranslations("director.shoot");
-  const { shot, index, count, videoId, audio } = props;
+  const { shot, index, videoId, audio } = props;
   const recording = studio.phase === "recording";
   const setup = studio.phase === "setup";
   return (
     <>
       <div className="absolute inset-x-3 top-[max(0.75rem,env(safe-area-inset-top))] flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
-          {recording ? (
-            <RecordingPill seconds={studio.seconds} />
-          ) : (
-            <ShotProgress index={index} count={count} />
-          )}
+          <TopLeft props={props} studio={studio} roll={roll} />
           <div className="flex items-center gap-2">
             <DirectorPill live={live} />
             <LeaveLink videoId={videoId} onClick={onLeave} />
@@ -370,7 +426,7 @@ function Overlay({ props, changed, studio, camera, live, liveOn, onFlip, onLeave
           <DirectorCaptions captions={live.captions} level={live.level} />
         )}
         {setup && liveOn ? <TellBox live={live} /> : null}
-        <Controls shot={shot} studio={studio} camera={camera} onFlip={onFlip} />
+        <Controls shot={shot} studio={studio} camera={camera} roll={roll} onFlip={onFlip} />
       </div>
     </>
   );
@@ -382,11 +438,13 @@ interface ToolScreen extends Pick<Screen, "props" | "studio" | "camera" | "live"
   /** Puts Director's change to a shot on the member's version of it. */
   adapt: (change: LiveAdaptation) => void;
   marks: Marks;
+  /** Director's mark on the roll: what came of it. */
+  mark: (call: Extract<LiveToolCall, { name: "mark" }>) => Promise<LiveToolResult>;
 }
 
 /** What each of Director's tools does on screen, and what came of it. */
 function toolResult(
-  call: Exclude<LiveToolCall, { name: "point_at" }>,
+  call: Exclude<LiveToolCall, { name: "point_at" | "mark" }>,
   { props, camera, adapt }: ToolScreen,
   go: (href: ReturnType<typeof shotPage>) => void,
 ): LiveToolResult {
@@ -419,6 +477,10 @@ function useTools(tools: { current: ToolHandler }, screen: ToolScreen) {
   const router = useRouter();
   useLayoutEffect(() => {
     tools.current = (id, call) => {
+      if (call.name === "mark") {
+        void screen.mark(call).then((result) => screen.live.answer(id, result));
+        return;
+      }
       if (screen.studio.phase !== "setup") {
         return screen.live.answer(id, "busy");
       }
@@ -488,6 +550,8 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
     retake,
   };
   const tools = useRef<ToolHandler>(() => undefined);
+  // Director's marks go to the roll, which the screen sets up once the shoot starts.
+  const mark = useRef<ToolScreen["mark"]>(() => Promise.resolve("not_recording"));
   const live = useDirectorLive({
     videoId,
     shotIndex: index,
@@ -524,6 +588,7 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
     live,
     adapt: (change) => setAdaptations((now) => adapted(now, change)),
     marks,
+    mark: (call) => mark.current(call),
   });
   const onFlip = useMemberFlip(camera, live);
   const { hold } = live;
@@ -533,7 +598,7 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
   // paints, so nothing Director says once the review shows is dropped as if mid-take.
   useLayoutEffect(() => hold(quiet), [hold, quiet]);
   useWakeLock();
-  return { props, changed: version.changed, camera, live, studio, onFlip, leaving, marks };
+  return { props, changed: version.changed, camera, live, studio, onFlip, leaving, marks, mark };
 }
 
 /** "Leave? This take isn't kept yet.", with Leave and Stay. */
@@ -593,6 +658,12 @@ function ShootScreen(shootProps: ShootProps) {
   const [started, setStarted] = useState(false);
   const shoot = useShoot(shootProps);
   const { camera, live, studio } = shoot;
+  // With Director on, the shoot records as one roll; without it, take by take.
+  const rollOn = liveOn && typeof MediaRecorder !== "undefined";
+  const roll = useRollShoot({ props: shoot.props, camera, live, wanted: started && rollOn });
+  useLayoutEffect(() => {
+    shoot.mark.current = roll.mark;
+  });
   const start = () => {
     camera.start();
     if (liveOn) {
@@ -627,10 +698,13 @@ function ShootScreen(shootProps: ShootProps) {
         {started ? null : (
           <StartCard
             first={memory.before.sessions === 0}
+            roll={rollOn}
+            leftoverMs={roll.upload.behindMs}
             ready={system.data !== undefined}
             onStart={start}
           />
         )}
+        {roll.phase === "paused" ? <PausedVeil onResume={roll.resume} /> : null}
         {started && !blocked && !reviewing ? (
           <Overlay
             props={shoot.props}
@@ -639,9 +713,13 @@ function ShootScreen(shootProps: ShootProps) {
             camera={camera}
             live={live}
             liveOn={liveOn}
+            roll={roll}
             onFlip={shoot.onFlip}
             onLeave={shoot.leaving.leave}
           />
+        ) : null}
+        {roll.phase === "finishing" || roll.phase === "done" ? (
+          <SavingFootage behindMs={roll.upload.behindMs} />
         ) : null}
         <Review shoot={shoot} />
         <LeaveDialog leaving={shoot.leaving} />
