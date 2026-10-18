@@ -31,7 +31,7 @@ const FULL: FrameBox = { x: 0, y: 0, width: 1, height: 1 };
 
 // The grades as canvas and CSS filters: black and white is grayscale(1), as the editor
 // renders it; the rest are close looks.
-const FILTERS: Record<Grade, string> = {
+export const FILTERS: Record<Grade, string> = {
   "black-and-white": "grayscale(1)",
   warm: "sepia(0.25) saturate(1.2)",
   cool: "saturate(0.9) hue-rotate(-12deg)",
