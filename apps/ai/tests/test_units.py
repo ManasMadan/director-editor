@@ -13,9 +13,10 @@ import pytest
 from pydantic import ValidationError
 
 from app.auth import verify
-from app.director import create_director_model, create_index_model, youtube_video
+from app.director import create_director_model, create_index_model
 from app.errors import AppError
-from app.settings import Settings
+from app.indexing import youtube_video
+from app.settings import IndexerSettings, Settings
 from tests.tokens import SECRET, service_token
 
 USER, ORG = uuid4(), uuid4()
@@ -130,6 +131,61 @@ def test_vertex_without_a_project_is_a_configuration_bug() -> None:
         create_index_model(bypassed, "gemini-4-argon")
 
 
+def _indexer_settings(**env: str) -> IndexerSettings:
+    """The Cloud Run indexer's settings from exactly these values (see `_settings`)."""
+    base = {
+        "INDEXER_URL": "https://director-indexer-1.us-central1.run.app",
+        "INDEXER_INVOKER": "director-vm@p.iam.gserviceaccount.com",
+    }
+    with patch.dict(os.environ, {}, clear=True):
+        return IndexerSettings.model_validate({**base, **env})
+
+
+def test_on_vertex_without_a_key_the_model_uses_the_service_account() -> None:
+    """Cloud Run's indexer has no express key: Vertex AI through Application Default
+    Credentials (its service account), for the project and location the settings name,
+    and the model still addressed by its full resource name."""
+    settings = _indexer_settings(GOOGLE_VERTEX="true", GOOGLE_CLOUD_PROJECT="p")
+    assert settings.google_api_key is None
+    model = create_index_model(settings, "gemini-4-argon")
+    assert model.system == "google-cloud"
+    assert model.client.vertexai is True
+    assert model.model_name == "projects/p/locations/global/publishers/google/models/gemini-4-argon"
+
+
+def test_the_indexer_needs_its_audience_its_caller_and_a_way_to_gemini() -> None:
+    assert _indexer_settings(GOOGLE_API_KEY="key").google_vertex is False
+    with pytest.raises(ValidationError, match="INDEXER_URL"):
+        _indexer_settings(GOOGLE_API_KEY="key", INDEXER_URL="")
+    with pytest.raises(ValidationError, match="INDEXER_INVOKER"):
+        _indexer_settings(GOOGLE_API_KEY="key", INDEXER_INVOKER="not an email")
+    with pytest.raises(ValidationError, match="GOOGLE_VERTEX=true needs GOOGLE_CLOUD_PROJECT"):
+        _indexer_settings(GOOGLE_VERTEX="true")
+    with pytest.raises(ValidationError, match="needs GOOGLE_API_KEY or GOOGLE_VERTEX=true"):
+        _indexer_settings()
+
+
+def test_production_refuses_plain_http_for_the_indexer_and_google_s_certificates() -> None:
+    production = {"NODE_ENV": "production", "GOOGLE_API_KEY": "key"}
+    assert _indexer_settings(**production).google_certs_url.host == "www.googleapis.com"
+    with pytest.raises(ValidationError, match="INDEXER_URL must be HTTPS"):
+        _indexer_settings(**production, INDEXER_URL="http://indexer.test")
+    with pytest.raises(ValidationError, match="GOOGLE_CERTS_URL must be HTTPS"):
+        _indexer_settings(**production, GOOGLE_CERTS_URL="http://127.0.0.1:1/certs")
+    with pytest.raises(ValidationError, match="INDEXER_URL must be HTTPS"):
+        _settings(NODE_ENV="production", INDEXER_URL="http://indexer.test")
+
+
+def test_the_indexer_url_is_an_origin() -> None:
+    """The ID token's audience is this URL exactly, and Cloud Run's is the service's URL
+    with no path or trailing slash."""
+    url = "https://director-indexer-1053522546520.us-central1.run.app"
+    assert _settings(INDEXER_URL=url).indexer_url == url
+    for wrong in (f"{url}/", f"{url}/v1/index", "director-indexer.run.app"):
+        with pytest.raises(ValidationError, match="INDEXER_URL"):
+            _settings(INDEXER_URL=wrong)
+
+
 def test_youtube_videos_go_without_a_container_type() -> None:
     video = youtube_video("jNQXAC9IVRw")
     assert video.url == "https://www.youtube.com/watch?v=jNQXAC9IVRw"
@@ -149,10 +205,13 @@ async def test_nothing_reaches_the_database_before_the_engine_is_opened() -> Non
 
 
 def test_routes_have_no_services_before_the_app_starts() -> None:
+    from app.indexer import services as indexer_services
     from app.main import services
 
     with pytest.raises(RuntimeError, match="lifespan"):
         services()
+    with pytest.raises(RuntimeError, match="lifespan"):
+        indexer_services()
 
 
 def test_the_openapi_export_is_the_committed_document(

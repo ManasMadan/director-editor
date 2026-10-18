@@ -5,14 +5,14 @@ and reviews each take they record (the part worth keeping, a score, one thing to
 Gemini, specifically: it is the model that watches a YouTube video from its URL, so the
 short is never downloaded here. Plans and reviews run in the worker (app/worker.py, queue
 `ai-director`), since watching a video takes longer than a request should; a scene check
-looks at one frame and answers in the request.
+looks at one frame and answers in the request. A plan's indexing itself (app/indexing.py)
+runs in the worker, or on the Cloud Run indexer (app/indexer.py) when INDEXER_URL is set.
 
 Every call reserves its tokens from the workspace's monthly allowance first and settles
 what it used afterwards (app/usage.py). There is no stand-in model: without
 DIRECTOR_MODEL the feature is off, because a plan no model wrote would be made up.
 """
 
-import asyncio
 import base64
 import binascii
 from collections.abc import Mapping
@@ -24,8 +24,7 @@ from uuid import UUID
 import httpx
 from google.genai.types import MediaResolution
 from psycopg.errors import UniqueViolation
-from pydantic_ai import Agent, BinaryContent, VideoUrl
-from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError
+from pydantic_ai import Agent, BinaryContent
 from pydantic_ai.models import Model
 from pydantic_ai.models.google import GoogleModel, GoogleModelSettings
 from pydantic_ai.providers.google import GoogleProvider
@@ -44,8 +43,15 @@ from app.contracts.realtime_message import DirectorChanged
 from app.db.models import DirectorCut, DirectorPlan, DirectorTake
 from app.db.session import tenant
 from app.errors import AppError
+from app.indexing import (
+    NOTHING_USED,
+    Indexer,
+    IndexFailed,
+    LocalIndexer,
+    RemoteIndexer,
+    retryable,
+)
 from app.log import log
-from app.plan_repair import repair_plan
 from app.queues import DirectorQueue
 from app.realtime import publish_to_org
 from app.schemas import (
@@ -53,13 +59,16 @@ from app.schemas import (
     CutPick,
     DirectorCutCreate,
     DirectorTakeCreate,
+    IndexRequest,
+    IndexResult,
+    PlanStage,
     SceneCheck,
     Shot,
     ShotPlan,
     ShotPlanDraft,
     TakeReview,
 )
-from app.settings import Settings
+from app.settings import GeminiSettings, Settings
 from app.usage import Feature, Reservation, reserve, settle
 
 # What screens showing a plan or its takes are told when one changes.
@@ -72,28 +81,9 @@ TAKE_DOWNLOAD_SECONDS = 60.0
 # a video. Past these, the call has failed.
 SCENE_TIMEOUT_SECONDS = 20.0
 WATCH_TIMEOUT_SECONDS = 120.0
-# The statuses Gemini refuses a request with (a bad request, a key it won't take, an unknown
-# model): not worth a retry. When the refusal is about the video (private, removed,
-# age-restricted), the member is told so; otherwise it's this service's configuration.
-REFUSED_STATUSES = frozenset({400, 403, 404})
-_VIDEO_WORDS = ("video", "youtube", "file_uri", "url")
-# Indexing watches a short unattended (no member waiting), so a transient failure is
-# worth a couple of immediate retries before falling back to a different model, rather
-# than failing the whole job over one bad response from INDEX_MODEL.
-PLANNER_RETRIES = 2
-PLANNER_RETRY_BACKOFF_SECONDS = 1.0
-# The statuses worth trying the index fallback model for straight away, no retry: the
-# model itself refused the request (a bad key, a model it doesn't recognize) rather than
-# the video, so a different model (or the key it's configured with) might succeed where
-# this one didn't. 401 is always about the model; 403/404 only when they aren't about the
-# video (REFUSED_STATUSES' own distinction).
-_FALLBACK_STATUSES = frozenset({401, 403, 404})
 # The partial unique index that holds each member to one short of their own (Prisma's
 # ai.prisma, DirectorPlan).
 ONE_USER_INDEX = "director_plan_one_user_index"
-# Three frames a second is plenty for a shot plan (it's reading cuts and poses, not fine
-# print), and keeps the request well under Gemini's token budget for a long short.
-INDEX_VIDEO_FPS = 3.0
 
 PLAN_INSTRUCTIONS = """\
 You are Director, a film director who teaches beginners to recreate a YouTube short.
@@ -195,16 +185,22 @@ class Budgets:
     per_review: int
 
 
-def _google_provider(settings: Settings) -> GoogleProvider | GoogleCloudProvider:
+def _google_provider(settings: GeminiSettings) -> GoogleProvider | GoogleCloudProvider:
     base_url = str(settings.google_base_url) if settings.google_base_url else None
-    return (
-        GoogleCloudProvider(api_key=settings.google_api_key, base_url=base_url)
-        if settings.google_vertex
-        else GoogleProvider(api_key=settings.google_api_key, base_url=base_url)
+    if not settings.google_vertex:
+        return GoogleProvider(api_key=settings.google_api_key, base_url=base_url)
+    if settings.google_api_key:
+        return GoogleCloudProvider(api_key=settings.google_api_key, base_url=base_url)
+    # No express key (the Cloud Run indexer): Application Default Credentials, which on
+    # Cloud Run are the service's own account, from the metadata server.
+    return GoogleCloudProvider(
+        project=settings.google_cloud_project,
+        location=settings.vertex_location,
+        base_url=base_url,
     )
 
 
-def _model_address(settings: Settings, model_name: str) -> str:
+def _model_address(settings: GeminiSettings, model_name: str) -> str:
     """What to send Gemini for `model_name` (a short name, e.g. "gemini-4-argon"). On
     Vertex, an API key drops any project or location from the request unless the model is
     addressed by its full resource name, which Vertex always routes to us-central1
@@ -223,7 +219,7 @@ def _model_address(settings: Settings, model_name: str) -> str:
     )
 
 
-def create_google_model(settings: Settings, model_name: str) -> GoogleModel:
+def create_google_model(settings: GeminiSettings, model_name: str) -> GoogleModel:
     """Builds a Gemini model for `model_name` (the short name every caller passes, kept
     short everywhere the service records or reports a model: DirectorPlan.model, the usage
     ledger, logs). Every GoogleModel( the service builds goes through this, so Vertex's
@@ -239,9 +235,9 @@ def create_director_model(settings: Settings) -> GoogleModel | None:
     return create_google_model(settings, settings.director_model)
 
 
-def create_index_model(settings: Settings, model_name: str) -> GoogleModel:
+def create_index_model(settings: GeminiSettings, model_name: str) -> GoogleModel:
     """A Gemini model for indexing (writing a plan unattended): INDEX_MODEL or, once its
-    retries are spent, INDEX_FALLBACK_MODEL (see `index_short`)."""
+    retries are spent, INDEX_FALLBACK_MODEL (see app/indexing.py's `index_short`)."""
     return create_google_model(settings, model_name)
 
 
@@ -255,10 +251,10 @@ PLANNER_SETTINGS = GoogleModelSettings(
 
 def create_planner_agent(model: Model) -> Agent[None, ShotPlanDraft]:
     """An agent that writes a shot plan from a video, over `model`. `index_short` runs
-    one of these as the primary attempt and one as the fallback; `Director` builds its
-    pair from INDEX_MODEL and INDEX_FALLBACK_MODEL at start-up, and the seed-building
-    script (apps/ai/scripts/build_seeds.py) builds its own the same way, so the prompt
-    and model settings are written once.
+    one of these as the primary attempt and one as the fallback; `create_local_indexer`
+    builds its pair from INDEX_MODEL and INDEX_FALLBACK_MODEL at start-up, and the
+    seed-building script (apps/ai/scripts/build_seeds.py) builds its own the same way, so
+    the prompt and model settings are written once.
 
     ShotPlanDraft, not ShotPlan: Vertex AI answers 400 INVALID_ARGUMENT to a schema with
     a minItems/maxItems anywhere in it (app/schemas.py's module comment), which the real
@@ -274,15 +270,29 @@ def create_planner_agent(model: Model) -> Agent[None, ShotPlanDraft]:
     )
 
 
-def youtube_video(video_id: str) -> VideoUrl:
-    # A YouTube page has no container type, and Vertex AI answers a YouTube URL sent as
-    # video/mp4 (what VideoUrl infers) with a 500; video/* works there and on the Gemini API.
-    # fps: VideoMetadata.fps, verified on Vertex to reach the request.
-    return VideoUrl(
-        url=f"https://www.youtube.com/watch?v={video_id}",
-        media_type="video/*",
-        vendor_metadata={"fps": INDEX_VIDEO_FPS},
+def create_local_indexer(settings: GeminiSettings) -> LocalIndexer:
+    """Indexing in this process, as the worker does without INDEXER_URL and the Cloud
+    Run indexer always does."""
+    return LocalIndexer(
+        create_planner_agent(create_index_model(settings, settings.index_model)),
+        settings.index_model,
+        # Tried once, after `index_short` gives up on INDEX_MODEL: its video calls fail
+        # intermittently (a 500) and usually succeed on a retry, but not always, and a
+        # refusal that's about the model itself (a bad key, an auth error, a model it
+        # doesn't recognize) goes straight to the fallback instead, since retrying the
+        # same model and key wouldn't change the answer.
+        create_planner_agent(create_index_model(settings, settings.index_fallback_model)),
+        settings.index_fallback_model,
+        settings.media_bucket,
     )
+
+
+def create_indexer(settings: Settings, http: httpx.AsyncClient) -> Indexer:
+    """The Cloud Run indexer when INDEXER_URL names it, so Gemini's long video calls and
+    the audio download happen off the VM; otherwise the worker indexes itself."""
+    if settings.indexer_url:
+        return RemoteIndexer(settings.indexer_url, http)
+    return create_local_indexer(settings)
 
 
 def _ready_shots(plan: DirectorPlan) -> list[Shot]:
@@ -356,43 +366,6 @@ def _jpeg(image: str) -> bytes:
     return data
 
 
-def retryable(error: BaseException) -> bool:
-    """Whether trying again may succeed: an outage, a timeout, or being told to slow down.
-    A refusal, an answer that breaks its contract or a take that isn't one won't change."""
-    if isinstance(error, ModelHTTPError):
-        return error.status_code == 429 or error.status_code >= 500
-    if isinstance(error, httpx.HTTPStatusError):
-        return error.response.status_code >= 500
-    return isinstance(error, (httpx.TransportError, ModelAPIError, TimeoutError))
-
-
-def _about_the_video(error: ModelHTTPError) -> bool:
-    """Whether a refusal's own body is about the video (private, removed, age-restricted)
-    rather than this service's configuration (a bad key, a model it doesn't recognize)."""
-    about = str(error.body or "").lower()
-    return any(word in about for word in _VIDEO_WORDS)
-
-
-def _refusal_code(error: ModelHTTPError) -> ErrorCode | None:
-    """The plan's error for a refused request: the video's fault, or this service's."""
-    if error.status_code not in REFUSED_STATUSES:
-        return None
-    if _about_the_video(error):
-        return "DIRECTOR_VIDEO_UNREADABLE"
-    log.error("gemini refused a plan request", status=error.status_code, body=error.body)
-    return "DIRECTOR_ANALYSIS_FAILED"
-
-
-def _falls_back_to_the_other_model(error: BaseException) -> bool:
-    """Worth trying the index fallback model for, straight away, no retry on the same
-    model first: a refusal that's about the model (an auth error, or a 403/404 that isn't
-    about the video) might not happen on the other one, where a refusal about the video
-    itself would happen on either."""
-    if not isinstance(error, ModelHTTPError) or error.status_code not in _FALLBACK_STATUSES:
-        return False
-    return error.status_code == 401 or not _about_the_video(error)
-
-
 def best_range(review: TakeReview, kind: str) -> tuple[int | None, int | None]:
     """The review's best part in milliseconds; none for a photo, or for a range that
     isn't one (it ends before it starts)."""
@@ -405,83 +378,30 @@ def best_range(review: TakeReview, kind: str) -> tuple[int | None, int | None]:
     return (start_ms, end_ms) if end_ms > start_ms else (None, None)
 
 
-async def index_short(
-    planner: Agent[None, ShotPlanDraft],
-    planner_name: str,
-    planner_fallback: Agent[None, ShotPlanDraft],
-    fallback_name: str,
-    video_id: str,
-    usage: RunUsage,
-    usage_limits: UsageLimits,
-) -> tuple[ShotPlan, str]:
-    """Watches `video_id` with `planner` and returns its repaired shot plan and the name
-    of whichever model actually wrote it: `planner_name`, or `fallback_name` once
-    `planner`'s retries are spent or it refuses in a way `planner_fallback` might not
-    (`_falls_back_to_the_other_model`). Retries a transient failure (a 5xx or 429) on
-    `planner` a couple more times with a short backoff before falling back, with no retry
-    on `planner_fallback` first. Anything else (a refusal about the video, a broken
-    contract) isn't retried and doesn't fall back: a different model watching the same
-    video wouldn't fix what's wrong with the video.
-
-    One implementation of "index a short into a usable plan", shared by the plan job
-    (`Director.analyze`, whose planner and its fallback it builds once at start-up from
-    INDEX_MODEL and INDEX_FALLBACK_MODEL) and the seed-building script
-    (apps/ai/scripts/build_seeds.py, which builds its own pair from `create_index_model`
-    and a budget of its own instead of a reservation's)."""
-    messages = [youtube_video(video_id), "Write the shot plan for this short."]
-    last_error: Exception | None = None
-    for attempt in range(PLANNER_RETRIES + 1):
-        try:
-            result = await planner.run(messages, usage=usage, usage_limits=usage_limits)
-            return repair_plan(result.output, None), planner_name
-        except Exception as error:
-            last_error = error
-            if _falls_back_to_the_other_model(error):
-                break
-            if not retryable(error):
-                raise
-            if attempt < PLANNER_RETRIES:
-                await asyncio.sleep(PLANNER_RETRY_BACKOFF_SECONDS * (attempt + 1))
-    log.warning(
-        "falling back to the index fallback model", video_id=video_id, error=str(last_error)
-    )
-    result = await planner_fallback.run(messages, usage=usage, usage_limits=usage_limits)
-    return repair_plan(result.output, None), fallback_name
-
-
 class Director:
     def __init__(
         self,
         model: Model,
         model_name: str,
-        index_model: Model,
+        indexer: Indexer,
         index_model_name: str,
-        index_fallback_model: Model,
-        index_fallback_model_name: str,
         budgets: Budgets,
         queue: DirectorQueue,
         redis: Redis,
         http: httpx.AsyncClient,
         analytics: Analytics | None,
     ) -> None:
-        # The short names the caller built each model from, not `index_model.model_name`:
-        # on Vertex that property is the full resource name (create_google_model), and
-        # DirectorPlan.model and the usage ledger must keep the short one (task-2.1.1b).
+        # The short names the caller built each model from, not `model.model_name`: on
+        # Vertex that property is the full resource name (create_google_model), and the
+        # usage ledger must keep the short one (task-2.1.1b).
         self._model_name = model_name
         self._index_model_name = index_model_name
-        self._index_fallback_model_name = index_fallback_model_name
+        self._indexer = indexer
         self._budgets = budgets
         self._queue = queue
         self._redis = redis
         self._http = http
         self._events = Recorder(analytics)
-        self._planner = create_planner_agent(index_model)
-        # Tried once, after `index_short` gives up on `self._planner` (INDEX_MODEL):
-        # INDEX_MODEL's video calls fail intermittently (a 500) and usually succeed on a
-        # retry, but not always, and a refusal that's about the model itself (a bad key,
-        # an auth error, a model it doesn't recognize) goes straight to the fallback
-        # instead, since retrying the same model and key wouldn't change the answer.
-        self._planner_fallback = create_planner_agent(index_fallback_model)
         self._scout = Agent(
             model,
             output_type=SceneCheck,
@@ -602,14 +522,16 @@ class Director:
     ) -> None:
         """Watches the plan's short and writes the plan (the plan job). Safe to run again:
         a ready plan is left as it is. A failure worth retrying raises, for BullMQ to try
-        again, and fails the plan only on the `final` attempt; any other ends it now."""
-        async with tenant(org_id) as session:
-            plan = await session.get(DirectorPlan, plan_id)
-            if plan is None or plan.status == "ready":
-                return
-            plan.status, plan.updated_at = "analyzing", func.now()
-            video_id = plan.video_id
-        await publish_to_org(self._redis, org_id, CHANGED)
+        again, and fails the plan only on the `final` attempt; any other ends it now.
+
+        Each stage is stored on the plan and announced as it's reached (`stage`): queued
+        when it's asked for (`index`), watching while Gemini watches the short, writing
+        once Gemini has answered (the audio is captured and the plan saved), then ready,
+        or failed with the reason."""
+        started = await self._start_watching(org_id, plan_id)
+        if started is None:
+            return
+        video_id, asked_by = started
         # Reserved under the index model: whichever one actually answers (the primary or,
         # once `index_short` falls back, the fallback) is recorded on the plan itself,
         # below, but the reservation happens before either has run.
@@ -619,35 +541,57 @@ class Director:
         if reservation is None:
             await self._fail_plan(org_id, plan_id, "AI_BUDGET_EXCEEDED")
             return
-        usage = RunUsage()
+        request = IndexRequest(
+            videoId=video_id, orgId=org_id, planId=plan_id, maxTokens=reservation.tokens
+        )
+        used = NOTHING_USED
         try:
-            # index_short: retries, falls back, and repairs what Gemini's plan validates
-            # field by field but can still leave inconsistent with itself (overlapping
-            # shots, a script line past its shot's end, more shots or steps than the
-            # prompt asked for). The video's own length isn't known here (Gemini watches
-            # it by URL, never downloaded), so the repair only clamps source ranges to
-            # MAX_SHORT_SECONDS.
-            repaired, answering_model = await index_short(
-                self._planner,
-                self._index_model_name,
-                self._planner_fallback,
-                self._index_fallback_model_name,
-                video_id,
-                usage,
-                UsageLimits(total_tokens_limit=reservation.tokens),
+            result = await self._indexer.index(
+                request, watched=lambda: self._reach(org_id, plan_id, "writing")
             )
-        except Exception as error:
-            # Includes the run's token cap: a short needing more would spend it again.
-            refused = _refusal_code(error) if isinstance(error, ModelHTTPError) else None
-            if refused is None:
-                log.exception("director plan failed", plan_id=str(plan_id))
-            if final or not retryable(error):
-                await self._fail_plan(org_id, plan_id, refused or "DIRECTOR_ANALYSIS_FAILED")
-            if retryable(error):
+            used = result.usage
+        except IndexFailed as failure:
+            used = failure.usage
+            if final or not failure.retryable:
+                await self._fail_plan(org_id, plan_id, failure.code)
+            if failure.retryable:
                 raise
             return
         finally:
-            await settle(reservation, usage.input_tokens, usage.output_tokens)
+            await settle(reservation, used.inputTokens, used.outputTokens)
+        await self._save_plan(org_id, plan_id, result)
+        # Only here, once the plan is stored: a run that fails or is retried isn't one.
+        self._events.record(
+            AnalyticsEvent(
+                kind="indexed",
+                user_id=asked_by,
+                video_id=video_id,
+                detail={"model": result.model, "audio": result.audio.status},
+            )
+        )
+
+    async def _start_watching(self, org_id: UUID, plan_id: UUID) -> tuple[str, UUID | None] | None:
+        """Marks the plan as being watched: its short and who asked for it, or None when
+        there's nothing to do (it's gone, or ready already)."""
+        async with tenant(org_id) as session:
+            plan = await session.get(DirectorPlan, plan_id)
+            if plan is None or plan.status == "ready":
+                return None
+            plan.status, plan.stage, plan.updated_at = "analyzing", "watching", func.now()
+            started = plan.video_id, plan.created_by
+        await publish_to_org(self._redis, org_id, CHANGED)
+        return started
+
+    async def _reach(self, org_id: UUID, plan_id: UUID, stage: PlanStage) -> None:
+        async with tenant(org_id) as session:
+            await session.execute(
+                update(DirectorPlan)
+                .where(DirectorPlan.id == plan_id)
+                .values(stage=stage, updated_at=func.now())
+            )
+        await publish_to_org(self._redis, org_id, CHANGED)
+
+    async def _save_plan(self, org_id: UUID, plan_id: UUID, result: IndexResult) -> None:
         async with tenant(org_id) as session:
             await session.execute(
                 update(DirectorPlan)
@@ -656,8 +600,10 @@ class Director:
                     status="ready",
                     stage="ready",
                     error=None,
-                    plan=repaired.model_dump(mode="json"),
-                    model=answering_model,
+                    plan=result.plan.model_dump(mode="json"),
+                    model=result.model,
+                    audio_status=result.audio.status,
+                    audio_key=result.audio.objectKey,
                     updated_at=func.now(),
                 )
             )
@@ -975,10 +921,8 @@ def create_director(
     return Director(
         model,
         settings.director_model,
-        create_index_model(settings, settings.index_model),
+        create_indexer(settings, http),
         settings.index_model,
-        create_index_model(settings, settings.index_fallback_model),
-        settings.index_fallback_model,
         Budgets(
             monthly=settings.monthly_tokens_per_org,
             per_plan=settings.director_tokens_per_plan,

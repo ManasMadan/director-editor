@@ -121,6 +121,95 @@ roll back in git:
 The database isn't rolled back: the previous release already works with the current
 schema. If a migration itself is wrong, fix forward with a new one.
 
+## The Cloud Run indexer
+
+Production's ai worker can send each plan job's short to a private Cloud Run service,
+`director-indexer`, so Gemini's long video calls and the audio download (yt-dlp, then
+`gs://director-media-…/audio/<videoId>.m4a`) run off the VM. It's the same `ai` image
+with another entrypoint (`uvicorn app.indexer:app`, apps/ai/app/indexer.py) and the same
+code the worker runs without it (apps/ai/app/indexing.py). It has no database: it
+answers with the plan, the audio's key and what the run used, and the worker stores and
+counts them.
+
+Only the VM's account may call it: Cloud Run lets in only the service's invokers
+(`--no-allow-unauthenticated`), and the indexer checks the ID token again (audience
+`INDEXER_URL`, email `INDEXER_INVOKER`). It calls Vertex AI and Cloud Storage as its own
+account, `director-indexer@…`, through Application Default Credentials: no express key
+or key file. Until `INDEXER_URL` is set on the ai worker, plans are indexed in the worker
+itself, the same way.
+
+It isn't deployed by Argo CD; run these by hand (or from a release checklist) with
+`gcloud` signed in as a project owner. The variables, once per shell:
+
+```sh
+PROJECT=project-18e15b18-c92e-44bb-9bf
+REGION=us-central1
+BUCKET=director-media-1053522546520
+COMMIT=<the commit production runs>          # release.yaml's ai image is sha-<commit>
+SOURCE=ghcr.io/manasmadan/director-editor/ai:sha-$COMMIT
+IMAGE=$REGION-docker.pkg.dev/$PROJECT/director/ai:sha-$COMMIT
+INDEXER=director-indexer@$PROJECT.iam.gserviceaccount.com
+VM=director-vm@$PROJECT.iam.gserviceaccount.com
+# Cloud Run's deterministic URL: https://<service>-<project number>.<region>.run.app
+INDEXER_URL=https://director-indexer-1053522546520.$REGION.run.app
+```
+
+Once per project (skip what exists):
+
+```sh
+gcloud services enable run.googleapis.com artifactregistry.googleapis.com --project=$PROJECT
+gcloud artifacts repositories create director --repository-format=docker \
+  --location=$REGION --project=$PROJECT
+gcloud iam service-accounts create director-indexer --project=$PROJECT \
+  --display-name="Director indexer (Cloud Run)"
+# Gemini on Vertex AI, and the audio it captures into the media bucket.
+gcloud projects add-iam-policy-binding $PROJECT --member=serviceAccount:$INDEXER \
+  --role=roles/aiplatform.user
+gcloud storage buckets add-iam-policy-binding gs://$BUCKET \
+  --member=serviceAccount:$INDEXER --role=roles/storage.objectAdmin
+```
+
+Each release (Cloud Run pulls from Artifact Registry, not GHCR, so the image is copied
+first; `crane copy $SOURCE $IMAGE` does the same):
+
+```sh
+gcloud auth configure-docker $REGION-docker.pkg.dev
+docker buildx imagetools create --tag $IMAGE $SOURCE
+
+gcloud run deploy director-indexer --project=$PROJECT --region=$REGION \
+  --image=$IMAGE \
+  --command=uvicorn --args=app.indexer:app,--host,0.0.0.0,--port,8080 --port=8080 \
+  --service-account=$INDEXER --no-allow-unauthenticated \
+  --timeout=900 --memory=2Gi --cpu=1 \
+  --set-env-vars=NODE_ENV=production,LOG_LEVEL=info,RELEASE=sha-$COMMIT,INDEXER_URL=$INDEXER_URL,INDEXER_INVOKER=$VM,GOOGLE_VERTEX=true,GOOGLE_CLOUD_PROJECT=$PROJECT,VERTEX_LOCATION=global,INDEX_MODEL=gemini-4-argon,INDEX_FALLBACK_MODEL=gemini-3.1-pro-preview,MEDIA_BUCKET=$BUCKET
+
+# The VM's account (the ai worker) may call it.
+gcloud run services add-iam-policy-binding director-indexer --project=$PROJECT \
+  --region=$REGION --member=serviceAccount:$VM --role=roles/run.invoker
+```
+
+`--timeout=900` is the worker's own (`INDEX_REQUEST_SECONDS` in app/indexing.py): every
+retry and the fallback model of a slow short fit in it. `INDEX_MODEL` and
+`INDEX_FALLBACK_MODEL` should match the worker's (the worker records usage under its own
+`INDEX_MODEL`). Check the service's URLs include `$INDEXER_URL`:
+
+```sh
+gcloud run services describe director-indexer --project=$PROJECT --region=$REGION \
+  --format='value(metadata.annotations."run.googleapis.com/urls")'
+```
+
+Then check it from the VM, as its account:
+
+```sh
+TOKEN=$(curl -s -H 'Metadata-Flavor: Google' \
+  "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience=$INDEXER_URL&format=full")
+curl -s -H "Authorization: Bearer $TOKEN" $INDEXER_URL/health/live    # {"status":"ok"}
+```
+
+Finally point the worker at it: set `INDEXER_URL: <$INDEXER_URL>` in the ai worker's
+`env` in `deploy/environments/production/stack.yaml` (where its comment says), and
+promote. Unsetting it again is the rollback: the worker goes back to indexing itself.
+
 ## Previews
 
 Adding the `preview` label to a pull request from this repository (not a fork) runs

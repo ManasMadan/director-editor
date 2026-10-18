@@ -282,6 +282,41 @@ class DirectorLibraryOut(BaseModel):
     indexUsed: bool = Field(description="The caller has indexed their one short of their own.")
 
 
+# ------------------------------------------------------------------------- the indexer
+# The Cloud Run indexer's request and answer (app/indexer.py), which the worker sends and
+# reads (app/indexing.py's RemoteIndexer). Both ends are this service, deployed from the
+# same image, so they change together; neither is in openapi.json, which is apps/api's.
+
+
+class IndexRequest(BaseModel):
+    model_config = REQUEST
+
+    videoId: str = Field(pattern=VIDEO_ID_PATTERN)
+    # For the logs: the indexer reads and writes no database.
+    orgId: UUID = Field(strict=False)
+    planId: UUID = Field(strict=False)
+    maxTokens: int = Field(
+        ge=1, description="The run's token cap: what the worker reserved for it."
+    )
+
+
+class TokenUsage(BaseModel):
+    inputTokens: int = Field(ge=0)
+    outputTokens: int = Field(ge=0)
+
+
+class AudioCapture(BaseModel):
+    status: AudioStatus = Field(description='"none" when no MEDIA_BUCKET is configured.')
+    objectKey: str | None = Field(max_length=200, description="Its key in MEDIA_BUCKET.")
+
+
+class IndexResult(BaseModel):
+    plan: ShotPlan
+    model: str = Field(min_length=1, max_length=200, description="The model that wrote it.")
+    audio: AudioCapture
+    usage: TokenUsage = Field(description="What the run used, for the worker to count.")
+
+
 class SceneCheckRequest(BaseModel):
     model_config = REQUEST
 

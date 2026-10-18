@@ -3,14 +3,16 @@ TypeScript services' (scripts/env-docs.test.ts)."""
 
 import re
 
-from app.settings import Settings
+from app.settings import IndexerSettings, Settings
 from tests import ENV_EXAMPLE
 
 DOCS = ENV_EXAMPLE.parent / "docs" / "environment.md"
 
 
 def variables() -> list[str]:
-    return [field.alias or name.upper() for name, field in Settings.model_fields.items()]
+    """The service's, and the Cloud Run indexer's (app/indexer.py)."""
+    fields = {**Settings.model_fields, **IndexerSettings.model_fields}
+    return [field.alias or name.upper() for name, field in fields.items()]
 
 
 def test_every_variable_is_in_the_example() -> None:

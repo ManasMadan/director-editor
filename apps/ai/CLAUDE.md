@@ -31,6 +31,11 @@ TypeScript client is `packages/ai-client`.
   tests use it instead of Starlette's untyped `app.state`).
 - `app/director.py`: plans, scene checks and take reviews; `app/plan_repair.py` fixes
   inconsistent shot plans; `app/audio.py` captures a short's original audio.
+- `app/indexing.py`: indexing a short (`index_short`, `LocalIndexer`), or sending it to
+  the Cloud Run indexer (`RemoteIndexer`, when `INDEXER_URL` is set). `app/indexer.py`
+  is that indexer (`uvicorn app.indexer:app`, its own `IndexerSettings`, no database);
+  `app/google_auth.py` gets ID and access tokens from the metadata server and checks
+  the indexer's callers.
 
 ## Gotchas
 

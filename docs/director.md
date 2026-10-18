@@ -46,7 +46,14 @@ plain-HTTP `GOOGLE_BASE_URL` or `YOUTUBE_API_URL` (the mock Google's protocol, n
 endpoint). A plan job (watching a short unattended) indexes it with `INDEX_MODEL`, a
 separate, more thorough model from `DIRECTOR_MODEL`'s live scene checks and reviews;
 `INDEX_FALLBACK_MODEL` is tried once after `INDEX_MODEL`'s own retries on a transient
-failure are spent.
+failure are spent. The plan's `stage` says how far it got, stored and announced as each
+is reached: `queued` when it's asked for, `watching` while Gemini watches the short,
+`writing` once Gemini has answered (the original audio is captured into `MEDIA_BUCKET`
+and the plan saved), then `ready`, or `failed` with its reason:
+`DIRECTOR_VIDEO_UNAVAILABLE` when Gemini can't watch the video (private, removed,
+age-restricted), `DIRECTOR_ANALYSIS_FAILED` otherwise. A failed plan never counts as the
+member's one short of their own. With `INDEXER_URL` set, the indexing runs on the Cloud
+Run indexer instead of in the worker ([deploy.md](deploy.md#the-cloud-run-indexer)).
 
 Integration, e2e and fuzz suites never need a real key: they start the mock Google
 themselves (`startFakeGoogle` from `packages/fake-google`, e.g.

@@ -1,7 +1,8 @@
 """Product analytics: one event per interesting thing someone does, streamed into
 BigQuery for a Looker Studio report. The same `events` table and row shape as apps/api's
-(packages/nest-common/src/analytics.ts); this service records `take_reviewed`, once a
-take's review has its score, since only this service knows when that is.
+(packages/nest-common/src/analytics.ts); this service records `indexed`, once a plan is
+ready, and `take_reviewed`, once a take's review has its score, since only this service
+knows when those are.
 
     recorder.record(AnalyticsEvent(kind="take_reviewed", user_id=..., score=82))
 

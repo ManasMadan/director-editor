@@ -47,6 +47,19 @@ tests:
             to: [{ ipBlock: { cidr: 169.254.169.254/32 } }]
             ports: [{ port: 80 }]
 
+  - it: captures a short's audio into the api's bucket from the ai worker
+    template: deployment.yaml
+    documentSelector: { path: metadata.name, value: demo-ai-worker }
+    asserts: &mediaBucket
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: MEDIA_BUCKET, value: director-media-1053522546520 }
+
+  - it: gives the ai service the same bucket
+    template: deployment.yaml
+    documentSelector: { path: metadata.name, value: demo-ai }
+    asserts: *mediaBucket
+
   - it: lets the worker reach the metadata server too
     template: networkpolicy.yaml
     documentSelector: { path: metadata.name, value: demo-worker }
