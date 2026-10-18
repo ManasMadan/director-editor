@@ -18,7 +18,7 @@ import type {
   YourVersion,
 } from "@repo/contracts/api";
 import { uploadPurposes } from "@repo/contracts/files";
-import { type DirectorTakeId, videoIdSchema } from "@repo/contracts/ids";
+import type { DirectorTakeId } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
 import { buttonVariants } from "@repo/ui/components/button";
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "@repo/ui/components/dialog";
@@ -36,9 +36,9 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { authClient } from "@/lib/auth-client";
 import { DirectorGate } from "@/modules/shorts";
 import { BackToPicks } from "../components/directors-picks";
 import { EditPlayer } from "../components/edit-player";
@@ -49,25 +49,17 @@ import { ShotBoard } from "../components/shot-board";
 import { TellDirector } from "../components/tell-director";
 import { VersionGaps } from "../components/version-gaps";
 import { type EditChoices, useEditHistory } from "../hooks/use-edit-history";
+import { useEditorTalk } from "../hooks/use-editor-talk";
 import { useMatchCuts } from "../hooks/use-match-cuts";
 import { useObjectUrl } from "../hooks/use-object-url";
 import { usePlayback } from "../hooks/use-playback";
 import { shotPage } from "../hooks/use-studio";
 import { type MediaState, useTakeMedia } from "../hooks/use-take-media";
-import { useTellDirector } from "../hooks/use-tell-director";
 import { type AudioMode, parseAudio } from "../lib/audio";
 import { type CaptionLine, webVtt } from "../lib/captions";
 import { composer, type Picture } from "../lib/compose";
 import { type Clip, clipsOf, editLines, editSeconds, playsAsGap } from "../lib/edit";
-import {
-  applyActions,
-  arrange,
-  type EditorEffect,
-  editorState,
-  fixLines,
-  UNARRANGED,
-  withPick,
-} from "../lib/editor-actions";
+import { arrange, editorState, fixLines, UNARRANGED, withPick } from "../lib/editor-actions";
 import { gradeFilter } from "../lib/grades";
 import { captionInk } from "../lib/ink";
 import type { MatchCutTransform } from "../lib/match-cuts";
@@ -578,13 +570,13 @@ function useEditor(
   shots: readonly DirectorShot[],
   audio: AudioMode,
   version: YourVersion,
+  owner: string | null,
 ) {
-  const history = useEditHistory({
-    style: "pop",
-    sound: audio === "voice",
-    picks: {},
-    ...UNARRANGED,
-  });
+  // Kept in this tab per member and template: a reload or a reshoot comes back to them.
+  const history = useEditHistory(
+    { style: "pop", sound: audio === "voice", picks: {}, ...UNARRANGED },
+    owner === null ? null : `${owner}:${videoId}`,
+  );
   const { playing, byShot, clips, matchCuts } = useArrangedClips(
     videoId,
     plan,
@@ -723,54 +715,6 @@ function WrapCall({ ready, play }: { ready: boolean; play: () => void }) {
   );
 }
 
-/**
- * The "tell Director" bar's requests: each answer that changes something is one step in
- * the edit history (one Undo), the shots it changed are outlined, and what only the page
- * can do (undo, redo, reshooting a shot) is done here.
- */
-function useTalk(videoId: string, editor: EditorState, audio: AudioMode) {
-  const router = useRouter();
-  const { history } = editor;
-  const effects: Record<EditorEffect["kind"], (effect: EditorEffect) => void> = {
-    undo: (effect) => repeat(effect, history.undo),
-    redo: (effect) => repeat(effect, history.redo),
-    reshoot: (effect) => {
-      if (effect.kind === "reshoot") {
-        router.push(shotPage(videoId, effect.shotIndex, audio, true));
-      }
-    },
-    // The asset picker and the soundtrack join here: Director has already said what it
-    // would make; until they're in the editor, nothing more happens.
-    asset: () => undefined,
-    music: () => undefined,
-  };
-  const talk = useTellDirector(videoIdSchema.parse(videoId), (reply) => {
-    editor.setReply(reply);
-    if (reply.outcome !== "applied") {
-      return;
-    }
-    const step = applyActions(history.choices, reply.actions, editor.byShot);
-    if (step.choices !== history.choices) {
-      history.change(step.choices);
-    }
-    for (const effect of step.effects) {
-      effects[effect.kind](effect);
-    }
-    const first = step.shots[0];
-    if (first !== undefined) {
-      editor.showShot(first);
-    }
-  });
-  return talk;
-}
-
-function repeat(effect: EditorEffect, once: () => void) {
-  const steps = "steps" in effect ? effect.steps : 1;
-  for (let step = 0; step < steps; step++) {
-    once();
-  }
-}
-
 /** The shots and their takes, and the "tell Director" bar under them. */
 function BoardPanel({
   videoId,
@@ -841,7 +785,7 @@ function TalkBar({
   editor: EditorState;
   shots: readonly DirectorShot[];
 }) {
-  const talk = useTalk(videoId, editor, audio);
+  const talk = useEditorTalk(videoId, audio, editor);
   const { history, playback } = editor;
   const dismiss = () => {
     editor.setReply(null);
@@ -878,6 +822,7 @@ function Editor({
   audio,
   wrap,
   version,
+  owner,
 }: {
   videoId: string;
   plan: ServedShotPlan;
@@ -886,8 +831,10 @@ function Editor({
   wrap: boolean;
   /** The member's version: its skipped shots and gaps aren't in the video. */
   version: YourVersion;
+  /** The signed-in member, whose choices are kept for the next visit. */
+  owner: string | null;
 }) {
-  const editor = useEditor(videoId, plan, shots, audio, version);
+  const editor = useEditor(videoId, plan, shots, audio, version, owner);
   const saver = useSaveVideo(videoId, plan.title);
   const assetSlots = useAssetSlotsQuery(videoId).data?.slots ?? NO_SLOTS;
   const { playback, history, clips, media } = editor;
@@ -981,6 +928,7 @@ function Edit({
   const ready = plan.data?.status === "ready" ? plan.data.plan : null;
   const shots = useDirectorShotsQuery(videoId, ready !== null);
   const version = useYourVersionQuery(videoId);
+  const session = authClient.useSession();
   // The shoot's footage still on this device (the member opened the editor without
   // waiting after Done) goes on uploading here; its takes appear as they're cut.
   useSliceUploader();
@@ -1008,7 +956,8 @@ function Edit({
       </p>
     );
   }
-  if (!ready || !shots.data || !version.data) {
+  // The member is known before the editor opens: their kept choices are read once, then.
+  if (!ready || !shots.data || !version.data || session.isPending) {
     return <Loading />;
   }
   return (
@@ -1019,6 +968,7 @@ function Edit({
       audio={parseAudio(audio, ready)}
       wrap={wrap}
       version={version.data}
+      owner={session.data?.user.id ?? null}
     />
   );
 }
