@@ -253,6 +253,23 @@ describe("Director's calls", () => {
     ]);
   });
 
+  it("count a turn of the slower line: reserved, then settled", async () => {
+    handler = (request, response) =>
+      request.url === "/v1/director/chat-reservations"
+        ? json(response, 201, { tokens: 20_000 })
+        : json(response, 204, undefined);
+    const { director } = client();
+    await expect(director.reserveChatTurn(caller, { model: "gemini-chat" })).resolves.toEqual({
+      tokens: 20_000,
+    });
+    const used = { model: "gemini-chat", reserved: 20_000, inputTokens: 3_000, outputTokens: 40 };
+    await expect(director.settleChatTurn(caller, used)).resolves.toBeUndefined();
+    expect(seen.map(({ method, path, body }) => [`${method} ${path}`, body])).toEqual([
+      ["POST /v1/director/chat-reservations", JSON.stringify({ model: "gemini-chat" })],
+      ["POST /v1/director/chat-usage", JSON.stringify(used)],
+    ]);
+  });
+
   it("throw the service's error with its code, params and issues", async () => {
     handler = (_request, response) =>
       json(

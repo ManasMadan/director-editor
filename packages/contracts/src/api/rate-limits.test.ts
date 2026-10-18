@@ -5,7 +5,8 @@
  */
 import { isContractProcedure, oc } from "@orpc/contract";
 import { describe, expect, it } from "vitest";
-import { base, type ProcedureMeta, type RateLimit } from "./base";
+import { HOUR_S, MINUTE_S } from "../time";
+import { base, type ProcedureMeta, type RateLimit, rateLimitsOf } from "./base";
 import { contract } from "./index";
 
 interface Described {
@@ -44,9 +45,7 @@ const unlimitedMutations = (router: object) =>
 
 const limits = () =>
   proceduresOf(contract).flatMap(({ path, meta, errors }) =>
-    meta.rateLimit && !("exempt" in meta.rateLimit)
-      ? [{ path, limit: meta.rateLimit, errors }]
-      : [],
+    rateLimitsOf(meta).map((limit) => ({ path, limit, errors })),
   );
 
 describe("rate limits", () => {
@@ -80,6 +79,35 @@ describe("rate limits", () => {
       byName.set(limit.name, first);
       expect(limit, `${path} (${limit.name})`).toEqual(first);
     }
+  });
+
+  it("hold the slower line to a person's pace, and a demo guest to less", () => {
+    const chat = rateLimitsOf(contract.director.chat["~orpc"].meta);
+    const spent = (guest: boolean) =>
+      chat
+        .filter((limit) => guest || !limit.guestsOnly)
+        .map(({ points, windowSeconds }) => ({
+          points,
+          windowSeconds,
+        }));
+    const most = (guest: boolean, windowSeconds: number) =>
+      Math.min(
+        ...spent(guest)
+          .filter((limit) => limit.windowSeconds === windowSeconds)
+          .map(({ points }) => points),
+      );
+    expect(most(false, MINUTE_S)).toBe(10);
+    expect(most(false, HOUR_S)).toBeLessThanOrEqual(300);
+    expect(most(true, MINUTE_S)).toBeLessThan(most(false, MINUTE_S));
+    expect(most(true, HOUR_S)).toBeLessThan(most(false, HOUR_S));
+  });
+
+  it("read as a list, one or several", () => {
+    const limit = { name: "t", points: 1, windowSeconds: 1, per: "user" } as const;
+    expect(rateLimitsOf({})).toEqual([]);
+    expect(rateLimitsOf({ rateLimit: { exempt: "a reason" } })).toEqual([]);
+    expect(rateLimitsOf({ rateLimit: limit })).toEqual([limit]);
+    expect(rateLimitsOf({ rateLimit: [limit, { ...limit, name: "u" }] })).toHaveLength(2);
   });
 
   it("per organization are only on procedures that act in one", () => {

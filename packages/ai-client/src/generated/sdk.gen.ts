@@ -4,8 +4,8 @@ import * as z from 'zod';
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddDirectorAssetData, AddDirectorAssetErrors, AddDirectorAssetResponses, AlignDirectorMatchCutData, AlignDirectorMatchCutErrors, AlignDirectorMatchCutResponses, AskDirectorEditorData, AskDirectorEditorErrors, AskDirectorEditorResponses, BrainstormDirectorTemplateData, BrainstormDirectorTemplateErrors, BrainstormDirectorTemplateResponses, ChooseDirectorAssetData, ChooseDirectorAssetErrors, ChooseDirectorAssetResponses, ChooseDirectorTakeData, ChooseDirectorTakeErrors, ChooseDirectorTakeResponses, ClipDirectorAttemptData, ClipDirectorAttemptErrors, ClipDirectorAttemptResponses, CreateDirectorCutData, CreateDirectorCutErrors, CreateDirectorCutResponses, CreateDirectorTakeData, CreateDirectorTakeErrors, CreateDirectorTakeResponses, CreateDirectorTemplateData, CreateDirectorTemplateErrors, CreateDirectorTemplateResponses, DependenciesData, DependenciesErrors, DependenciesResponses, DrawDirectorAssetData, DrawDirectorAssetErrors, DrawDirectorAssetResponses, EditDirectorTemplateData, EditDirectorTemplateErrors, EditDirectorTemplateResponses, GetDirectorCutData, GetDirectorCutErrors, GetDirectorCutResponses, GetDirectorLibraryData, GetDirectorLibraryErrors, GetDirectorLibraryResponses, GetDirectorPlanData, GetDirectorPlanErrors, GetDirectorPlanResponses, IndexDirectorPlanData, IndexDirectorPlanErrors, IndexDirectorPlanResponses, ListDirectorAssetsData, ListDirectorAssetsErrors, ListDirectorAssetsResponses, ListDirectorCutsData, ListDirectorCutsErrors, ListDirectorCutsResponses, ListDirectorMediaData, ListDirectorMediaErrors, ListDirectorMediaResponses, ListDirectorTakesData, ListDirectorTakesErrors, ListDirectorTakesResponses, LiveData, LiveErrors, LiveResponses, LocateDirectorTargetData, LocateDirectorTargetErrors, LocateDirectorTargetResponses, ReadyData, ReadyErrors, ReadyResponses, ReviseDirectorVersionData, ReviseDirectorVersionErrors, ReviseDirectorVersionResponses, SpeakDirectorLineData, SpeakDirectorLineErrors, SpeakDirectorLineResponses, WriteDirectorPublishCopyData, WriteDirectorPublishCopyErrors, WriteDirectorPublishCopyResponses } from './types.gen';
-import { zAddDirectorAssetBody, zAddDirectorAssetHeaders, zAddDirectorAssetPath, zAddDirectorAssetResponse, zAlignDirectorMatchCutBody, zAlignDirectorMatchCutHeaders, zAlignDirectorMatchCutResponse, zAskDirectorEditorBody, zAskDirectorEditorHeaders, zAskDirectorEditorResponse, zBrainstormDirectorTemplateBody, zBrainstormDirectorTemplateHeaders, zBrainstormDirectorTemplateResponse, zChooseDirectorAssetBody, zChooseDirectorAssetHeaders, zChooseDirectorAssetPath, zChooseDirectorAssetResponse, zChooseDirectorTakeBody, zChooseDirectorTakeHeaders, zChooseDirectorTakePath, zChooseDirectorTakeResponse, zClipDirectorAttemptBody, zClipDirectorAttemptHeaders, zClipDirectorAttemptResponse, zCreateDirectorCutBody, zCreateDirectorCutHeaders, zCreateDirectorCutResponse, zCreateDirectorTakeBody, zCreateDirectorTakeHeaders, zCreateDirectorTakeResponse, zCreateDirectorTemplateBody, zCreateDirectorTemplateHeaders, zCreateDirectorTemplateResponse, zDependenciesResponse, zDrawDirectorAssetBody, zDrawDirectorAssetHeaders, zDrawDirectorAssetPath, zDrawDirectorAssetResponse, zEditDirectorTemplateBody, zEditDirectorTemplateHeaders, zEditDirectorTemplateResponse, zGetDirectorCutHeaders, zGetDirectorCutPath, zGetDirectorCutResponse, zGetDirectorLibraryHeaders, zGetDirectorLibraryResponse, zGetDirectorPlanHeaders, zGetDirectorPlanPath, zGetDirectorPlanResponse, zIndexDirectorPlanBody, zIndexDirectorPlanHeaders, zIndexDirectorPlanResponse, zListDirectorAssetsHeaders, zListDirectorAssetsPath, zListDirectorAssetsResponse, zListDirectorCutsHeaders, zListDirectorCutsPath, zListDirectorCutsResponse, zListDirectorMediaHeaders, zListDirectorMediaResponse, zListDirectorTakesHeaders, zListDirectorTakesPath, zListDirectorTakesResponse, zLiveResponse, zLocateDirectorTargetBody, zLocateDirectorTargetHeaders, zLocateDirectorTargetResponse, zReadyResponse, zReviseDirectorVersionBody, zReviseDirectorVersionHeaders, zReviseDirectorVersionPath, zReviseDirectorVersionResponse, zSpeakDirectorLineBody, zSpeakDirectorLineHeaders, zSpeakDirectorLineResponse, zWriteDirectorPublishCopyBody, zWriteDirectorPublishCopyHeaders, zWriteDirectorPublishCopyResponse } from './zod.gen';
+import type { AddDirectorAssetData, AddDirectorAssetErrors, AddDirectorAssetResponses, AlignDirectorMatchCutData, AlignDirectorMatchCutErrors, AlignDirectorMatchCutResponses, AskDirectorEditorData, AskDirectorEditorErrors, AskDirectorEditorResponses, BrainstormDirectorTemplateData, BrainstormDirectorTemplateErrors, BrainstormDirectorTemplateResponses, ChooseDirectorAssetData, ChooseDirectorAssetErrors, ChooseDirectorAssetResponses, ChooseDirectorTakeData, ChooseDirectorTakeErrors, ChooseDirectorTakeResponses, ClipDirectorAttemptData, ClipDirectorAttemptErrors, ClipDirectorAttemptResponses, CreateDirectorCutData, CreateDirectorCutErrors, CreateDirectorCutResponses, CreateDirectorTakeData, CreateDirectorTakeErrors, CreateDirectorTakeResponses, CreateDirectorTemplateData, CreateDirectorTemplateErrors, CreateDirectorTemplateResponses, DependenciesData, DependenciesErrors, DependenciesResponses, DrawDirectorAssetData, DrawDirectorAssetErrors, DrawDirectorAssetResponses, EditDirectorTemplateData, EditDirectorTemplateErrors, EditDirectorTemplateResponses, GetDirectorCutData, GetDirectorCutErrors, GetDirectorCutResponses, GetDirectorLibraryData, GetDirectorLibraryErrors, GetDirectorLibraryResponses, GetDirectorPlanData, GetDirectorPlanErrors, GetDirectorPlanResponses, IndexDirectorPlanData, IndexDirectorPlanErrors, IndexDirectorPlanResponses, ListDirectorAssetsData, ListDirectorAssetsErrors, ListDirectorAssetsResponses, ListDirectorCutsData, ListDirectorCutsErrors, ListDirectorCutsResponses, ListDirectorMediaData, ListDirectorMediaErrors, ListDirectorMediaResponses, ListDirectorTakesData, ListDirectorTakesErrors, ListDirectorTakesResponses, LiveData, LiveErrors, LiveResponses, LocateDirectorTargetData, LocateDirectorTargetErrors, LocateDirectorTargetResponses, ReadyData, ReadyErrors, ReadyResponses, ReserveDirectorChatTurnData, ReserveDirectorChatTurnErrors, ReserveDirectorChatTurnResponses, ReviseDirectorVersionData, ReviseDirectorVersionErrors, ReviseDirectorVersionResponses, SettleDirectorChatTurnData, SettleDirectorChatTurnErrors, SettleDirectorChatTurnResponses, SpeakDirectorLineData, SpeakDirectorLineErrors, SpeakDirectorLineResponses, WriteDirectorPublishCopyData, WriteDirectorPublishCopyErrors, WriteDirectorPublishCopyResponses } from './types.gen';
+import { zAddDirectorAssetBody, zAddDirectorAssetHeaders, zAddDirectorAssetPath, zAddDirectorAssetResponse, zAlignDirectorMatchCutBody, zAlignDirectorMatchCutHeaders, zAlignDirectorMatchCutResponse, zAskDirectorEditorBody, zAskDirectorEditorHeaders, zAskDirectorEditorResponse, zBrainstormDirectorTemplateBody, zBrainstormDirectorTemplateHeaders, zBrainstormDirectorTemplateResponse, zChooseDirectorAssetBody, zChooseDirectorAssetHeaders, zChooseDirectorAssetPath, zChooseDirectorAssetResponse, zChooseDirectorTakeBody, zChooseDirectorTakeHeaders, zChooseDirectorTakePath, zChooseDirectorTakeResponse, zClipDirectorAttemptBody, zClipDirectorAttemptHeaders, zClipDirectorAttemptResponse, zCreateDirectorCutBody, zCreateDirectorCutHeaders, zCreateDirectorCutResponse, zCreateDirectorTakeBody, zCreateDirectorTakeHeaders, zCreateDirectorTakeResponse, zCreateDirectorTemplateBody, zCreateDirectorTemplateHeaders, zCreateDirectorTemplateResponse, zDependenciesResponse, zDrawDirectorAssetBody, zDrawDirectorAssetHeaders, zDrawDirectorAssetPath, zDrawDirectorAssetResponse, zEditDirectorTemplateBody, zEditDirectorTemplateHeaders, zEditDirectorTemplateResponse, zGetDirectorCutHeaders, zGetDirectorCutPath, zGetDirectorCutResponse, zGetDirectorLibraryHeaders, zGetDirectorLibraryResponse, zGetDirectorPlanHeaders, zGetDirectorPlanPath, zGetDirectorPlanResponse, zIndexDirectorPlanBody, zIndexDirectorPlanHeaders, zIndexDirectorPlanResponse, zListDirectorAssetsHeaders, zListDirectorAssetsPath, zListDirectorAssetsResponse, zListDirectorCutsHeaders, zListDirectorCutsPath, zListDirectorCutsResponse, zListDirectorMediaHeaders, zListDirectorMediaResponse, zListDirectorTakesHeaders, zListDirectorTakesPath, zListDirectorTakesResponse, zLiveResponse, zLocateDirectorTargetBody, zLocateDirectorTargetHeaders, zLocateDirectorTargetResponse, zReadyResponse, zReserveDirectorChatTurnBody, zReserveDirectorChatTurnHeaders, zReserveDirectorChatTurnResponse, zReviseDirectorVersionBody, zReviseDirectorVersionHeaders, zReviseDirectorVersionPath, zReviseDirectorVersionResponse, zSettleDirectorChatTurnBody, zSettleDirectorChatTurnHeaders, zSettleDirectorChatTurnResponse, zSpeakDirectorLineBody, zSpeakDirectorLineHeaders, zSpeakDirectorLineResponse, zWriteDirectorPublishCopyBody, zWriteDirectorPublishCopyHeaders, zWriteDirectorPublishCopyResponse } from './zod.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -83,6 +83,49 @@ export const brainstormDirectorTemplate = <ThrowOnError extends boolean = false>
     }).parseAsync(data),
     responseValidator: async (data) => await zBrainstormDirectorTemplateResponse.parseAsync(data),
     url: '/v1/director/brainstorm',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Reserve Director Chat Turn
+ *
+ * A turn of Director's slower line, taken out of the month's allowance before apps/api
+ * asks Gemini for it (it settles what the turn spent with chat-usage).
+ */
+export const reserveDirectorChatTurn = <ThrowOnError extends boolean = false>(options: Options<ReserveDirectorChatTurnData, ThrowOnError>): RequestResult<ReserveDirectorChatTurnResponses, ReserveDirectorChatTurnErrors, ThrowOnError> => (options.client ?? client).post<ReserveDirectorChatTurnResponses, ReserveDirectorChatTurnErrors, ThrowOnError>({
+    requestValidator: async (data) => await z.object({
+        body: zReserveDirectorChatTurnBody,
+        headers: zReserveDirectorChatTurnHeaders.optional(),
+        path: z.never().optional(),
+        query: z.never().optional()
+    }).parseAsync(data),
+    responseValidator: async (data) => await zReserveDirectorChatTurnResponse.parseAsync(data),
+    url: '/v1/director/chat-reservations',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Settle Director Chat Turn
+ *
+ * What a reserved turn of the slower line spent, whatever came of it.
+ */
+export const settleDirectorChatTurn = <ThrowOnError extends boolean = false>(options: Options<SettleDirectorChatTurnData, ThrowOnError>): RequestResult<SettleDirectorChatTurnResponses, SettleDirectorChatTurnErrors, ThrowOnError> => (options.client ?? client).post<SettleDirectorChatTurnResponses, SettleDirectorChatTurnErrors, ThrowOnError>({
+    requestValidator: async (data) => await z.object({
+        body: zSettleDirectorChatTurnBody,
+        headers: zSettleDirectorChatTurnHeaders.optional(),
+        path: z.never().optional(),
+        query: z.never().optional()
+    }).parseAsync(data),
+    responseValidator: async (data) => await zSettleDirectorChatTurnResponse.parseAsync(data),
+    url: '/v1/director/chat-usage',
     ...options,
     headers: {
         'Content-Type': 'application/json',

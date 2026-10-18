@@ -45,6 +45,7 @@ type Feature = Literal[
     "director-revise",
     "director-pass",
     "director-editor",
+    "director-chat",
 ]
 
 

@@ -93,15 +93,31 @@ export interface RateLimit {
    * messages or calls out; "allow" for everyday changes, so an outage doesn't stop them.
    */
   onRedisError?: "deny" | "allow";
+  /**
+   * Spent only by a demo guest's calls, on top of the limits everyone spends: a guest is a
+   * free workspace for a day, one tap (and a captcha) away, and dozens may be on at once,
+   * so what costs money gets them less of it.
+   */
+  guestsOnly?: boolean;
 }
 
 /** Metadata every procedure can carry (read by the API's request pipeline). */
 export interface ProcedureMeta {
   /**
-   * The procedure's rate limit, or why it has none. Every procedure that changes
-   * something (any method but GET) needs one or the other; a test checks it.
+   * The procedure's rate limit (or several, each spent by every call it applies to), or
+   * why it has none. Every procedure that changes something (any method but GET) needs
+   * one or the other; a test checks it.
    */
-  rateLimit?: RateLimit | { exempt: string };
+  rateLimit?: RateLimit | readonly RateLimit[] | { exempt: string };
+}
+
+/** A procedure's rate limits as a list: none when it has none or is exempt. */
+export function rateLimitsOf(meta: ProcedureMeta): readonly RateLimit[] {
+  const limit = meta.rateLimit;
+  if (!limit || "exempt" in limit) {
+    return [];
+  }
+  return "name" in limit ? [limit] : limit;
 }
 
 /**

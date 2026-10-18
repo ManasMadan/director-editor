@@ -41420,6 +41420,34 @@
                       "type": "object",
                       "properties": {
                         "defined": {
+                          "const": true
+                        },
+                        "code": {
+                          "const": "AI_BUDGET_EXCEEDED"
+                        },
+                        "status": {
+                          "const": 429
+                        },
+                        "message": {
+                          "type": "string",
+                          "default": "AI_BUDGET_EXCEEDED"
+                        },
+                        "data": {
+                          "$ref": "#/components/schemas/ErrorData"
+                        }
+                      },
+                      "required": [
+                        "defined",
+                        "code",
+                        "status",
+                        "message",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "defined": {
                           "const": false
                         },
                         "code": {

@@ -44,13 +44,19 @@ import type {
 } from "@repo/contracts/ids";
 import { HOUR_S, MINUTE_S } from "@repo/contracts/time";
 import { TAKE_REVIEW_READ_S } from "@repo/jobs";
-import { AppError, InjectPinoLogger, PinoLogger } from "@repo/nest-common";
+import { AppError, describeError, InjectPinoLogger, PinoLogger } from "@repo/nest-common";
 import * as z from "zod";
 import { env } from "../../env";
 import { aiCaller, callAi } from "../ai";
 import { AnalyticsService } from "../analytics";
 import { FilesService } from "../files";
-import { chatUpstream, createGoogleAuth, DirectorChat } from "../live";
+import {
+  type ChatLedger,
+  type ChatSpend,
+  chatUpstream,
+  createGoogleAuth,
+  DirectorChat,
+} from "../live";
 import { RecordingService } from "../recording";
 import { ShortsService } from "../shorts";
 import { type AssetImageRow, planAssetImages, withAssetImages } from "./asset-images";
@@ -149,7 +155,7 @@ export class DirectorService {
     private readonly files: FilesService,
     private readonly recording: RecordingService,
     private readonly analytics: AnalyticsService,
-    @InjectPinoLogger(DirectorService.name) log: PinoLogger,
+    @InjectPinoLogger(DirectorService.name) private readonly log: PinoLogger,
   ) {
     this.chatLine = new DirectorChat(
       chatUpstream({
@@ -214,7 +220,7 @@ export class DirectorService {
       throw new AppError("DIRECTOR_PLAN_NOT_FOUND");
     }
     const asked = performance.now();
-    const reply = await this.chatLine.reply(plan.plan, input);
+    const reply = await this.chatLine.reply(plan.plan, input, this.chatLedger(userId, orgId));
     this.analytics.record("director_turn", {
       userId,
       videoId: input.videoId,
@@ -222,6 +228,52 @@ export class DirectorService {
       detail: chatTurnDetail(input, reply, performance.now() - asked),
     });
     return reply;
+  }
+
+  /**
+   * Where the slower line's turns are counted: the AI service's ledger, the workspace's
+   * monthly allowance every other call of Director's spends (AI_BUDGET_EXCEEDED when it's
+   * gone). A turn is reserved before it asks Gemini and settled with what Gemini said it
+   * cost, however it ends.
+   */
+  private chatLedger(userId: UserId, orgId: OrgId): ChatLedger {
+    const caller = aiCaller(userId, orgId);
+    const model = env.CHAT_MODEL;
+    return {
+      charge: async (turn) => {
+        const { tokens } = await callAi((ai) => ai.director.reserveChatTurn(caller, { model }));
+        const spent: ChatSpend = { inputTokens: 0, outputTokens: 0, counted: true };
+        try {
+          return await turn(spent);
+        } finally {
+          await this.settleChatTurn(caller, model, tokens, spent);
+        }
+      },
+    };
+  }
+
+  private async settleChatTurn(
+    caller: ReturnType<typeof aiCaller>,
+    model: string,
+    reserved: number,
+    spent: ChatSpend,
+  ) {
+    // An answer that didn't say what it cost keeps the whole reservation.
+    const inputTokens = spent.counted ? spent.inputTokens : Math.max(reserved, spent.inputTokens);
+    try {
+      await callAi((ai) =>
+        ai.director.settleChatTurn(caller, {
+          model,
+          reserved,
+          inputTokens,
+          outputTokens: spent.outputTokens,
+        }),
+      );
+    } catch (error) {
+      // The reservation stands, which errs on the allowance's side; the member's reply
+      // doesn't wait on the ledger.
+      this.log.warn({ err: describeError(error) }, "settling a slower line turn failed");
+    }
   }
 
   /**

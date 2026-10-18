@@ -485,6 +485,60 @@ export type CaptionFix = {
 };
 
 /**
+ * ChatTurnReservation
+ */
+export type ChatTurnReservation = {
+    /**
+     * Tokens
+     *
+     * What the turn took out of the month's allowance, to settle with.
+     */
+    tokens: number;
+};
+
+/**
+ * ChatTurnReservationRequest
+ *
+ * A turn of Director's slower line about to ask Gemini. apps/api asks Gemini itself
+ * (src/modules/live/live.chat.ts, where Live's persona and tools are), and counts each
+ * turn here, in the same ledger as every other call.
+ */
+export type ChatTurnReservationRequest = {
+    /**
+     * Model
+     *
+     * The model the turn asks.
+     */
+    model: string;
+};
+
+/**
+ * ChatTurnUsage
+ *
+ * What a reserved turn actually spent, whatever happened to it.
+ */
+export type ChatTurnUsage = {
+    /**
+     * Inputtokens
+     */
+    inputTokens: number;
+    /**
+     * Model
+     */
+    model: string;
+    /**
+     * Outputtokens
+     */
+    outputTokens: number;
+    /**
+     * Reserved
+     *
+     * The reservation's tokens.
+     */
+    reserved: number;
+};
+
+/**
  * ClipPause
  *
  * A stretch nothing was recorded: no take is ever cut across one.
@@ -2141,6 +2195,76 @@ export type BrainstormDirectorTemplateResponses = {
 };
 
 export type BrainstormDirectorTemplateResponse = BrainstormDirectorTemplateResponses[keyof BrainstormDirectorTemplateResponses];
+
+export type ReserveDirectorChatTurnData = {
+    body: ChatTurnReservationRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/director/chat-reservations';
+};
+
+export type ReserveDirectorChatTurnErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type ReserveDirectorChatTurnError = ReserveDirectorChatTurnErrors[keyof ReserveDirectorChatTurnErrors];
+
+export type ReserveDirectorChatTurnResponses = {
+    /**
+     * Successful Response
+     */
+    201: ChatTurnReservation;
+};
+
+export type ReserveDirectorChatTurnResponse = ReserveDirectorChatTurnResponses[keyof ReserveDirectorChatTurnResponses];
+
+export type SettleDirectorChatTurnData = {
+    body: ChatTurnUsage;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/director/chat-usage';
+};
+
+export type SettleDirectorChatTurnErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type SettleDirectorChatTurnError = SettleDirectorChatTurnErrors[keyof SettleDirectorChatTurnErrors];
+
+export type SettleDirectorChatTurnResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type SettleDirectorChatTurnResponse = SettleDirectorChatTurnResponses[keyof SettleDirectorChatTurnResponses];
 
 export type ClipDirectorAttemptData = {
     body: ClipRequest;

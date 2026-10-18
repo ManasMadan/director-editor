@@ -1197,6 +1197,40 @@ MAX_TAKE_MS = MAX_SHOT_SECONDS * 1000
 MAX_ALIGN_FRAME_BASE64 = 300_000
 # The most one alignment may reserve (DIRECTOR_TOKENS_PER_ALIGNMENT's ceiling).
 MAX_ALIGN_TOKENS = 100_000
+# The most one turn of the slower line may reserve (DIRECTOR_TOKENS_PER_CHAT_TURN's
+# ceiling), and what one may report spending: far past two short requests, a bound on a
+# bug rather than on a turn.
+MAX_CHAT_TURN_TOKENS = 100_000
+MAX_CHAT_TURN_SPENT = 1_000_000
+
+
+class ChatTurnReservationRequest(BaseModel):
+    """A turn of Director's slower line about to ask Gemini. apps/api asks Gemini itself
+    (src/modules/live/live.chat.ts, where Live's persona and tools are), and counts each
+    turn here, in the same ledger as every other call."""
+
+    model_config = REQUEST
+
+    model: str = Field(min_length=1, max_length=200, description="The model the turn asks.")
+
+
+class ChatTurnReservation(BaseModel):
+    tokens: int = Field(
+        ge=1,
+        le=MAX_CHAT_TURN_TOKENS,
+        description="What the turn took out of the month's allowance, to settle with.",
+    )
+
+
+class ChatTurnUsage(BaseModel):
+    """What a reserved turn actually spent, whatever happened to it."""
+
+    model_config = REQUEST
+
+    model: str = Field(min_length=1, max_length=200)
+    reserved: int = Field(ge=1, le=MAX_CHAT_TURN_TOKENS, description="The reservation's tokens.")
+    inputTokens: int = Field(ge=0, le=MAX_CHAT_TURN_SPENT)
+    outputTokens: int = Field(ge=0, le=MAX_CHAT_TURN_SPENT)
 
 
 class MatchCutClip(BaseModel):

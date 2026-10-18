@@ -36,7 +36,9 @@ import {
   listDirectorMedia,
   listDirectorTakes,
   locateDirectorTarget,
+  reserveDirectorChatTurn,
   reviseDirectorVersion,
+  settleDirectorChatTurn,
   speakDirectorLine,
   writeDirectorPublishCopy,
 } from "./generated/sdk.gen";
@@ -45,6 +47,8 @@ import type {
   AssetChoiceCreate,
   AssetDrawingCreate,
   BrainstormRequest,
+  ChatTurnReservationRequest,
+  ChatTurnUsage,
   ClipRequest,
   CreatePlanRequest,
   DirectorCutCreate,
@@ -239,6 +243,14 @@ function directorCalls(forCall: ClientFor) {
     },
     async locate(caller: AiCaller, body: LocateRequest) {
       return unwrap(locateDirectorTarget({ client: await forCall(caller), body }));
+    },
+    /** A turn of the slower line taken out of the allowance before the API asks Gemini. */
+    async reserveChatTurn(caller: AiCaller, body: ChatTurnReservationRequest) {
+      return unwrap(reserveDirectorChatTurn({ client: await forCall(caller), body }));
+    },
+    /** What a reserved turn of the slower line spent. */
+    async settleChatTurn(caller: AiCaller, body: ChatTurnUsage): Promise<void> {
+      await settle(settleDirectorChatTurn({ client: await forCall(caller), body }));
     },
     async createCut(caller: AiCaller, body: DirectorCutCreate) {
       return unwrap(createDirectorCut({ client: await forCall(caller), body }));

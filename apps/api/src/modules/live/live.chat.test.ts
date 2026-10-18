@@ -8,11 +8,11 @@ import type { DirectorChatInput } from "@repo/contracts/api";
 import { type ShotPlan, shotPlanSchema } from "@repo/contracts/api";
 import { videoIdSchema } from "@repo/contracts/ids";
 import { LIVE_TOOLS } from "@repo/contracts/live";
-import { startFakeGoogle } from "@repo/fake-google";
+import { CHAT_USAGE, startFakeGoogle } from "@repo/fake-google";
 import { isAppError } from "@repo/nest-common";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import * as z from "zod";
-import { chatUpstream, DirectorChat } from "./live.chat";
+import { type ChatSpend, chatUpstream, DirectorChat } from "./live.chat";
 import { PERSONA } from "./live.persona";
 import { functionDeclarations } from "./live.setup";
 
@@ -65,11 +65,25 @@ beforeAll(async () => {
 });
 afterAll(() => fake.close());
 
-function chatAt(url: string | undefined, log = vi.fn()) {
-  return new DirectorChat(
+/** The AI ledger, standing in: each turn it was asked to count, and what each spent. */
+function ledgerOf() {
+  const turns: ChatSpend[] = [];
+  return {
+    turns,
+    charge<T>(turn: (spent: ChatSpend) => Promise<T>) {
+      const spent = { inputTokens: 0, outputTokens: 0, counted: true };
+      turns.push(spent);
+      return turn(spent);
+    },
+  };
+}
+
+function chatAt(url: string | undefined, log = vi.fn(), ledger = ledgerOf()) {
+  const chat = new DirectorChat(
     chatUpstream({ project: "my-project", model: "gemini-x", url, auth }),
     log,
   );
+  return { reply: (shots: ShotPlan, input: DirectorChatInput) => chat.reply(shots, input, ledger) };
 }
 
 /** Every request the chat sends, through a recorder in front of the mock. */
@@ -111,7 +125,11 @@ const requestSchema = z.object({
 describe("Director's slower line", () => {
   it("is off without a Google Cloud project", async () => {
     const off = new DirectorChat(chatUpstream({ project: undefined, model: "m", auth }), vi.fn());
-    await expect(off.reply(plan, said("hi"))).rejects.toMatchObject({ code: "FEATURE_DISABLED" });
+    const ledger = ledgerOf();
+    await expect(off.reply(plan, said("hi"), ledger)).rejects.toMatchObject({
+      code: "FEATURE_DISABLED",
+    });
+    expect(ledger.turns).toEqual([]);
   });
 
   it("addresses the model at Vertex AI's global endpoint by default", () => {
@@ -256,15 +274,49 @@ describe("Director's slower line", () => {
     expect(take.reply).toBe("Nice, that looked good.");
   });
 
-  it("says nothing, and asks no one, for a note Director only needs to know", async () => {
-    const proxy = await recorded();
+  it("counts a turn in the ledger with what Gemini said each of its requests cost", async () => {
+    const ledger = ledgerOf();
+    await chatAt(fake.url, vi.fn(), ledger).reply(plan, said("hello"));
+    // Asked twice: once for the call, once for the words to go with it.
+    await chatAt(fake.url, vi.fn(), ledger).reply(plan, said("go to shot 2"));
+    const output = CHAT_USAGE.totalTokenCount - CHAT_USAGE.promptTokenCount;
+    expect(ledger.turns).toEqual([
+      { inputTokens: CHAT_USAGE.promptTokenCount, outputTokens: output, counted: true },
+      { inputTokens: 2 * CHAT_USAGE.promptTokenCount, outputTokens: 2 * output, counted: true },
+    ]);
+  });
+
+  it("says when an answer didn't tell what it cost, so the turn keeps its reservation", async () => {
+    const silent = createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ candidates: [{ content: { parts: [{ text: "Hi." }] } }] }));
+    });
+    await new Promise<void>((resolve) => silent.listen(0, "127.0.0.1", resolve));
+    const { port } = z.object({ port: z.number() }).parse(silent.address());
+    const ledger = ledgerOf();
     try {
-      const reply = await chatAt(proxy.url).reply(plan, {
+      const reply = await chatAt(`http://127.0.0.1:${port}`, vi.fn(), ledger).reply(
+        plan,
+        said("hello"),
+      );
+      expect(reply.reply).toBe("Hi.");
+      expect(ledger.turns).toEqual([{ inputTokens: 0, outputTokens: 0, counted: false }]);
+    } finally {
+      await new Promise<void>((resolve) => silent.close(() => resolve()));
+    }
+  });
+
+  it("says nothing, asks no one and counts nothing for a note Director only needs to know", async () => {
+    const proxy = await recorded();
+    const ledger = ledgerOf();
+    try {
+      const reply = await chatAt(proxy.url, vi.fn(), ledger).reply(plan, {
         ...said("x"),
         turn: { kind: "take", state: "recording" },
       });
       expect(reply).toEqual({ reply: "", calls: [] });
       expect(proxy.bodies).toEqual([]);
+      expect(ledger.turns).toEqual([]);
     } finally {
       await proxy.close();
     }

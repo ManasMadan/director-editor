@@ -189,6 +189,36 @@ export const zCaptionFix = z.object({
 });
 
 /**
+ * ChatTurnReservation
+ */
+export const zChatTurnReservation = z.object({
+    tokens: z.int().gte(1).lte(100000)
+});
+
+/**
+ * ChatTurnReservationRequest
+ *
+ * A turn of Director's slower line about to ask Gemini. apps/api asks Gemini itself
+ * (src/modules/live/live.chat.ts, where Live's persona and tools are), and counts each
+ * turn here, in the same ledger as every other call.
+ */
+export const zChatTurnReservationRequest = z.object({
+    model: z.string().min(1).max(200)
+});
+
+/**
+ * ChatTurnUsage
+ *
+ * What a reserved turn actually spent, whatever happened to it.
+ */
+export const zChatTurnUsage = z.object({
+    inputTokens: z.int().gte(0).lte(1000000),
+    model: z.string().min(1).max(200),
+    outputTokens: z.int().gte(0).lte(1000000),
+    reserved: z.int().gte(1).lte(100000)
+});
+
+/**
  * ClipPause
  *
  * A stretch nothing was recorded: no take is ever cut across one.
@@ -1240,6 +1270,30 @@ export const zBrainstormDirectorTemplateHeaders = z.object({
  * Successful Response
  */
 export const zBrainstormDirectorTemplateResponse = zBrainstormReply;
+
+export const zReserveDirectorChatTurnBody = zChatTurnReservationRequest;
+
+export const zReserveDirectorChatTurnHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+/**
+ * Successful Response
+ */
+export const zReserveDirectorChatTurnResponse = zChatTurnReservation;
+
+export const zSettleDirectorChatTurnBody = zChatTurnUsage;
+
+export const zSettleDirectorChatTurnHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+/**
+ * Successful Response
+ */
+export const zSettleDirectorChatTurnResponse = z.void();
 
 export const zClipDirectorAttemptBody = zClipRequest;
 

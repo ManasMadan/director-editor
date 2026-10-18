@@ -22,7 +22,13 @@
  */
 
 import { implement, ORPCError, ValidationError } from "@orpc/server";
-import { contract, type ErrorData, type ProcedureMeta, type RateLimit } from "@repo/contracts/api";
+import {
+  contract,
+  type ErrorData,
+  type ProcedureMeta,
+  type RateLimit,
+  rateLimitsOf,
+} from "@repo/contracts/api";
 import { ERROR_CODES, type ErrorCode, isErrorCode } from "@repo/contracts/errors";
 import type { OrgId, UserId } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
@@ -164,20 +170,24 @@ export function rateLimitKey(limit: RateLimit, keys: LimitKeys) {
   return key;
 }
 
-/** Spends a call's rate limit; one limiter per name, so procedures sharing a name share it. */
+/**
+ * Spends a call's rate limits, in the order declared (a demo guest's own ones too); one
+ * limiter per name, so procedures sharing a name share it.
+ */
 function limitSpender(redis: Redis) {
   const limiters = new Map<string, RateLimiter>();
-  return async (meta: ProcedureMeta, keys: LimitKeys) => {
-    const limit = meta.rateLimit;
-    if (!limit || "exempt" in limit) {
-      return;
+  return async (meta: ProcedureMeta, keys: LimitKeys, guest: boolean) => {
+    for (const limit of rateLimitsOf(meta)) {
+      if (limit.guestsOnly && !guest) {
+        continue;
+      }
+      let limiter = limiters.get(limit.name);
+      if (!limiter) {
+        limiter = createRateLimiter(redis, limit);
+        limiters.set(limit.name, limiter);
+      }
+      await limiter.take(rateLimitKey(limit, keys));
     }
-    let limiter = limiters.get(limit.name);
-    if (!limiter) {
-      limiter = createRateLimiter(redis, limit);
-      limiters.set(limit.name, limiter);
-    }
-    await limiter.take(rateLimitKey(limit, keys));
   };
 }
 
@@ -255,7 +265,7 @@ export function createProcedures(auth: Auth, memberships: Memberships, redis: Re
         orgId: result.session.activeOrganizationId ?? undefined,
         locale: required(result.user.locale, "the locale"),
       });
-      await spendLimit(meta, { user: result.user.id });
+      await spendLimit(meta, { user: result.user.id }, result.user.guestUntil != null);
       return next({ context: { user: result.user, session: result.session } });
     },
   );
@@ -270,7 +280,7 @@ export function createProcedures(auth: Auth, memberships: Memberships, redis: Re
     }) => {
       const caller = await orgCaller(context.headers);
       updateContext({ userId: caller.userId, orgId: caller.orgId });
-      await spendLimit(meta, { user: caller.userId, org: caller.orgId });
+      await spendLimit(meta, { user: caller.userId, org: caller.orgId }, caller.guest);
       return next({ context: caller });
     },
   );

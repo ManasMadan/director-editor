@@ -24,6 +24,7 @@ import { CHAT_API_PATH, chatAnswer } from "./chat";
 import { answer, generateRequest, generateResponse, promptTokens } from "./gemini";
 import { createLive } from "./live";
 
+export { CHAT_USAGE } from "./chat";
 export { LIVE_API_PATH } from "./live";
 
 import { type Answer, createOAuth, type OAuth } from "./oauth";

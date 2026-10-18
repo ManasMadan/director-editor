@@ -21,7 +21,7 @@ import {
   liveAdaptation,
   liveToolCall,
 } from "../live";
-import { MINUTE_S } from "../time";
+import { HOUR_S, MINUTE_S } from "../time";
 import { base, errorsOf, WORKSPACE_ERRORS } from "./base";
 import {
   DIRECTOR_FRAME_MAX_LENGTH,
@@ -115,6 +115,7 @@ export const directorChatContract = {
         ...WORKSPACE_ERRORS,
         "FEATURE_DISABLED",
         "UPSTREAM_UNAVAILABLE",
+        "AI_BUDGET_EXCEEDED",
         "DIRECTOR_PLAN_NOT_FOUND",
         "DIRECTOR_SHOT_NOT_FOUND",
       ),
@@ -125,8 +126,27 @@ export const directorChatContract = {
       tags: ["Director"],
       summary: "Talk to Director, one turn at a time",
     })
+    // Each turn is one or two paid Gemini requests (counted in the workspace's AI
+    // allowance too): about as often as a person speaks, and a demo guest less.
     .meta({
-      rateLimit: { name: "director-chat", points: 30, windowSeconds: MINUTE_S, per: "user" },
+      rateLimit: [
+        { name: "director-chat", points: 10, windowSeconds: MINUTE_S, per: "user" },
+        { name: "director-chat-hour", points: 300, windowSeconds: HOUR_S, per: "user" },
+        {
+          name: "director-chat-guest",
+          points: 6,
+          windowSeconds: MINUTE_S,
+          per: "user",
+          guestsOnly: true,
+        },
+        {
+          name: "director-chat-guest-hour",
+          points: 90,
+          windowSeconds: HOUR_S,
+          per: "user",
+          guestsOnly: true,
+        },
+      ],
     })
     .input(directorChatInput)
     .output(directorChatReply),
