@@ -408,6 +408,32 @@ describe("the editor", { tags: ["files"] }, () => {
     expect(await cutFiles(user)).toEqual([]);
   });
 
+  it("cancels while the video uploads: no cut is saved, even once the file is checked", {
+    timeout: 60_000,
+  }, async () => {
+    await commands.storageCors();
+    const { user, videoId } = await filmedShort();
+    const page = await openEditor(videoId, undefined);
+    const before = await completed();
+    await userEvent.click(page.getByRole("button", { name: "Save video" }));
+    await expect
+      .element(page.getByRole("status", { name: "Saving to My media…" }), { timeout: 20_000 })
+      .toBeVisible();
+    // The upload is done and waiting for the worker's check, which hasn't run.
+    await expect.poll(completed, { timeout: 40_000 }).toBeGreaterThan(before);
+    await userEvent.click(page.getByRole("button", { name: "Cancel" }));
+    await expect.element(page.getByRole("button", { name: "Save video" })).toBeEnabled();
+    expect(page.getByRole("alert").query()).toBeNull();
+    // The page stops asking after the file: its next look is its last.
+    const looks = await commands.answeredRequests("/rpc/files/get");
+    await expect
+      .poll(() => commands.answeredRequests("/rpc/files/get"), { timeout: 5_000 })
+      .toBeLessThanOrEqual(looks + 1);
+    const [file] = await cutFiles(user);
+    await commands.checkUpload(String(file?.id));
+    expect(await api.director.media()).toEqual([]);
+  });
+
   it("stops rendering when the member leaves mid-render, and saves nothing", {
     timeout: 60_000,
   }, async () => {

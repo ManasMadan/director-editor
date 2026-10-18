@@ -682,6 +682,24 @@ describe("saving a cut", () => {
     expect(saved).toEqual([]);
   });
 
+  it("stops waiting for the worker's check once cancelled", async () => {
+    const { api, saved } = cutApi(["processing"]);
+    const cancel = new AbortController();
+    const { result } = renderHook(() => useSaveCutMutation(), api);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const saving = result.current
+      .mutateAsync({ videoId, picks, title: "Mine", file: video(), signal: cancel.signal })
+      .catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(2 * SECOND_MS);
+    cancel.abort();
+    const error = await tick(saving);
+    vi.useRealTimers();
+    expect(error).toHaveProperty("name", "AbortError");
+    const looks = api.calls.filter((call) => call === "files/get").length;
+    expect(looks).toBeLessThanOrEqual(3);
+    expect(saved).toEqual([]);
+  });
+
   it("is turned down with the worker's reason, and never saved", async () => {
     const { api, saved } = cutApi(["pending", "rejected"]);
     const { result } = renderHook(() => useSaveCutMutation(), api);

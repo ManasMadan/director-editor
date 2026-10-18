@@ -24,7 +24,7 @@ interface CutInput {
 
 async function saveCut(client: ApiClient, { file, signal, ...input }: CutInput) {
   const uploaded = await uploadFile(client, "director-cut-video", file, signal);
-  const ready = await fileReady(client, uploaded, CUT_CHECK_TIMEOUT_MS);
+  const ready = await fileReady(client, uploaded, CUT_CHECK_TIMEOUT_MS, signal);
   signal?.throwIfAborted();
   return client.director.saveCut({ ...input, fileId: ready.id });
 }

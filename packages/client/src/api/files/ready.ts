@@ -17,15 +17,20 @@ class FileRejectedError extends Error {
   }
 }
 
-/** The file once the worker has passed it; FileRejectedError when it didn't in `timeoutMs`. */
+/**
+ * The file once the worker has passed it; FileRejectedError when it didn't in `timeoutMs`.
+ * `signal` stops the waiting (an AbortError) for a file nobody wants any more.
+ */
 export async function fileReady(
   client: ApiClient,
   file: FileInfo,
   timeoutMs = 2 * MINUTE_MS,
+  signal?: AbortSignal,
 ): Promise<FileInfo> {
   const deadline = Date.now() + timeoutMs;
   let current = file;
   while (current.status === "pending" || current.status === "processing") {
+    signal?.throwIfAborted();
     if (Date.now() > deadline) {
       throw new FileRejectedError("FILE_NOT_READY");
     }

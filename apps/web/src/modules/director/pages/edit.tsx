@@ -149,11 +149,8 @@ function useSaveVideo(videoId: string, title: string) {
     const cancel = new AbortController();
     running.current = cancel;
     setSaving({ step: "rendering", done: 0 });
-    const onProgress = (done: number) => {
-      if (!cancel.signal.aborted) {
-        setSaving({ step: "rendering", done });
-      }
-    };
+    // No progress comes after a cancel: the render stops before its next frame.
+    const onProgress = (done: number) => setSaving({ step: "rendering", done });
     const video = await render(input, onProgress, cancel.signal).catch(() => null);
     if (cancel.signal.aborted) {
       return;
@@ -198,7 +195,8 @@ function Saved({
   );
   const extension = video.type === "video/mp4" ? "mp4" : "webm";
   return (
-    <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
+    // Controlled and always open while shown: its only change is closing.
+    <Dialog open onOpenChange={onClose}>
       <DialogContent
         showCloseButton={false}
         className="top-0 left-0 flex h-dvh max-w-none translate-x-0 translate-y-0 flex-col items-center gap-4 overflow-y-auto rounded-none bg-studio p-4 pt-[max(1rem,env(safe-area-inset-top))] text-studio-foreground ring-0 sm:max-w-none"
