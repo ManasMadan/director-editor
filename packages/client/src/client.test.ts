@@ -11,6 +11,7 @@ const info = {
     director: false,
     files: false,
     google: false,
+    live: false,
   },
   minimumClientVersion: "1.0.0",
   captchaSiteKey: null,
