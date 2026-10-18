@@ -347,7 +347,7 @@ export function ShotBoard({
     <section
       aria-label={t("board")}
       inert={locked}
-      className="flex min-h-0 snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto overscroll-x-contain px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] [scrollbar-width:none]"
+      className="transition-opacity inert:opacity-40 flex min-h-0 snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto overscroll-x-contain px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] [scrollbar-width:none]"
     >
       {clips.map((clip) => (
         <ShotColumn

@@ -550,7 +550,7 @@ function Editor({
           </p>
         ) : null}
         {/* Held still while the video is made: what it's made of can't change under it. */}
-        <div inert={saver.busy}>
+        <div inert={saver.busy} className={cn(saver.busy && "opacity-40")}>
           <Transport editor={editor} />
           {editor.tool ? (
             <div className="px-4 pb-3">
