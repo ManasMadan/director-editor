@@ -55,3 +55,14 @@ export function nextShot(shots: { index: number; takes: unknown[] }[] | undefine
   const started = Boolean(missing && shots?.some((shot) => shot.takes.length > 0));
   return { index: started && missing ? missing.index : 0, started };
 }
+
+/**
+ * The starter the library offers as "Quick start": the head-nod Short, one person talking
+ * to the camera, which works indoors and alone, so a judge with three minutes and a phone
+ * can shoot it anywhere (Director moves its market scenes inside when asked).
+ */
+export const QUICK_START_VIDEO_ID = "22k0fZarxh8";
+
+/** The quick start's template in a library, when the library has it ready. */
+export const quickStartOf = <P extends { videoId: string; status: string }>(templates: P[]) =>
+  templates.find((plan) => plan.videoId === QUICK_START_VIDEO_ID && plan.status === "ready");

@@ -83,7 +83,7 @@ test("the landing page shows Director and sends visitors to the demo", async ({ 
   await expect(page.getByRole("heading", { name: "Six Shorts, ready to shoot" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Built on Google Cloud" })).toBeVisible();
   await expect(page.locator("body")).not.toContainText("Director-editor");
-  await page.getByRole("link", { name: "Try the demo" }).first().click();
+  await page.getByRole("link", { name: "Try it now, no sign-up" }).first().click();
   await expect(page).toHaveURL(/\/sign-in\?demo=1$/);
 });
 
@@ -91,7 +91,7 @@ test("the landing page stays public, signed in or not", async ({ page }) => {
   await signUp(page);
   await page.goto("/");
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("link", { name: "Try the demo" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Try it now, no sign-up" })).toHaveCount(0);
   await page.getByRole("link", { name: "Open Director" }).first().click();
   await expect(page).toHaveURL(/\/library/);
 });

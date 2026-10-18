@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { angleOf, INDEX_STEPS, indexStep, nextShot, shotRhythm } from "./library";
+import {
+  angleOf,
+  INDEX_STEPS,
+  indexStep,
+  nextShot,
+  QUICK_START_VIDEO_ID,
+  quickStartOf,
+  shotRhythm,
+} from "./library";
 
 describe("indexStep", () => {
   it("follows the indexing stage, step by step", () => {
@@ -58,5 +66,15 @@ describe("nextShot", () => {
   it("is the first shot without a take once filming has started", () => {
     expect(nextShot([shot(0, 1), shot(1, 0), shot(2, 0)])).toEqual({ index: 1, started: true });
     expect(nextShot([shot(0, 0), shot(1, 1)])).toEqual({ index: 0, started: true });
+  });
+});
+
+describe("quickStartOf", () => {
+  it("is the head-nod starter, once it's ready", () => {
+    const ready = { videoId: QUICK_START_VIDEO_ID, status: "ready" };
+    const other = { videoId: "abcdefghijk", status: "ready" };
+    expect(quickStartOf([other, ready])).toBe(ready);
+    expect(quickStartOf([other, { ...ready, status: "analyzing" }])).toBeUndefined();
+    expect(quickStartOf([])).toBeUndefined();
   });
 });

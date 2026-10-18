@@ -76,6 +76,26 @@ describe("the library", () => {
       .toHaveAttribute("href", `/director/${broken}`);
   });
 
+  it("puts the head-nod starter first, as the quick start anyone can shoot indoors alone", async () => {
+    const orgId = await member();
+    await commands.fakeLibrary(orgId, {
+      templates: [seed("Office GRWM"), seed("4 Variations of the Indian Head Nod", "22k0fZarxh8")],
+    });
+    await showLibrary();
+    const quick = page.getByRole("link", { name: /Quick start/ });
+    await expect.element(quick).toHaveAttribute("href", "/director/22k0fZarxh8");
+    await expect.element(quick).toMatchTextContent(/4 Variations of the Indian Head Nod/);
+    await expect.element(quick).toMatchTextContent(/Just you, talking to the camera\./);
+  });
+
+  it("offers no quick start while that starter isn't in the library", async () => {
+    const orgId = await member();
+    await commands.fakeLibrary(orgId, { templates: [seed("Office GRWM")] });
+    await showLibrary();
+    await expect.element(page.getByRole("link", { name: /Office GRWM/ })).toBeVisible();
+    expect(page.getByRole("link", { name: /Quick start/ }).query()).toBeNull();
+  });
+
   it("invites the member to paste a link when there's nothing in it yet", async () => {
     await member();
     await showLibrary();

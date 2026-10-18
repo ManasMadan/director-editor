@@ -11,15 +11,16 @@ beginners and publishes it to their own YouTube channel. It all runs on Google C
 
 ## Try it
 
-Open **https://director.mmadan.in**. The landing page shows what Gemini made of a real
-Short, and "Try the demo" opens the sign-in page with a shared demo account already filled
-in. The account's email and password are printed on the sign-in page itself (its "Use
-demo account" button fills the form), so they aren't repeated here.
+Open **https://director.mmadan.in** and tap "Try it now, no sign-up": the browser is
+signed in to the demo as a private guest of its own, with the 6 starter templates and one
+Short of its own to index. Nobody else sees what it films, and it's all deleted after a
+day. If the demo can't make a guest just then, the sign-in page offers a shared demo
+account instead, its email and password printed there (so they aren't repeated here);
+everyone who uses that one sees what's filmed in it.
 
-The demo account starts with the 6 starter templates and can index one Short of its own,
-shared by everyone who uses it. It can't publish to YouTube or change its own account; sign
-in with Google, or sign up, to publish to your own channel. A phone gives the fullest
-experience. Allow the camera and the microphone when the browser asks.
+The demo can't publish to YouTube (it shows the post Director wrote, to read) or change
+its account; sign in with Google, or sign up, to publish to your own channel. A phone
+gives the fullest experience. Allow the camera and the microphone when the browser asks.
 
 <!-- screenshots added after deploy -->
 | Landing | Library | Template | Call |
