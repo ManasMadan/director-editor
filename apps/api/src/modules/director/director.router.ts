@@ -36,6 +36,9 @@ export const directorRouter = ({ inOrg }: Procedures, director: DirectorService)
   saveCut: inOrg.director.saveCut.handler(({ context, input }) =>
     director.saveCut(context.userId, context.orgId, input),
   ),
+  alignMatchCut: inOrg.director.alignMatchCut.handler(({ context, input }) =>
+    director.alignMatchCut(context.userId, context.orgId, input),
+  ),
   media: inOrg.director.media.handler(({ context }) =>
     director.media(context.userId, context.orgId),
   ),

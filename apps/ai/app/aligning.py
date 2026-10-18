@@ -77,11 +77,11 @@ PATCH_MARGIN = 0.15
 # Under this correlation, a template match found something else.
 MIN_MATCH = 0.4
 ECC_CRITERIA = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 200, 1e-6)
-FFMPEG_SECONDS = 60.0
-LOCATE_TIMEOUT_SECONDS = 30.0
+FFMPEG_SECONDS = 20.0
+LOCATE_TIMEOUT_SECONDS = 20.0
 # What the service waits for the Cloud Run aligner: a cold start, two ffmpeg reads and a
-# Gemini call. Under apps/api's wait for this service.
-ALIGN_REQUEST_SECONDS = 50.0
+# Gemini call. Under apps/api's wait for this service (packages/ai-client, 30 s).
+ALIGN_REQUEST_SECONDS = 27.0
 JPEG_QUALITY = 80
 # ECC's mask over the incoming frame: all of it may hold the anchor.
 EVERYWHERE = np.full((HEIGHT, WIDTH), 255, dtype=np.uint8)

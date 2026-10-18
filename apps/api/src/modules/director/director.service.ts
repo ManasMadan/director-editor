@@ -23,6 +23,8 @@ import {
   directorTakeSchema,
   type Located,
   locatedSchema,
+  type MatchCutAlignment,
+  matchCutAlignmentSchema,
   type SceneCheck,
   type ServedShotPlan,
   type ShotPlan,
@@ -30,7 +32,14 @@ import {
   shotPlanSchema,
 } from "@repo/contracts/api";
 import type { UploadPurpose } from "@repo/contracts/files";
-import type { DirectorCutId, FileId, OrgId, UserId, VideoId } from "@repo/contracts/ids";
+import type {
+  DirectorCutId,
+  DirectorTakeId,
+  FileId,
+  OrgId,
+  UserId,
+  VideoId,
+} from "@repo/contracts/ids";
 import { HOUR_S, MINUTE_S } from "@repo/contracts/time";
 import { AppError } from "@repo/nest-common";
 import * as z from "zod";
@@ -239,6 +248,47 @@ export class DirectorService {
   async media(userId: UserId, orgId: OrgId): Promise<DirectorCut[]> {
     const rows = await callAi((ai) => ai.director.listMedia(aiCaller(userId, orgId)));
     return rows.map(toCut);
+  }
+
+  /**
+   * Lines up a match cut between two of the caller's ready video takes of the short
+   * (DIRECTOR_TAKE_NOT_FOUND otherwise): the AI service reads both through presigned
+   * links and answers where to cut and how to move the incoming take.
+   */
+  async alignMatchCut(
+    userId: UserId,
+    orgId: OrgId,
+    input: {
+      videoId: VideoId;
+      anchor: string;
+      outgoing: { takeId: DirectorTakeId; atMs: number };
+      incoming: { takeId: DirectorTakeId; atMs: number };
+    },
+  ): Promise<MatchCutAlignment> {
+    const takes = await this.takes(userId, orgId, input.videoId);
+    const read = async (side: { takeId: DirectorTakeId; atMs: number }) => {
+      const take = takes.find((candidate) => candidate.id === side.takeId);
+      if (!take || take.kind !== "video" || take.status !== "ready") {
+        throw new AppError("DIRECTOR_TAKE_NOT_FOUND");
+      }
+      const { url } = await this.files.readUrl(
+        userId,
+        take.fileId,
+        PURPOSE.video,
+        TAKE_READ_EXPIRES_S,
+      );
+      return { url, atMs: side.atMs };
+    };
+    const [outgoing, incoming] = await Promise.all([read(input.outgoing), read(input.incoming)]);
+    return matchCutAlignmentSchema.parse(
+      await callAi((ai) =>
+        ai.director.alignMatchCut(aiCaller(userId, orgId), {
+          anchor: input.anchor,
+          outgoing,
+          incoming,
+        }),
+      ),
+    );
   }
 
   /**
