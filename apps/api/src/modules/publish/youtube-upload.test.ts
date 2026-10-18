@@ -85,10 +85,26 @@ describe("the YouTube uploader", () => {
     });
     expect(JSON.parse(String(start?.body))).toEqual({
       snippet: { title: video.title, description: video.description, categoryId: "22" },
-      status: { privacyStatus: "public", selfDeclaredMadeForKids: false },
+      status: {
+        privacyStatus: "public",
+        selfDeclaredMadeForKids: false,
+        containsSyntheticMedia: false,
+      },
     });
     expect(put?.headers["content-length"]).toBe(String(BYTES.length));
     expect(put?.body).toEqual(BYTES);
+  });
+
+  it("declares a video with AI footage as altered or synthetic content", async () => {
+    received.length = 0;
+    route = session((response) =>
+      send(response, 200, { id: "AbCdEfGhIjK", status: { privacyStatus: "private" } }),
+    );
+    await uploader().upload("token-1", { ...video, containsSyntheticMedia: true }, file());
+    const [start] = received;
+    expect(JSON.parse(String(start?.body)).status).toMatchObject({
+      containsSyntheticMedia: true,
+    });
   });
 
   it("says why YouTube refused to open the session, and lets go of the file", async () => {

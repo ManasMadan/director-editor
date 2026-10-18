@@ -17,12 +17,12 @@ type Edit = ShotPlan["edits"][number];
 type Asset = ShotPlan["assets"][number];
 type EditOf<T extends Edit["type"]> = Extract<Edit, { type: T }>;
 
-export const FULL: FrameBox = { x: 0, y: 0, width: 1, height: 1 };
+const FULL: FrameBox = { x: 0, y: 0, width: 1, height: 1 };
 
 /** A gap's slot id: the nth `gap` edit of the plan, from 1 (the AI service names them alike). */
-export const gapSlotId = (n: number) => `gap-${n}`;
+const gapSlotId = (n: number) => `gap-${n}`;
 /** A skipped shot's slot id: the nth shot, from 1. */
-export const shotSlotId = (n: number) => `shot-${n}`;
+const shotSlotId = (n: number) => `shot-${n}`;
 
 /** Where a moment of the original lands on the edit's clock. */
 export function editTime(clips: readonly Clip[], source: number): number {
@@ -56,7 +56,7 @@ export const spanOf = (
 
 const within = (span: Span, at: number) => at >= span.start && at < span.end;
 
-export interface Placed {
+interface Placed {
   assetId: string;
   box: FrameBox;
   fit: "cover" | "contain";
@@ -64,7 +64,7 @@ export interface Placed {
   shown: number;
 }
 
-export interface Words {
+interface Words {
   text: string;
   style: EditOf<"text">["style"];
   position: EditOf<"text">["position"];
@@ -73,7 +73,7 @@ export interface Words {
   shown: number;
 }
 
-export interface Mark {
+interface Mark {
   mark: NonNullable<EditOf<"overlay">["mark"]>;
   box: FrameBox;
   color: string | null;
@@ -103,7 +103,7 @@ export interface Scene {
 // Graphics carrying words are fitted whole rather than cropped (as slot-preview does).
 const CONTAINED = new Set<Asset["kind"]>(["text-card", "end-card"]);
 /** How long an entry or exit takes, in seconds. */
-export const EASE_SECONDS = 0.35;
+const EASE_SECONDS = 0.35;
 
 function easing(span: Span, at: number, entry: string, exit: string) {
   const inFor = entry === "cut" ? 1 : Math.min(1, (at - span.start) / EASE_SECONDS);
@@ -140,7 +140,7 @@ const CAPTION_Y: Record<EditOf<"text">["position"], number> = {
   "between-halves": 0.5,
 };
 /** The captions' default place: over the chest, clear of YouTube's buttons. */
-export const CAPTIONS_Y = 0.64;
+const CAPTIONS_Y = 0.64;
 
 /** The plan's asset for a voice-over or asset shot with no layout of its own: the one it overlaps. */
 function assetOfShot(plan: ShotPlan, clip: Clip): Asset | undefined {
@@ -208,12 +208,8 @@ function frameOf(plan: ShotPlan, clips: readonly Clip[], at: number, clip: Clip 
   let camera = boxes.camera;
   // Only the member's voice is used, or nothing of their take: the picture is the asset.
   if (clip && clip.shot.mode !== "on-camera") {
-    const own =
-      asset ??
-      (() => {
-        const found = assetOfShot(plan, clip);
-        return found ? placed(plan, found.id, FULL, 1) : null;
-      })();
+    const found = asset ? null : assetOfShot(plan, clip);
+    const own = asset ?? (found ? placed(plan, found.id, FULL, 1) : null);
     if (own) {
       asset = { ...own, box: FULL };
       camera = null;
@@ -222,66 +218,76 @@ function frameOf(plan: ShotPlan, clips: readonly Clip[], at: number, clip: Clip 
   return { camera, asset, layout };
 }
 
+/** Where a split's seam is: the bottom of the camera's half when it's on top. */
+const seamOf = (camera: FrameBox) => (camera.y === 0 ? camera.height : camera.y);
+
+function captionsYOf(edit: EditOf<"text">, frame: ReturnType<typeof frameOf>) {
+  if (edit.position === "between-halves" && frame.layout?.layout === "split" && frame.camera) {
+    return seamOf(frame.camera);
+  }
+  return CAPTION_Y[edit.position];
+}
+
+/** What one edit active at `at` adds to the scene. */
+function addEdit(
+  plan: ShotPlan,
+  scene: Scene,
+  edit: Edit,
+  span: Span,
+  at: number,
+  frame: ReturnType<typeof frameOf>,
+) {
+  if (edit.type === "overlay") {
+    const shown = easing(span, at, edit.entry, edit.exit);
+    if (edit.assetId) {
+      scene.overlays.push(placed(plan, edit.assetId, edit.box, shown));
+    } else if (edit.mark) {
+      const drawn = edit.entry === "draw" ? Math.min(1, (at - span.start) / 0.6) : 1;
+      scene.marks.push({
+        mark: edit.mark,
+        box: edit.box,
+        color: edit.color,
+        drawn: Math.min(drawn, shown),
+      });
+    }
+  } else if (edit.type === "text" && edit.style === "captions") {
+    scene.captionsY = captionsYOf(edit, frame);
+  } else if (edit.type === "text" && edit.text) {
+    scene.words.push({
+      text: edit.text,
+      style: edit.style,
+      position: edit.position,
+      color: edit.color,
+      highlight: edit.highlightColor,
+      shown: easing(span, at, "fade", "fade"),
+    });
+  } else if (edit.type === "end-card") {
+    scene.endCard = { assetId: edit.assetId, text: edit.text };
+  }
+}
+
 /** What the video shows `at` seconds into the edit. */
 export function sceneAt(plan: ShotPlan, clips: readonly Clip[], at: number): Scene {
   const clip = clips.find((each) => at < each.at + each.seconds) ?? clips.at(-1);
-  const { camera, asset, layout } = frameOf(plan, clips, at, clip);
-  const overlays: Placed[] = [];
-  const marks: Mark[] = [];
-  const words: Words[] = [];
-  let endCard: Scene["endCard"] = null;
-  let captionsY = CAPTIONS_Y;
-  for (const edit of plan.edits) {
-    const span = spanOf(clips, edit);
-    if (!within(span, at)) {
-      continue;
-    }
-    if (edit.type === "overlay") {
-      const shown = easing(span, at, edit.entry, edit.exit);
-      if (edit.assetId) {
-        overlays.push(placed(plan, edit.assetId, edit.box, shown));
-      } else if (edit.mark) {
-        const drawn = edit.entry === "draw" ? Math.min(1, (at - span.start) / 0.6) : 1;
-        marks.push({
-          mark: edit.mark,
-          box: edit.box,
-          color: edit.color,
-          drawn: Math.min(drawn, shown),
-        });
-      }
-    } else if (edit.type === "text") {
-      if (edit.style === "captions") {
-        captionsY =
-          edit.position === "between-halves" && layout?.layout === "split" && camera
-            ? camera.y === 0
-              ? camera.height
-              : camera.y
-            : CAPTION_Y[edit.position];
-      } else if (edit.text) {
-        words.push({
-          text: edit.text,
-          style: edit.style,
-          position: edit.position,
-          color: edit.color,
-          highlight: edit.highlightColor,
-          shown: easing(span, at, "fade", "fade"),
-        });
-      }
-    } else if (edit.type === "end-card") {
-      endCard = { assetId: edit.assetId, text: edit.text };
-    }
-  }
-  return {
-    camera,
-    asset,
+  const frame = frameOf(plan, clips, at, clip);
+  const scene: Scene = {
+    camera: frame.camera,
+    asset: frame.asset,
     ...gradeFilters(plan, clips, at),
     gap: gapAt(plan, clips, at, clip),
-    overlays,
-    marks,
-    words,
-    endCard,
-    captionsY,
+    overlays: [],
+    marks: [],
+    words: [],
+    endCard: null,
+    captionsY: CAPTIONS_Y,
   };
+  for (const edit of plan.edits) {
+    const span = spanOf(clips, edit);
+    if (within(span, at)) {
+      addEdit(plan, scene, edit, span, at, frame);
+    }
+  }
+  return scene;
 }
 
 /** The B-roll moments of an edit for the editor's gap tiles: each gap edit and skipped shot. */

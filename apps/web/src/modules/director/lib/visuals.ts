@@ -67,8 +67,8 @@ export async function loadVisuals(
           ? await videoOf(blob)
           : { kind: "image", image: await createImageBitmap(blob) };
         return [slotId, visual];
-      } catch (error) {
-        console.warn("a slot's picture couldn't be read", slotId, error);
+      } catch {
+        // Unreadable (a link run out, a format the browser can't decode): left out.
         return null;
       }
     }),

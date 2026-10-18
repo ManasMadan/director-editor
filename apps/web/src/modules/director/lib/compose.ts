@@ -39,7 +39,7 @@ function pictureOf(visual: Visual): Picture | null {
 }
 
 /** Draws `picture` into `box` (fractions of the canvas) without distorting it. */
-export function drawInto(
+function drawInto(
   ctx: CanvasRenderingContext2D,
   picture: Picture,
   box: FrameBox,
@@ -205,6 +205,86 @@ export interface Composer {
   stop: () => void;
 }
 
+const WHOLE: FrameBox = { x: 0, y: 0, width: 1, height: 1 };
+
+/** Plays one B-roll clip at a time, from where its gap has got to; pauses the one before. */
+function clipPlayer() {
+  let playing: HTMLVideoElement | null = null;
+  return (video: HTMLVideoElement | null, seconds: number) => {
+    if (playing && playing !== video) {
+      playing.pause();
+    }
+    if (video?.paused) {
+      video.currentTime = video.duration > 0 ? seconds % video.duration : 0;
+      // A clip that won't play shows its first frame, still, for its gap.
+      video.play().catch(() => video.pause());
+    }
+    playing = video;
+  };
+}
+
+/** A gap's B-roll: its clip, or its still slowly pushing in, over the whole frame. */
+function paintGap(
+  ctx: CanvasRenderingContext2D,
+  scene: Scene,
+  gap: NonNullable<Scene["gap"]>,
+  visual: Visual | undefined,
+  fallback: Picture | null,
+) {
+  const picture = (visual ? pictureOf(visual) : null) ?? fallback;
+  if (!picture) {
+    return;
+  }
+  const still = visual?.kind !== "video";
+  const zoom = still ? 1 + PUSH_IN * (gap.seconds / Math.max(0.5, gap.length)) : 1;
+  drawInto(ctx, picture, WHOLE, { zoom, filter: scene.assetFilter ?? scene.cameraFilter });
+}
+
+/** The frame's layout: the camera picture and the asset in their boxes. */
+function paintLayout(
+  ctx: CanvasRenderingContext2D,
+  scene: Scene,
+  camera: Picture | null,
+  asset: Picture | null,
+) {
+  if (camera && scene.camera) {
+    drawInto(ctx, camera, scene.camera, { filter: scene.cameraFilter });
+  }
+  if (scene.asset && asset) {
+    drawInto(ctx, asset, scene.asset.box, { fit: scene.asset.fit, filter: scene.assetFilter });
+  } else if (camera && !scene.camera) {
+    // The asset this moment needs isn't there: the member's picture rather than nothing.
+    drawInto(ctx, camera, WHOLE, { filter: scene.cameraFilter });
+  }
+}
+
+/** What's drawn over the frame: overlays, marks, the end card and words. */
+function paintOver(
+  ctx: CanvasRenderingContext2D,
+  scene: Scene,
+  pictureFor: (id: string | null) => Picture | null,
+  visualFor: (id: string | null) => Visual | undefined,
+) {
+  for (const overlay of scene.overlays) {
+    const picture = pictureFor(overlay.assetId);
+    if (picture) {
+      ctx.save();
+      ctx.globalAlpha = overlay.shown;
+      drawInto(ctx, picture, overlay.box, { fit: overlay.fit, filter: scene.assetFilter });
+      ctx.restore();
+    }
+  }
+  for (const mark of scene.marks) {
+    drawMark(ctx, mark);
+  }
+  if (scene.endCard) {
+    drawEndCard(ctx, scene.endCard, visualFor(scene.endCard.assetId), scene.assetFilter);
+  }
+  scene.words.forEach((words, index) => {
+    drawWords(ctx, words, index);
+  });
+}
+
 /**
  * A painter for one render: `assets` holds each slot's chosen picture (asset ids and the
  * gap slots), `hold` the nearest take's picture for a gap with nothing chosen.
@@ -216,28 +296,18 @@ export function composer(
   assets: ReadonlyMap<string, Visual>,
   hold: Picture | null,
 ): Composer {
-  const { width: cw, height: ch } = ctx.canvas;
-  // The last camera picture drawn, copied: what a skipped shot holds when nothing fills it.
+  const { width, height } = ctx.canvas;
+  // The last frame with the camera in it, copied: what a skipped shot holds when nothing
+  // fills it.
   const held = document.createElement("canvas");
-  held.width = cw;
-  held.height = ch;
+  held.width = width;
+  held.height = height;
   const heldCtx = held.getContext("2d");
   let hasHeld = false;
-  let playing: HTMLVideoElement | null = null;
-
-  const playOnly = (video: HTMLVideoElement | null, seconds: number) => {
-    if (playing && playing !== video) {
-      playing.pause();
-    }
-    if (video && video.paused) {
-      video.currentTime = video.duration > 0 ? seconds % video.duration : 0;
-      void video.play().catch(() => undefined);
-    }
-    playing = video;
-  };
-
-  const visualPicture = (id: string | null | undefined) => {
-    const visual = id ? assets.get(id) : undefined;
+  const playOnly = clipPlayer();
+  const visualFor = (id: string | null) => (id ? assets.get(id) : undefined);
+  const pictureFor = (id: string | null) => {
+    const visual = visualFor(id);
     return visual ? pictureOf(visual) : null;
   };
 
@@ -245,70 +315,22 @@ export function composer(
     paint(at, camera) {
       const scene = sceneAt(plan, clips, at);
       ctx.fillStyle = GROUND;
-      ctx.fillRect(0, 0, cw, ch);
-      const gapVisual = scene.gap ? assets.get(scene.gap.slotId) : undefined;
+      ctx.fillRect(0, 0, width, height);
+      const gapVisual = visualFor(scene.gap?.slotId ?? null);
       playOnly(gapVisual?.kind === "video" ? gapVisual.video : null, scene.gap?.seconds ?? 0);
-      const gapPicture = gapVisual ? pictureOf(gapVisual) : null;
-      if (scene.gap && (gapPicture || !camera)) {
-        // B-roll over the camera; a skipped shot with nothing chosen holds the nearest take.
-        const picture = gapPicture ?? (hasHeld ? { source: held, width: cw, height: ch } : hold);
-        if (picture) {
-          const zoom =
-            gapVisual?.kind === "video"
-              ? 1
-              : 1 + PUSH_IN * (scene.gap.seconds / Math.max(0.5, scene.gap.length));
-          drawInto(
-            ctx,
-            picture,
-            { x: 0, y: 0, width: 1, height: 1 },
-            { zoom, filter: scene.assetFilter ?? scene.cameraFilter },
-          );
-        }
+      // B-roll over the camera when one's chosen; a skipped shot with nothing chosen holds
+      // the nearest take.
+      if (scene.gap && (gapVisual || !camera)) {
+        const fallback = hasHeld ? { source: held, width, height } : hold;
+        paintGap(ctx, scene, scene.gap, gapVisual, fallback);
       } else {
-        if (camera && scene.camera) {
-          drawInto(ctx, camera, scene.camera, { filter: scene.cameraFilter });
-        }
-        const asset = scene.asset ? visualPicture(scene.asset.assetId) : null;
-        if (scene.asset && asset) {
-          drawInto(ctx, asset, scene.asset.box, {
-            fit: scene.asset.fit,
-            filter: scene.assetFilter,
-          });
-        } else if (camera && !scene.camera) {
-          // The asset this moment needs isn't there: the member's picture rather than nothing.
-          drawInto(
-            ctx,
-            camera,
-            { x: 0, y: 0, width: 1, height: 1 },
-            { filter: scene.cameraFilter },
-          );
-        }
+        paintLayout(ctx, scene, camera, pictureFor(scene.asset?.assetId ?? null));
       }
       if (camera && heldCtx) {
         heldCtx.drawImage(ctx.canvas, 0, 0);
         hasHeld = true;
       }
-      for (const overlay of scene.overlays) {
-        const picture = visualPicture(overlay.assetId);
-        if (picture) {
-          ctx.save();
-          ctx.globalAlpha = overlay.shown;
-          drawInto(ctx, picture, overlay.box, { fit: overlay.fit, filter: scene.assetFilter });
-          ctx.restore();
-        }
-      }
-      for (const mark of scene.marks) {
-        drawMark(ctx, mark);
-      }
-      if (scene.endCard) {
-        drawEndCard(
-          ctx,
-          scene.endCard,
-          scene.endCard.assetId ? assets.get(scene.endCard.assetId) : undefined,
-          scene.assetFilter,
-        );
-      }
-      scene.words.forEach((words, index) => drawWords(ctx, words, index));
+      paintOver(ctx, scene, pictureFor, visualFor);
       return scene.captionsY;
     },
     stop() {

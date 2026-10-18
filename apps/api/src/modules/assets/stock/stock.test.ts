@@ -232,6 +232,13 @@ describe("which keys an image of a slot may be signed for", () => {
       true,
     );
     expect(imageKeyAllowed(plan, image("upload", `files/${id}`))).toBe(true);
+    // A gap's Veo clip, kept beside the slot's images.
+    expect(imageKeyAllowed(plan, image("created", `director-assets/${plan}/chart/${id}.mp4`))).toBe(
+      true,
+    );
+    expect(imageKeyAllowed(plan, image("created", `director-assets/${plan}/chart/${id}.mov`))).toBe(
+      false,
+    );
     expect(imageKeyAllowed(plan, image("created", null))).toBe(false);
     expect(imageKeyAllowed(plan, image("created", `director-assets/${plan}/card/${id}.png`))).toBe(
       false,
