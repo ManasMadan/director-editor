@@ -4,6 +4,7 @@ which assets get a default, where each is kept, and which failures are worth a r
 from uuid import UUID
 
 import httpx
+import pytest
 from google.genai import errors as genai_errors
 
 from app.assets import (
@@ -15,6 +16,7 @@ from app.assets import (
     image_prompt,
     worth_retrying,
 )
+from app.branding import unbranding
 from app.schemas import Asset, ShotPlan
 from tests.test_plan_repair_assets import REFERENCE, asset
 from tests.test_seed_media import PLAN
@@ -43,12 +45,12 @@ def test_a_colour_asset_with_no_text_is_asked_for_as_it_is() -> None:
     assert "Palette: Orange on white." in prompt
 
 
-def test_the_original_s_branding_is_replaced_with_a_placeholder_everywhere() -> None:
+def test_the_creator_s_identity_is_replaced_with_a_placeholder_everywhere() -> None:
     reference = {
         **REFERENCE,
         "composition": "The be10X logo on top, a headline under it",
         "text": ["BE10X", "Claude Automation Expert", "Follow @be10x.official", "be10x.in"],
-        "brands": ["be10X", "  "],
+        "brands": ["be10X"],
     }
     prompt = image_prompt(
         an_asset(
@@ -62,7 +64,7 @@ def test_the_original_s_branding_is_replaced_with_a_placeholder_everywhere() -> 
     assert 'The text "Your Name", spelt exactly like that.' in prompt
     assert 'The text "Follow @yourname", spelt exactly like that.' in prompt
     assert 'The text "yourwebsite.com", spelt exactly like that.' in prompt
-    # Words that aren't the original's branding stay as they are.
+    # The Short's topic isn't the creator's identity: it stays.
     assert 'The text "Claude Automation Expert", spelt exactly like that.' in prompt
 
 
@@ -72,6 +74,30 @@ def test_a_handle_or_web_address_is_caught_even_when_the_planner_lists_no_brands
     assert "mesa" not in prompt.lower()
     assert prompt.count("yourwebsite.com") == 2
     assert "An end card, @yourname." in prompt
+
+
+@pytest.mark.parametrize(
+    ("brands", "text", "unbranded"),
+    [
+        # A brand is a whole word, never letters inside another.
+        (["AI"], "Maintain your AI training plan", "Maintain your Your Name training plan"),
+        (["Apple"], "Pineapple smoothie", "Pineapple smoothie"),
+        (["Mesa"], "Mesaverde, by Mesa", "Mesaverde, by Your Name"),
+        (["X"], "Max out 10X", "Max out 10X"),
+        # One pass: a placeholder put in is never matched again.
+        (["Name", "your"], "@mesaschool", "@yourname"),
+        (["Name"], "Name", "Your Name"),
+        # Ordinary text isn't a web address, nor an email a handle.
+        ([], "e.g.in 2 steps, Node.js, 5.5", "e.g.in 2 steps, Node.js, 5.5"),
+        ([], "email me: a@b.com", "email me: a@b.com"),
+        # The longest name first.
+        (["Mesa", "Mesa School"], "Mesa School rocks", "Your Name rocks"),
+    ],
+)
+def test_unbranding_replaces_only_whole_names_handles_and_addresses(
+    brands: list[str], text: str, unbranded: str
+) -> None:
+    assert unbranding(brands)(text) == unbranded
 
 
 def test_half_a_split_screen_is_drawn_in_the_nearest_shape_nano_banana_has() -> None:

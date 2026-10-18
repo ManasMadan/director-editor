@@ -76,6 +76,7 @@ PLAN: dict[str, object] = {
     "shots": [PLAN_SHOT],
     "assets": [],
     "edits": [],
+    "brands": [],
 }
 FALLBACK_MODEL = "gemini-fallback-test"
 FALLBACK_PATH = f"/v1beta/models/{FALLBACK_MODEL}:generateContent"
@@ -240,6 +241,7 @@ def test_a_plan_names_no_storage_path() -> None:
         "shots": [{**PLAN_SHOT, "mode": "on-camera"}],
         "assets": [],
         "edits": [],
+        "brands": [],
     }
 
 

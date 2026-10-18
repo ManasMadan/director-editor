@@ -7,6 +7,7 @@ and tenancy."""
 import asyncio
 from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -190,8 +191,15 @@ def images(org: UUID, plan_id: UUID) -> list[tuple[object, ...]]:
     )
 
 
-def assets_job(plan_id: UUID) -> dict[bytes, bytes]:
-    return stored_job(f"{{ai-director}}:ai-director:{plan_id}-assets")
+def assets_job_key(org: UUID, plan_id: UUID) -> str:
+    """The plan's assets job, by its id: the plan's, stamped with when it was written."""
+    [(updated,)] = as_org(org, "SELECT updated_at FROM ai.director_plan WHERE id = %s", (plan_id,))
+    assert isinstance(updated, datetime)
+    return f"{{ai-director}}:ai-director:{plan_id}-assets-{round(updated.timestamp() * 1000)}"
+
+
+def assets_job(org: UUID, plan_id: UUID) -> dict[bytes, bytes]:
+    return stored_job(assets_job_key(org, plan_id))
 
 
 def uploads(fake: Fake) -> list[bytes]:
@@ -211,7 +219,7 @@ def test_indexing_claims_an_image_for_each_still_and_queues_their_job(client: Te
         org, "SELECT DISTINCT user_id FROM ai.director_asset WHERE plan_id = %s", (plan_id,)
     )
     assert owner == user
-    assert assets_job(plan_id)[b"name"] == b"assets"
+    assert assets_job(org, plan_id)[b"name"] == b"assets"
     served = plan_of(client, org, user)
     assert served.plan is not None
     assert [each.id for each in served.plan.assets] == ["chart", "card", "music", "end-card"]
@@ -291,7 +299,7 @@ def test_a_member_past_the_day_s_limit_gets_no_images_and_no_job(client: TestCli
     _made_elsewhere(user, 30)
     plan_id = indexed(client, org, user)
     assert images(org, plan_id) == []
-    assert assets_job(plan_id) == {}
+    assert assets_job(org, plan_id) == {}
 
 
 def test_a_plan_without_stills_claims_nothing(
@@ -322,14 +330,14 @@ def test_a_plan_nobody_indexed_counts_against_nobody_s_day(client: TestClient) -
 def test_a_retry_of_a_saved_plan_queues_images_still_waiting(client: TestClient) -> None:
     org, user = new_org()
     plan_id = indexed(client, org, user)
-    redis_client().delete(f"{{ai-director}}:ai-director:{plan_id}-assets")
+    redis_client().delete(assets_job_key(org, plan_id))
     on_app_loop(client, lambda: director().analyze(org, plan_id, user))
-    assert assets_job(plan_id)[b"name"] == b"assets"
+    assert assets_job(org, plan_id)[b"name"] == b"assets"
     # Once they're drawn, a retry queues nothing.
     make(client, org, plan_id)
-    redis_client().delete(f"{{ai-director}}:ai-director:{plan_id}-assets")
+    redis_client().delete(assets_job_key(org, plan_id))
     on_app_loop(client, lambda: director().analyze(org, plan_id, user))
-    assert assets_job(plan_id) == {}
+    assert assets_job(org, plan_id) == {}
 
 
 @pytest.mark.parametrize(
@@ -418,7 +426,7 @@ def test_without_a_bucket_no_image_is_claimed_or_drawn(
         plan_id = indexed(test, org, user)
         make(test, org, plan_id)
     assert images(org, plan_id) == []
-    assert assets_job(plan_id) == {}
+    assert assets_job(org, plan_id) == {}
     assert drawings(google[0]) == []
 
 
@@ -432,11 +440,31 @@ def test_a_job_for_a_plan_that_s_gone_draws_nothing(
 
 def test_another_workspace_never_sees_a_plan_s_images(client: TestClient) -> None:
     org, user = new_org()
-    plan_id = indexed(client, org, user)
+    indexed(client, org, user)
     other, _ = new_org()
     # Read as the service reads them, as app_ai under row-level security.
-    assert on_app_loop(client, lambda: director().asset_images(other, plan_id)) == []
-    assert len(on_app_loop(client, lambda: director().asset_images(org, plan_id))) == len(STILLS)
+    plan = on_app_loop(client, lambda: director().plan(org, VIDEO))
+    assert on_app_loop(client, lambda: director().asset_images(other, plan)) == []
+    assert len(on_app_loop(client, lambda: director().asset_images(org, plan))) == len(STILLS)
+
+
+def test_reading_a_plan_queues_images_left_waiting_with_no_job(client: TestClient) -> None:
+    """The plan job saved the plan, then couldn't queue its images: the next read of the
+    plan queues them, once, and a plan indexed again gets a job of its own."""
+    org, user = new_org()
+    plan_id = indexed(client, org, user)
+    redis_client().delete(assets_job_key(org, plan_id))
+    plan_of(client, org, user)
+    assert assets_job(org, plan_id)[b"name"] == b"assets"
+    # Indexed again: a new stamp, so a new job, while the old one is still remembered.
+    as_org(org, "UPDATE ai.director_plan SET updated_at = now() WHERE id = %s", (plan_id,))
+    plan_of(client, org, user)
+    assert assets_job(org, plan_id)[b"name"] == b"assets"
+    # Nothing waiting: a read queues nothing.
+    make(client, org, plan_id)
+    as_org(org, "UPDATE ai.director_plan SET updated_at = now() WHERE id = %s", (plan_id,))
+    plan_of(client, org, user)
+    assert assets_job(org, plan_id) == {}
 
 
 def test_the_worker_runs_the_assets_job_and_logs_each_image_and_the_job(

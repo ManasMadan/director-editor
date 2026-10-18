@@ -71,6 +71,7 @@ PLAN: dict[str, object] = {
     "shots": [SHOT],
     "assets": [],
     "edits": [],
+    "brands": [],
 }
 SCRIPT_LINE: dict[str, object] = {"startSeconds": 0, "endSeconds": 2, "text": "Hi."}
 KEYPOINT: dict[str, object] = {"name": "nose", "x": 0.5, "y": 0.2}
@@ -310,6 +311,13 @@ def test_judge_names_a_split_that_isn_t_halves_and_captions_off_the_seam() -> No
         "no word-by-word captions",
         "no captions between the halves",
     ]
+
+
+@pytest.mark.parametrize(("share", "halves"), [(0.42, True), (0.58, True), (0.35, False)])
+def test_a_split_within_eight_points_of_even_counts_as_halves(share: float, halves: bool) -> None:
+    """The editor snaps a measured split within 8% of 50/50 to halves."""
+    plan = ShotPlan.model_validate(plan_with(edits=[{**SPLIT, "cameraShare": share}]))
+    assert judge(plan, Expectation(halves=True)) == ([] if halves else ["no split in halves"])
 
 
 def test_judge_passes_a_plan_with_everything_its_short_expects() -> None:

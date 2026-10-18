@@ -114,6 +114,7 @@ PLAN: dict[str, object] = {
     "durationSeconds": 12,
     "assets": [],
     "edits": [],
+    "brands": [],
     "shots": [
         {
             "kind": "video",
@@ -163,6 +164,7 @@ NO_PERSON_PLAN: dict[str, object] = {
     "durationSeconds": 6,
     "assets": [],
     "edits": [],
+    "brands": [],
     "shots": [
         {
             "kind": "video",
@@ -198,6 +200,7 @@ NO_SPEECH_PLAN: dict[str, object] = {
     "durationSeconds": 6,
     "assets": [],
     "edits": [],
+    "brands": [],
     "shots": [
         {
             "kind": "video",

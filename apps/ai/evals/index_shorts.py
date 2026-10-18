@@ -57,15 +57,19 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 SHORTS_PATH = APP_ROOT / "evals" / "shorts.json"
 # argparse's own exit status for a command used wrongly.
 USAGE_ERROR = 2
+# How far from 50/50 a split may be measured and still be halves: the editor snaps one
+# that close to halves.
+HALVES_TOLERANCE = 0.08
 
 
 class Expectation(BaseModel):
     """What a Short's plan must have beyond filmable shots, from looking at the Short (spec
     7.5's acceptance, as far as a plan can show it): a layout edit of this kind, split in
-    halves (each 50% +/- 5% of the height); at least this many stills to make, one of
-    them describing each of `stillText` (in its subject or its text); a shot in each of
-    these modes, and none on camera when `voiceOnly`; captions, in this style and on a
-    split's seam; lower thirds; a B-roll gap; an end card."""
+    halves (50% +/- 8% of the height, where the editor snaps a split to halves); at least
+    this many stills to make, one of them describing each of `stillText` (in its subject
+    or its text); a shot in each of these modes, and none on camera when `voiceOnly`;
+    captions, in this style and on a split's seam; lower thirds; a B-roll gap; an end
+    card."""
 
     model_config = ConfigDict(strict=True, extra="forbid")
 
@@ -200,7 +204,7 @@ def _layout_checks(plan: ShotPlan, expect: Expectation) -> list[Check]:
     halves = any(
         edit.layout == "split"
         and edit.cameraShare is not None
-        and abs(edit.cameraShare - 0.5) <= 0.05
+        and round(abs(edit.cameraShare - 0.5), 6) <= HALVES_TOLERANCE
         for edit in layouts
     )
     return [

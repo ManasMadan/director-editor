@@ -246,7 +246,7 @@ async def get_director_plan(
 ) -> DirectorPlanOut:
     """The workspace's plan for a short, with the default images of its assets."""
     plan = await director.plan(caller.org_id, video_id)
-    return _plan_out(plan, await director.asset_images(caller.org_id, plan.id))
+    return _plan_out(plan, await director.asset_images(caller.org_id, plan))
 
 
 @app.post("/v1/director/scene-checks", operation_id="checkDirectorScene")

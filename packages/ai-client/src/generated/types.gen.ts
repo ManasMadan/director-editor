@@ -749,6 +749,10 @@ export type ShotPlan = {
      */
     audio: 'speech' | 'music' | 'speech-and-music' | 'none';
     /**
+     * Brands
+     */
+    brands?: Array<string>;
+    /**
      * Durationseconds
      */
     durationSeconds: number;

@@ -77,6 +77,7 @@ def plan(
     assets: list[dict[str, object]] | None = None,
     edits: list[dict[str, object]] | None = None,
     shots: list[dict[str, object]] | None = None,
+    brands: list[str] | None = None,
 ) -> ShotPlanDraft:
     return ShotPlanDraft.model_validate(
         {
@@ -88,13 +89,16 @@ def plan(
             "shots": shots or [shot(sourceStartSeconds=0, sourceEndSeconds=10, durationSeconds=10)],
             "assets": assets or [],
             "edits": edits or [],
+            "brands": brands or [],
         }
     )
 
 
 def test_a_plan_written_before_assets_and_edits_reads_with_neither() -> None:
-    old = ShotPlan.model_validate(plan().model_dump(mode="json", exclude={"assets", "edits"}))
-    assert (old.assets, old.edits) == ([], [])
+    old = ShotPlan.model_validate(
+        plan().model_dump(mode="json", exclude={"assets", "edits", "brands"})
+    )
+    assert (old.assets, old.edits, old.brands) == ([], [], [])
 
 
 def test_voice_over_and_asset_shots_keep_their_mode() -> None:
@@ -325,23 +329,30 @@ def test_a_plan_takes_another_index_s_assets_and_edits_without_changing_its_shot
     assert (overlay.box.model_dump(), overlay.endSeconds) == (BOX, 10)
 
 
-def test_an_edit_s_words_carry_no_branding_of_the_original_s() -> None:
+def test_an_edit_s_words_carry_none_of_the_creator_s_identity() -> None:
+    """The plan's own brands (the creator's identity) come out of every edit's words, as
+    whole words; an asset's brands only out of its own image; the Short's topic stays."""
     branded = asset(
-        id="end card",
-        kind="end-card",
-        reference={**REFERENCE, "brands": ["Mesa School of Business", "Mesa"]},
+        id="end card", kind="end-card", reference={**REFERENCE, "brands": ["PGP Forge"]}
     )
     edits = [
         edit("text", style="label", text="Mesa SCHOOL OF BUSINESS"),
         edit("end-card", text="Mesa: apply now at mesa.school, @mesa.school"),
-        edit("text", style="lower-third", text="25L in Revenue"),
+        edit("text", style="lower-third", text="Mesaverde trip, PGP Forge, 25L in Revenue"),
+        edit("text", style="title", text="Mastering Claude in 2026, e.g.in 2 steps"),
     ]
-    label, end_card, revenue = repair_plan(
-        plan(assets=[branded], edits=edits), video_seconds=None
-    ).edits
-    assert isinstance(label, TextEdit)
-    assert label.text == "Your Name"
-    assert isinstance(end_card, EndCardEdit)
-    assert end_card.text == "Your Name: apply now at yourwebsite.com, @yourname"
-    assert isinstance(revenue, TextEdit)
-    assert revenue.text == "25L in Revenue"
+    repaired = repair_plan(
+        plan(assets=[branded], edits=edits, brands=["Mesa School of Business", "Mesa", " "]),
+        video_seconds=None,
+    )
+    assert [each.text for each in repaired.edits if isinstance(each, TextEdit | EndCardEdit)] == [
+        "Your Name",
+        "Your Name: apply now at yourwebsite.com, @yourname",
+        # Neither inside a word, nor an asset's own brand on another edit.
+        "Mesaverde trip, PGP Forge, 25L in Revenue",
+        "Mastering Claude in 2026, e.g.in 2 steps",
+    ]
+    assert repaired.brands == ["Mesa School of Business", "Mesa"]
+    # The plan's identity is on every asset too, for its default image.
+    [card] = repaired.assets
+    assert card.reference.brands == ["PGP Forge", "Mesa School of Business", "Mesa"]

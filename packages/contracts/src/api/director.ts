@@ -219,8 +219,9 @@ const assetSchema = z.object({
     /** Every line of text on it, word for word. */
     text: z.array(z.string()),
     /**
-     * The original's own branding on it (brand names, handles, the creator's name): never
-     * drawn into the member's version. A plan written before it reads with none.
+     * The original creator's own identity on it (their name, their channel, school or
+     * business, handles, sites): never drawn into the member's version. A plan written
+     * before it reads with none.
      */
     brands: z.array(z.string()).default([]),
     mood: z.string(),
@@ -308,6 +309,11 @@ export const shotPlanSchema = z.object({
   /** A plan written before assets and edits existed reads with neither. */
   assets: z.array(assetSchema).max(DIRECTOR_MAX_ASSETS).default([]),
   edits: z.array(editSchema).max(DIRECTOR_MAX_EDITS).default([]),
+  /**
+   * The original creator's own identity anywhere in the Short: never in the member's
+   * version. Optional, so a plan typed before it still is one.
+   */
+  brands: z.array(z.string()).max(12).optional(),
 });
 export type ShotPlan = z.infer<typeof shotPlanSchema>;
 

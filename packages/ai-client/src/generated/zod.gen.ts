@@ -749,6 +749,7 @@ export const zShotPlan = z.object({
         'speech-and-music',
         'none'
     ]),
+    brands: z.array(z.string().min(1).max(80)).max(12).optional(),
     durationSeconds: z.number().gte(0.5).lte(180),
     edits: z.array(zEdit).max(40).optional(),
     format: z.string().min(1).max(60),

@@ -1418,6 +1418,16 @@
             "title": "Audio",
             "type": "string"
           },
+          "brands": {
+            "items": {
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Brands",
+            "type": "array"
+          },
           "durationSeconds": {
             "maximum": 180.0,
             "minimum": 0.5,

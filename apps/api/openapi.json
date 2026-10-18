@@ -10602,6 +10602,13 @@
                                     },
                                     "default": []
                                   },
+                                  "brands": {
+                                    "type": "array",
+                                    "maxItems": 12,
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
                                   "musicUrl": {
                                     "type": "string",
                                     "format": "uri"
@@ -13108,6 +13115,13 @@
                               },
                               "default": []
                             },
+                            "brands": {
+                              "type": "array",
+                              "maxItems": 12,
+                              "items": {
+                                "type": "string"
+                              }
+                            },
                             "musicUrl": {
                               "type": "string",
                               "format": "uri"
@@ -15596,6 +15610,13 @@
                                 ]
                               },
                               "default": []
+                            },
+                            "brands": {
+                              "type": "array",
+                              "maxItems": 12,
+                              "items": {
+                                "type": "string"
+                              }
                             },
                             "musicUrl": {
                               "type": "string",

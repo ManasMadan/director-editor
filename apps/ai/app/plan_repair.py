@@ -100,8 +100,8 @@ def repair_plan(plan: ShotPlanDraft, video_seconds: float | None) -> ShotPlan:
         _repair_shot(shot, duration) for shot, duration in zip(shots, durations, strict=True)
     ]
     end = _end_of_short([shot.sourceEndSeconds for shot in repaired], video_seconds)
-    assets, renamed = _repair_assets(plan.assets, end)
-    unbranded = _unbranded_by(plan.assets)
+    brands = _lines(plan.brands, 80)
+    assets, renamed = _repair_assets(plan.assets, end, brands)
     # Validated against the real ShotPlan (its Field constraints, not the draft's looser
     # ones): a trim that still leaves too much of something raises here, loudly, rather
     # than writing an inconsistent plan.
@@ -111,15 +111,10 @@ def repair_plan(plan: ShotPlanDraft, video_seconds: float | None) -> ShotPlan:
             "shots": [shot.model_dump(mode="json") for shot in repaired],
             "durationSeconds": sum(shot.durationSeconds for shot in repaired),
             "assets": assets,
-            "edits": _repair_edits(plan.edits, renamed, end, unbranded),
+            "edits": _repair_edits(plan.edits, renamed, end, unbranding(brands)),
+            "brands": brands,
         }
     )
-
-
-def _unbranded_by(assets: list[AssetDraft]) -> Callable[[str], str]:
-    """What takes the original's branding (every asset's brands, handles, web addresses)
-    out of an edit's words: they go on the member's version as they are (app/branding.py)."""
-    return unbranding(brand for asset in assets for brand in asset.reference.brands)
 
 
 def with_assets_and_edits(plan: ShotPlan, source: ShotPlan) -> ShotPlan:
@@ -129,15 +124,17 @@ def with_assets_and_edits(plan: ShotPlan, source: ShotPlan) -> ShotPlan:
     (scripts/seed_assets.py)."""
     end = _end_of_short([shot.sourceEndSeconds for shot in plan.shots], None)
     assets, renamed = _repair_assets(
-        [AssetDraft.model_validate(asset.model_dump()) for asset in source.assets], end
+        [AssetDraft.model_validate(asset.model_dump()) for asset in source.assets],
+        end,
+        source.brands,
     )
-    drafts = [AssetDraft.model_validate(asset.model_dump()) for asset in source.assets]
     edits = [_draft_of(edit.model_dump(mode="json")) for edit in source.edits]
     return ShotPlan.model_validate(
         {
             **plan.model_dump(mode="json"),
             "assets": assets,
-            "edits": _repair_edits(edits, renamed, end, _unbranded_by(drafts)),
+            "edits": _repair_edits(edits, renamed, end, unbranding(source.brands)),
+            "brands": source.brands,
         }
     )
 
@@ -332,10 +329,13 @@ def _color(value: str | None) -> str | None:
     return value if value is not None and _COLOR.fullmatch(value) else None
 
 
-def _repair_assets(drafts: list[AssetDraft], end: float) -> tuple[list[Fields], dict[str, str]]:
+def _repair_assets(
+    drafts: list[AssetDraft], end: float, brands: list[str]
+) -> tuple[list[Fields], dict[str, str]]:
     """The assets in the order they first show, at most `MAX_ASSETS`, each with an id the
     storage key can carry (unique in the plan), its timing inside the Short and its text
-    trimmed; and each kept one's new id by the id Gemini gave it, for the edits."""
+    trimmed, and the plan's `brands` among its own; and each kept one's new id by the id
+    Gemini gave it, for the edits."""
     kept = sorted(drafts, key=lambda draft: draft.sourceStartSeconds)[:MAX_ASSETS]
     used: set[str] = set()
     renamed: dict[str, str] = {}
@@ -348,7 +348,8 @@ def _repair_assets(drafts: list[AssetDraft], end: float) -> tuple[list[Fields], 
         reference = {
             **draft.reference.model_dump(mode="json"),
             "text": _lines(draft.reference.text, 200),
-            "brands": _lines(draft.reference.brands, 80),
+            # The plan's own identity is on every asset too, for its default image.
+            "brands": _lines([*draft.reference.brands, *brands], 80),
         }
         assets.append(
             {
@@ -364,8 +365,10 @@ def _repair_assets(drafts: list[AssetDraft], end: float) -> tuple[list[Fields], 
 
 
 def _lines(lines: list[str], longest: int) -> list[str]:
-    """The non-blank `lines`, each cut to `longest`, at most `MAX_ASSET_TEXT_LINES`."""
-    return [line.strip()[:longest] for line in lines if line.strip()][:MAX_ASSET_TEXT_LINES]
+    """The non-blank `lines`, each cut to `longest` and each once, at most
+    `MAX_ASSET_TEXT_LINES`."""
+    kept = dict.fromkeys(line.strip()[:longest] for line in lines if line.strip())
+    return list(kept)[:MAX_ASSET_TEXT_LINES]
 
 
 def _slug(text: str) -> str:

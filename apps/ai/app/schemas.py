@@ -255,8 +255,10 @@ class AssetReferenceDraft(BaseModel):
         description="Every line of text on it, word for word; empty when there is none."
     )
     brands: list[str] = Field(
-        description="Every brand, product or company name, logo text, handle, website, and "
-        "the creator's or channel's own name on it, each as written; empty when none."
+        description="The original creator's own identity on it: their name, their "
+        "channel's, school's "
+        "or business's name, handles and websites, each as written; never a product or "
+        "tool the Short is about. Empty when none."
     )
     mood: str = Field(min_length=1, max_length=160)
 
@@ -268,8 +270,9 @@ class AssetReference(AssetReferenceDraft):
         max_length=MAX_ASSET_TEXT_LINES,
         description="Every line of text on it, word for word; empty when there is none.",
     )
-    # The original's own branding: never drawn into the member's version (app/assets.py).
-    # A plan written before it reads with none.
+    # The original creator's own identity, the plan's included (app/plan_repair.py): never
+    # drawn into the member's version (app/branding.py). A plan written before it reads
+    # with none.
     brands: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(
         default_factory=list[str], max_length=MAX_ASSET_TEXT_LINES
     )
@@ -493,6 +496,11 @@ class ShotPlan(BaseModel):
     # A plan written before assets and edits existed reads with neither.
     assets: list[Asset] = Field(default_factory=list[Asset], max_length=MAX_ASSETS)
     edits: list[Edit] = Field(default_factory=list[Edit], max_length=MAX_EDITS)
+    # The original creator's own identity anywhere in the Short (app/branding.py): never
+    # in the member's version's words. A plan written before it reads with none.
+    brands: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(
+        default_factory=list[str], max_length=MAX_ASSET_TEXT_LINES
+    )
 
 
 class TargetPoseDraft(TargetPose):
@@ -568,6 +576,12 @@ class ShotPlanDraft(BaseModel):
     )
     edits: list[EditDraft] = Field(
         description="The editing over the footage, in order; empty when there's none."
+    )
+    brands: list[str] = Field(
+        description="The original creator's own identity in the Short: their name, their "
+        "channel's, school's "
+        "or business's name, handles and websites, each as written; never a product or "
+        "tool the Short is about. Empty when none."
     )
 
 

@@ -35,6 +35,7 @@ PLAN_DRAFT: dict[str, object] = {
     "durationSeconds": 4,
     "assets": [],
     "edits": [],
+    "brands": [],
     "shots": [
         {
             "kind": "video",

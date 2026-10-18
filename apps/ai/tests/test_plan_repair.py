@@ -84,6 +84,7 @@ def plan(*shots: dict[str, object], duration: float = 10) -> ShotPlanDraft:
             "shots": list(shots),
             "assets": [],
             "edits": [],
+            "brands": [],
         }
     )
 
