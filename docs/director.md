@@ -93,7 +93,11 @@ on a laptop), with a top band (the shots, Director, the way out) and a bottom ba
   through the API's relay ([how-it-works.md](how-it-works.md)). The microphone and a
   frame a second go up; Director's voice comes back, and both sides are captioned
   (`components/director-captions.tsx`), so the shoot can be followed with the sound off.
-  What the member types in the text box goes to Director as their own words. Director
+  The captions show the last exchange oldest first, so a reply sits under what it
+  answers; the member's line goes eight seconds after Director has answered it, or at
+  once on a flip, a countdown or a take review. Screen readers hear each line once it's
+  finished. What the member types in the text box goes to Director as their own words,
+  on the take review too. Director
   can show another shot (`go_to_shot`) or flip the camera (`switch_camera`), never
   start or stop a take; the screen answers each request with what really happened
   (done, or refused because a take is under way or the camera is off). The camera, the
@@ -101,11 +105,17 @@ on a laptop), with a top band (the shots, Director, the way out) and a bottom ba
   screen shows.
 - **The shutter** (`hooks/use-studio.ts`) is the one way a take starts: a tap counts
   down 3, 2, 1 (a second tap, or Escape, calls it off), then records until it's tapped
-  again or a moment past the shot's length. While a take records, a red "REC" and its
-  time show, Director's voice is held back so it can't end up in the take, Director is
-  told to stay quiet, and the line to say stays on screen (the teleprompter). Then the
+  again or a moment past the shot's length. Director is told when the count starts (and
+  when it's called off), and its voice is held from the first number to the take's end,
+  so it never talks over the count or ends up in the take; what it says while held is
+  never shown either. While a take records, a red "REC" and its time show, and the line
+  to say stays on screen (the teleprompter). Then the
   take loops to watch back, with Director's word on it, to go again or keep. Keeping it
   uploads it and moves to the next shot (or the editor after the last).
+- **Leaving.** ✕ (or the browser's back) leaves at once in setup. During a countdown,
+  a recording or with a take not kept yet, it asks first ("Leave? This take isn't kept
+  yet.", `hooks/use-leave-guard.ts`): the count is called off or the recording stopped
+  at once, so Stay keeps the take on screen.
 - **Flip.** The flip button swaps between the selfie and the back camera. Director is
   told once the other camera's picture is up, so it talks about the new view.
 - **When Director can't be there.** A dropped line or Gemini out of reach is retried

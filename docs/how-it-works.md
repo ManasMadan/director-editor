@@ -205,7 +205,8 @@ Then a first turn asks Director to say hi and ask one question, so it speaks fir
 What happens on screen reaches Gemini as short notes in the relay's own words, in square
 brackets, so Gemini can tell them from the member: a move to another shot (with the new
 shot's brief), a flip of the camera ("look at the new view and say what you see"), and a
-take starting (stay silent), ending (speak first) or thrown away.
+take counting in (go quiet now), called off, recording (stay silent), ending (speak
+first) or thrown away.
 
 ### Sound, pictures and words
 
