@@ -330,7 +330,7 @@ describe("the editor", { tags: ["files"] }, () => {
     await passCut(user, before);
 
     await expect
-      .element(page.getByRole("heading", { name: "Saved to My media" }), { timeout: 20_000 })
+      .element(page.getByRole("dialog", { name: "Saved to My media" }), { timeout: 20_000 })
       .toBeVisible();
     await expect
       .element(page.getByRole("link", { name: "Open My media" }))
@@ -543,5 +543,9 @@ describe("the editor", { tags: ["files"] }, () => {
     await expect
       .element(page.getByRole("link", { name: "Download" }), { timeout: 20_000 })
       .toHaveAttribute("download", "director-short.mp4");
+    // A dialog: Escape goes back to editing.
+    await userEvent.keyboard("{Escape}");
+    await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
+    await expect.element(page.getByRole("button", { name: "Save video" })).toBeEnabled();
   });
 });

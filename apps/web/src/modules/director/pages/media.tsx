@@ -8,7 +8,7 @@ import { useFileDownloadUrl } from "@repo/client/api/files/download-url";
 import type { DirectorCut } from "@repo/contracts/api";
 import { GeminiLoader, GeminiShimmer } from "@repo/ui/components/gemini-loader";
 import { cn } from "@repo/ui/lib/utils";
-import { ChevronLeft, Play } from "lucide-react";
+import { Play } from "lucide-react";
 import Link from "next/link";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
@@ -146,7 +146,7 @@ function CutCard({ cut }: { cut: DirectorCut }) {
       <div className="flex flex-col gap-1 px-0.5">
         <p className="truncate text-sm font-medium">{cut.title}</p>
         <p className="text-xs text-studio-foreground/60">
-          {format.dateTime(cut.createdAt, { dateStyle: "medium" })}
+          {format.dateTime(cut.createdAt, { dateStyle: "medium", timeStyle: "short" })}
         </p>
         <PublishChip publish={cut.publish} />
       </div>
@@ -233,17 +233,9 @@ export function MediaPage() {
   const t = useTranslations("director.media");
   return (
     <DirectorGate>
-      <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-16">
-        <header className="flex items-center gap-2">
-          <Link
-            href="/library"
-            aria-label={t("back")}
-            className="-ml-2 flex size-10 items-center justify-center rounded-full hover:bg-studio-foreground/10"
-          >
-            <ChevronLeft className="size-6" aria-hidden />
-          </Link>
-          <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-        </header>
+      {/* On the studio stage, under the site header (STUDIO_PATHS), like the library. */}
+      <div className="flex flex-col gap-6 pt-6 lg:pt-10">
+        <h1 className="text-3xl font-semibold tracking-tight">{t("title")}</h1>
         <Media />
       </div>
     </DirectorGate>

@@ -11,9 +11,12 @@ describe("the editor's board", () => {
   });
 
   it("makes a shot's column as wide as it is long, within bounds", () => {
-    expect(columnWidth(3)).toBe(168);
-    expect(columnWidth(4.5)).toBe(252);
-    expect(columnWidth(0.5)).toBe(156);
-    expect(columnWidth(30)).toBe(320);
+    expect(columnWidth(3)).toBe(192);
+    expect(columnWidth(4.5)).toBe(288);
+    // From about two seconds up a column grows with its shot; shorter ones stay tappable.
+    expect(columnWidth(2)).toBe(128);
+    expect(columnWidth(1.5)).toBe(120);
+    expect(columnWidth(0.5)).toBe(120);
+    expect(columnWidth(30)).toBe(360);
   });
 });

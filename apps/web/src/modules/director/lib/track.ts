@@ -1,14 +1,14 @@
 /** The editor's clock reading, and how wide each shot's column is on its board. */
 
 /** How wide a second of the edit is on the board, in CSS pixels. */
-const PX_PER_SECOND = 56;
+const PX_PER_SECOND = 64;
 /**
- * A column is as wide as its shot is long, within bounds: a half-second shot still has
- * room for its takes and their stepper, and a long one doesn't push the next shot off
- * a phone's screen.
+ * A column is as wide as its shot is long, within bounds: from about two seconds up the
+ * board reads as time, a shorter shot still has room to tap its takes and stepper, and a
+ * long one doesn't push the next shot off a phone's screen.
  */
-const MIN_COLUMN_PX = 156;
-const MAX_COLUMN_PX = 320;
+const MIN_COLUMN_PX = 120;
+const MAX_COLUMN_PX = 360;
 
 export function columnWidth(seconds: number): number {
   return Math.round(Math.min(MAX_COLUMN_PX, Math.max(MIN_COLUMN_PX, seconds * PX_PER_SECOND)));

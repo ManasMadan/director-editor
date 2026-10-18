@@ -1,5 +1,6 @@
 "use client";
 
+import { useApiErrorMessage } from "@repo/client";
 import type { DirectorShot, DirectorTake } from "@repo/contracts/api";
 import type { DirectorTakeId } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
@@ -101,6 +102,14 @@ function RetakeNote({ feedback, href }: { feedback: string | null; href: ShotPag
 /** What a take's card says about its review: the score, or that it's still being watched. */
 function ReviewLine({ take }: { take: DirectorTake }) {
   const t = useTranslations("director.review");
+  const errorMessage = useApiErrorMessage();
+  if (take.status === "failed") {
+    return (
+      <span className="text-xs text-studio-error">
+        {errorMessage({ code: take.error ?? "DIRECTOR_REVIEW_FAILED" })}
+      </span>
+    );
+  }
   if (take.status === "pending" || take.status === "reviewing") {
     return (
       <span className="flex flex-col gap-1">
@@ -186,13 +195,15 @@ function Stepper({
   onPick,
 }: Pick<ColumnProps, "shot" | "picks" | "onPick"> & { current: DirectorTakeId }) {
   const t = useTranslations("director.editor");
+  // aria-disabled, not disabled: stepping to the first or last take keeps the focus on
+  // the button the member just pressed, where a disabled one would drop it to the page.
   const button = (takeId: DirectorTakeId | null, label: string, icon: ReactNode) => (
     <button
       type="button"
       onClick={takeId ? () => onPick(shot.index, takeId) : undefined}
-      disabled={!takeId}
+      aria-disabled={!takeId}
       aria-label={label}
-      className="flex size-9 items-center justify-center rounded-full bg-studio-foreground/10 disabled:opacity-30"
+      className="flex size-9 items-center justify-center rounded-full bg-studio-foreground/10 aria-disabled:opacity-30"
     >
       {icon}
     </button>

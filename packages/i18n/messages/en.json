@@ -865,7 +865,6 @@
     "starting": "Getting Director ready…",
     "media": {
       "title": "My media",
-      "back": "Back to the library",
       "loading": "Loading your videos…",
       "empty": "Nothing saved yet",
       "emptyHint": "Pick a Short, film your takes and save the video: it lands here, ready to publish.",

@@ -44,9 +44,19 @@ export function useTakeMedia(clips: readonly Clip[]): Map<DirectorTakeId, MediaS
   const downloadUrl = useFileDownloadUrl();
   const [media, setMedia] = useState(new Map<DirectorTakeId, MediaState>());
   const started = useRef(new Set<DirectorTakeId>());
+  const failed = useRef(new Set<DirectorTakeId>());
   const urls = useRef<string[]>([]);
 
   useEffect(() => {
+    // A take that couldn't be downloaded is tried again the next time it's picked (not
+    // on every render while it stays picked, which would retry in a loop).
+    const picked = new Set(clips.map((clip) => clip.take?.id));
+    for (const id of failed.current) {
+      if (!picked.has(id)) {
+        failed.current.delete(id);
+        started.current.delete(id);
+      }
+    }
     for (const clip of clips) {
       const take = clip.take;
       // A take still being reviewed waits: its review says which part to keep.
@@ -63,7 +73,10 @@ export function useTakeMedia(clips: readonly Clip[]): Map<DirectorTakeId, MediaS
           urls.current.push(url);
           return load(clip, blob, url);
         })
-        .then(set, () => set("failed"));
+        .then(set, () => {
+          failed.current.add(take.id);
+          set("failed");
+        });
     }
   }, [clips, downloadUrl]);
 

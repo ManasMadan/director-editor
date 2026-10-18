@@ -105,6 +105,37 @@ describe("useTakeMedia", () => {
     expect(api.calls).toHaveLength(3);
   });
 
+  it("tries a take that couldn't be downloaded again the next time it's picked", async () => {
+    let refuse = true;
+    const api = standIn((os) => ({
+      files: {
+        downloadUrl: os.files.downloadUrl.handler(({ input, errors }) => {
+          if (refuse && input.fileId === id(100)) {
+            throw errors.FILE_NOT_FOUND({ data: { params: {} } });
+          }
+          return {
+            url: URL.createObjectURL(new Blob([`bytes of ${input.fileId}`])),
+            expiresAt: new Date(Date.now() + 60_000),
+          };
+        }),
+      },
+    }));
+    let clips = [clip(0)];
+    const hook = await renderHook(() => useTakeMedia(clips), { api });
+    await expect.poll(() => hook.current.get(takeId(0))).toBe("failed");
+    // Another render with the same pick doesn't try again.
+    hook.rerender();
+    expect(api.calls).toHaveLength(1);
+    refuse = false;
+    clips = [clip(0, { take: take(4) })];
+    hook.rerender();
+    await expect.poll(() => typeof hook.current.get(takeId(4))).toBe("object");
+    clips = [clip(0)];
+    hook.rerender();
+    await expect.poll(() => typeof hook.current.get(takeId(0))).toBe("object");
+    expect(api.calls).toHaveLength(3);
+  });
+
   it("marks a take that couldn't be downloaded", async () => {
     await commands.failRequests("/takes/missing", { status: 404 });
     const api = standIn((os) => ({

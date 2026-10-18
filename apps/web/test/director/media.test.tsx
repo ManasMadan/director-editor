@@ -51,9 +51,6 @@ describe("My media", () => {
     await expect
       .element(page.getByRole("link", { name: "Pick a Short" }))
       .toHaveAttribute("href", "/library");
-    await expect
-      .element(page.getByRole("link", { name: "Back to the library" }))
-      .toHaveAttribute("href", "/library");
   });
 
   it("groups the videos by template, newest first, each with where its publishing stands", async () => {
@@ -117,7 +114,9 @@ describe("My media", () => {
     await expect.element(card("Private one").getByText("Private on YouTube")).toBeVisible();
     await expect.element(card("Somewhere").getByText("On YouTube", { exact: true })).toBeVisible();
     await expect.element(card("Take two").getByText("00:12")).toBeVisible();
-    await expect.element(card("Take two").getByText("Oct 18, 2026")).toBeVisible();
+    // Two videos of one template told apart by when they were saved.
+    await expect.element(card("Take two").getByText("Oct 18, 2026, 12:00 PM")).toBeVisible();
+    await expect.element(card("Public one").getByText("Oct 18, 2026, 11:00 AM")).toBeVisible();
     // The template's own thumbnail beside its name.
     const thumbnail = document.querySelector(`img[src*="/vi/${morning}/"]`);
     expect(thumbnail?.getAttribute("src")).toBe(`https://i.ytimg.com/vi/${morning}/hqdefault.jpg`);

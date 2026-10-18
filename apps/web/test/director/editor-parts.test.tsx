@@ -152,11 +152,11 @@ describe("the board of shots", () => {
       "Shot 2 · The look",
       "Shot 3 · Wave",
     ]);
-    // 56px a second, within 156 to 320.
+    // 64px a second, within 120 to 360.
     expect(columns.map((column) => (column as HTMLElement).style.width)).toEqual([
-      "252px",
-      "156px",
-      "156px",
+      "288px",
+      "120px",
+      "128px",
     ]);
     const walkIn = page.getByRole("radiogroup", { name: "Takes of shot 1" });
     const takes = walkIn.getByRole("radio").elements();
@@ -211,6 +211,18 @@ describe("the board of shots", () => {
       .element(wave.getByRole("link", { name: "Film it" }))
       .toHaveAttribute("href", "/director/abcdefghijk/shoot?shot=2&audio=voice");
     expect(wave.getByRole("radiogroup").query()).toBeNull();
+  });
+
+  it.each([
+    ["DIRECTOR_VIDEO_UNREADABLE", "Director couldn't watch this short."],
+    [null, "Director couldn't review this take. Record it again."],
+  ])("says why Director couldn't review a take (%s)", async (error, message) => {
+    const failed = directorTake({ status: "failed", error });
+    const { page } = await board({
+      listed: [boardShot(0, [failed]), boardShot(1, [look], { picked: look }), boardShot(2, [])],
+    });
+    const walkIn = page.getByRole("group", { name: "Shot 1 · Walk in" });
+    await expect.element(walkIn.getByText(message, { exact: false })).toBeVisible();
   });
 
   it("steps through a shot's takes, no further than the first or last", async () => {
@@ -320,6 +332,14 @@ describe("picking another take", () => {
     expect(document.querySelectorAll("label img")).toHaveLength(3);
 
     await userEvent.click(page.getByRole("button", { name: "Next take" }));
+    await expect.poll(preview).toEqual([walk2.id, smile.id]);
+    await expect.element(page.getByText("Take 2 of 2")).toBeVisible();
+    // At the last take the button says so, and keeps the focus a disabled one would drop.
+    const next = page.getByRole("button", { name: "Next take" });
+    await expect.element(next).toHaveAttribute("aria-disabled", "true");
+    expect(document.activeElement).toBe(next.element());
+    // Pressed again (a keyboard's Enter reaches it, where a pointer is turned away), nothing moves.
+    (next.element() as HTMLButtonElement).click();
     await expect.poll(preview).toEqual([walk2.id, smile.id]);
     await expect.element(page.getByText("Take 2 of 2")).toBeVisible();
   });
