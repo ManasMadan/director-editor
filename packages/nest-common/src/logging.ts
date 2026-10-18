@@ -48,9 +48,10 @@ export function createClientAddress(trustedProxies: string[]) {
 
 export const LoggerModule = {
   forRoot(config: LoggerConfig): DynamicModule {
+    const options = loggerOptions(config);
     return PinoLoggerModule.forRoot({
       pinoHttp: {
-        ...loggerOptions(config),
+        ...options,
         // Request, user and org ids on every line written inside a request or job.
         mixin: contextLogFields,
         // Completion lines are written by Fastify's onResponse hook (see bootstrap.ts),
@@ -59,6 +60,8 @@ export const LoggerModule = {
         autoLogging: false,
         // Keep the per-request binding small: never log headers (cookies, tokens).
         serializers: {
+          // The logger's own (the `err` one scrubs errors), with the request's below.
+          ...options.serializers,
           req: (req: { id: string; method: string; url: string }) => ({
             id: req.id,
             method: req.method,

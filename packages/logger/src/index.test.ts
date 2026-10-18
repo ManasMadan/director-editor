@@ -1,7 +1,8 @@
 import { Writable } from "node:stream";
 import { pino } from "pino";
 import { describe, expect, it } from "vitest";
-import { createLogger, loggerOptions, scrub } from "./index";
+import * as z from "zod";
+import { createLogger, isSecretField, loggerOptions, scrub } from "./index";
 
 describe("scrub", () => {
   it("censors sensitive keys at any depth and keeps everything else", () => {
@@ -16,7 +17,7 @@ describe("scrub", () => {
     });
   });
 
-  it("scrubs inside arrays, keeps errors whole and stops at a depth limit", () => {
+  it("scrubs inside arrays and errors, and stops at a depth limit", () => {
     const error = new Error("boom");
     let deep: unknown = { token: "deepest" };
     for (let i = 0; i < 9; i++) {
@@ -24,7 +25,7 @@ describe("scrub", () => {
     }
     const out = scrub({ items: [{ token: "t" }, 1], error, deep }) as Record<string, unknown>;
     expect(out.items).toEqual([{ token: "[redacted]" }, 1]);
-    expect(out.error).toBe(error);
+    expect(out.error).toMatchObject({ type: "Error", message: "boom", stack: error.stack });
     expect(JSON.stringify(out.deep)).toContain("deepest");
   });
 });
@@ -74,7 +75,9 @@ describe("logger", () => {
     });
     const log = pino(loggerOptions({ service: "test" }), sink);
     const signed =
-      "https://storage.example.com/takes/t1.webm?X-Amz-Credential=key&X-Amz-Signature=deadbeef";
+      "https://storage.example.com/takes/t1.webm?X-Amz-Date=20261018&X-Amz-Credential=AKIA1&X-Amz-Signature=deadbeef";
+    const censored =
+      "https://storage.example.com/takes/t1.webm?X-Amz-Date=20261018&X-Amz-Credential=[redacted]&X-Amz-Signature=[redacted]";
     log.info(
       {
         activity: "auth.signed_in",
@@ -112,7 +115,7 @@ describe("logger", () => {
       "sess-1",
       "client-1",
       "deadbeef",
-      "X-Amz-Credential=key",
+      "AKIA1",
       "cafe",
     ]) {
       expect(line).not.toContain(secret);
@@ -120,8 +123,8 @@ describe("logger", () => {
     expect(JSON.parse(line)).toMatchObject({
       actor: { email: "ada@example.com" },
       ip: "203.0.113.9",
-      sourceUrl: "https://storage.example.com/takes/t1.webm?[redacted]",
-      err: { message: "couldn't fetch https://storage.example.com/takes/t1.webm?[redacted]" },
+      sourceUrl: censored,
+      err: { message: `couldn't fetch ${censored}` },
     });
   });
 
@@ -129,5 +132,76 @@ describe("logger", () => {
     expect(scrub({ url: "https://www.youtube.com/shorts/abc?feature=share" })).toEqual({
       url: "https://www.youtube.com/shorts/abc?feature=share",
     });
+  });
+
+  it("censors a signed URL in a real Error and in the message, and keeps the stack", () => {
+    const lines: string[] = [];
+    const sink = new Writable({
+      write(chunk, _encoding, done) {
+        lines.push(String(chunk));
+        done();
+      },
+    });
+    const log = pino(loggerOptions({ service: "test" }), sink);
+    const signed = "https://s.example.com/t.webm?X-Goog-Credential=gc-1&X-Goog-Signature=beef";
+    const censored =
+      "https://s.example.com/t.webm?X-Goog-Credential=[redacted]&X-Goog-Signature=[redacted]";
+    const cause = new Error(`fetching ${signed} failed`);
+    log.error({ err: new Error(`upload of ${signed} failed`, { cause }) }, "upload failed");
+    log.warn({ error: cause }, `why? ${signed} answered 403`);
+    const logged = z.object({
+      msg: z.string(),
+      err: z.unknown().optional(),
+      error: z.object({ message: z.string() }).optional(),
+    });
+    const [failed, warned] = lines.map((line) => logged.parse(JSON.parse(line)));
+    for (const line of lines) {
+      expect(line).not.toContain("gc-1");
+      expect(line).not.toContain("beef");
+    }
+    expect(failed?.err).toMatchObject({
+      type: "Error",
+      // pino adds the cause's message to the error's.
+      message: `upload of ${censored} failed: fetching ${censored} failed`,
+      stack: expect.stringContaining(`upload of ${censored} failed\n    at `),
+    });
+    expect(warned?.msg).toBe(`why? ${censored} answered 403`);
+    expect(warned?.error?.message).toBe(`fetching ${censored} failed`);
+  });
+});
+
+describe("a credential's name", () => {
+  it.each([
+    "password",
+    "newPassword",
+    "api_key",
+    "apiKey",
+    "X-Api-Key",
+    "serviceSecret",
+    "client-secret",
+    "access_token",
+    "sessionToken",
+    "Authorization",
+    "set-cookie",
+    "otp",
+    "AWS_CREDENTIALS",
+    "backupCodes",
+  ])("%s is censored, whatever its casing style", (name) => {
+    expect(scrub({ [name]: "s3cr3t" })).toEqual({ [name]: "[redacted]" });
+  });
+
+  it.each(["inputTokens", "outputTokens", "email", "key", "signature"])(
+    "%s only looks like one, and is kept",
+    (name) => {
+      expect(isSecretField(name)).toBe(false);
+    },
+  );
+
+  it("is found in a query too, which keeps every other parameter", () => {
+    expect(
+      scrub("/cb?code=abc&state=s1&key=AIza1&token=t1&sig=x&X-Amz-Expires=60&access_token=a"),
+    ).toBe(
+      "/cb?code=[redacted]&state=s1&key=[redacted]&token=[redacted]&sig=[redacted]&X-Amz-Expires=60&access_token=[redacted]",
+    );
   });
 });
