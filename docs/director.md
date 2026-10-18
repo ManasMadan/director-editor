@@ -102,7 +102,8 @@ on a laptop), with a top band (the shots, Director, the way out) and a bottom ba
   nudges once (twice at most) after fifteen quiet seconds. Director
   can show another shot (`go_to_shot`), flip the camera (`switch_camera`) or change a
   shot to the member's own idea (`adapt_shot`: "what if I do it with my grandma"), or put
-  a labelled box on something it can see (`point_at`: "your window"), never
+  a labelled box on something it can see (`point_at`: "your window"), or rate an
+  attempt and make the member's pick their choice (`rate`), never
   start or stop a take; the screen answers each request with what really happened
   (done, or refused because a take is under way or the camera is off). A changed shot
   shows the member's version on the card (`lib/your-version.ts`), its changed rows
@@ -201,7 +202,7 @@ iOS asks before a page may read the tilt: the level shows a button for that.
   ([how-it-works.md](how-it-works.md#continuous-recording)); all under row-level security. Plans are a JSON
   column validated by `ShotPlan` on the way in and out.
 - AI service: `apps/ai/app/director.py` (the three Gemini calls, their token budgets and
-  failures), queue `ai-director` (`plan`, `assets`, `review-take`) in `packages/jobs`.
+  failures), queue `ai-director` (`plan`, `assets`, `review-take`, `session-pass`) in `packages/jobs`.
 - Seed templates: `packages/contracts/src/director-seeds.json`, the 6 seed Shorts
   (`apps/ai/app/seeds/seeds.json`) indexed for real on Vertex AI and committed. Rebuild it
   with `bun run --filter @repo/ai seeds:build` whenever the plan schema changes (and check

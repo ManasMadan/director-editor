@@ -251,9 +251,9 @@ those, or after half an hour, Director goes and the browser hears why.
 
 ### Tools
 
-Gemini has nine tools, none of which can start or stop a take:
+Gemini has ten tools on Live (the slower line has all but `rate`), none of which can start or stop a take:
 
-| Tool | What the shoot screen does |
+| Tool | What happens |
 |---|---|
 | `go_to_shot` (`shot`, from 1) | shows that shot; the camera and Director carry on |
 | `switch_camera` (`to`: front or back) | flips the camera |
@@ -264,6 +264,7 @@ Gemini has nine tools, none of which can start or stop a take:
 | `remember` (`kind`, `note`: one to three words) | adds a chip above the text box; × on it forgets it and Director acknowledges |
 | `forget` (`note`) | takes the chip away |
 | `point_at` (`target`: what to find; `label`: two or three words) | finds it in the current frame and pins a labelled box on it ("Director's marks" below), or answers `not_found` and draws nothing |
+| `rate` (`shot`, `take`, `score`, `reason`, `use`) | handled by the relay itself (`live.picks.ts`), below |
 
 The relay checks the arguments (a shot the plan has; for `adapt_shot`, at least one
 change, each at most 300 characters) and hands each call to the browser
@@ -298,6 +299,16 @@ a quarter of a frame of motion or four seconds it locates again (at most every t
 seconds, ten times a shot), and fades if the thing is gone. A mark shows for eight
 seconds from the last time it was found, two at most, and every mark goes on a new
 shot, a flip of the camera or the start of a take.
+
+`rate` never reaches the browser. After each attempt Director rates it with a score and
+a short, specific reason; the relay keeps the shoot's ratings per shot (attempts are
+numbered from 1 in the order filmed, and a take thrown away to go again gives its number
+back) and answers whether that attempt is the new best, so Director can say "that's the
+new best one" (never the score, unless asked). When the member says "use that one" or
+"use the second one", Director calls `rate` with `use`: the API finds that attempt among
+the member's takes of the shot since the shoot began and makes it their choice
+(`director.chooseTake`), which the editor shows first. A take still uploading isn't
+found yet, and Director is told to ask again in a moment.
 
 ### One conversation, the whole shoot
 
@@ -399,14 +410,32 @@ service a signed read of it, valid for 30 minutes, and the `review-take` job:
 2. sends Gemini 3.8 Flash the take with the shot it was meant to be, asking for the one
    continuous stretch worth keeping (as close to the shot's length as the take allows), a
    score from 0 to 100 for how closely it follows the shot, and one kind sentence of
-   feedback: what worked, then the one thing to try next;
+   feedback: what worked, then the one thing to try next, and a one-line reason it would
+   or wouldn't be the one to use ("the cleanest delivery, and you held the smile");
 3. stores the review on the take and records a `take_reviewed` event with its score.
 
 Takes are never replaced: a shot collects every attempt. The API's `director.shots`
 (`apps/api/src/modules/director/shots.ts`) picks the best-scored take of each shot (the
 newest of a tie), and a shot needs a retake while that pick scored below 60
 (`DIRECTOR_RETAKE_BELOW`). A shot with no scored take yet has no pick and asks for
-nothing.
+nothing. The member's own choice (`chosenTakeId`, one a shot, set while shooting or with
+`director.chooseTake`) beats Director's pick. The editor lists every take of a shot: the
+member's choice first, then Director's pick with its reason, then the rest in the order
+filmed; one tap swaps, and "Go back to Director's picks" undoes every swap at once.
+
+### The post-session pass
+
+Once a recording session is done, the `session-pass` job (`apps/ai/app/session_pass.py`)
+has Gemini watch the whole recording, with the plan and the attempts Director marked
+live, to find what the marks missed (a great line said while "rehearsing") and attempts
+whose edges were off. Gemini only reports what it saw; plain code (`reconcile`) decides
+what is new (a stretch that isn't mostly a marked attempt) and what moved (an edge off by
+half a second or more), so a marked attempt never becomes a second take. New attempts
+are cut into takes like the marked ones, marked `origin: pass` ("Found in your footage"
+in the editor). It reads and writes the recording through two seams, `RecordingSource`
+and `AttemptSink`; until continuous recording's tables reach the AI service, a stand-in
+finds no session and the job does nothing. It spends the workspace's allowance like any
+model call (`director-pass`, at most 150,000 tokens a session).
 
 ## The editor
 

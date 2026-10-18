@@ -181,9 +181,9 @@ function relayFor(
     frameIntervalMs: FRAME_INTERVAL_MS,
     now: options.now,
     log: options.log,
+    picks: options.picks(call.caller, call.videoId, new Date(options.now())),
     // Called from Gemini's socket, outside the call's request context: bound back to it,
     // so the line names the caller and the request.
-    picks: options.picks(call.caller, call.videoId, new Date(options.now())),
     onCallStarted: AsyncResource.bind(() => {
       options.recordCallStarted(call.caller.userId, call.videoId);
       options.activity({ activity: "director.call_started", target: callTarget(call) });
