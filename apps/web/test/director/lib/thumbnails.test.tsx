@@ -27,6 +27,23 @@ describe("a take's frames", () => {
     expect(colors).toEqual(["red", "blue"]);
   });
 
+  it("shows the take from its very first frame", async () => {
+    const [first] = await videoFrames(take, [0]);
+    const image = await imageOf(first?.src ?? "");
+    expect(hue(pixel(image, 72, 128, 36, 64))).toBe("red");
+  });
+
+  it("draws again once the frame is on screen, when the seek got there before it", async () => {
+    // As on a busy machine: the first draw after the seek finds no frame to draw yet.
+    const drawImage = vi
+      .spyOn(CanvasRenderingContext2D.prototype, "drawImage")
+      .mockImplementationOnce(() => undefined);
+    const [frame] = await videoFrames(take, [1]);
+    expect(drawImage).toHaveBeenCalledTimes(2);
+    const image = await imageOf(frame?.src ?? "");
+    expect(hue(pixel(image, 72, 128, 36, 64))).toBe("blue");
+  });
+
   it("fails on a take the browser can't read", async () => {
     const broken = URL.createObjectURL(new Blob(["not a video"], { type: "video/webm" }));
     await expect(videoFrames(broken, [0])).rejects.toThrow("the take couldn't be read");

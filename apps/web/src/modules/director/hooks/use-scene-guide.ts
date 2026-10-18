@@ -52,6 +52,11 @@ export function useSceneGuide(
   const checks = useRef(0);
   const failures = useRef(0);
   const lastAt = useRef(Number.NEGATIVE_INFINITY);
+  // Whether a frame still being taken may be sent once it's ready. Not after the screen
+  // has gone or stopped looking (a take or a call started): the check would spend the
+  // allowance on an answer nobody reads, and the request would outlive the page that
+  // made it, its failure handled by a page that's no longer there.
+  const sending = useRef(false);
   // Once Director says you're there, it stops looking.
   const settled = scene?.inPlace === true;
   const { mutateAsync } = check;
@@ -69,8 +74,9 @@ export function useSceneGuide(
     lastAt.current = performance.now();
     try {
       const image = await frameOf(element);
-      // No frame to send (the camera between pictures): nothing spent, nothing failed.
-      if (image === null) {
+      // No frame to send (the camera between pictures), or no longer looking by the time
+      // it's ready: nothing spent, nothing failed.
+      if (image === null || !sending.current) {
         return;
       }
       checks.current += 1;
@@ -90,9 +96,13 @@ export function useSceneGuide(
     if (!looking) {
       return;
     }
+    sending.current = true;
     void look();
     const timer = window.setInterval(() => void look(), EVERY_MS);
-    return () => window.clearInterval(timer);
+    return () => {
+      sending.current = false;
+      window.clearInterval(timer);
+    };
   }, [looking, look]);
 
   // Pointed somewhere new: look now, rather than at the next tick.
