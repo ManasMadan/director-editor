@@ -48,6 +48,8 @@ const wireCandidate = z.object({
   createdAt: z.coerce.date(),
 });
 type WireCandidate = z.infer<typeof wireCandidate>;
+/** What an image is: a Veo clip is stored as an MP4, everything else is a picture. */
+const mediaOf = (image: WireCandidate) => (image.objectKey?.endsWith(".mp4") ? "video" : "image");
 const wireSlots = z.object({
   slots: z.array(
     z.object({
@@ -223,11 +225,14 @@ export class AssetsService {
    * which YouTube asks to be declared as altered or synthetic content.
    */
   async usesSyntheticMedia(userId: UserId, orgId: OrgId, videoId: VideoId): Promise<boolean> {
-    const assets = await this.list(userId, orgId, videoId);
-    return assets.slots.some((slot) =>
-      slot.images.some(
+    // The slots alone: the plan and the images' signed links aren't needed for this.
+    const { slots } = wireSlots.parse(
+      await callAi((ai) => ai.director.listAssets(aiCaller(userId, orgId), videoId)),
+    );
+    return slots.some((slot) =>
+      slot.candidates.some(
         (image) =>
-          image.id === slot.chosenId && image.origin === "created" && image.media === "video",
+          image.id === slot.chosenId && image.origin === "created" && mediaOf(image) === "video",
       ),
     );
   }
@@ -243,7 +248,7 @@ export class AssetsService {
     return {
       id: image.id,
       origin: image.origin === "default" ? "created" : image.origin,
-      media: image.objectKey?.endsWith(".mp4") ? "video" : "image",
+      media: mediaOf(image),
       status,
       url:
         allowed && image.objectKey

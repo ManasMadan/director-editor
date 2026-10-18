@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { ORPCError } from "@orpc/client";
+import { zAssetSlotsOut } from "@repo/ai-client/schemas";
 import { PUBLISH_DAILY_LIMIT } from "@repo/contracts/api";
 import { directorSeeds } from "@repo/contracts/director-seeds";
 import { startFakeGoogle } from "@repo/fake-google";
@@ -44,6 +45,8 @@ let google: Awaited<ReturnType<typeof startFakeGoogle>>;
 let ai: Server;
 let aiDb: pg.Pool;
 const copyAsks: unknown[] = [];
+/** The gap's B-roll the member chose, when a test gives one: a Veo clip is AI footage. */
+const chosen: { clip: boolean } = { clip: false };
 
 const storage = new S3Storage({
   bucket: LOCAL_STORAGE.S3_BUCKET,
@@ -120,7 +123,40 @@ const COPY = {
   credits: "Inspired by the original, recreated with Director.",
 };
 
-/** apps/ai's routes for a cut: reading one, and Gemini's copy for it. */
+/** The plan's asset slots, as apps/ai lists them: one gap, and the member's clip for it. */
+function assetSlots(videoId: string) {
+  const clip = randomUUID();
+  return zAssetSlotsOut.parse({
+    slots: [
+      {
+        assetId: "gap-1",
+        prompt: "A kettle coming to the boil",
+        candidates: [
+          {
+            id: clip,
+            assetId: "gap-1",
+            origin: "created",
+            status: "ready",
+            objectKey: `director-assets/${videoId}/gap-1/${clip}.mp4`,
+            fileId: null,
+            error: null,
+            prompt: "A kettle coming to the boil",
+            credit: null,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        chosenId: chosen.clip ? clip : null,
+        history: [],
+      },
+    ],
+    imagesUsed: 1,
+    imagesPerVideo: 10,
+    imagesToday: 1,
+    imagesPerDay: 30,
+  });
+}
+
+/** apps/ai's routes for a cut: reading one, its plan's assets, and Gemini's copy for it. */
 async function aiRoute(request: IncomingMessage, response: ServerResponse) {
   const who = await caller(request);
   const chunks: Buffer[] = [];
@@ -148,6 +184,10 @@ async function aiRoute(request: IncomingMessage, response: ServerResponse) {
       picks: [],
       createdAt: cut.createdAt.toISOString(),
     });
+  }
+  const assets = /^\/v1\/director\/plans\/([\w-]+)\/assets$/.exec(request.url ?? "");
+  if (request.method === "GET" && assets?.[1]) {
+    return send(response, 200, assetSlots(assets[1]));
   }
   if (request.method === "POST" && request.url === "/v1/director/publish-copy") {
     copyAsks.push(body);
@@ -182,7 +222,10 @@ afterAll(async () => {
   await new Promise((resolve) => ai?.close(resolve));
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  chosen.clip = false;
+});
 
 type Session = ReturnType<typeof createSession>;
 
@@ -365,6 +408,15 @@ describe("publishing a cut", { tags: ["files"] }, () => {
     );
   });
 
+  it("declares a video with a Veo clip in a gap as altered or synthetic content", async () => {
+    const { session, email, me } = await signInWithGoogle();
+    await allowYouTube(session, email);
+    const { cutId } = await aCut(me);
+    chosen.clip = true;
+    await session.rpc.publish.upload(publishInput(cutId));
+    expect(google.uploads.at(-1)?.status.containsSyntheticMedia).toBe(true);
+  });
+
   it("publishes the cut to the member's channel and stores YouTube's id", async () => {
     const { session, email, me } = await signInWithGoogle();
     await allowYouTube(session, email);
@@ -380,7 +432,12 @@ describe("publishing a cut", { tags: ["files"] }, () => {
       bytes: VIDEO.length,
       contentType: "video/mp4",
       snippet: { title: "Three looks, one mirror #Shorts" },
-      status: { privacyStatus: "public", selfDeclaredMadeForKids: false },
+      // No AI footage in it: nothing to declare.
+      status: {
+        privacyStatus: "public",
+        selfDeclaredMadeForKids: false,
+        containsSyntheticMedia: false,
+      },
     });
     expect(upload?.snippet.description).toBe(
       `My take on the trend.\n\n#grwm #fitcheck\n\n${COPY.credits}\nhttps://youtube.com/shorts/${ORIGINAL}`,
