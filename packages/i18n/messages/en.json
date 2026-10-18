@@ -31,10 +31,87 @@
     "description": "Pick a Short you love, and Director walks you through shooting your own take on it."
   },
   "home": {
-    "title": "Remake any Short, shot by shot.",
-    "subtitle": "Director breaks a Short into its shots, guides you through filming each one, and reviews every take.",
-    "cta": "Get started",
-    "ctaSignedIn": "Open your library"
+    "title": "<line>Watch any Short.</line> <line>Shoot your own.</line>",
+    "subtitle": "Pick a Short you love. Gemini breaks it into shots, then directs you through filming each one on your phone, live. Cut your takes together and post your version to YouTube.",
+    "cta": "Try the demo",
+    "ctaSignedIn": "Open Director",
+    "how": "See how it works",
+    "xray": {
+      "caption": "The plan Gemini 4 Argon wrote for “{title}” by {channel}: {shots, plural, one {# shot} other {# shots}}, each with its framing, pose, camera move and lines.",
+      "original": "Original",
+      "file": "plan.json",
+      "shots": "The plan's shots",
+      "shot": "Shot {index, number}: {title}",
+      "static": "Hold still"
+    },
+    "steps": {
+      "title": "From watching to posting, in three steps",
+      "index": {
+        "title": "Index",
+        "body": "Paste a Short's link. Gemini 4 Argon watches it and writes the plan: every shot's framing, pose, camera move and lines."
+      },
+      "shoot": {
+        "title": "Shoot with Gemini",
+        "body": "Film each shot on a live call with Gemini. It sees your camera and tells you where to stand, how to hold the phone and what to say."
+      },
+      "publish": {
+        "title": "Publish",
+        "body": "Line your takes up on the timeline, add captions and post your version to YouTube Shorts."
+      }
+    },
+    "proof": {
+      "title": "Every shot, timed to the original",
+      "body": "The Short above, and the shots Gemini found in it. Play it and follow along.",
+      "play": "Play “{title}”",
+      "player": "“{title}” on YouTube",
+      "range": "{start, number, ::0.0}–{end, number, ::0.0} s",
+      "silent": "No lines"
+    },
+    "cloud": {
+      "title": "Built on Google Cloud",
+      "argon": {
+        "name": "Gemini 4 Argon on Vertex AI",
+        "use": "Watches each Short and writes its shot-by-shot plan."
+      },
+      "flash": {
+        "name": "Gemini 3.8 Flash on Vertex AI",
+        "use": "Checks your scene and reviews every take."
+      },
+      "live": {
+        "name": "Gemini Live API",
+        "use": "Directs you by voice and sees your camera while you film."
+      },
+      "storage": {
+        "name": "Cloud Storage",
+        "use": "Keeps your takes and finished videos."
+      },
+      "bigquery": {
+        "name": "BigQuery",
+        "use": "Records every indexing, take and score."
+      },
+      "youtube": {
+        "name": "YouTube Data API",
+        "use": "Brings in the Shorts you pick."
+      },
+      "signIn": {
+        "name": "Sign in with Google",
+        "use": "Signs you in with your Google account."
+      }
+    },
+    "templates": {
+      "title": "Six Shorts, ready to shoot",
+      "body": "Every account starts with these templates, already broken into shots by Gemini 4 Argon.",
+      "by": "by {channel}",
+      "meta": "{shots, plural, one {# shot} other {# shots}}, {seconds, number, ::0.0} s"
+    },
+    "platforms": {
+      "title": "For platforms",
+      "body": "Everyone who watches a Short is one tap from making their own. Director's planning, live direction and take reviews run behind one API, so a video app could put “Shoot your own” under every Short."
+    },
+    "footer": {
+      "label": "Site",
+      "credit": "The Shorts shown belong to their creators and play from YouTube."
+    }
   },
   "auth": {
     "signInTitle": "Welcome back",

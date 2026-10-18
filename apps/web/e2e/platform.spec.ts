@@ -69,11 +69,28 @@ test("the app is called Director everywhere a visitor or member looks", async ({
   await namedDirector();
 });
 
+test("the landing page shows Director and sends visitors to the demo", async ({ page }) => {
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Watch any Short. Shoot your own." }),
+  ).toBeVisible();
+  // The x-ray's real plan, the 6 seed templates and the Google Cloud services.
+  await expect(
+    page.getByRole("list", { name: "The plan's shots" }).getByRole("listitem"),
+  ).toHaveCount(10);
+  await expect(page.getByRole("heading", { name: "Six Shorts, ready to shoot" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Built on Google Cloud" })).toBeVisible();
+  await expect(page.locator("body")).not.toContainText("Director-editor");
+  await page.getByRole("link", { name: "Try the demo" }).first().click();
+  await expect(page).toHaveURL(/\/sign-in\?demo=1$/);
+});
+
 test("the landing page stays public, signed in or not", async ({ page }) => {
   await signUp(page);
   await page.goto("/");
   await expect(page).toHaveURL(/\/$/);
-  await page.getByRole("link", { name: "Open your library" }).click();
+  await expect(page.getByRole("link", { name: "Try the demo" })).toHaveCount(0);
+  await page.getByRole("link", { name: "Open Director" }).first().click();
   await expect(page).toHaveURL(/\/library/);
 });
 
@@ -123,8 +140,10 @@ test.describe("accessibility (WCAG 2.2 AA)", () => {
 
   test("dark mode", async ({ page }) => {
     await page.emulateMedia({ colorScheme: "dark" });
-    await page.goto("/sign-in");
-    await expectAccessible(page);
+    for (const path of ["/", "/sign-in"]) {
+      await page.goto(path);
+      await expectAccessible(page);
+    }
     await signUp(page);
     for (const path of ["/library", "/settings/security"]) {
       await page.goto(path);
