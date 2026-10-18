@@ -49,6 +49,8 @@ interface LiveEvents {
   /** The socket is open: Director can see the member (and hear them, with a microphone). */
   onLive: () => void;
   onTranscript: (who: Speaker, text: string) => void;
+  /** Director finished what it had to say. */
+  onTurn: () => void;
   /** Director asked the shoot screen to do something; answer it with `answer(id, …)`. */
   onTool: (id: string, call: LiveToolCall) => void;
   onSpeaking: (speaking: boolean) => void;
@@ -185,6 +187,8 @@ function receive(session: Session, data: unknown, events: LiveEvents) {
     // The member talked over Director: what it was still to say is dropped (barge-in).
     case "interrupted":
       return session.player.flush();
+    case "turn":
+      return events.onTurn();
     case "error":
       session.error = message.code;
       return;

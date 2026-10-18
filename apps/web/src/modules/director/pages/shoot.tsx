@@ -66,7 +66,16 @@ function OriginalAudio({ videoId, shot }: { videoId: string; shot: Shot }) {
  * time it says the browser will ask for the camera and microphone next, so the prompt
  * never comes cold.
  */
-function StartCard({ first, onStart }: { first: boolean; onStart: () => void }) {
+function StartCard({
+  first,
+  ready,
+  onStart,
+}: {
+  first: boolean;
+  /** Whether it's known yet if Director can join here. */
+  ready: boolean;
+  onStart: () => void;
+}) {
   const t = useTranslations("director.shoot");
   return (
     <div className="absolute inset-x-4 bottom-[max(1.5rem,env(safe-area-inset-bottom))] flex flex-col gap-3">
@@ -84,7 +93,8 @@ function StartCard({ first, onStart }: { first: boolean; onStart: () => void }) 
       <button
         type="button"
         onClick={onStart}
-        className="h-14 rounded-full bg-studio-foreground text-lg font-semibold text-studio shadow-xl transition-transform active:scale-95"
+        disabled={!ready}
+        className="h-14 rounded-full bg-studio-foreground text-lg font-semibold text-studio shadow-xl transition-transform active:scale-95 disabled:opacity-60"
       >
         {t("start")}
       </button>
@@ -127,7 +137,7 @@ function DirectorPill({ live }: { live: DirectorLive }) {
           GLASS,
         )}
       >
-        <GeminiLoader size="sm" label={t("joining")} />
+        <GeminiLoader as="span" size="sm" label={t("joining")} />
         <span aria-hidden>{t("joining")}</span>
       </p>
     );
@@ -495,7 +505,13 @@ function ShootScreen(shootProps: ShootProps) {
             camera.facing === "front" && "-scale-x-100",
           )}
         />
-        {started ? null : <StartCard first={memory.before.sessions === 0} onStart={start} />}
+        {started ? null : (
+          <StartCard
+            first={memory.before.sessions === 0}
+            ready={system.data !== undefined}
+            onStart={start}
+          />
+        )}
         {started && !blocked && !reviewing ? (
           <Overlay
             props={shoot.props}

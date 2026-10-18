@@ -66,7 +66,7 @@ const boxSchema = z.object({
 });
 export type FrameBox = z.infer<typeof boxSchema>;
 
-export const keypointNames = [
+const keypointNames = [
   "nose",
   "left_shoulder",
   "right_shoulder",
@@ -81,7 +81,6 @@ export const keypointNames = [
   "left_ankle",
   "right_ankle",
 ] as const;
-export type KeypointName = (typeof keypointNames)[number];
 
 const cameraMoves = [
   "static",

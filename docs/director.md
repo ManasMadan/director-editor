@@ -4,17 +4,17 @@ Director teaches someone to film their own version of a YouTube short. They pick
 from the library (the six seed Shorts every workspace starts with, or one Short of their
 own they paste a link to), Gemini watches it and writes the shot plan (how many shots,
 which are videos and which photos, in what order, where to stand, how to hold the phone,
-what to say), and the camera screen guides each take live. Gemini then reviews each take
-and picks its best part, and the browser stitches the takes into the finished short.
-This page covers the screens, Director Live's guides, the data and the demo account;
-[how-it-works.md](how-it-works.md) follows each step underneath (indexing, the live call,
-reviews, the editor, publishing).
+what to say), and Director (Gemini Live) talks the member through each shot on the shoot
+screen. Gemini then reviews each take and picks its best part, and the browser stitches
+the takes into the finished short. This page covers the screens, the shoot screen, the
+data and the demo account; [how-it-works.md](how-it-works.md) follows each step
+underneath (indexing, Director live, reviews, the editor, publishing).
 
 ```
 apps/web (library, camera)    ──@repo/client──▶  apps/api  ──ai-client (JWT)──▶  apps/ai  ──▶  Gemini
   │ getUserMedia, MediaRecorder,                 │ shorts: YouTube link check       │ plan job: watches the short by URL
-  │ DeviceOrientation, MediaPipe pose,           │ director: checks, then proxies    │ scene check: one camera frame
-  │ speech synthesis, canvas stitching           │ files: take uploads, signed reads │ review job: watches one take
+  │ Director live (/api/live WebSocket),         │ director: checks, then proxies    │ review job: watches one take
+  │ canvas stitching                             │ live: relays to Gemini Live       │
   └── presigned PUT ──▶ storage ──▶ apps/worker (ClamAV, type check) ─────────────────┘
 ```
 
@@ -31,7 +31,7 @@ bun run setup                              # once: .env from .env.example
 bun run env:set S3_BUCKET=uploads          # takes are uploads
 bun run env:set YOUTUBE_API_KEY=...        # a YouTube Data API v3 key
 bun run env:set GOOGLE_API_KEY=...         # a Vertex key, or a Gemini API key (below)
-bun run env:set GOOGLE_CLOUD_PROJECT=...   # the Vertex project; also turns on the live call
+bun run env:set GOOGLE_CLOUD_PROJECT=...   # the Vertex project; also turns on Director live
 bun run env:set DIRECTOR_MODEL=gemini-3.8-flash
 bun dev:full                               # the AI service, RustFS and ClamAV too
 ```
@@ -44,7 +44,7 @@ the AI service has `DIRECTOR_MODEL` and `GOOGLE_API_KEY`
 ([environment.md](environment.md)). `.env.example` defaults `GOOGLE_VERTEX` to `true`,
 so a `GOOGLE_API_KEY` you add is addressed through
 Vertex AI rather than the Gemini API, once `GOOGLE_CLOUD_PROJECT` is also set (below,
-under Director's live video call): `GOOGLE_API_KEY` then needs to be a Vertex key bound
+under Director live): `GOOGLE_API_KEY` then needs to be a Vertex key bound
 to a service account, and usage bills through Cloud Billing rather than the Gemini API.
 Unset `GOOGLE_VERTEX` to call the Gemini API directly instead. Production refuses a
 plain-HTTP `GOOGLE_BASE_URL` or `YOUTUBE_API_URL` (the mock Google's protocol, not a real
@@ -76,85 +76,54 @@ and any pasted link opens too. Its scene checks and take reviews are in
 | `/library` | the workspace's templates (starters and members' own, each with its shot rhythm and length, or its indexing stage), and "Bring your own Short": paste a link and Gemini indexes it, live; a second one of your own opens the "You've used your AI credit" dialog |
 | `/shorts/[videoId]` | an old link: redirects to `/director/[videoId]` |
 | `/director/[videoId]` | the template: the original, its storyboard, each shot's scene, framing, phone angle and lines, what you've filmed, the audio choice, Start shooting |
-| `/director/[videoId]/shoot?shot=n&audio=voice\|original` | the camera, one shot at a time; with `&back=edit` (a retake asked for in the editor) it goes back to the editor once the take is kept |
+| `/director/[videoId]/shoot?shot=n&audio=voice\|original` | the shoot screen, on shot n; with `&back=edit` (a retake asked for in the editor) it goes back to the editor once the take is kept |
 | `/director/[videoId]/edit?audio=voice\|original` | the editor: a board of shots left to right (each as wide as it is long), each shot's takes top to bottom with Director's pick marked, a stepper to change the pick, Director's note and a Retake on a shot whose best take scored below 60; the preview plays the picks; "Save video" renders the cut in the browser (about 720×1280 at 4 Mbit/s, at most 100 MB), uploads it and saves it to My media, with Cancel while it does |
 | `/media` | My media: the member's saved videos, under the template each was made from, to play, with each one's YouTube publish status |
 
-The camera screen is **Director Live**: the camera in a floating capsule over a blurred,
-dark copy of itself, an aurora behind it that breathes while Director talks or listens, a
-frosted dock (show your screen, talk, the shutter, pause, end) and a few status pills.
-Controls fade after a few seconds untouched; any touch brings them back.
+The shoot screen is one screen for the whole short. The camera fills it (a 9:16 column
+on a laptop), with a top band (the shots, Director, the way out) and a bottom band
+(Director's captions, a text box, flip and the shutter).
 
-- **One voice.** Everything that could say something (Gemini's scene check, the phone's
-  own light and shake readings, the framing, the angle, the pose, what's in the frame,
-  the steps) offers a cue to `lib/cues.ts`, which picks the one that matters most, waits
-  a breath between lines, never repeats a line inside its cooldown, and gives the member
-  the floor when they talk. The line is shown as a caption and, with the voice on, said
-  aloud in Director's own voice: Gemini's text-to-speech (`TTS_MODEL`, through
-  `director.speak`), which the API keeps in storage per line and voice, so each line is
-  spoken once for everyone. When that voice is off (no uploads), fails or takes more than
-  two seconds, the browser's speech synthesis says the line instead (for a minute after a
-  failure, and for good once it's off); on a live call,
-  Gemini Live does all the talking. It talks to someone filming for the first time, a grandparent or a child: warm,
-  short, one thing at a time, and patient (a breath of 4.5 seconds between lines, 25
-  before a nudge comes back). A few calls punctuate it: "Get ready! Here we go in 3",
-  "Action!", "Cut!", "Let's try that one more time", "That's a wrap".
-- **Reacts as the camera moves.** The phone samples a tiny copy of the frame four times
-  a second (`lib/frame-stats.ts`): light, backlight and shake answer at once, and a
-  frame that looks somewhere new asks Gemini for a scene check straight away instead of
-  waiting for the next one.
-- **Points things out.** MediaPipe's object detector (EfficientDet-Lite0, in the browser)
-  finds props, backdrops, pets and screens (`lib/things.ts`); the best few get a lasso
-  and a name, and Director says what they're good for. The shot's landmark comes first.
-- **Doodles, not boxes** (`lib/sketch.ts`, `lib/doodle.ts`): single pen lines with a
-  soft shadow, boiling like hand-drawn animation, few at a time. A stick buddy strikes
-  the pose to copy, breathing and blinking, and its face says how the set-up is going
-  before Director does: a smile, a "?" while it can't see you, a worried look with a
-  little sun when the light needs fixing, a grin and a hop once you match it (faded back
-  while recording). Footprints mark where to stand, beside a lassoed landmark; arrows
-  say which way to go. One thing at a time: while Gemini walks you to your spot, the walk
-  is all that's drawn, and the buddy comes once you're there (or once Gemini can't guide
-  any more: out of reach, or its checks spent). Then a horizon to level, and stickers
-  when it comes together (a star when
-  the pose locks, "Nailed it!" when the ready check is all green, the clapperboard for
-  each take). Everything tracked glides on a critically damped spring
-  (`lib/spring.ts`), so nothing jitters. Reduced motion stops the boil, the bob and the
-  blink.
-- **The ready check**: spot, frame, angle, light, each green, amber, or left out when the
-  shot or device can't judge it (`lib/readiness.ts`).
-- **Talk to it.** The browser's speech recogniser listens (Chrome, Safari): "action",
-  "cut", "go again", "keep it", "flip", "repeat", "quiet", in the member's language
-  (`director.live.voice.words`). Talking over Director stops it. What the microphone
-  hears of Director's own voice, and phrases the recogniser doubts, are ignored
-  (`lib/intents.ts`). It stops listening while a take records the member's voice.
-- **Hands-free.** Hold a hand above your head for a moment to roll.
-- **Flip and share.** The flip button swaps cameras; the dock can show Director the
-  screen instead (no recording then), and Director brainstorms from the shot's plan.
-- **The Director's Cut.** The moment a take ends, `lib/cut.ts` picks its steadiest
-  stretch of the shot's length to loop, scores it, and gives one piece of praise and one
-  thing to try (energy from the voice's level, shake, light, framing, a late start),
-  said aloud a beat after "Cut!". Gemini's full review follows once the take is kept.
-- **It remembers** (`lib/memory.ts`): voice and listening on or off, the countdown
-  (or, on Auto, a longer one once most takes start late), the light problems and props
-  that keep coming up, sessions and scores. The greeting is about last time.
+- **Start shooting.** Nothing turns on until the member taps Start shooting. The card
+  above it says what happens: Director sees and hears them while they get set, and a
+  take records only on the shutter. The first time it also says the browser will ask
+  for the camera and microphone next. The tap opens the selfie camera and brings
+  Director in, and also lets the page make sound.
+- **Director live** (`hooks/use-director-live.ts`, `lib/live-session.ts`): Gemini Live
+  through the API's relay ([how-it-works.md](how-it-works.md)). The microphone and a
+  frame a second go up; Director's voice comes back, and both sides are captioned
+  (`components/director-captions.tsx`), so the shoot can be followed with the sound off.
+  What the member types in the text box goes to Director as their own words. Director
+  can show another shot (`go_to_shot`) or flip the camera (`switch_camera`), never
+  start or stop a take; the screen answers each request with what really happened
+  (done, or refused because a take is under way or the camera is off). The camera, the
+  microphone and Director stay up from shot to shot: moving on changes only what the
+  screen shows.
+- **The shutter** (`hooks/use-studio.ts`) is the one way a take starts: a tap counts
+  down 3, 2, 1 (a second tap, or Escape, calls it off), then records until it's tapped
+  again or a moment past the shot's length. While a take records, a red "REC" and its
+  time show, Director's voice is held back so it can't end up in the take, Director is
+  told to stay quiet, and the line to say stays on screen (the teleprompter). Then the
+  take loops to watch back, with Director's word on it, to go again or keep. Keeping it
+  uploads it and moves to the next shot (or the editor after the last).
+- **Flip.** The flip button swaps between the selfie and the back camera. Director is
+  told once the other camera's picture is up, so it talks about the new view.
+- **When Director can't be there.** A dropped line or Gemini out of reach is retried
+  once, silently, after two seconds. If that fails too (or Director is off on the site,
+  or the hour's allowance is spent), the top band says why, says the shutter still
+  works, and offers Try again where it could help. Without a microphone Director still
+  sees, speaks and reads the text box.
+- **It remembers** (`lib/memory.ts`): how many shoots the member has started, so the
+  card says less after the first.
 - **The wrap.** Keeping the last shot opens the editor on Director's cut of the takes,
   playing, with "That's a wrap!", for any last changes.
-- **Never stuck.** Two failed scene checks in a row (no allowance, rate-limited, Gemini
-  down) switch Director to on-device guidance for the shot, with an "On-device" badge;
-  a detector that can't load just leaves its guide out.
-- **Phone angle**: a horizon doodle from the phone's tilt (DeviceOrientation), solid green
-  inside the plan's tolerance. A computer has no tilt sensor, so the angle check is left
-  out there. The screen is kept awake while it's open (Wake Lock), and phones buzz on the
-  beats (Vibration).
+- The screen is kept awake while it's open (Wake Lock).
 
-The seams, each documented in its file:
+The seam, documented in its file:
 
 | Concern | Now | Later | Where |
 |---|---|---|---|
 | What Director remembers | this browser's storage | an API procedure, a row per member | `MemoryStore` in `apps/web/src/modules/director/lib/memory.ts` |
-| Director's voice | Gemini's text-to-speech (`director.speak`), the browser's speech synthesis when it fails; on a call, Gemini Live | Gemini Live's voice off a call too | `say`, `hush`, `saying` in `lib/speech.ts` |
-| Hearing the member | the browser's speech recogniser; on a call, Gemini Live hears them itself | a streamed transcript from a live session off a call too | `useListening` in `hooks/use-listening.ts` |
-| Looking at the scene | a Gemini call per frame (`checkScene`); on a call, Gemini Live sees a frame a second | a live session streaming frames off a call too | `useSceneGuide` in `hooks/use-scene-guide.ts` |
 
 With "use the original audio", the take records no sound and the original plays while
 filming, in YouTube's own embedded player; the finished short is silent, for the original

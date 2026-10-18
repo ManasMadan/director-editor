@@ -33,7 +33,7 @@ const facing = z.enum(["front", "back"]);
 export type Facing = z.infer<typeof facing>;
 
 /** A tool call as the browser carries it out: which, and with what (a shot is 0-based). */
-export const liveToolCall = z.discriminatedUnion("name", [
+const liveToolCall = z.discriminatedUnion("name", [
   z.object({ name: z.literal("go_to_shot"), shot: shotIndex }),
   z.object({ name: z.literal("switch_camera"), to: facing }),
 ]);
@@ -43,14 +43,14 @@ export type LiveToolCall = z.infer<typeof liveToolCall>;
  * What came of a tool call: done, or refused because a take is under way (counting down,
  * recording, being watched back or sent) or there's no camera on to switch.
  */
-export const LIVE_TOOL_RESULTS = ["done", "busy", "no_camera"] as const;
+const LIVE_TOOL_RESULTS = ["done", "busy", "no_camera"] as const;
 export type LiveToolResult = (typeof LIVE_TOOL_RESULTS)[number];
 
 /**
  * Where a take is: recording, just recorded (the member is watching it back), or thrown
  * away to go again.
  */
-export const LIVE_TAKE_STATES = ["recording", "recorded", "discarded"] as const;
+const LIVE_TAKE_STATES = ["recording", "recorded", "discarded"] as const;
 export type LiveTakeState = (typeof LIVE_TAKE_STATES)[number];
 
 /**
@@ -94,6 +94,8 @@ export const liveServerMessage = z.discriminatedUnion("type", [
   }),
   /** The member spoke over Director: drop the audio still queued to play. */
   z.object({ type: z.literal("interrupted") }),
+  /** Director finished what it had to say: its next words start a new line. */
+  z.object({ type: z.literal("turn") }),
   /**
    * Why Director is going away, just before the socket closes. A code newer than the
    * reader reads as INTERNAL: still a failure, never an unreadable message.

@@ -71,8 +71,15 @@ export const CAPTCHA = {
 export interface Services {
   databaseUrl: string;
   aiUrl: string;
-  /** The mock Google (packages/fake-google): YouTube and Google sign-in. */
+  /** The mock Google (packages/fake-google): YouTube, Google sign-in and the Live API. */
   googleUrl: string;
+  /** What the mock Live API was told on each connection Director live made, oldest first. */
+  liveSessions(): {
+    turns: string[];
+    toolResponses: unknown[];
+    open: boolean;
+    resumedFrom: string | null;
+  }[];
   close(): Promise<void>;
 }
 

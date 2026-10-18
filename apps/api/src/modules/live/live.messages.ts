@@ -29,6 +29,7 @@ export const upstreamMessageSchema = z.object({
         })
         .optional(),
       interrupted: z.boolean().optional(),
+      turnComplete: z.boolean().optional(),
       inputTranscription: transcription,
       outputTranscription: transcription,
     })

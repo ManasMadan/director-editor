@@ -49,7 +49,7 @@ const clientMessage = z.object({
 });
 
 /** One connection, as a test inspects it. */
-export interface LiveSession {
+interface LiveSession {
   model: string;
   /** The handle this connection resumed from, if it did. */
   resumedFrom: string | null;

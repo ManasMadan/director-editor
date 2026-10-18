@@ -397,6 +397,7 @@ describe("a live call", () => {
       },
     });
     fake.send({ serverContent: { interrupted: true, modelTurn: {} } });
+    fake.send({ serverContent: { turnComplete: true } });
     expect(await browser.message(0)).toEqual({ type: "audio", pcm16: "BBBB" });
     expect(await browser.message(1)).toEqual({
       type: "transcript",
@@ -409,6 +410,8 @@ describe("a live call", () => {
       text: "Lovely, hold it there.",
     });
     expect(await browser.message(3)).toEqual({ type: "interrupted" });
+    // Its turn is over: the browser starts its next words on a new line.
+    expect(await browser.message(4)).toEqual({ type: "turn" });
   });
 
   it("forwards up to twice real time of microphone audio, and hangs up past it", async () => {
@@ -429,17 +432,17 @@ describe("a live call", () => {
     expect(fake.received).toHaveLength(10);
   });
 
-  it("takes three typed turns in ten seconds, and hangs up on a fourth; a move to another shot isn't one", async () => {
+  it("takes six typed turns in ten seconds, and hangs up on a seventh; a move to another shot isn't one", async () => {
     const { fake, browser } = await liveCall();
     browser.send({ type: "text", text: "one" });
     browser.send({ type: "shot", shot: 1 });
-    for (const text of ["two", "three", "four"]) {
+    for (const text of ["two", "three", "four", "five", "six", "seven"]) {
       browser.send({ type: "text", text });
     }
     expect(await browser.closed).toBe(1008);
     expect(browser.received).toEqual([{ type: "error", code: "DIRECTOR_CALL_TOO_FAST" }]);
     await vi.waitFor(() => expect(fake.server.clients.size).toBe(0));
-    expect(fake.received).toHaveLength(6);
+    expect(fake.received).toHaveLength(9);
   });
 
   it("hangs up when Gemini stops reading what it's sent", async () => {

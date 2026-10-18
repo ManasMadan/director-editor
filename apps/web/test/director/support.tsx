@@ -304,11 +304,6 @@ export function canvasCamera(refusal?: DOMException) {
   return { opened, getUserMedia };
 }
 
-/** The phone held at `beta`/`gamma` degrees, as the orientation sensor reports it. */
-export function tiltPhone(beta: number, gamma: number) {
-  window.dispatchEvent(new DeviceOrientationEvent("deviceorientation", { beta, gamma }));
-}
-
 /** A short WebM of a moving picture (with a tone when `withSound`), as a take records it. */
 export async function recordVideo(seconds: number, withSound = false): Promise<Blob> {
   const { canvas, stop } = movingCanvas(180, 320);
@@ -397,6 +392,3 @@ export function fakeRecognizer() {
   vi.stubGlobal("SpeechRecognition", undefined);
   vi.stubGlobal("webkitSpeechRecognition", FakeRecognizer);
 }
-
-/** Moves the pointer, as a member touching the screen does: faded controls come back. */
-export const touch = () => window.dispatchEvent(new PointerEvent("pointermove"));

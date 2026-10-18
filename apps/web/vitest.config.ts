@@ -40,7 +40,8 @@ const browserProject = (
   // React's automatic runtime (Next compiles JSX the same way).
   oxc: { jsx: { runtime: "automatic" as const } },
   server: {
-    proxy: { "/rpc": API[services].url, "/api": API[services].url },
+    // Director live is a WebSocket under /api: the proxy passes upgrades on too.
+    proxy: { "/rpc": API[services].url, "/api": { target: API[services].url, ws: true } },
   },
   // Every dependency the app uses, bundled before the first test: one found later makes
   // Vite reload the page mid-run.

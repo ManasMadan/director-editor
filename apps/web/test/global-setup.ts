@@ -1,7 +1,8 @@
 /**
  * Starts what the browser tests talk to: two builds of the real API, one with every
  * optional feature on (files on the local RustFS, the AI stand-in, Google sign-in,
- * YouTube's link check from the mock YouTube, the demo account offered) and one with
+ * YouTube's link check from the mock YouTube, Director live on the mock Google's Live
+ * API, the demo account offered) and one with
  * every feature off except captcha, both on one cloned database. The browser reaches them
  * on its own origin, through the proxy in
  * vitest.config.ts, exactly like the site does through the gateway.
@@ -10,7 +11,7 @@ import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { mkdirSync, openSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { createTestDatabase, prepareTemplate } from "@repo/db/testing";
-import { startFakeGoogle } from "@repo/fake-google";
+import { LIVE_API_PATH, startFakeGoogle } from "@repo/fake-google";
 import { DEMO } from "./demo";
 import { startFakeAi } from "./fake-ai";
 import { API, CAPTCHA, REDIS_URL, type Services, SITE } from "./services";
@@ -99,6 +100,9 @@ async function start(): Promise<Services> {
     AI_SERVICE_SECRET: "",
     YOUTUBE_API_KEY: "",
     DEMO_PASSWORD: "",
+    GOOGLE_CLOUD_PROJECT: "",
+    LIVE_API_URL: "",
+    GOOGLE_ACCESS_TOKEN: "",
   };
   const variants = {
     full: {
@@ -111,6 +115,10 @@ async function start(): Promise<Services> {
       AI_SERVICE_SECRET: ai.secret,
       YOUTUBE_API_KEY: "web-tests-youtube-key",
       YOUTUBE_API_URL: `${google.url}/youtube/v3`,
+      // Director live, as production has it, on the mock's Live API (its token is the key).
+      GOOGLE_CLOUD_PROJECT: "web-tests-project",
+      LIVE_API_URL: `${google.url.replace("http:", "ws:")}${LIVE_API_PATH}`,
+      GOOGLE_ACCESS_TOKEN: "web-tests-youtube-key",
     },
     bare: {
       ...off,
@@ -147,6 +155,7 @@ async function start(): Promise<Services> {
     databaseUrl: database.urlFor("postgres"),
     aiUrl: ai.url,
     googleUrl: google.url,
+    liveSessions: () => google.live.sessions,
     async close() {
       await Promise.all(
         children.map(

@@ -40,6 +40,10 @@ describe("what the browser sends", () => {
 });
 
 describe("what the browser hears", () => {
+  it("hears when Director's turn is over", () => {
+    expect(liveServerMessage.parse({ type: "turn" })).toEqual({ type: "turn" });
+  });
+
   it("reads an error code newer than itself as our own failure", () => {
     expect(liveServerMessage.parse({ type: "error", code: "SOMETHING_NEW" })).toEqual({
       type: "error",

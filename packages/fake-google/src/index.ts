@@ -21,6 +21,9 @@ import { buffer, text } from "node:stream/consumers";
 import * as z from "zod";
 import { answer, generateRequest, generateResponse, promptTokens, type SceneSteps } from "./gemini";
 import { createLive } from "./live";
+
+export { LIVE_API_PATH } from "./live";
+
 import { type Answer, createOAuth, type OAuth } from "./oauth";
 import { youtube } from "./youtube";
 import { createYouTubeUploads } from "./youtube-upload";

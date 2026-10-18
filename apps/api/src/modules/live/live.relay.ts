@@ -85,7 +85,8 @@ const AUDIO_BYTES_PER_SECOND = 16_000 * 2;
 const AUDIO_WINDOW_MS = 5 * SECOND_MS;
 /** Twice real time over the window: room for a burst after the network stalls, no more. */
 const AUDIO_WINDOW_BYTES = 2 * AUDIO_BYTES_PER_SECOND * (AUDIO_WINDOW_MS / SECOND_MS);
-const TEXT_TURNS = 3;
+/** Typed turns: a fast typist's burst, no more. */
+const TEXT_TURNS = 6;
 const TEXT_WINDOW_MS = 10 * SECOND_MS;
 /**
  * Moves to another shot in the same window: a whole plan's worth, so Director skipping
@@ -484,6 +485,9 @@ export class LiveRelay {
     }
     if (content.interrupted) {
       this.toClient({ type: "interrupted" });
+    }
+    if (content.turnComplete) {
+      this.toClient({ type: "turn" });
     }
   }
 

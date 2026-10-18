@@ -604,7 +604,27 @@ const resetPublishAllowance: BrowserCommand<[]> = async () => {
   }
 };
 
+/**
+ * The turns the mock Live API was sent on Director live's connections since `from` (the
+ * count before a test began, from `liveSessionCount`): the app's notes and what was typed.
+ */
+const liveTurns: BrowserCommand<[from: number]> = async (_context, from) =>
+  (await services())
+    .liveSessions()
+    .slice(from)
+    .map((session) => ({
+      turns: session.turns,
+      toolResponses: session.toolResponses,
+      open: session.open,
+      resumedFrom: session.resumedFrom,
+    }));
+
+/** How many connections the mock Live API has had: where a test's own begin. */
+const liveSessionCount: BrowserCommand<[]> = async () => (await services()).liveSessions().length;
+
 export const commands = {
+  liveTurns,
+  liveSessionCount,
   answeredRequests,
   resetPublishAllowance,
   fakeCut,
@@ -635,6 +655,12 @@ export const commands = {
 
 declare module "vitest/browser" {
   interface BrowserCommands {
+    liveTurns(
+      from: number,
+    ): Promise<
+      { turns: string[]; toolResponses: unknown[]; open: boolean; resumedFrom: string | null }[]
+    >;
+    liveSessionCount(): Promise<number>;
     answeredRequests(part: string): Promise<number>;
     checkUpload(fileId: string, rejectReason?: string): Promise<void>;
     fakeCut(cutId: string, state: { cut: object; copy?: object }): Promise<void>;

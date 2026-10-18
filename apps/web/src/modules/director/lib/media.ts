@@ -2,7 +2,7 @@
  * The camera, the recorder and frames from them. MediaRecorder writes MP4 in Safari and
  * WebM elsewhere; both are upload types a take may have (packages/contracts files).
  */
-import type { Shot } from "@repo/contracts/api";
+import type { Facing } from "@repo/contracts/live";
 import { VIEW_ASPECT, viewCrop } from "./view";
 
 /** About 1.5 Mbit/s: a 60-second take, with its sound, stays inside a take upload's 15 MB. */
@@ -27,8 +27,8 @@ export function recorderFormat(
   return { mimeType, uploadType: mimeType.startsWith("video/mp4") ? "video/mp4" : "video/webm" };
 }
 
-/** The shot's camera, portrait, with the microphone when the take records sound. */
-export function openCamera(camera: Shot["camera"], withSound: boolean): Promise<MediaStream> {
+/** The front or back camera, portrait, with the microphone when takes record sound. */
+export function openCamera(camera: Facing, withSound: boolean): Promise<MediaStream> {
   return navigator.mediaDevices.getUserMedia({
     video: {
       facingMode: camera === "front" ? "user" : "environment",
@@ -44,11 +44,6 @@ export function openCamera(camera: Shot["camera"], withSound: boolean): Promise<
   });
 }
 
-/** The member's screen (or a window or tab of it), to show Director. */
-export function openScreen(): Promise<MediaStream> {
-  return navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-}
-
 export function stopStream(stream: MediaStream | null) {
   for (const track of stream?.getTracks() ?? []) {
     track.stop();
@@ -57,8 +52,7 @@ export function stopStream(stream: MediaStream | null) {
 
 /**
  * What the viewfinder shows now (the camera's frame cropped to 9:16, not mirrored), as a
- * JPEG at most `maxWidth` wide: a photo take, or the frame a scene check sends, whose
- * answers are then in the viewfinder's own space.
+ * JPEG at most `maxWidth` wide: a photo take, or the frame Director sees.
  */
 export function captureFrame(
   video: HTMLVideoElement,

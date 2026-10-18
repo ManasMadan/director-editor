@@ -115,6 +115,8 @@ function useConnect(refs: Refs, setters: Setters) {
             setState("live");
           },
           onTranscript: (who, text) => setCaptions((now) => withTranscript(now, who, text)),
+          // Director's next words are a new line, not more of this one.
+          onTurn: () => setCaptions((now) => ({ ...now, last: null })),
           onTool: (id, call) => latest.current.onTool(id, call),
           onSpeaking: setSpeaking,
           onDeaf: () => setHearing(false),
