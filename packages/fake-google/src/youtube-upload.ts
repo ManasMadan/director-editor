@@ -62,6 +62,17 @@ function refuse(status: number, reason: string): Answer {
 
 const videoId = () => randomBytes(8).toString("base64url").slice(0, 11);
 
+/** Why YouTube won't take an upload from this account now, if it won't. */
+function refusalOf(grant: Grant, quotaSpent: boolean): Answer | null {
+  if (!grant.scopes.some((scope) => UPLOAD_SCOPES.includes(scope))) {
+    return refuse(403, "insufficientPermissions");
+  }
+  if (grant.email.startsWith("no-channel")) {
+    return refuse(401, "youtubeSignupRequired");
+  }
+  return quotaSpent ? refuse(403, "quotaExceeded") : null;
+}
+
 export function createYouTubeUploads({
   url,
   audited,
@@ -90,14 +101,9 @@ export function createYouTubeUploads({
       if (!grant) {
         return refuse(401, "authError");
       }
-      if (!grant.scopes.some((scope) => UPLOAD_SCOPES.includes(scope))) {
-        return refuse(403, "insufficientPermissions");
-      }
-      if (grant.email.startsWith("no-channel")) {
-        return refuse(401, "youtubeSignupRequired");
-      }
-      if (quotaSpent()) {
-        return refuse(403, "quotaExceeded");
+      const refused = refusalOf(grant, quotaSpent());
+      if (refused) {
+        return refused;
       }
       const metadata = metadataSchema.safeParse(JSON.parse(body || "{}"));
       const length = Number(headers.length);
