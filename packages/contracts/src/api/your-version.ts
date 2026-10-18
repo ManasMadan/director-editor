@@ -108,6 +108,41 @@ export function applyShotVersion(shot: Shot, version: ShotVersion | undefined): 
   };
 }
 
+/** Whether the member films shot `index`: skipped shots and gaps aren't filmed. */
+export function films(version: YourVersion, index: number): boolean {
+  return !(version.skipped.includes(index) || version.gaps.includes(index));
+}
+
+/** The next shot after `index` they film, or null when there's none left. */
+export function nextFilmed(version: YourVersion, index: number, count: number): number | null {
+  for (let next = index + 1; next < count; next += 1) {
+    if (films(version, next)) {
+      return next;
+    }
+  }
+  return null;
+}
+
+/**
+ * The shot they film nearest to `index`: itself when they film it, else the next one
+ * they film, else the one before; null when they film none of the plan.
+ */
+export function nearestFilmed(version: YourVersion, index: number, count: number): number | null {
+  if (films(version, index)) {
+    return index;
+  }
+  const next = nextFilmed(version, index, count);
+  if (next !== null) {
+    return next;
+  }
+  for (let before = index - 1; before >= 0; before -= 1) {
+    if (films(version, before)) {
+      return before;
+    }
+  }
+  return null;
+}
+
 const reviseResultSchema = z.object({
   version: yourVersionSchema,
   /** What changed, in a line, for Director to confirm in its own words. */

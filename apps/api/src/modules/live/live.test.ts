@@ -70,6 +70,10 @@ const PERSONA_RULES = [
   "confirm what changed in one line",
   "call skip_shot: the screen moves on by itself",
   "Never replan during a take",
+  "Never move them to another shot on your own",
+  "isn't a yes to moving on",
+  "before you call replan",
+  "Never skip a shot they didn't ask to skip",
 ];
 
 const shot: Shot = {
@@ -349,7 +353,7 @@ describe("a live call", () => {
       // The instruction arrives as JSON, its quotes escaped.
       expect(text).toContain(JSON.stringify(rule).slice(1, -1));
     }
-    expect(PERSONA_VERSION).toBe(4);
+    expect(PERSONA_VERSION).toBe(5);
     const tools = setup.tools as { functionDeclarations: { name: string }[] }[];
     expect(tools[0]?.functionDeclarations.map((tool) => tool.name)).toEqual([
       ...LIVE_TOOLS,
@@ -1141,7 +1145,9 @@ describe("the member's version of a shot", () => {
       },
     });
     browser.send({ type: "tool_result", id: "tool-1", result: "done" });
-    expect(await fake.message(2)).toEqual(toolResponse("g1", "adapt_shot", { result: "done" }));
+    expect(await fake.message(2)).toMatchObject(
+      toolResponse("g1", "adapt_shot", { result: "done", theyAreOn: { shot: 1, status: "film" } }),
+    );
     fake.send(turnDone);
     // On that shot, Director hears the member's version beside the original.
     browser.send({ type: "shot", shot: 1 });
@@ -1401,6 +1407,63 @@ describe("memory, skipping and re-planning", () => {
     const said = JSON.stringify(answer);
     expect(said).toContain("One angle");
     expect(said).toContain("Gaps the edit fills, so nobody films them: shot 1.");
+  });
+
+  it("tells Director which shot the member is on after a re-plan, and to ask before moving them off a gap", async () => {
+    const { fake, browser } = await liveCall();
+    fake.send({
+      toolCall: {
+        functionCalls: [{ id: "g1", name: "replan", args: { instruction: "one angle" } }],
+      },
+    });
+    await browser.message(0);
+    browser.send({ type: "context", version: { ...EMPTY_VERSION, gaps: [0] } });
+    browser.send({ type: "tool_result", id: "tool-1", result: "done" });
+    expect(await fake.message(2)).toMatchObject(
+      toolResponse("g1", "replan", {
+        result: "done",
+        theyAreOn: {
+          shot: 1,
+          status: "gap",
+          say: expect.stringContaining("ask whether to go to shot 2. Move only once they say yes."),
+        },
+      }),
+    );
+    // Nothing left to film: Director asks whether they're done.
+    fake.send({
+      toolCall: { functionCalls: [{ id: "g2", name: "replan", args: { instruction: "less" } }] },
+    });
+    await browser.message(1);
+    browser.send({ type: "context", version: { ...EMPTY_VERSION, gaps: [0], skipped: [1] } });
+    browser.send({ type: "tool_result", id: "tool-2", result: "done" });
+    expect(JSON.stringify(await fake.message(3))).toContain("ask whether they're done");
+  });
+
+  it("tells Director why the screen wouldn't move: not asked, or a shot they don't film", async () => {
+    const { fake, browser } = await liveCall();
+    fake.send({
+      toolCall: {
+        functionCalls: [
+          { id: "g1", name: "go_to_shot", args: { shot: 2 } },
+          { id: "g2", name: "go_to_shot", args: { shot: 2 } },
+        ],
+      },
+    });
+    await browser.message(1);
+    browser.send({ type: "tool_result", id: "tool-1", result: "not_asked" });
+    browser.send({ type: "tool_result", id: "tool-2", result: "not_filmed" });
+    expect(await fake.message(2)).toMatchObject(
+      toolResponse("g1", "go_to_shot", {
+        result: "refused",
+        why: expect.stringContaining("ask whether they want to move on"),
+      }),
+    );
+    expect(await fake.message(3)).toMatchObject(
+      toolResponse("g2", "go_to_shot", {
+        result: "refused",
+        why: expect.stringContaining("restore_shot it first"),
+      }),
+    );
   });
 
   it("says a re-plan that failed failed", async () => {

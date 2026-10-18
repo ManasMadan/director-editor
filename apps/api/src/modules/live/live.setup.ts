@@ -12,7 +12,9 @@
  */
 import {
   applyShotVersion,
+  films,
   type MemoryNote,
+  nearestFilmed,
   type Shot,
   type ShotPlan,
   type YourVersion,
@@ -88,6 +90,34 @@ export function memoryOf(version: YourVersion): string {
       : null,
   ].filter((row) => row !== null);
   return rows.join("\n");
+}
+
+/**
+ * The shot on the member's screen and whether their version still films it, for the
+ * answer to a change Director made: without it Director guessed, and moved them on by
+ * itself (to get them off a shot the change had made a gap, or because "ok" after a
+ * re-plan sounded like "next").
+ */
+export function whereTheyAre(version: YourVersion, index: number, count: number) {
+  const shot = index + 1;
+  if (films(version, index)) {
+    return {
+      shot,
+      status: "film",
+      say: `They're on shot ${shot} and still film it. Stay on it: never move them to another shot unless they ask to, or say yes when you ask.`,
+    };
+  }
+  const status = version.gaps.includes(index) ? "gap" : "skipped";
+  const now = status === "gap" ? "a gap the edit fills" : "skipped";
+  const next = nearestFilmed(version, index, count);
+  return {
+    shot,
+    status,
+    say:
+      next === null
+        ? `Shot ${shot}, the one on their screen, is now ${now}, and there's nothing left to film: tell them, and ask whether they're done.`
+        : `Shot ${shot}, the one on their screen, is now ${now}: tell them, and ask whether to go to shot ${next + 1}. Move only once they say yes.`,
+  };
 }
 
 function withMemory(text: string, version: YourVersion) {
@@ -337,7 +367,7 @@ export function noiseMessage() {
 const TOOL_DECLARATIONS: Record<LiveTool, object> = {
   go_to_shot: {
     description:
-      "Show another shot on their screen, so you both work on that one. The camera stays on.",
+      "Show another shot on their screen, so you both work on that one. The camera stays on. Only when they ask for another shot or say yes when you ask; never right after changing their plan unless they asked.",
     parameters: {
       type: "OBJECT",
       properties: { shot: { type: "INTEGER", description: "The shot's number, from 1." } },
@@ -394,7 +424,7 @@ const TOOL_DECLARATIONS: Record<LiveTool, object> = {
   },
   skip_shot: {
     description:
-      "Leave a shot out of their video when they want to skip it. The screen moves on to the next shot by itself.",
+      "Leave a shot out of their video when they ask to skip it. The screen moves on to the next shot by itself.",
     parameters: {
       type: "OBJECT",
       properties: {

@@ -39,6 +39,14 @@ export const TOOL_RESPONSES: Record<LiveToolResult | "unknown", object> = {
     result: "failed",
     why: "It didn't work just now. Say so in a few words and carry on with the shot as it is.",
   },
+  not_asked: {
+    result: "refused",
+    why: "You just changed their plan and they haven't asked to move on. Stay on this shot: ask whether they want to move on, and move only once they say so.",
+  },
+  not_filmed: {
+    result: "refused",
+    why: "That shot isn't in their version any more (skipped, or a gap the edit fills). If they want to film it after all, restore_shot it first.",
+  },
 };
 
 /** The call for the browser, or what Gemini hears at once because it can't be done. */

@@ -40310,7 +40310,9 @@
                             "not_found",
                             "paused",
                             "not_recording",
-                            "failed"
+                            "failed",
+                            "not_asked",
+                            "not_filmed"
                           ],
                           "type": "string"
                         }

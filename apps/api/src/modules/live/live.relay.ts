@@ -69,6 +69,7 @@ import {
   shotMessage,
   takeMessage,
   versionMessage,
+  whereTheyAre,
 } from "./live.setup";
 import { checkTool, TOOL_RESPONSES, toolNamed } from "./live.tools";
 import { type LiveTurn, TurnMeter } from "./live.turns";
@@ -950,6 +951,22 @@ export class LiveRelay {
     this.pacer.take(false);
   }
 
+  /**
+   * What Gemini hears of a call the browser answered. A re-plan's answer carries the new
+   * version (the browser sent it just before), so Director confirms what really changed;
+   * it and a change to a shot also say which shot the member is on and whether it's still
+   * filmed, so Director stays there (or asks) rather than moving them on by itself.
+   */
+  private responseTo(name: LiveTool, result: LiveToolResult | "unknown"): object {
+    if (result !== "done" || (name !== "replan" && name !== "adapt_shot")) {
+      return TOOL_RESPONSES[result];
+    }
+    const theyAreOn = whereTheyAre(this.version, this.shot, this.options.plan.shots.length);
+    return name === "replan"
+      ? { result: "done", yourVersion: memoryOf(this.version), theyAreOn }
+      : { result: "done", theyAreOn };
+  }
+
   /** Whether a call of Director's takes the member to another shot by itself. */
   private movesThem(call: LiveToolCall) {
     return (
@@ -1000,10 +1017,7 @@ export class LiveRelay {
     }
     // A re-plan's answer carries the new version (the browser sent it just before), so
     // Director confirms what really changed.
-    const response =
-      name === "replan" && result === "done"
-        ? { result: "done", yourVersion: memoryOf(this.version) }
-        : TOOL_RESPONSES[result];
+    const response = this.responseTo(name, result);
     if (!line.retired && line.socket.readyState === WebSocket.OPEN) {
       send(line, { toolResponse: { functionResponses: [{ id: geminiId, name, response }] } });
     }
