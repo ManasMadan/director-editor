@@ -370,9 +370,10 @@ export function PublishButton({
       router.replace("/media", { scroll: false });
     }
   }, [returning, router]);
+  // The sheet also closes when My media goes away with it open: the card is gone by then,
+  // and there's nothing to put focus back on.
   const focusOnClose = () =>
-    required(trigger.current, "the publish trigger").querySelector<HTMLElement>("a, button") ??
-    heading.current;
+    trigger.current?.querySelector<HTMLElement>("a, button") ?? heading.current;
   return (
     <>
       <span ref={trigger} className="contents">

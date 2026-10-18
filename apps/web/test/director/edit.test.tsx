@@ -358,7 +358,10 @@ describe("the editor", { tags: ["files"] }, () => {
     // And in My media, under its template, ready to play.
     cleanup();
     const media = await renderPage(<MediaPage />, { url: "/media" });
-    await expect.element(media.getByRole("heading", { name: "Morning routine" })).toBeVisible();
+    // The template's heading; the cut's own card is titled the same, a level below.
+    await expect
+      .element(media.getByRole("heading", { level: 2, name: "Morning routine" }))
+      .toBeVisible();
     await expect.element(media.getByText("1 video")).toBeVisible();
     await expect.element(media.getByText("Not published")).toBeVisible();
     await userEvent.click(media.getByRole("button", { name: "Play Morning routine" }));
