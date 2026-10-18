@@ -23,9 +23,13 @@ export function OriginalPlayer({
 }) {
   const [playing, setPlaying] = useState(false);
   return (
-    <div className="relative aspect-9/16 w-full overflow-hidden rounded-3xl bg-studio">
+    // The focus ring goes on this frame: its overflow-hidden corners would clip a ring on the
+    // button inside, and the still would paint over an inset one.
+    <div className="relative aspect-9/16 w-full overflow-hidden rounded-3xl bg-studio has-focus-visible:ring-4 has-focus-visible:ring-ring has-focus-visible:ring-offset-2 has-focus-visible:ring-offset-background">
       {playing ? (
         <YouTubeEmbed
+          // Focus follows the button that this replaced, rather than falling to <body>.
+          ref={(frame: HTMLIFrameElement | null) => frame?.focus()}
           videoId={videoId}
           title={playerTitle}
           options={{ autoplay: true, controls: true }}
@@ -36,7 +40,7 @@ export function OriginalPlayer({
           type="button"
           aria-label={playLabel}
           onClick={() => setPlaying(true)}
-          className="group absolute inset-0 grid place-items-center outline-none focus-visible:ring-4 focus-visible:ring-ring"
+          className="group absolute inset-0 grid place-items-center outline-none"
         >
           <Image src={thumbnail} alt="" fill unoptimized sizes="20rem" className="object-cover" />
           <span className="relative grid size-16 place-items-center rounded-full bg-record text-record-foreground shadow-lg transition-transform group-hover:scale-105">

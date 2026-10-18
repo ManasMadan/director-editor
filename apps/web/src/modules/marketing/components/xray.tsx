@@ -16,7 +16,7 @@ import {
 import Image from "next/image";
 import { getTranslations } from "next-intl/server";
 import { type JsonLine, jsonLines } from "../lib/plan-json";
-import { XRAY } from "../lib/seed-excerpt";
+import { XRAY } from "../lib/seeds";
 import { thumbnailUrl } from "../lib/youtube";
 
 /*
@@ -88,8 +88,11 @@ const inFrame = (frame: FrameBox) => ({
   height: frame.height * FRAME_HEIGHT,
 });
 
-/** The pose to match, drawn as a figure over the frame. */
-function PoseFigure({ pose }: { pose: Shot["pose"] }) {
+/**
+ * The pose to match, drawn as a figure over the frame. `weight` thickens it for a small
+ * frame, where a line one unit wide would vanish.
+ */
+function PoseFigure({ pose, weight = 1 }: { pose: Shot["pose"]; weight?: number }) {
   const joints = new Map(
     pose.keypoints.map(({ name, x, y }) => [name, { x: x * FRAME_WIDTH, y: y * FRAME_HEIGHT }]),
   );
@@ -100,7 +103,7 @@ function PoseFigure({ pose }: { pose: Shot["pose"] }) {
     return a && b ? [{ id: `${from}-${to}`, a, b }] : [];
   });
   return (
-    <g className="text-studio-foreground" fill="none" stroke="currentColor" strokeWidth={1}>
+    <g className="text-studio-foreground" fill="none" stroke="currentColor" strokeWidth={weight}>
       {bones.map(({ id, a, b }) => (
         <line
           key={id}
@@ -129,7 +132,7 @@ function PoseFigure({ pose }: { pose: Shot["pose"] }) {
           key={name}
           cx={x * FRAME_WIDTH}
           cy={y * FRAME_HEIGHT}
-          r={1.6}
+          r={1.6 * weight}
           stroke="none"
           className="xray-in fill-current"
           style={delay(AT.pose + 0.4)}
@@ -154,8 +157,8 @@ async function Notes({ shot }: { shot: Shot }) {
         {director(`live.size.${shot.framing.shotSize}`)}
       </p>
       <p
-        className={cn(sticker, "right-2 bottom-28 max-w-[70%] rotate-2")}
-        style={delay(AT.phoneAngle)}
+        className={cn(sticker, "right-2 max-w-[45%] rotate-2")}
+        style={{ ...delay(AT.phoneAngle), top: `${(y + 0.2) * 100}%` }}
       >
         {director(`shoot.height.${shot.phoneAngle.height}`)}
       </p>
@@ -203,7 +206,7 @@ export async function Phone({ shot, shots }: { shot: Shot; shots: number }) {
         </span>
       </div>
       <Notes shot={shot} />
-      <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 bg-linear-to-t from-studio/90 to-transparent px-3 pt-10 pb-3">
+      <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 bg-linear-to-t from-studio from-55% to-transparent px-3 pt-16 pb-3">
         {line ? (
           <p
             className="xray-in line-clamp-3 text-center text-xs leading-snug"
@@ -301,14 +304,16 @@ async function ShotStrip({ shots }: { shots: Shot[] }) {
               {move === "static" ? t("xray.static") : director(`shoot.doodle.move.${move}`)}
             </span>
             <span aria-hidden className="relative aspect-9/16 rounded-md bg-studio-foreground/8">
-              <svg aria-hidden viewBox={VIEW_BOX} className="absolute inset-0 size-full text-guide">
+              <svg aria-hidden viewBox={VIEW_BOX} className="absolute inset-0 size-full">
                 <rect
                   {...inFrame(shot.framing.subject)}
                   rx={4}
                   fill="none"
                   stroke="currentColor"
                   strokeWidth={4}
+                  className="text-guide"
                 />
+                <PoseFigure pose={shot.pose} weight={3} />
               </svg>
               <span className="absolute top-1 left-1.5 text-[0.625rem] font-semibold tabular-nums">
                 {index + 1}
@@ -333,17 +338,16 @@ async function ShotStrip({ shots }: { shots: Shot[] }) {
 /** The hero's x-ray of the seed in XRAY, captioned with what it is. */
 export async function XRayStage() {
   const t = await getTranslations("home");
-  const { plan } = XRAY;
-  const [first] = plan.shots;
+  const { plan, firstShot } = XRAY;
   return (
     <figure className="flex flex-col gap-4 rounded-3xl bg-studio p-4 text-studio-foreground ring-1 ring-studio-foreground/10 sm:p-6">
       <div aria-hidden className="grid gap-4 sm:grid-cols-[12rem_minmax(0,1fr)]">
-        <Phone shot={first} shots={plan.shots.length} />
-        <PlanPanel shot={first} />
+        <Phone shot={firstShot} shots={plan.shots.length} />
+        <PlanPanel shot={firstShot} />
       </div>
       <ShotStrip shots={plan.shots} />
       <figcaption className="text-sm text-pretty text-studio-foreground/70">
-        {t("xray.caption", { title: plan.title, channel: XRAY.channel, shots: plan.shots.length })}
+        {t("xray.caption", { title: plan.title, shots: plan.shots.length })}
       </figcaption>
     </figure>
   );

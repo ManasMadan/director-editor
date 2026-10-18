@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { renderHtml } from "../../../../test/next-server";
-import { XRAY } from "../lib/seed-excerpt";
+import { XRAY } from "../lib/seeds";
 import { Phone } from "./xray";
 
 describe("the x-ray's phone", () => {
-  const [first] = XRAY.plan.shots;
+  const first = XRAY.firstShot;
 
   it("draws the first shot's lines, head and joints", async () => {
     const html = await renderHtml(await Phone({ shot: first, shots: 10 }));

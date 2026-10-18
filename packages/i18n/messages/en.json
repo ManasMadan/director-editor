@@ -37,7 +37,7 @@
     "ctaSignedIn": "Open Director",
     "how": "See how it works",
     "xray": {
-      "caption": "The plan Gemini 4 Argon wrote for “{title}” by {channel}: {shots, plural, one {# shot} other {# shots}}, each with its framing, pose, camera move and lines.",
+      "caption": "The plan Gemini 4 Argon wrote for “{title}”: {shots, plural, one {# shot} other {# shots}}, each with its framing, pose, camera move and lines.",
       "original": "Original",
       "file": "plan.json",
       "shots": "The plan's shots",
@@ -61,7 +61,7 @@
     },
     "proof": {
       "title": "Every shot, timed to the original",
-      "body": "The Short above, and the shots Gemini found in it. Play it and follow along.",
+      "body": "This Short, and the shots Gemini found in it. Play it and follow along.",
       "play": "Play “{title}”",
       "player": "“{title}” on YouTube",
       "range": "{start, number, ::0.0}–{end, number, ::0.0} s",
@@ -87,7 +87,7 @@
       },
       "bigquery": {
         "name": "BigQuery",
-        "use": "Records every indexing, take and score."
+        "use": "Logs each live call Director starts and every take review's score."
       },
       "youtube": {
         "name": "YouTube Data API",
@@ -101,16 +101,12 @@
     "templates": {
       "title": "Six Shorts, ready to shoot",
       "body": "Every account starts with these templates, already broken into shots by Gemini 4 Argon.",
-      "by": "by {channel}",
-      "meta": "{shots, plural, one {# shot} other {# shots}}, {seconds, number, ::0.0} s"
+      "meta": "{shots, plural, one {# shot} other {# shots}}, {seconds, number, ::0.0} s",
+      "credit": "The Shorts shown belong to their creators and play from YouTube."
     },
     "platforms": {
       "title": "For platforms",
       "body": "Everyone who watches a Short is one tap from making their own. Director's planning, live direction and take reviews run behind one API, so a video app could put “Shoot your own” under every Short."
-    },
-    "footer": {
-      "label": "Site",
-      "credit": "The Shorts shown belong to their creators and play from YouTube."
     }
   },
   "auth": {
@@ -273,7 +269,8 @@
     "privacy": "Privacy policy",
     "termsBody": "These terms govern your use of this service. Replace this text with your own terms before launch.",
     "privacyBody": "This policy explains what data we collect and why. Replace this text with your own policy before launch.",
-    "lastUpdated": "Last updated {date}"
+    "lastUpdated": "Last updated {date}",
+    "nav": "Legal"
   },
   "errorPage": {
     "notFoundTitle": "Page not found",

@@ -1,3 +1,5 @@
+import { directorSeeds } from "@repo/contracts/director-seeds";
+import { required } from "@repo/contracts/objects";
 import { expect, expectAccessible, settled, signOut, signUp, test } from "./support";
 
 test("unknown pages show a translated 404", async ({ page }) => {
@@ -92,6 +94,30 @@ test("the landing page stays public, signed in or not", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Try the demo" })).toHaveCount(0);
   await page.getByRole("link", { name: "Open Director" }).first().click();
   await expect(page).toHaveURL(/\/library/);
+});
+
+test("a member's template card on the landing opens its ready plan", async ({ page }) => {
+  // Every new workspace starts with the 6 seed templates, already indexed: the card opens
+  // the member's own copy, ready to film.
+  await signUp(page);
+  await page.goto("/");
+  const seed = required(directorSeeds[0], "the first seed template");
+  await page.getByRole("link", { name: seed.plan.title }).click();
+  await expect(page).toHaveURL(new RegExp(`/director/${seed.videoId}$`));
+  // What that page shows, asked the way it asks (the page itself also needs Director's
+  // optional services, which a stack without them turns off).
+  const response = await page.request.post("/rpc/director/plan", {
+    data: { json: { videoId: seed.videoId } },
+  });
+  expect(response.ok()).toBe(true);
+  const { json: plan } = await response.json();
+  expect(plan).toMatchObject({
+    videoId: seed.videoId,
+    source: "seed",
+    status: "ready",
+    plan: { title: seed.plan.title },
+  });
+  expect(plan.plan.shots).toHaveLength(seed.plan.shots.length);
 });
 
 test("workspace pages are gone", async ({ page }) => {

@@ -1,10 +1,11 @@
+import { directorSeeds } from "@repo/contracts/director-seeds";
 import { buttonVariants } from "@repo/ui/components/button";
 import { cn } from "@repo/ui/lib/utils";
 import type { Route } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
-import { SEED_TEMPLATES, XRAY } from "../lib/seed-excerpt";
+import { XRAY } from "../lib/seeds";
 import { thumbnailUrl } from "../lib/youtube";
 import { OriginalPlayer } from "./original-player";
 
@@ -122,17 +123,17 @@ export async function Templates({ signedIn }: { signedIn: boolean }) {
         <p className="max-w-prose text-muted-foreground text-pretty">{t("templates.body")}</p>
       </div>
       <ul className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
-        {SEED_TEMPLATES.map((template) => {
-          const href: Route = signedIn ? `/director/${template.videoId}` : "/sign-in?demo=1";
+        {directorSeeds.map(({ videoId, plan }) => {
+          const href: Route = signedIn ? `/director/${videoId}` : "/sign-in?demo=1";
           return (
-            <li key={template.videoId}>
+            <li key={videoId}>
               <Link
                 href={href}
                 className="group flex flex-col gap-2 rounded-xl outline-none focus-visible:ring-4 focus-visible:ring-ring"
               >
                 <span className="relative aspect-9/16 overflow-hidden rounded-xl bg-muted">
                   <Image
-                    src={thumbnailUrl(template.videoId, "hqdefault")}
+                    src={thumbnailUrl(videoId, "hqdefault")}
                     alt=""
                     fill
                     unoptimized
@@ -140,15 +141,11 @@ export async function Templates({ signedIn }: { signedIn: boolean }) {
                     className="object-cover transition-transform duration-300 group-hover:scale-105"
                   />
                 </span>
-                <span className="line-clamp-2 text-sm font-medium leading-snug">
-                  {template.title}
-                </span>
+                <span className="line-clamp-2 text-sm font-medium leading-snug">{plan.title}</span>
                 <span className="-mt-1 text-xs text-muted-foreground">
-                  {t("templates.by", { channel: template.channel })}
-                  <br />
                   {t("templates.meta", {
-                    shots: template.shots,
-                    seconds: template.durationSeconds,
+                    shots: plan.shots.length,
+                    seconds: plan.durationSeconds,
                   })}
                 </span>
               </Link>
@@ -156,6 +153,7 @@ export async function Templates({ signedIn }: { signedIn: boolean }) {
           );
         })}
       </ul>
+      <p className="text-sm text-muted-foreground">{t("templates.credit")}</p>
     </section>
   );
 }
@@ -184,22 +182,5 @@ export async function Platforms({ cta }: { cta: { href: Route; label: string } }
         {cta.label}
       </Link>
     </section>
-  );
-}
-
-export async function Footer() {
-  const [t, legal] = await Promise.all([getTranslations("home"), getTranslations("legal")]);
-  return (
-    <footer className="flex flex-col gap-3 border-t pt-6 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-      <p>{t("footer.credit")}</p>
-      <nav aria-label={t("footer.label")} className="flex gap-4">
-        <Link href="/terms" className="hover:text-foreground">
-          {legal("terms")}
-        </Link>
-        <Link href="/privacy" className="hover:text-foreground">
-          {legal("privacy")}
-        </Link>
-      </nav>
-    </footer>
   );
 }
