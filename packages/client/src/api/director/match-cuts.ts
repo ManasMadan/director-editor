@@ -18,5 +18,9 @@ export function useMatchCutAlignments(asks: readonly MatchCutAsk[]) {
         retry: false,
       }),
     ),
+    // Each cut's answer, or whether it failed: kept the same object while nothing
+    // changes (TanStack Query shares unchanged results), so screens can depend on it.
+    combine: (results) =>
+      results.map((result) => ({ alignment: result.data, failed: result.isError })),
   });
 }

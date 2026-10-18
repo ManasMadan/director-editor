@@ -45,8 +45,10 @@ describe("useMatchCutAlignments", () => {
     const asks = [ask("the watch"), ask("the ring")];
     const { result } = renderHook(() => useMatchCutAlignments(asks), api);
     await until(() => {
-      expect(result.current[0]?.data).toEqual(aligned);
-      expect(result.current[1]?.isError).toBe(true);
+      expect(result.current).toEqual([
+        { alignment: aligned, failed: false },
+        { alignment: undefined, failed: true },
+      ]);
     });
     // Not retried, and not asked again while the answer is kept.
     expect(sent.map((input) => input.anchor)).toEqual(["the watch", "the ring"]);

@@ -34,6 +34,7 @@ import {
   RollProgress,
   SavingFootage,
 } from "../components/roll-parts";
+import { MatchGhost } from "../components/match-ghost";
 import {
   CountdownNumber,
   FlipButton,
@@ -695,6 +696,7 @@ function ShootScreen(shootProps: ShootProps) {
             mirrored={camera.facing === "front"}
           />
         ) : null}
+        {started ? <MatchGhost {...shootProps} facing={camera.facing} /> : null}
         {started ? null : (
           <StartCard
             first={memory.before.sessions === 0}

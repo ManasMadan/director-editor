@@ -29,9 +29,57 @@ const FPS = 30;
 /** How much a photo slowly zooms in over its time on screen. */
 const PHOTO_ZOOM = 0.06;
 
+/**
+ * How a clip is drawn when a match cut lines it up (lib/match-cuts.ts): scaled and turned
+ * clockwise (degrees) about the frame's centre, then moved, in the frame's pixels.
+ */
+export interface FrameTransform {
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
+}
+
 export type Segment =
-  | { kind: "video"; source: Blob; startSeconds: number; endSeconds: number }
+  | {
+      kind: "video";
+      source: Blob;
+      startSeconds: number;
+      endSeconds: number;
+      transform?: FrameTransform | undefined;
+    }
   | { kind: "photo"; source: Blob; seconds: number };
+
+/** Sets `ctx` up to draw the frame with `transform` applied (the CSS preview's maths). */
+export function applyTransform(ctx: CanvasRenderingContext2D, transform: FrameTransform) {
+  ctx.translate(OUTPUT_WIDTH / 2 + transform.x, OUTPUT_HEIGHT / 2 + transform.y);
+  ctx.rotate((transform.rotation * Math.PI) / 180);
+  ctx.scale(transform.scale, transform.scale);
+  ctx.translate(-OUTPUT_WIDTH / 2, -OUTPUT_HEIGHT / 2);
+}
+
+/** How much the edges a moved frame uncovers are blurred: a soft copy, never black. */
+const EDGE_BLUR = "blur(24px)";
+
+/** Draws one frame of a video segment, moved when a match cut lined it up. */
+function drawFrame(
+  ctx: CanvasRenderingContext2D,
+  video: HTMLVideoElement,
+  rect: ReturnType<typeof coverRect>,
+  transform: FrameTransform | undefined,
+) {
+  if (!transform) {
+    ctx.drawImage(video, rect.x, rect.y, rect.w, rect.h);
+    return;
+  }
+  ctx.filter = EDGE_BLUR;
+  ctx.drawImage(video, rect.x, rect.y, rect.w, rect.h);
+  ctx.filter = "none";
+  ctx.save();
+  applyTransform(ctx, transform);
+  ctx.drawImage(video, rect.x, rect.y, rect.w, rect.h);
+  ctx.restore();
+}
 
 /** Where to draw a `width`×`height` picture so it covers the frame, cropped in the middle. */
 export function coverRect(width: number, height: number, zoom = 1) {
@@ -98,7 +146,7 @@ async function playVideo(stage: Stage, segment: Extract<Segment, { kind: "video"
     stage.recorder.resume();
     const rect = coverRect(video.videoWidth, video.videoHeight);
     while (video.currentTime < segment.endSeconds && !video.ended && !cancelled(stage)) {
-      stage.ctx.drawImage(video, rect.x, rect.y, rect.w, rect.h);
+      drawFrame(stage.ctx, video, rect, segment.transform);
       stage.onFrame(video.currentTime - segment.startSeconds);
       await nextFrame();
     }

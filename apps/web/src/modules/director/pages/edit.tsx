@@ -31,8 +31,10 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { DirectorGate } from "@/modules/shorts";
 import { EditPlayer } from "../components/edit-player";
 import { SoundPanel, StylePicker, type Tool } from "../components/edit-tools";
+import { MatchCutNotes } from "../components/match-cut";
 import { ShotBoard } from "../components/shot-board";
 import { type EditChoices, useEditHistory } from "../hooks/use-edit-history";
+import { useMatchCuts } from "../hooks/use-match-cuts";
 import { useObjectUrl } from "../hooks/use-object-url";
 import { usePlayback } from "../hooks/use-playback";
 import { shotPage } from "../hooks/use-studio";
@@ -41,6 +43,7 @@ import { type AudioMode, parseAudio } from "../lib/audio";
 import { webVtt } from "../lib/captions";
 import { type Clip, clipsOf, complete, editLines, editSeconds } from "../lib/edit";
 import { captionInk } from "../lib/ink";
+import type { MatchCutTransform } from "../lib/match-cuts";
 import { cutPicks, pickedTakes } from "../lib/picks";
 import { MAX_SECONDS, type Segment, stitch } from "../lib/stitch";
 import { timecode } from "../lib/track";
@@ -54,11 +57,21 @@ function loadedTake(media: Map<DirectorTakeId, MediaState>, clip: Clip) {
   return typeof state === "object" ? state : undefined;
 }
 
-function segmentsOf(clips: readonly Clip[], media: Map<DirectorTakeId, MediaState>): Segment[] {
+function segmentsOf(
+  clips: readonly Clip[],
+  media: Map<DirectorTakeId, MediaState>,
+  transforms: ReadonlyMap<number, MatchCutTransform>,
+): Segment[] {
   return clips.map((clip) => {
     const take = required(loadedTake(media, clip), "a loaded take");
     return clip.shot.kind === "video"
-      ? { kind: "video", source: take.blob, startSeconds: clip.from, endSeconds: clip.to }
+      ? {
+          kind: "video",
+          source: take.blob,
+          startSeconds: clip.from,
+          endSeconds: clip.to,
+          transform: transforms.get(clip.index),
+        }
       : { kind: "photo", source: take.blob, seconds: clip.seconds };
   });
 }
@@ -77,11 +90,13 @@ interface SaveInput {
   media: Map<DirectorTakeId, MediaState>;
   choices: EditChoices;
   picks: DirectorCut["picks"];
+  /** How each clip a match cut lined up is drawn (lib/match-cuts.ts). */
+  transforms: ReadonlyMap<number, MatchCutTransform>;
 }
 
 /** Renders the edit in the browser, at a size a saved video may be, until `signal` cancels. */
 async function render(
-  { clips, media, choices }: SaveInput,
+  { clips, media, choices, transforms }: SaveInput,
   onProgress: (done: number) => void,
   signal: AbortSignal,
 ) {
@@ -90,7 +105,7 @@ async function render(
   const resumed = audio.resume();
   try {
     await resumed;
-    return await stitch(segmentsOf(clips, media), {
+    return await stitch(segmentsOf(clips, media, transforms), {
       audio,
       withSound: choices.sound,
       onProgress,
@@ -377,11 +392,19 @@ function Transport({ editor }: { editor: EditorState }) {
 }
 
 /** Everything the editor holds: the shots and their picks, the takes, the clock, the choices. */
-function useEditor(plan: ShotPlan, shots: readonly DirectorShot[], audio: AudioMode) {
+function useEditor(
+  videoId: string,
+  plan: ShotPlan,
+  shots: readonly DirectorShot[],
+  audio: AudioMode,
+) {
   const history = useEditHistory({ style: "pop", sound: audio === "voice", picks: {} });
   const { picks } = history.choices;
   const played = useMemo(() => pickedTakes(shots, picks), [shots, picks]);
-  const clips = useMemo(() => clipsOf(plan.shots, played), [plan.shots, played]);
+  const unaligned = useMemo(() => clipsOf(plan.shots, played), [plan.shots, played]);
+  // Match cuts are lined up as soon as both takes are in: the clips play the aligned cut.
+  const matchCuts = useMatchCuts(videoId, plan, unaligned);
+  const { clips } = matchCuts;
   const media = useTakeMedia(clips);
   const total = editSeconds(clips);
   const playback = usePlayback(total);
@@ -395,6 +418,7 @@ function useEditor(plan: ShotPlan, shots: readonly DirectorShot[], audio: AudioM
     tool,
     setTool,
     lines: useMemo(() => editLines(clips), [clips]),
+    matchCuts,
     cutPicks: cutPicks(played),
     ready: complete(clips) && clips.every((clip) => loadedTake(media, clip)),
     left: clips.filter((clip) => clip.state === "missing").length,
@@ -429,6 +453,7 @@ function Stage({ editor, saving }: { editor: EditorState; saving: Saving }) {
         time={playback.time}
         playing={playback.playing}
         clock={playback.clock}
+        transforms={editor.matchCuts.transforms}
         lines={editor.lines}
         style={history.choices.style}
         sound={history.choices.sound}
@@ -515,12 +540,18 @@ function Editor({
   wrap: boolean;
 }) {
   const t = useTranslations("director");
-  const editor = useEditor(plan, shots, audio);
+  const editor = useEditor(videoId, plan, shots, audio);
   const saver = useSaveVideo(videoId, plan.title);
   const { playback, history, clips, media } = editor;
   const save = () => {
     playback.pause();
-    void saver.save({ clips, media, choices: history.choices, picks: editor.cutPicks });
+    void saver.save({
+      clips,
+      media,
+      choices: history.choices,
+      picks: editor.cutPicks,
+      transforms: editor.matchCuts.transforms,
+    });
   };
   return (
     <div className="flex h-dvh flex-col lg:grid lg:grid-cols-[minmax(20rem,28rem)_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)]">
@@ -558,6 +589,7 @@ function Editor({
             {t("review.left", { count: editor.left })}
           </p>
         ) : null}
+        <MatchCutNotes cuts={editor.matchCuts.cuts} />
         <ShotBoard
           clips={clips}
           shots={shots}

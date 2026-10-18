@@ -8,6 +8,7 @@ import { useEffect, useRef } from "react";
 import type { MediaState, TakeMedia } from "../hooks/use-take-media";
 import type { CaptionLine, CaptionStyle } from "../lib/captions";
 import { type Clip, clipAt } from "../lib/edit";
+import { cssTransform, type MatchCutTransform } from "../lib/match-cuts";
 import { CaptionLayer } from "./caption-layer";
 
 /** How far a video may drift from the clock before it's put back: more while playing. */
@@ -98,6 +99,7 @@ export function EditPlayer({
   time,
   playing,
   clock,
+  transforms,
   lines,
   style,
   sound,
@@ -108,6 +110,8 @@ export function EditPlayer({
   time: number;
   playing: boolean;
   clock: () => number;
+  /** How each clip a match cut lined up is drawn, by clip index (lib/match-cuts.ts). */
+  transforms?: ReadonlyMap<number, MatchCutTransform> | undefined;
   lines: readonly CaptionLine[];
   style: CaptionStyle;
   sound: boolean;
@@ -130,6 +134,7 @@ export function EditPlayer({
           clip={clip}
           take={take}
           active={clip === active}
+          transform={transforms?.get(clip.index)}
           time={time}
           register={(element) => {
             if (element) {
@@ -151,6 +156,7 @@ function ClipMedia({
   id,
   take,
   active,
+  transform,
   time,
   register,
 }: {
@@ -158,6 +164,7 @@ function ClipMedia({
   id: DirectorTakeId;
   take: TakeMedia;
   active: boolean;
+  transform?: MatchCutTransform | undefined;
   time: number;
   register: (element: HTMLVideoElement | null) => void;
 }) {
@@ -184,6 +191,7 @@ function ClipMedia({
       preload="auto"
       aria-hidden
       className={cn("absolute inset-0 size-full object-cover", !active && "invisible")}
+      style={transform ? { transform: cssTransform(transform) } : undefined}
     />
   );
 }

@@ -268,7 +268,7 @@ export class DirectorService {
     const takes = await this.takes(userId, orgId, input.videoId);
     const read = async (side: { takeId: DirectorTakeId; atMs: number }) => {
       const take = takes.find((candidate) => candidate.id === side.takeId);
-      if (!take || take.kind !== "video" || take.status !== "ready") {
+      if (take?.kind !== "video" || take.status !== "ready") {
         throw new AppError("DIRECTOR_TAKE_NOT_FOUND");
       }
       const { url } = await this.files.readUrl(
