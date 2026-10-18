@@ -32,7 +32,7 @@ import {
   updateContext,
 } from "@repo/nest-common";
 import type { FastifyInstance } from "fastify";
-import { WebSocket, WebSocketServer } from "ws";
+import { type RawData, WebSocket, WebSocketServer } from "ws";
 import * as z from "zod";
 import type { RecordActivity } from "../../activity";
 import { toHeaders } from "../../http-context";
@@ -40,7 +40,13 @@ import type { OrgCaller } from "../../rpc/procedures";
 import type { GoogleAuth } from "./google-auth";
 import { CLIENT_MAX_PAYLOAD_BYTES } from "./live.messages";
 import type { LivePicks } from "./live.picks";
-import { type CallEnd, closeWithError, type LiveLog, LiveRelay } from "./live.relay";
+import {
+  type CallEnd,
+  type ClientFrame,
+  closeWithError,
+  type LiveLog,
+  LiveRelay,
+} from "./live.relay";
 import { type LiveModel, liveUrl, setupMessage } from "./live.setup";
 import type { LiveTurn } from "./live.turns";
 
@@ -56,7 +62,24 @@ export const MAX_LIVE_MS = 30 * MINUTE_MS;
  * before, carrying the conversation over, so the member never notices.
  */
 export const ROTATE_AFTER_MS = 9 * MINUTE_MS;
-const FRAME_INTERVAL_MS = SECOND_MS;
+/**
+ * The browser sends a frame a second, and the Live API takes about that many. Network
+ * jitter brings some closer together: the gate sits a little under a second, so a frame
+ * that already cost the member's upload isn't thrown away for arriving early.
+ */
+const FRAME_INTERVAL_MS = 800;
+/**
+ * How often an open call is pinged. A phone that changes networks often never closes its
+ * old socket; one that hasn't answered the last ping by the next is hung up on, so its
+ * relay (and Gemini, still billing) doesn't run on for the rest of the half hour.
+ */
+export const LIVE_HEARTBEAT_MS = 15 * SECOND_MS;
+/**
+ * What the browser sends while its call is still being checked (its version, the roll's
+ * state, the first moments of audio), kept for the relay. Past this the rest is audio,
+ * which is let go as it would be before Gemini is ready anyway.
+ */
+const EARLY_MESSAGES = 64;
 
 /** Where Director live goes, or null when the feature is off (GOOGLE_CLOUD_PROJECT unset). */
 export interface LiveUpstream {
@@ -186,8 +209,10 @@ function relayFor(
   upstream: LiveUpstream,
   call: { plan: ShotPlan; shot: number; resumed: boolean; caller: OrgCaller; videoId: VideoId },
   options: LiveOptions,
+  early: ClientFrame[],
 ) {
   return new LiveRelay(client, {
+    early,
     url: upstream.url,
     auth: upstream.auth,
     setup: (shot, handle, version) =>
@@ -281,14 +306,18 @@ function registerUpgrade(
 export function mountLive(fastify: FastifyInstance, options: LiveOptions) {
   const sockets = new WebSocketServer({ noServer: true, maxPayload: CLIENT_MAX_PAYLOAD_BYTES });
   const allowedOrigins = new Set(options.allowedOrigins.map((url) => new URL(url).origin));
-  // Users with Director live open, in this process. Each replica keeps its own: with
-  // several, a user could hold one per replica, still each capped at MAX_LIVE_MS.
-  const calling = new Set<UserId>();
+  // Users with Director live open, in this process, and the socket each is on. Each
+  // replica keeps its own: with several, a user could hold one per replica, still each
+  // capped at MAX_LIVE_MS.
+  const calling = new Map<UserId, WebSocket>();
+  const alive = heartbeat(sockets);
 
   async function call(client: WebSocket, headers: Headers, url: URL) {
     client.on("error", (error) =>
       options.log("warn", { err: describeError(error) }, "live client socket failed"),
     );
+    alive.add(client);
+    const early = keepEarly(client);
     let userId: UserId | null = null;
     // What the call is about, for its activity lines, once its query is known to be valid.
     let target: ActivityTarget = {};
@@ -307,10 +336,13 @@ export function mountLive(fastify: FastifyInstance, options: LiveOptions) {
       if (options.liveOff(caller.userId)) {
         throw new AppError("FEATURE_DISABLED", { params: { feature: "live" } });
       }
-      if (calling.has(caller.userId)) {
-        throw new AppError("CONFLICT");
+      // The newest call wins: the member came back (a phone on another network, another
+      // tab) before the old socket was seen to close. The old one hears why it ended.
+      const previous = calling.get(caller.userId);
+      if (previous) {
+        closeWithError(previous, "CONFLICT");
       }
-      calling.add(caller.userId);
+      calling.set(caller.userId, client);
       userId = caller.userId;
       const plan = readyPlan(await options.plan(caller, query.data.videoId), query.data.shot);
       // Only a call that can really start is charged.
@@ -331,13 +363,16 @@ export function mountLive(fastify: FastifyInstance, options: LiveOptions) {
           videoId: query.data.videoId,
         },
         options,
+        early.take(),
       ).run();
       options.activity(callEnded(ended, target, options.now()));
     } catch (error) {
       options.activity({ activity: "director.call_started", ...outcomeOf(error), target });
       refuseCall(options.log, client, error);
     } finally {
-      if (userId) {
+      early.take();
+      // A newer call of the member's holds the place now: it isn't this one's to free.
+      if (userId && calling.get(userId) === client) {
         calling.delete(userId);
       }
     }
@@ -347,8 +382,56 @@ export function mountLive(fastify: FastifyInstance, options: LiveOptions) {
 
   // Open sockets would hold the server's close until they end; end them first.
   fastify.addHook("preClose", async () => {
+    alive.stop();
     for (const client of sockets.clients) {
       client.terminate();
     }
   });
+}
+
+/**
+ * Keeps what the browser sends before the relay exists (ws drops a message nobody listens
+ * for); `take` stops keeping and hands it over, for the relay to read first.
+ */
+function keepEarly(client: WebSocket) {
+  const kept: ClientFrame[] = [];
+  const keep = (data: RawData, isBinary: boolean) => {
+    if (kept.length < EARLY_MESSAGES) {
+      kept.push({ data, isBinary });
+    }
+  };
+  client.on("message", keep);
+  return {
+    take: () => {
+      client.off("message", keep);
+      return kept.splice(0);
+    },
+  };
+}
+
+/**
+ * Pings every open call each LIVE_HEARTBEAT_MS, and hangs up on one that didn't answer
+ * the last ping: its relay then ends, and the member's place is free.
+ */
+function heartbeat(sockets: WebSocketServer) {
+  const answered = new WeakSet<WebSocket>();
+  const timer = setInterval(() => {
+    for (const client of sockets.clients) {
+      if (!answered.has(client)) {
+        client.terminate();
+        continue;
+      }
+      answered.delete(client);
+      client.ping();
+    }
+  }, LIVE_HEARTBEAT_MS);
+  timer.unref();
+  return {
+    /** A new call counts as answered, until its first ping. */
+    add: (client: WebSocket) => {
+      answered.add(client);
+      client.on("pong", () => answered.add(client));
+    },
+    stop: () => clearInterval(timer),
+  };
 }

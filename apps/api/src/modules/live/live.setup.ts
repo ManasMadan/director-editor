@@ -314,6 +314,18 @@ export function rollMessage(state: LiveRollState) {
   }
 }
 
+/**
+ * An attempt Director marked as started has run well past the shot's length with no end
+ * mark: it may have missed the end, and is asked, without being made to talk over one
+ * that's still going.
+ */
+export function attemptMessage() {
+  return note(
+    "[An attempt started a while ago and hasn't been marked as ended. If they've finished, call mark with event end and give your note; if they're still going, stay silent.]",
+    true,
+  );
+}
+
 /** The member keeps getting cut off: noise in the room, most likely. */
 export function noiseMessage() {
   return note(
