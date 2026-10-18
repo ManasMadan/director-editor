@@ -2,6 +2,14 @@
 
 import * as z from 'zod';
 
+/**
+ * AnchorPoint
+ */
+export const zAnchorPoint = z.object({
+    x: z.number().gte(0).lte(1),
+    y: z.number().gte(0).lte(1)
+});
+
 export const zAspectRatio = z.enum([
     '9:16',
     '3:4',
@@ -491,6 +499,60 @@ export const zLocated = z.object({
     box: zBox.nullable(),
     found: z.boolean(),
     label: z.string().min(1).max(40)
+});
+
+/**
+ * MatchCutClip
+ */
+export const zMatchCutClip = z.object({
+    atMs: z.int().gte(0).lte(60000),
+    url: z.string().max(4000).regex(/^https?:\/\//)
+});
+
+/**
+ * MatchCutRequest
+ */
+export const zMatchCutRequest = z.object({
+    anchor: z.string().min(1).max(120),
+    incoming: zMatchCutClip,
+    outgoing: zMatchCutClip
+});
+
+/**
+ * MatchCutTransform
+ *
+ * How to draw the incoming clip: scaled by `scale` and turned `rotation` degrees
+ * clockwise about the frame's centre, then moved `x`, `y` pixels (of the 720x1280
+ * frame). Identity is scale 1 and the rest 0.
+ */
+export const zMatchCutTransform = z.object({
+    rotation: z.number().gte(-180).lte(180),
+    scale: z.number().gte(0.25).lte(4),
+    x: z.number().gte(-720).lte(720),
+    y: z.number().gte(-1280).lte(1280)
+});
+
+/**
+ * MatchCutAlignment
+ *
+ * `aligned`: the anchor was found in both clips and the transform lines it up;
+ * `not-found`: Gemini couldn't see it in one of them, and the cut stays a plain cut
+ * (identity, the cut where it was asked).
+ */
+export const zMatchCutAlignment = z.object({
+    anchor: zAnchorPoint.nullable(),
+    cropPercent: z.number().gte(0).lte(100),
+    incomingFrame: z.string().max(300000).nullable(),
+    incomingStartMs: z.int().gte(0).lte(60000),
+    offsetBeforePx: z.number().gte(0),
+    offsetPx: z.number().gte(0),
+    outgoingEndMs: z.int().gte(0).lte(60000),
+    outgoingFrame: z.string().max(300000).nullable(),
+    rotationDiff: z.number().gte(0),
+    scaleDiff: z.number().gte(0),
+    status: z.enum(['aligned', 'not-found']),
+    transform: zMatchCutTransform,
+    withinTolerance: z.boolean()
 });
 
 /**
@@ -985,6 +1047,18 @@ export const zLocateDirectorTargetHeaders = z.object({
  * Successful Response
  */
 export const zLocateDirectorTargetResponse = zLocated;
+
+export const zAlignDirectorMatchCutBody = zMatchCutRequest;
+
+export const zAlignDirectorMatchCutHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+/**
+ * Successful Response
+ */
+export const zAlignDirectorMatchCutResponse = zMatchCutAlignment;
 
 export const zIndexDirectorPlanBody = zDirectorPlanCreate;
 

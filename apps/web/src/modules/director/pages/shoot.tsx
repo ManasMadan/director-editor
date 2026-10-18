@@ -27,6 +27,7 @@ import { type FormEvent, useEffect, useLayoutEffect, useRef, useState } from "re
 import { DirectorGate, YouTubeEmbed } from "@/modules/shorts";
 import { DirectorCaptions, DirectorOrb, useLiveFailure } from "../components/director-captions";
 import { MarksLayer } from "../components/marks-layer";
+import { MatchGhost } from "../components/match-ghost";
 import {
   DoneButton,
   PausedVeil,
@@ -34,7 +35,6 @@ import {
   RollProgress,
   SavingFootage,
 } from "../components/roll-parts";
-import { MatchGhost } from "../components/match-ghost";
 import {
   CountdownNumber,
   FlipButton,

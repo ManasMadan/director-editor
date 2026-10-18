@@ -4,6 +4,20 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
+/**
+ * AnchorPoint
+ */
+export type AnchorPoint = {
+    /**
+     * X
+     */
+    x: number;
+    /**
+     * Y
+     */
+    y: number;
+};
+
 export type AspectRatio = '9:16' | '3:4' | '4:5' | '1:1' | '9:8' | '5:4' | '4:3' | '16:9';
 
 /**
@@ -981,6 +995,137 @@ export type Located = {
 };
 
 /**
+ * MatchCutAlignment
+ *
+ * `aligned`: the anchor was found in both clips and the transform lines it up;
+ * `not-found`: Gemini couldn't see it in one of them, and the cut stays a plain cut
+ * (identity, the cut where it was asked).
+ */
+export type MatchCutAlignment = {
+    /**
+     * The anchor's centre at the cut.
+     */
+    anchor: AnchorPoint | null;
+    /**
+     * Croppercent
+     *
+     * How much of the frame's side is lost.
+     */
+    cropPercent: number;
+    /**
+     * Incomingframe
+     *
+     * The first after it, aligned, JPEG.
+     */
+    incomingFrame: string | null;
+    /**
+     * Incomingstartms
+     */
+    incomingStartMs: number;
+    /**
+     * Offsetbeforepx
+     *
+     * How far the anchor jumped unaligned.
+     */
+    offsetBeforePx: number;
+    /**
+     * Offsetpx
+     *
+     * How far it still moves at the cut, aligned.
+     */
+    offsetPx: number;
+    /**
+     * Outgoingendms
+     */
+    outgoingEndMs: number;
+    /**
+     * Outgoingframe
+     *
+     * The last frame before the cut, JPEG.
+     */
+    outgoingFrame: string | null;
+    /**
+     * Rotationdiff
+     *
+     * Its turn left at the cut, in degrees.
+     */
+    rotationDiff: number;
+    /**
+     * Scalediff
+     *
+     * The anchor's size change left, a fraction.
+     */
+    scaleDiff: number;
+    /**
+     * Status
+     */
+    status: 'aligned' | 'not-found';
+    transform: MatchCutTransform;
+    /**
+     * Withintolerance
+     */
+    withinTolerance: boolean;
+};
+
+/**
+ * MatchCutClip
+ */
+export type MatchCutClip = {
+    /**
+     * Atms
+     *
+     * Where the cut falls in the take: the outgoing clip's end, the incoming's start.
+     */
+    atMs: number;
+    /**
+     * Url
+     *
+     * A presigned read of the take.
+     */
+    url: string;
+};
+
+/**
+ * MatchCutRequest
+ */
+export type MatchCutRequest = {
+    /**
+     * Anchor
+     *
+     * What lines up.
+     */
+    anchor: string;
+    incoming: MatchCutClip;
+    outgoing: MatchCutClip;
+};
+
+/**
+ * MatchCutTransform
+ *
+ * How to draw the incoming clip: scaled by `scale` and turned `rotation` degrees
+ * clockwise about the frame's centre, then moved `x`, `y` pixels (of the 720x1280
+ * frame). Identity is scale 1 and the rest 0.
+ */
+export type MatchCutTransform = {
+    /**
+     * Rotation
+     */
+    rotation: number;
+    /**
+     * Scale
+     */
+    scale: number;
+    /**
+     * X
+     */
+    x: number;
+    /**
+     * Y
+     */
+    y: number;
+};
+
+/**
  * OverlayEdit
  *
  * Something drawn over the frame: an asset, or a mark (a circle, an underline).
@@ -1769,6 +1914,41 @@ export type LocateDirectorTargetResponses = {
 };
 
 export type LocateDirectorTargetResponse = LocateDirectorTargetResponses[keyof LocateDirectorTargetResponses];
+
+export type AlignDirectorMatchCutData = {
+    body: MatchCutRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/director/match-cuts';
+};
+
+export type AlignDirectorMatchCutErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type AlignDirectorMatchCutError = AlignDirectorMatchCutErrors[keyof AlignDirectorMatchCutErrors];
+
+export type AlignDirectorMatchCutResponses = {
+    /**
+     * Successful Response
+     */
+    200: MatchCutAlignment;
+};
+
+export type AlignDirectorMatchCutResponse = AlignDirectorMatchCutResponses[keyof AlignDirectorMatchCutResponses];
 
 export type IndexDirectorPlanData = {
     body: DirectorPlanCreate;

@@ -17,6 +17,7 @@ const videoId = videoIdSchema.parse("dQw4w9WgXcQ");
 
 const shot = (kind: Shot["kind"], sourceStartSeconds: number, durationSeconds = 2): Shot => ({
   kind,
+  mode: "on-camera",
   title: kind,
   purpose: "p",
   sourceStartSeconds,

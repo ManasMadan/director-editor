@@ -60,8 +60,8 @@ from app.queues import DirectorQueue
 from app.realtime import publish_to_org
 from app.schemas import (
     MAX_SHOT_SECONDS,
-    Box,
     AlignRequest,
+    Box,
     CutPick,
     DirectorCutCreate,
     DirectorTakeCreate,
