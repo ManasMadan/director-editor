@@ -292,6 +292,8 @@ function useLoop(url: string | undefined, onFailed: () => void) {
     return () => {
       listening.abort();
       element.pause();
+      // Its pause listener is gone by now: the button mustn't go on saying it plays.
+      setPlaying(false);
     };
   }, [url]);
   const toggle = () => {
@@ -321,7 +323,8 @@ function Soundtrack({ url, media }: { url: string | undefined; media: MediaLinks
       <button
         type="button"
         onClick={toggle}
-        aria-label={playing ? t("pauseSoundtrack") : t("playSoundtrack")}
+        aria-label={t("playSoundtrack")}
+        aria-pressed={playing}
         className="flex size-10 shrink-0 items-center justify-center rounded-full bg-studio-foreground text-studio transition-transform active:scale-95"
       >
         {playing ? (

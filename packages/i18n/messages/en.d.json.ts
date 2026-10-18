@@ -671,8 +671,7 @@ declare const messages: {
       "playPreview": "Play the Veo preview of shot {index, number}",
       "pausePreview": "Pause the preview of shot {index, number}",
       "soundtrack": "Soundtrack, made with Lyria",
-      "playSoundtrack": "Play the soundtrack",
-      "pauseSoundtrack": "Pause the soundtrack"
+      "playSoundtrack": "Play the soundtrack"
     },
     "editor": {
       "title": "Edit your video",

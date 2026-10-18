@@ -21,18 +21,27 @@ export interface MediaLinks {
 }
 
 /**
- * A link to one of a seed's media, usable until it fails to load: then the page reads
- * the plan again for fresh links (`refresh`) and the element is left out meanwhile, so no
- * broken image shows. The link of a plan read since is tried again: a signed link can
- * come back the same within a second.
+ * A link to one of a seed's media, for the element showing it (one card's storyboard or
+ * preview, the soundtrack): the first link it was given, for as long as that one works.
+ * Once it fails to load, the page reads the plan again for fresh links (`refresh`) and the
+ * element is left out meanwhile, so no broken image shows; the plan as read next brings
+ * the link tried in its place (the same one, if it was signed again within the second).
  */
 export function useMediaLink(url: string | undefined, links: MediaLinks) {
-  const [failed, setFailed] = useState<{ url: string | undefined; read: number }>();
-  const broken = failed !== undefined && failed.url === url && failed.read === links.read;
+  // Every read of the plan signs every link afresh (on focus, on a nudge), so the link in
+  // use is kept: a new one would restart what's playing and download what's shown again.
+  const [held, setHeld] = useState(url);
+  // When the link in use failed: the plan as read then.
+  const [failedAt, setFailedAt] = useState<number>();
+  if (failedAt !== undefined && failedAt !== links.read) {
+    // Read again since: its fresh link takes over (React's update-while-rendering).
+    setHeld(url);
+    setFailedAt(undefined);
+  }
   return {
-    url: broken ? undefined : url,
+    url: failedAt === undefined ? held : undefined,
     failed: () => {
-      setFailed({ url, read: links.read });
+      setFailedAt(links.read);
       links.refresh();
     },
   };
@@ -53,13 +62,18 @@ export function Storyboard({
 }) {
   const t = useTranslations("director");
   return (
-    <ol aria-label={t("template.storyboard")} className="flex h-14 gap-1">
+    // A long short's shots don't all fit a phone's width: the strip scrolls on its own,
+    // each shot staying big enough to tap.
+    <ol
+      aria-label={t("template.storyboard")}
+      className="flex h-14 snap-x gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none]"
+    >
       {shots.map((shot, index) => {
         const Icon = shot.kind === "video" ? Video : Camera;
         return (
           <li
             key={`${shot.title}-${index}`}
-            className="min-w-9"
+            className="min-w-9 snap-start"
             style={{ flex: shot.durationSeconds }}
           >
             <button
