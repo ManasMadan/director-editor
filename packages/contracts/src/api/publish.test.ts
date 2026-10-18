@@ -39,7 +39,8 @@ describe("youtubeDescription", () => {
   });
 
   it("counts bytes, as YouTube does", () => {
-    expect(descriptionBytes("é")).toBe(2);
+    expect(descriptionBytes("aé")).toBe(3);
+    expect(descriptionBytes("あ😀")).toBe(7);
   });
 });
 

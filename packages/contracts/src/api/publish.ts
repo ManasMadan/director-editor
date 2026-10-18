@@ -90,8 +90,17 @@ export function youtubeDescription(copy: Omit<PublishCopy, "title">, videoId: Vi
 }
 
 /** How many bytes of YouTube's description limit a description takes. */
-export const descriptionBytes = (description: string) =>
-  new TextEncoder().encode(description).length;
+export function descriptionBytes(description: string) {
+  // UTF-8 by hand: this package runs anywhere (React Native included), without
+  // TextEncoder's types. A code point takes one byte, plus one past each of these.
+  const wider = [0x80, 0x800, 0x10000];
+  let bytes = 0;
+  for (const char of description) {
+    const code = Number(char.codePointAt(0));
+    bytes += 1 + wider.filter((limit) => code >= limit).length;
+  }
+  return bytes;
+}
 
 // The longest a link to a Short can be: what the input's check measures against, since
 // the input names the cut, not the Short.
