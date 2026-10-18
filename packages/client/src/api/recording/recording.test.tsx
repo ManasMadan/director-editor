@@ -9,6 +9,7 @@ import type {
 import { recordingSessionIdSchema, videoIdSchema } from "@repo/contracts/ids";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { id, renderHook, standIn, until } from "../../../test/stand-in";
+import { errorCode } from "../../errors";
 import { useAddRecordingPartMutation } from "./add-part";
 import { useFinishRecordingMutation } from "./finish";
 import { useMarkAttemptMutation } from "./mark";
@@ -179,12 +180,17 @@ describe("where queued slices wait", () => {
 
 describe("uploading the recording", () => {
   /** The API as the uploader sees it; `stored` slices are signed as already uploaded. */
-  function recordingApi({ alreadyStored = [] as number[], refuse = null as string | null } = {}) {
+  function recordingApi({
+    alreadyStored = [] as number[],
+    refuse = null as string | null,
+    hold = Promise.resolve(),
+  } = {}) {
     const completed: string[] = [];
     const closed: number[] = [];
     const api = standIn((os) => ({
       recording: {
-        uploadSlice: os.recording.uploadSlice.handler(({ input }) => {
+        uploadSlice: os.recording.uploadSlice.handler(async ({ input }) => {
+          await hold;
           if (refuse) {
             throw new ORPCError(refuse);
           }
@@ -227,6 +233,7 @@ describe("uploading the recording", () => {
     await result.current.enqueue(slice(0));
     await result.current.enqueue(slice(1));
     await result.current.enqueue(partEnd(2));
+    await result.current.send();
     await until(() => expect(result.current.pending).toBe(0));
     expect(stored).toEqual([{ path: "/recordings/0/0", body: "slice-0-0", type: "video/webm" }]);
     expect(completed).toEqual(["0/0", "0/1"]);
@@ -279,32 +286,64 @@ describe("uploading the recording", () => {
       const { result, unmount } = renderHook(() => useSliceUploader(store), api);
       await result.current.enqueue(slice(0));
       await until(() => expect(result.current).toMatchObject({ pending: 0, error: refusal }));
+      // The refusal itself, for the shoot screen to say what was lost and why.
+      expect(errorCode(result.current.lost)).toBe(refusal);
       unmount();
     }
   });
 
-  it("holds five minutes at most, and says it's full until it sends one", async () => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    storageStatus = 503;
-    const { api, completed } = recordingApi();
+  it("is full from five minutes queued until it's below, and never refuses a slice", async () => {
+    // The connection is gone: the first slice is still on its way while the rest queue.
+    let back = (): void => undefined;
+    const hold = new Promise<void>((resolve) => {
+      back = resolve;
+    });
+    const { api, completed } = recordingApi({ hold });
     const store = new MemorySliceStore();
     const { result, unmount } = renderHook(() => useSliceUploader(store), api);
-    for (let index = 0; index < 30; index++) {
-      expect(await result.current.enqueue(slice(index))).toBe(true);
+    for (let index = 0; index < 29; index++) {
+      await result.current.enqueue(slice(index));
     }
-    expect(await result.current.enqueue(slice(30))).toBe(false);
+    await until(() => expect(result.current).toMatchObject({ pending: 29, full: false }));
+    await result.current.enqueue(slice(29));
     await until(() =>
       expect(result.current).toMatchObject({ pending: 30, behindMs: 300_000, full: true }),
     );
-    // A part's end holds no footage: it's always taken.
-    expect(await result.current.enqueue(partEnd(30))).toBe(true);
-    // Back online (the shoot screen asks it to send at once).
-    storageStatus = 200;
+    // A slice past the five minutes is kept all the same (the recorder's last, while the
+    // screen pauses): one missing from the middle of a part leaves a hole no take can be
+    // cut across.
+    await result.current.enqueue(slice(30));
+    await result.current.enqueue(partEnd(31));
+    await until(() =>
+      expect(result.current).toMatchObject({ pending: 32, behindMs: 310_000, full: true }),
+    );
+    back();
     await result.current.send();
     await until(() =>
       expect(result.current).toMatchObject({ pending: 0, behindMs: 0, full: false }),
     );
-    expect(completed).toHaveLength(30);
+    expect(completed).toHaveLength(31);
+    unmount();
+  });
+
+  it("takes an item once it's kept, without waiting for what's ahead of it to send", async () => {
+    let answer = (): void => undefined;
+    const hold = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    const { api, completed, closed } = recordingApi({ hold });
+    const store = new MemorySliceStore();
+    const { result, unmount } = renderHook(() => useSliceUploader(store), api);
+    // A camera flip ends a part here: it mustn't wait for the queue to empty.
+    await result.current.enqueue(slice(0));
+    await result.current.enqueue(partEnd(1));
+    expect(await store.all()).toHaveLength(2);
+    expect(completed).toEqual([]);
+    answer();
+    await result.current.send();
+    await until(() => expect(result.current.pending).toBe(0));
+    expect(completed).toEqual(["0/0"]);
+    expect(closed).toEqual([1]);
     unmount();
   });
 
@@ -331,6 +370,20 @@ describe("uploading the recording", () => {
     await until(() => expect(result.current.error).toBe("INTERNAL"));
     await result.current.enqueue(slice(0));
     await until(() => expect(completed).toEqual(["0/0"]));
+    unmount();
+  });
+
+  it("says a slice the device couldn't keep is lost, and keeps taking the rest", async () => {
+    const { api, completed } = recordingApi();
+    const store = new MemorySliceStore();
+    vi.spyOn(store, "put").mockRejectedValueOnce(new Error("quota"));
+    const { result, unmount } = renderHook(() => useSliceUploader(store), api);
+    await result.current.enqueue(slice(0));
+    await until(() => expect(result.current).toMatchObject({ pending: 0, error: "INTERNAL" }));
+    expect(result.current.lost).toBeInstanceOf(Error);
+    await result.current.enqueue(slice(1));
+    await until(() => expect(completed).toEqual(["0/1"]));
+    await until(() => expect(result.current).toMatchObject({ error: null, lost: null }));
     unmount();
   });
 
