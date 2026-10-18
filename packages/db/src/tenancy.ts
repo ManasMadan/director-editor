@@ -108,6 +108,15 @@ export function tenantTx<T>(db: Db, orgId: OrgId, fn: (tx: Tx) => Promise<T>): P
   }, TX_OPTIONS);
 }
 
+/**
+ * Scopes the rest of a transaction to a workspace, for a unit that starts on non-tenant
+ * data and goes on to tenant rows: creating a workspace (whose id only exists once it's
+ * inserted) and giving it its starting data in the same transaction.
+ */
+export async function enterTenant(tx: Tx, orgId: OrgId): Promise<void> {
+  await setScope(tx, "app.org_id", orgId);
+}
+
 /** A transaction on non-tenant data (same rules as tenantTx: database calls only inside). */
 export function transaction<T>(db: Db, fn: (tx: Tx) => Promise<T>): Promise<T> {
   return db.$transaction((tx) => fn(asTx(tx)), TX_OPTIONS);

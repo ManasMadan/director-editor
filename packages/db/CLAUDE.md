@@ -22,7 +22,8 @@ imports its client from here; Python mirrors the tables in `apps/ai/app/db/model
   `app_shadow` as the shadow database.
 - `src/client.ts`: `createDb` / `createDatabase` (`read` and `write`, the read-replica
   seam; both the primary today), with statement and idle-in-transaction timeouts.
-- `src/tenancy.ts`: `withTenant`, `tenantTx`, `withUser`, `userTx`, `transaction`, `Tx`.
+- `src/tenancy.ts`: `withTenant`, `tenantTx`, `enterTenant`, `withUser`, `userTx`,
+  `transaction`, `Tx`.
 - `src/testing/`: `prepareTemplate`, `createTestDatabase` (`urlFor(role)`), `factories`.
 - `test/security.test.ts`: proves RLS and least privilege as the real roles.
 
