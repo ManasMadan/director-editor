@@ -220,6 +220,37 @@ describe("useSceneGuide", () => {
     });
   });
 
+  it("sends nothing for a frame it was still taking when the screen went away", async () => {
+    const { api, inputs } = director();
+    const toBlob = HTMLCanvasElement.prototype.toBlob;
+    const frames: (() => void)[] = [];
+    vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation(function (
+      this: HTMLCanvasElement,
+      ...args
+    ) {
+      frames.push(() => toBlob.apply(this, args));
+    });
+    const video = { current: cameraVideo() };
+    const gone = await renderHook(
+      () => useSceneGuide(video, { videoId: VIDEO_ID, shotIndex: 0, active: true, moved: 0 }),
+      { api },
+    );
+    await until(() => expect(frames).toHaveLength(1));
+    gone.unmount();
+    frames[0]?.();
+
+    // A screen still open sends its frame, which went the same way after it: once its
+    // check is in, the one from the screen that went had every chance to arrive first.
+    const open = await renderHook(
+      () => useSceneGuide(video, { videoId: VIDEO_ID, shotIndex: 1, active: true, moved: 0 }),
+      { api },
+    );
+    await until(() => expect(frames).toHaveLength(2));
+    frames[1]?.();
+    await until(() => expect(open.current.scene).not.toBeNull());
+    expect(inputs.map((input) => input.shotIndex)).toEqual([1]);
+  });
+
   it("skips a check with no frame to send, or with the page hidden", async () => {
     everySixSeconds();
     const { api, inputs } = director();
