@@ -45,6 +45,7 @@ MAX_SHOT_SECONDS = 60
 MAX_SHOT_STEPS = 10
 MAX_SCRIPT_LINES = 20
 MAX_POSE_KEYPOINTS = 13
+MAX_SHOT_TITLE = 80
 # What a template needs beyond the member's own filming (packages/contracts' director.ts
 # mirrors these): at most one asset per image a video may have made (12, the image limit
 # per video), and room for a busy edit (captions, a layout, overlays, cuts).
@@ -186,7 +187,7 @@ class Shot(BaseModel):
         description="on-camera: the viewer films it; voice-over: only their voice is used; "
         "asset: nothing is filmed, an asset takes its place.",
     )
-    title: str = Field(min_length=1, max_length=80)
+    title: str = Field(min_length=1, max_length=MAX_SHOT_TITLE)
     purpose: str = Field(
         min_length=1,
         max_length=240,
@@ -1402,6 +1403,9 @@ class ShotVersion(BaseModel):
     model_config = REQUEST
 
     shot: ShotIndex
+    # The shot's name in their version, when re-planning or adapting it moved it somewhere
+    # the original's title names no more ("Intro at your desk" for "Intro in the market").
+    title: Annotated[str, Field(min_length=1, max_length=MAX_SHOT_TITLE)] | None = None
     where: VersionRow | None = None
     action: VersionRow | None = None
     line: VersionRow | None = None
@@ -1432,6 +1436,10 @@ class RevisedShotDraft(BaseModel):
     shot: int = Field(description="The shot's number, from 1.")
     status: Literal["film", "skip", "gap"] = Field(
         description="film: they film it; skip: left out; gap: not filmed, the editor fills it."
+    )
+    title: str | None = Field(
+        description="The shot's new name when its title names something it no longer has"
+        " (the old place), or null for no change."
     )
     where: str | None = Field(description="Where they film it now, or null for no change.")
     action: str | None = Field(description="What they do now, or null for no change.")

@@ -211,6 +211,23 @@ describe("least privilege", () => {
     });
   });
 
+  it("lets the AI service read a member's version of a template, and never change it", async () => {
+    await asRole("app_ai", async (client) => {
+      await expect(
+        client.query("SELECT user_id, video_id, version FROM app.director_version WHERE false"),
+      ).resolves.toMatchObject({ command: "SELECT" });
+      await expect(
+        client.query("SELECT created_at FROM app.director_version WHERE false"),
+      ).rejects.toThrow(/permission denied/);
+      await expect(
+        client.query("UPDATE app.director_version SET version = '{}' WHERE false"),
+      ).rejects.toThrow(/permission denied/);
+      await expect(client.query("DELETE FROM app.director_version WHERE false")).rejects.toThrow(
+        /permission denied/,
+      );
+    });
+  });
+
   it("lets only the AI service ask whether a member has used their index", async () => {
     const asked = "SELECT ai.index_used($1) AS used";
     await asRole("app_ai", async (client) => {

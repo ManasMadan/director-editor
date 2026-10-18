@@ -60,8 +60,20 @@ describe("the member's version of a shot", () => {
     expect([...version.changed]).toEqual(["where", "do", "say"]);
   });
 
+  it("takes the new title of a shot moved somewhere new, and keeps the original's otherwise", () => {
+    const moved = yourVersion(original, {
+      shot: 0,
+      title: "The nod at your desk",
+      where: "At your desk",
+    });
+    expect(moved.shot.title).toBe("The nod at your desk");
+    expect(moved.shot.sceneLandmark).toBeNull();
+    expect(yourVersion(original, { shot: 0, where: "Inside" }).shot.title).toBe("The nod");
+  });
+
   it("keeps the rows Director didn't change", () => {
     const version = yourVersion(original, { shot: 0, line: "Yes!" });
+    expect(version.shot.title).toBe("The nod");
     expect(version.shot.scene).toBe("By a window");
     expect(version.shot.steps).toBe(original.steps);
     expect([...version.changed]).toEqual(["say"]);

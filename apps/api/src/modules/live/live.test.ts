@@ -1134,6 +1134,30 @@ describe("the member's version of a shot", () => {
     expect(brief).not.toContain("- Where:");
   });
 
+  it("renames a shot it moved somewhere new", async () => {
+    const { fake, browser } = await liveCall();
+    fake.send({
+      toolCall: {
+        functionCalls: [
+          {
+            id: "g1",
+            name: "adapt_shot",
+            args: { shot: 1, title: " Intro at your desk ", where: "At your desk" },
+          },
+          { id: "g2", name: "adapt_shot", args: { shot: 1, title: "x".repeat(81) } },
+        ],
+      },
+    });
+    expect(await browser.message(0)).toEqual({
+      type: "tool",
+      id: "tool-1",
+      call: { name: "adapt_shot", shot: 0, title: "Intro at your desk", where: "At your desk" },
+    });
+    expect(await fake.message(2)).toMatchObject(
+      toolResponse("g2", "adapt_shot", { error: expect.stringContaining("the title one to 80") }),
+    );
+  });
+
   it("keeps nothing the browser couldn't show", async () => {
     const { fake, browser } = await liveCall();
     fake.send({
@@ -1164,12 +1188,13 @@ describe("the member's version of a shot", () => {
     });
     expect(await fake.message(2)).toEqual(
       toolResponse("1", "adapt_shot", {
-        error: "say what changed: where, action, line, framing or camera",
+        error: "say what changed: title, where, action, line, framing or camera",
       }),
     );
     expect(await fake.message(3)).toEqual(
       toolResponse("2", "adapt_shot", {
-        error: "each of where, action, line and framing is one to 300 characters",
+        error:
+          "each of where, action, line and framing is one to 300 characters, the title one to 80",
       }),
     );
     expect(await fake.message(4)).toMatchObject(

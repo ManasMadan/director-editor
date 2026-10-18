@@ -40116,6 +40116,11 @@
                           "minimum": 0,
                           "maximum": 11
                         },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
                         "where": {
                           "type": "string",
                           "minLength": 1,
@@ -40193,6 +40198,11 @@
                               "type": "integer",
                               "minimum": 0,
                               "maximum": 11
+                            },
+                            "title": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80
                             },
                             "where": {
                               "type": "string",
@@ -40391,6 +40401,11 @@
                                 "type": "integer",
                                 "minimum": 0,
                                 "maximum": 11
+                              },
+                              "title": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 80
                               },
                               "where": {
                                 "type": "string",
@@ -72139,6 +72154,11 @@
                             "minimum": 0,
                             "maximum": 11
                           },
+                          "title": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          },
                           "where": {
                             "type": "string",
                             "minLength": 1,
@@ -73304,6 +73324,11 @@
                               "minimum": 0,
                               "maximum": 11
                             },
+                            "title": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80
+                            },
                             "where": {
                               "type": "string",
                               "minLength": 1,
@@ -73420,6 +73445,11 @@
                             "type": "integer",
                             "minimum": 0,
                             "maximum": 11
+                          },
+                          "title": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
                           },
                           "where": {
                             "type": "string",
@@ -74593,6 +74623,11 @@
                               "minimum": 0,
                               "maximum": 11
                             },
+                            "title": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80
+                            },
                             "where": {
                               "type": "string",
                               "minLength": 1,
@@ -74713,6 +74748,11 @@
                                 "type": "integer",
                                 "minimum": 0,
                                 "maximum": 11
+                              },
+                              "title": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 80
                               },
                               "where": {
                                 "type": "string",

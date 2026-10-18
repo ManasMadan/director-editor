@@ -8,6 +8,7 @@ a shot the plan doesn't have, so a stray answer can't break the shoot screen.
 
 from app.schemas import (
     MAX_REVISE_SUMMARY,
+    MAX_SHOT_TITLE,
     MAX_VERSION_ROW,
     RevisedShotDraft,
     ReviseRequest,
@@ -17,6 +18,7 @@ from app.schemas import (
     ShotVersion,
     YourVersion,
 )
+from app.text import shorten
 
 REVISE_INSTRUCTIONS = """\
 You are Director, helping someone film their own version of a short on their phone. You
@@ -26,12 +28,14 @@ changed for them, which shots they skipped and which are gaps), what they've tol
 
 Answer with every shot of the plan, in order, each with a status: film (they film it),
 skip (left out of their video) or gap (not filmed: the editor fills it with B-roll, stock
-or the template's assets). For each shot you change, give only what changes (where, what
-they do, their line, the framing in a few words, the camera); leave the rest null.
+or the template's assets). For each shot you change, give only what changes (its title,
+where, what they do, their line, the framing in a few words, the camera); leave the rest
+null.
 
 A change of place or setup ("indoors", "at my desk"): rewrite where, the framing and what
 they do for every shot they still film so it fits there, keeping each shot's purpose, and
-leave nothing that names the old place.
+leave nothing that names the old place: a shot whose title names it gets a new title
+that fits where they are now ("Intro at your desk" for "Intro in the market").
 
 "One angle" or "one position": every shot they film is from where they are now, on the
 camera they're using; a shot from another angle is moved to their position when its
@@ -75,6 +79,13 @@ def _row(text: str | None) -> str | None:
     return text.strip()[:MAX_VERSION_ROW]
 
 
+def _title(text: str | None) -> str | None:
+    """A new title, trimmed and cut at a word to a title's length, or nothing."""
+    if text is None or not text.strip():
+        return None
+    return shorten(text.strip(), MAX_SHOT_TITLE)
+
+
 def _changed(old: ShotVersion | None, draft: RevisedShotDraft, index: int) -> ShotVersion | None:
     """The shot's version after the draft: its changes over the old ones."""
     base = old or ShotVersion(shot=index)
@@ -82,6 +93,7 @@ def _changed(old: ShotVersion | None, draft: RevisedShotDraft, index: int) -> Sh
         update={
             field: value
             for field, value in {
+                "title": _title(draft.title),
                 "where": _row(draft.where),
                 "action": _row(draft.action),
                 "line": _row(draft.line),

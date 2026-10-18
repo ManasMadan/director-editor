@@ -1507,6 +1507,7 @@ REVISION: dict[str, object] = {
         {
             "shot": 1,
             "status": "film",
+            "title": None,
             "where": None,
             "action": None,
             "line": None,
@@ -1516,6 +1517,7 @@ REVISION: dict[str, object] = {
         {
             "shot": 2,
             "status": "gap",
+            "title": None,
             "where": None,
             "action": None,
             "line": None,
@@ -1691,6 +1693,125 @@ def test_a_take_is_reviewed_and_keeps_its_best_part(
     assert {"type": "director.changed"} in published(events)
     # Reviewed once: running the job again leaves it.
     on_app_loop(client, lambda: director().review(org, take.id, "http://unused", user))
+
+
+def keep_version(org: UUID, user: UUID, version: dict[str, object]) -> None:
+    """The member's version of the template, as apps/api keeps it."""
+    _ = as_org(
+        org,
+        """INSERT INTO app.director_version (org_id, user_id, video_id, version, updated_at)
+           VALUES (%s, %s, %s, %s, now())""",
+        (org, user, VIDEO, Jsonb(version)),
+    )
+
+
+def outdoor_first_shot(org: UUID) -> None:
+    """The ready plan's first shot, filmed outdoors in the original."""
+    _ = as_org(
+        org,
+        """UPDATE ai.director_plan SET plan = jsonb_set(jsonb_set(plan,
+             '{shots,0,scene}', '"Film outdoors on the street"'),
+             '{shots,0,title}', '"Intro in the market"')""",
+    )
+
+
+INDOORS: dict[str, object] = {
+    "notes": [{"kind": "place", "note": "Inside"}],
+    "shots": [{"shot": 0, "title": "Intro at your desk", "where": "At your desk"}],
+    "skipped": [],
+    "gaps": [],
+}
+
+
+def reviewed_prompt(
+    client: TestClient,
+    gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]],
+    org: UUID,
+    user: UUID,
+) -> str:
+    """What Gemini was sent to review a take of the first shot."""
+    gemini[1][GEMINI_PATH] = gemini_output(REVIEW)
+    with serve_files({"/take.webm": ("video/webm", b"\x1a\x45\xdf\xa3" + b"\x00" * 64)}) as files:
+        url = f"{files.url}/take.webm?X-Amz-Signature=abc"
+        take = add_take(client, org, user, url)
+        on_app_loop(client, lambda: director().review(org, take.id, url, user))
+    assert takes_of(client, org, user)[0].status == "ready"
+    return gemini[0].received[-1][1].decode()
+
+
+def test_a_take_is_reviewed_against_the_member_s_version_of_the_shot(
+    client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    """They moved the outdoor shot to their desk: the review is told the shot as they're
+    filming it and what they've told Director, never the street they left."""
+    org, user = new_org()
+    _ = ready_plan(client, org, user)
+    outdoor_first_shot(org)
+    keep_version(org, user, INDOORS)
+    sent = reviewed_prompt(client, gemini, org, user)
+    assert "At your desk" in sent
+    assert "Intro at your desk" in sent
+    assert "- place: Inside" in sent
+    assert "outdoors" not in sent
+    assert "Intro in the market" not in sent
+
+
+def test_a_take_with_no_version_or_another_workspace_s_is_reviewed_against_the_plan(
+    client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    org, user = new_org()
+    _ = ready_plan(client, org, user)
+    outdoor_first_shot(org)
+    other, _ = new_org()
+    keep_version(other, user, INDOORS)
+    sent = reviewed_prompt(client, gemini, org, user)
+    assert "Film outdoors on the street" in sent
+    assert "At your desk" not in sent
+    assert "(nothing yet)" in sent
+
+
+def test_the_editor_reads_the_shots_as_the_member_filmed_them(
+    client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    org, user = new_org()
+    _ = ready_plan(client, org, user)
+    outdoor_first_shot(org)
+    keep_version(org, user, INDOORS)
+    gemini[1][GEMINI_PATH] = gemini_output(
+        {
+            "heard": "Make it warmer",
+            "outcome": "applied",
+            "say": "Warmer it is.",
+            "actions": [],
+            "choices": [],
+        }
+    )
+    response = client.post(
+        "/v1/director/editor-requests",
+        json={
+            "videoId": VIDEO,
+            "text": "Make it warmer",
+            "audio": None,
+            "audioType": None,
+            "state": {"shots": [], "captions": "pop", "sound": True, "music": False, "fixes": []},
+        },
+        headers=headers(org, user),
+    )
+    assert response.status_code == 200, response.text
+    sent = gemini[0].received[-1][1].decode()
+    assert "Intro at your desk" in sent
+    assert "Intro in the market" not in sent
+
+
+def test_a_version_that_can_t_be_read_leaves_the_plan_s_shot(
+    client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    org, user = new_org()
+    _ = ready_plan(client, org, user)
+    outdoor_first_shot(org)
+    keep_version(org, user, {"notes": "Inside"})
+    sent = reviewed_prompt(client, gemini, org, user)
+    assert "Film outdoors on the street" in sent
 
 
 @pytest.fixture

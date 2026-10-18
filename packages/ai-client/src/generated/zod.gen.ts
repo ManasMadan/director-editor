@@ -1184,6 +1184,7 @@ export const zShotVersion = z.object({
     framing: zVersionRow.nullish(),
     line: zVersionRow.nullish(),
     shot: zShotIndex,
+    title: z.string().min(1).max(80).nullish(),
     where: zVersionRow.nullish()
 });
 

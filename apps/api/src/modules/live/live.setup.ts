@@ -348,11 +348,16 @@ const TOOL_DECLARATIONS: Record<LiveTool, object> = {
   },
   adapt_shot: {
     description:
-      "Put their own version of a shot on their screen when they change it or a constraint changes it: where they are, what they do, their line, the framing, the camera. Only what changed; one or two short sentences each.",
+      "Put their own version of a shot on their screen when they change it or a constraint changes it: where they are, what they do, their line, the framing, the camera, and a new title when the old one names something it no longer has. Only what changed; one or two short sentences each.",
     parameters: {
       type: "OBJECT",
       properties: {
         shot: { type: "INTEGER", description: "The shot's number, from 1." },
+        title: {
+          type: "STRING",
+          description:
+            'Its new name, a few words, when the old one names the old place ("Intro at your desk").',
+        },
         where: { type: "STRING", description: "Where they film it now." },
         action: { type: "STRING", description: "What they do now." },
         line: { type: "STRING", description: "Their line now, word for word." },

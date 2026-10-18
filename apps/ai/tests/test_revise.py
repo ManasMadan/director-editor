@@ -18,6 +18,7 @@ def draft_shot(shot: int, status: str = "film", **rows: str | None) -> RevisedSh
     fields: dict[str, object] = {
         "shot": shot,
         "status": status,
+        "title": None,
         "where": None,
         "action": None,
         "line": None,
@@ -82,3 +83,24 @@ def test_the_prompt_names_the_shots_their_version_and_the_instruction() -> None:
         assert part in prompt, part
     bare = "\n".join(revise_prompt(SHOTS, ReviseRequest(instruction="x", version=version())))
     assert "(nothing yet)" in bare
+
+
+def test_a_shot_moved_somewhere_new_can_be_renamed() -> None:
+    draft = RevisionDraft(
+        shots=[
+            draft_shot(1, title="  Intro at your desk  ", where="At your desk"),
+            draft_shot(2, title="   "),
+        ],
+        summary="",
+    )
+    result = apply_revision(SHOTS, version(), draft)
+    assert result.version.shots == [
+        ShotVersion(shot=0, title="Intro at your desk", where="At your desk")
+    ]
+    long = apply_revision(
+        SHOTS, version(), RevisionDraft(shots=[draft_shot(1, title="word " * 30)], summary="")
+    )
+    title = long.version.shots[0].title
+    assert title is not None
+    assert len(title) <= 80
+    assert title.endswith("word")
