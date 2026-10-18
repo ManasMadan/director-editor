@@ -112,3 +112,23 @@ vulnerabilities:
     statement: >-
       stdlib v1.26.4 (fixed in 1.26.9, 1.27.2): no upstream rebuild with the fixed package as of 2026-10-13
     expired_at: 2026-11-12
+  - id: CVE-2026-66046
+    statement: >-
+      libexpat1 2.8.3-1~deb13u1 (fixed in 2.9.0-1~deb13u1): no upstream rebuild with the fixed package as of 2026-10-18 (v0.15.1, the newest release, has the same package)
+    expired_at: 2026-11-17
+  - id: CVE-2026-76956
+    statement: >-
+      libexpat1 2.8.3-1~deb13u1 (fixed in 2.9.0-1~deb13u1): no upstream rebuild with the fixed package as of 2026-10-18 (v0.15.1, the newest release, has the same package)
+    expired_at: 2026-11-17
+  - id: CVE-2026-76957
+    statement: >-
+      libexpat1 2.8.3-1~deb13u1 (fixed in 2.9.0-1~deb13u1): no upstream rebuild with the fixed package as of 2026-10-18 (v0.15.1, the newest release, has the same package)
+    expired_at: 2026-11-17
+  - id: CVE-2026-77214
+    statement: >-
+      libexpat1 2.8.3-1~deb13u1 (fixed in 2.9.0-1~deb13u1): no upstream rebuild with the fixed package as of 2026-10-18 (v0.15.1, the newest release, has the same package)
+    expired_at: 2026-11-17
+  - id: CVE-2026-93990
+    statement: >-
+      libexpat1 2.8.3-1~deb13u1 (fixed in 2.9.0-1~deb13u1): no upstream rebuild with the fixed package as of 2026-10-18 (v0.15.1, the newest release, has the same package)
+    expired_at: 2026-11-17

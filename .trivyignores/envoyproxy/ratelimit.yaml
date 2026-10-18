@@ -56,3 +56,7 @@ vulnerabilities:
     statement: >-
       stdlib v1.26.5 (fixed in 1.26.9, 1.27.2): no upstream rebuild with the fixed package as of 2026-10-13
     expired_at: 2026-11-12
+  - id: CVE-2026-56851
+    statement: >-
+      golang.org/x/text v0.40.0 (fixed in 0.41.0): no upstream rebuild with the fixed package as of 2026-10-18 (Envoy Gateway v1.9.2, the newest release, still runs this ratelimit build)
+    expired_at: 2026-11-17

@@ -1,6 +1,6 @@
 import { directorSeeds } from "@repo/contracts/director-seeds";
 import { required } from "@repo/contracts/objects";
-import { expect, expectAccessible, settled, signOut, signUp, test } from "./support";
+import { asWorkspace, expect, expectAccessible, settled, signOut, signUp, test } from "./support";
 
 test("unknown pages show a translated 404", async ({ page }) => {
   const response = await page.goto("/does-not-exist");
@@ -104,20 +104,31 @@ test("a member's template card on the landing opens its ready plan", async ({ pa
   const seed = required(directorSeeds[0], "the first seed template");
   await page.getByRole("link", { name: seed.plan.title }).click();
   await expect(page).toHaveURL(new RegExp(`/director/${seed.videoId}$`));
-  // What that page shows, asked the way it asks (the page itself also needs Director's
-  // optional services, which a stack without them turns off).
-  const response = await page.request.post("/rpc/director/plan", {
-    data: { json: { videoId: seed.videoId } },
+  // The plan that page shows, read as the AI service reads it. Not through the API: a
+  // stack without Director's optional services (CI's) has the AI service answer
+  // FEATURE_DISABLED, but the copy is in the workspace either way.
+  const session = await (await page.request.get("/api/auth/get-session")).json();
+  const orgId: string = session.session.activeOrganizationId;
+  const plan = await asWorkspace(orgId, async (client) => {
+    const { rows } = await client.query<{
+      source: string;
+      status: string;
+      stage: string;
+      plan: { title: string; shots: unknown[] };
+    }>("SELECT source, status, stage, plan FROM ai.director_plan WHERE video_id = $1", [
+      seed.videoId,
+    ]);
+    return rows;
   });
-  expect(response.ok()).toBe(true);
-  const { json: plan } = await response.json();
-  expect(plan).toMatchObject({
-    videoId: seed.videoId,
-    source: "seed",
-    status: "ready",
-    plan: { title: seed.plan.title },
-  });
-  expect(plan.plan.shots).toHaveLength(seed.plan.shots.length);
+  expect(plan).toEqual([
+    {
+      source: "seed",
+      status: "ready",
+      stage: "ready",
+      plan: expect.objectContaining({ title: seed.plan.title }),
+    },
+  ]);
+  expect(plan[0]?.plan.shots).toHaveLength(seed.plan.shots.length);
 });
 
 test("workspace pages are gone", async ({ page }) => {
@@ -160,6 +171,11 @@ test.describe("accessibility (WCAG 2.2 AA)", () => {
     for (const path of ["/library", "/settings", "/settings/security"]) {
       await page.goto(path);
       await settled(page);
+      if (path === "/settings") {
+        // The email card's button waits for the captcha's answer, like a form's submit,
+        // and fades in once enabled: axe would catch it halfway and read low contrast.
+        await expect(page.getByRole("button", { name: "Change email" })).toBeEnabled();
+      }
       await expectAccessible(page);
     }
   });

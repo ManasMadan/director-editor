@@ -44,7 +44,10 @@ test("upload a profile picture: checked, cropped square, shown everywhere", asyn
   await expect(card(page).getByRole("button", { name: "Upload a picture" })).toBeVisible();
 
   await choose(page, "holiday.jpg", "image/jpeg", await photo("#3366cc"));
-  await expect(card(page).getByRole("status")).toContainText(/Uploading|Checking your picture/);
+  // The loader says what it's waiting for in its accessible name, not in visible text.
+  await expect(card(page).getByRole("status")).toHaveAccessibleName(
+    /Uploading|Checking your picture/,
+  );
   await expect(page.getByText("Profile picture updated")).toBeVisible({ timeout: 30_000 });
 
   const shown = await shownPicture(page);

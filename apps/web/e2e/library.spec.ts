@@ -4,8 +4,7 @@
  * offering the starter templates, without adding anything.
  */
 import { randomUUID } from "node:crypto";
-import pg from "pg";
-import { expect, expectAccessible, signUp, test } from "./support";
+import { asWorkspace, expect, expectAccessible, signUp, test } from "./support";
 
 /** A real, public video under three minutes ("Me at the zoo"): the API checks it on YouTube. */
 const PUBLIC_SHORT = "jNQXAC9IVRw";
@@ -42,24 +41,6 @@ const plan = (title: string) => ({
 
 /** An 11-character id no real video has, for rows the test makes itself. */
 const madeUpVideoId = () => `t${randomUUID().replaceAll("-", "").slice(0, 10)}`;
-
-/**
- * Runs `work` as the AI service does: its own database role, inside a transaction scoped
- * to the workspace by row-level security.
- */
-async function asWorkspace<T>(orgId: string, work: (client: pg.Client) => Promise<T>) {
-  const client = new pg.Client({ connectionString: process.env.AI_DATABASE_URL });
-  await client.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query("SELECT set_config('app.org_id', $1, true)", [orgId]);
-    const result = await work(client);
-    await client.query("COMMIT");
-    return result;
-  } finally {
-    await client.end();
-  }
-}
 
 /** Plans written straight into the library: one the member indexed, and a starter. */
 const fillLibrary = (orgId: string, userId: string, starterTitle: string) =>

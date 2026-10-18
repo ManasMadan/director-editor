@@ -160,3 +160,11 @@ vulnerabilities:
     statement: >-
       github.com/getkin/kin-openapi v0.144.0 (fixed in 0.147.0), 13.2.4 still ships it: no upstream rebuild with the fixed package as of 2026-10-17
     expired_at: 2026-11-16
+  - id: CVE-2026-56851
+    statement: >-
+      golang.org/x/text v0.28.0 to v0.39.0 in Grafana's binaries (fixed in 0.41.0): no upstream rebuild with the fixed package as of 2026-10-18 (13.2.4, the newest release, still has them)
+    expired_at: 2026-11-17
+  - id: CVE-2026-100349
+    statement: >-
+      github.com/getkin/kin-openapi v0.144.0 (fixed in 0.146.0): no upstream rebuild with the fixed package as of 2026-10-18 (13.2.4, the newest release, still has v0.144.0)
+    expired_at: 2026-11-17
