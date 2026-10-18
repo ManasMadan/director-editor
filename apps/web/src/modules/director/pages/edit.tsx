@@ -381,7 +381,7 @@ function Stage({ editor, saving }: { editor: EditorState; saving: Saving }) {
         onStall={playback.pause}
       />
       {label === null ? null : (
-        <div className="absolute inset-0 flex items-center justify-center bg-studio/80">
+        <div className="absolute inset-0 flex items-center justify-center bg-studio/90">
           <GeminiLoader
             label={label}
             showLabel

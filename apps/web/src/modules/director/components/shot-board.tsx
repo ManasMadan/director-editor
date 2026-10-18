@@ -198,7 +198,7 @@ function Stepper({
     </button>
   );
   return (
-    <div className="flex items-center justify-between gap-1 pt-1">
+    <div className="flex items-center justify-between gap-1">
       {button(
         stepPick(shot, picks, -1),
         t("previousTake"),
@@ -248,6 +248,10 @@ function ShotColumn({
       style={{ width: columnWidth(clip.seconds) }}
     >
       <ShotHeader clip={clip} progress={props.progress} onSeek={props.onSeek} />
+      {/* In reach at the top, however many takes the column scrolls through. */}
+      {playing && shot.takes.length > 1 ? (
+        <Stepper shot={shot} picks={picks} current={playing} onPick={onPick} />
+      ) : null}
       {shot.needsRetake ? (
         <RetakeNote feedback={directorsPick?.feedback ?? null} href={retakeHref} />
       ) : null}
@@ -273,9 +277,6 @@ function ShotColumn({
           ))}
         </div>
       )}
-      {playing && shot.takes.length > 1 ? (
-        <Stepper shot={shot} picks={picks} current={playing} onPick={onPick} />
-      ) : null}
       {shot.takes.length > 0 && !shot.needsRetake ? (
         <Link
           href={retakeHref}
