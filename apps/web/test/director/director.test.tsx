@@ -1,11 +1,16 @@
-/** Director's page for a short: the plan as it's worked out, then what it takes to film it. */
+/**
+ * A template's page: the original and its storyboard, how each shot is filmed and what's
+ * filmed of it, and the button to start; before that, Gemini at work or why it failed.
+ */
+import { fileIdSchema } from "@repo/contracts/ids";
 import { describe, expect, it } from "vitest";
 import { commands, userEvent } from "vitest/browser";
 import { DirectorPage } from "@/modules/director";
 import { currentUrl, renderPage } from "../render";
 import { signUp } from "../users";
-import { newVideoId, planShot, readyPlan, shotPlan } from "./support";
+import { newVideoId, planShot, readyPlan, shotPlan, take } from "./support";
 
+const fileId = () => fileIdSchema.parse(crypto.randomUUID());
 const hero = () => document.querySelector("iframe") as HTMLIFrameElement;
 const heroParams = () => new URL(hero().src).searchParams;
 
@@ -17,7 +22,13 @@ async function showPlan(videoId: string) {
 describe("Director's page for a ready plan", () => {
   const plan = shotPlan({
     shots: [
-      planShot({ title: "Walk in", sourceStartSeconds: 1.2, sourceEndSeconds: 3.6 }),
+      planShot({
+        title: "Walk in",
+        sourceStartSeconds: 1.2,
+        sourceEndSeconds: 3.6,
+        phoneAngle: { pitch: 15, roll: 0, tolerance: 6, height: "eye" },
+        script: [{ startSeconds: 0, endSeconds: 1.5, text: "Morning, everyone!" }],
+      }),
       planShot({
         kind: "photo",
         title: "The look",
@@ -27,6 +38,11 @@ describe("Director's page for a ready plan", () => {
         durationSeconds: 1.5,
         sourceStartSeconds: 4,
         sourceEndSeconds: 5.2,
+        framing: {
+          shotSize: "close-up",
+          subject: { x: 0.2, y: 0.1, width: 0.6, height: 0.5 },
+          note: "Fill the frame.",
+        },
       }),
     ],
   });
@@ -52,6 +68,22 @@ describe("Director's page for a ready plan", () => {
     await expect.element(page.getByText("Back camera")).toBeVisible();
     await expect.element(page.getByText("1.5 s")).toBeVisible();
     await expect.element(page.getByText("Kitchen")).toBeVisible();
+    // Where to stand in the picture, how to hold the phone and what to say.
+    await expect
+      .element(page.getByRole("img", { name: "Medium shot: where you stand in the picture" }))
+      .toBeVisible();
+    await expect
+      .element(page.getByRole("img", { name: "Close-up: where you stand in the picture" }))
+      .toBeVisible();
+    await expect.element(page.getByText("Waist up.")).toBeVisible();
+    await expect.element(page.getByText("Fill the frame.")).toBeVisible();
+    await expect.element(page.getByText("Hold the phone at eye level")).toBeVisible();
+    await expect.element(page.getByText("Tilted up 15°")).toBeVisible();
+    await expect.element(page.getByText("Hold the phone at chest height")).toBeVisible();
+    await expect.element(page.getByText("Held level")).toBeVisible();
+    await expect.element(page.getByText("Morning, everyone!")).toBeVisible();
+    // Nothing filmed yet: no take state on any shot.
+    expect(page.getByText("Filmed", { exact: false }).query()).toBeNull();
 
     // Tapping a shot in the storyboard plays just its part of the original.
     const second = page.getByRole("button", { name: "Watch shot 2: The look" });
@@ -80,7 +112,10 @@ describe("Director's page for a ready plan", () => {
     await expect.element(page.getByRole("radio", { name: "I'll speak" })).toBeChecked();
     await userEvent.click(page.getByText("Use the original audio"));
     await expect.element(page.getByRole("radio", { name: "Use the original audio" })).toBeChecked();
-    await userEvent.click(page.getByRole("button", { name: "Use template" }));
+    await expect
+      .element(page.getByRole("link", { name: "Back to the library" }))
+      .toHaveAttribute("href", "/library");
+    await userEvent.click(page.getByRole("button", { name: "Start shooting" }));
     expect(currentUrl()).toBe(`/director/${videoId}/shoot?shot=0&audio=original`);
   });
 
@@ -94,25 +129,73 @@ describe("Director's page for a ready plan", () => {
     await expect.element(page.getByText(note)).toBeVisible();
     expect(page.getByRole("radio").query()).toBeNull();
     await expect.element(page.getByText("You need 1 shot: 1 video and no photos.")).toBeVisible();
-    await userEvent.click(page.getByRole("button", { name: "Use template" }));
+    await userEvent.click(page.getByRole("button", { name: "Start shooting" }));
     expect(currentUrl()).toBe(`/director/${videoId}/shoot?shot=0&audio=original`);
+  });
+
+  it("says the mic will be used when the original's audio couldn't be fetched", async () => {
+    const videoId = newVideoId();
+    await commands.fakeDirector(videoId, {
+      plan: { status: "ready", plan: shotPlan(), audioStatus: "failed" },
+    });
+    const page = await showPlan(videoId);
+    await expect
+      .element(page.getByText("The original audio couldn't be fetched, so your mic will be used."))
+      .toBeVisible();
+    expect(page.getByRole("radio").query()).toBeNull();
+    await userEvent.click(page.getByRole("button", { name: "Start shooting" }));
+    expect(currentUrl()).toBe(`/director/${videoId}/shoot?shot=0&audio=voice`);
+  });
+
+  it("shows what's filmed of each shot, and picks up at the first shot not filmed", async () => {
+    const videoId = newVideoId();
+    const shots = ["One", "Two", "Three", "Four"].map((title) => planShot({ title }));
+    await commands.fakeDirector(videoId, {
+      plan: { status: "ready", plan: shotPlan({ shots }) },
+      takes: [
+        take({ fileId: fileId(), shotIndex: 0, score: 82 }),
+        take({ fileId: fileId(), shotIndex: 1, score: 40 }),
+        take({ fileId: fileId(), shotIndex: 3, status: "reviewing" }),
+      ],
+    });
+    const page = await showPlan(videoId);
+    await expect.element(page.getByText("Filmed, 82/100")).toBeVisible();
+    await expect.element(page.getByText("Needs a retake (40/100)")).toBeVisible();
+    await expect.element(page.getByText("Director is reviewing your take")).toBeVisible();
+    await userEvent.click(page.getByRole("button", { name: "Continue shooting" }));
+    expect(currentUrl()).toBe(`/director/${videoId}/shoot?shot=2&audio=voice`);
+  });
+
+  it("says a take is filmed before Director has scored it", async () => {
+    const videoId = newVideoId();
+    await commands.fakeDirector(videoId, {
+      plan: { status: "ready", plan: shotPlan() },
+      takes: [take({ fileId: fileId(), status: "failed" })],
+    });
+    const page = await showPlan(videoId);
+    await expect.element(page.getByText("Filmed", { exact: true })).toBeVisible();
+    // Every shot has a take: starting again from the top.
+    await expect.element(page.getByRole("button", { name: "Start shooting" })).toBeVisible();
   });
 });
 
 describe("Director's page before the plan is ready", () => {
   it.each([
-    ["pending", "Director is getting ready…"],
-    ["analyzing", "Director is watching the short…"],
-  ] as const)("says Director is at work while the plan is %s", async (status, message) => {
+    ["pending", "queued", "Waiting for Gemini"],
+    ["analyzing", "watching", "Gemini is watching the Short"],
+    ["analyzing", "writing", "Writing the shot list"],
+  ])("shows Gemini at work while the plan is %s (%s)", async (status, stage, message) => {
     const videoId = newVideoId();
-    await commands.fakeDirector(videoId, { plan: { status, plan: null } });
+    await commands.fakeDirector(videoId, { plan: { status, stage, plan: null } });
     const page = await showPlan(videoId);
-    await expect.element(page.getByText(message)).toBeVisible();
-    await expect.element(page.getByText("This takes about a minute.")).toBeVisible();
+    await expect.element(page.getByRole("status", { name: message })).toBeVisible();
+    await expect
+      .element(page.getByText("This takes about a minute.", { exact: false }))
+      .toBeVisible();
     await expect.element(page.getByRole("heading", { name: "Director" })).toBeVisible();
     await expect
-      .element(page.getByRole("link", { name: "Back" }))
-      .toHaveAttribute("href", `/shorts/${videoId}`);
+      .element(page.getByRole("link", { name: "Back to the library" }))
+      .toHaveAttribute("href", "/library");
   });
 
   it.each([
@@ -121,36 +204,48 @@ describe("Director's page before the plan is ready", () => {
       "Director couldn't watch this short. It may be private, age-restricted or removed.",
     ],
     [null, "Director couldn't work out how to film this short. Try again."],
-  ])("says why the plan failed (%s), and asks again", async (error, message) => {
+  ])("says why indexing failed (%s), and leads back to the library", async (error, message) => {
     const videoId = newVideoId();
-    await commands.fakeDirector(videoId, { plan: { status: "failed", error, plan: null } });
-    await commands.failRequests("/rpc/director/index", { status: 502 });
+    await commands.fakeDirector(videoId, {
+      plan: { status: "failed", stage: "failed", error, plan: null },
+    });
     const page = await showPlan(videoId);
     await expect.element(page.getByRole("alert")).toHaveTextContent(message);
-    await userEvent.click(page.getByRole("button", { name: "Try again" }));
-    await expect.poll(() => commands.failedRequests("/rpc/director/index")).toBe(1);
-    await expect.element(page.getByRole("alert")).not.toHaveTextContent(message);
+    await expect
+      .element(
+        page.getByText("A Short that couldn't be indexed doesn't use up your own.", {
+          exact: false,
+        }),
+      )
+      .toBeVisible();
+    await expect
+      .element(page.getByRole("link", { name: "Go to the library" }))
+      .toHaveAttribute("href", "/library");
+    // Indexing again is the library's to offer: nothing here asks for it.
+    expect(page.getByRole("button", { name: "Try again" }).query()).toBeNull();
+    expect(await commands.answeredRequests("/rpc/director/index")).toBe(0);
   });
 
-  it("doesn't index a short just because it was opened, only when the member asks", async () => {
+  it("never indexes a short just because it was opened, and points to the library", async () => {
     const videoId = newVideoId();
-    // The API checks the short on YouTube first, which isn't reachable here: as if the
-    // gateway couldn't reach the API.
-    await commands.failRequests("/rpc/director/index", { status: 502 });
     const page = await showPlan(videoId);
     await expect
       .element(page.getByRole("alert"))
       .toHaveTextContent("This Short isn't in your library yet.");
-    expect(await commands.failedRequests("/rpc/director/index")).toBe(0);
-    await userEvent.click(page.getByRole("button", { name: "Try again" }));
-    await expect.poll(() => commands.failedRequests("/rpc/director/index")).toBe(1);
+    await expect
+      .element(page.getByRole("link", { name: "Go to the library" }))
+      .toHaveAttribute("href", "/library");
+    expect(await commands.answeredRequests("/rpc/director/index")).toBe(0);
   });
 
-  it("says when the plan can't be read", async () => {
+  it("says when the plan can't be read, and reads it again without indexing", async () => {
     const videoId = newVideoId();
     await commands.failRequests("/rpc/director/plan", { status: 502 });
     const page = await showPlan(videoId);
     await expect.element(page.getByRole("alert")).toBeVisible();
-    expect(await commands.failedRequests("/rpc/director/index")).toBe(0);
+    const tried = await commands.failedRequests("/rpc/director/plan");
+    await userEvent.click(page.getByRole("button", { name: "Try again" }));
+    await expect.poll(() => commands.failedRequests("/rpc/director/plan")).toBeGreaterThan(tried);
+    expect(await commands.answeredRequests("/rpc/director/index")).toBe(0);
   });
 });

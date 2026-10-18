@@ -162,8 +162,8 @@ export async function signIn(page: Page, user: User, options: { expectUrl?: RegE
 }
 
 export async function signOut(page: Page, user: User) {
-  // The library and the other full-screen pages bring their own chrome; the account menu
-  // is in the site header, which settings shows.
+  // Director's own pages (a short's, the camera) bring their own chrome; the account menu
+  // is in the site header, which settings always shows.
   await page.goto("/settings");
   await page.getByRole("button", { name: user.name }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();

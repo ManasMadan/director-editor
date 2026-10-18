@@ -1,8 +1,6 @@
-import { pageTitle } from "@/lib/metadata";
-import { ShortsPlayerPage } from "@/modules/shorts";
+import { permanentRedirect } from "next/navigation";
 
-export const generateMetadata = pageTitle("shorts.title");
-
+// The Shorts feed is gone; a link to one of its shorts opens that short in Director.
 export default async function Page({ params }: PageProps<"/shorts/[videoId]">) {
-  return <ShortsPlayerPage videoId={(await params).videoId} />;
+  permanentRedirect(`/director/${(await params).videoId}`);
 }

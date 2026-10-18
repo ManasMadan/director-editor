@@ -1,7 +1,7 @@
 "use client";
 
 import { required } from "@repo/contracts/objects";
-import { Spinner } from "@repo/ui/components/spinner";
+import { GeminiLoader } from "@repo/ui/components/gemini-loader";
 import { cn } from "@repo/ui/lib/utils";
 import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -140,7 +140,7 @@ function ClipBody({ clip, state }: { clip: Clip; state: MediaState | undefined }
   if (clip.state === "reviewing" || state === "loading" || state === undefined) {
     return (
       <span className="flex size-full items-center justify-center bg-studio-foreground/10">
-        <Spinner />
+        <GeminiLoader label={t("editor.loading")} size="sm" />
       </span>
     );
   }

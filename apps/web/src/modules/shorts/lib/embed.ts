@@ -47,5 +47,9 @@ export function sendCommand(frame: HTMLIFrameElement | null, command: PlayerComm
   );
 }
 
-/** The link to a short on YouTube itself (to share, or to comment there). */
-export const shortUrl = (videoId: string) => `https://www.youtube.com/shorts/${videoId}`;
+/**
+ * The short's picture, from YouTube's image host (in the CSP's img-src as https:). Every
+ * video has this one; for a portrait short it's letterboxed, so it's shown cropped to the
+ * middle of the frame.
+ */
+export const thumbnailUrl = (videoId: string) => `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;

@@ -11,16 +11,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@repo/ui/components/dropdown-menu";
+import { cn } from "@repo/ui/lib/utils";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { authClient } from "@/lib/auth-client";
-import { HOME_PATH } from "@/lib/routes";
 
 interface UserMenuProps {
+  className?: string;
   user: { name: string; email: string; image?: string | null | undefined };
 }
 
-export function UserMenu({ user }: UserMenuProps) {
+export function UserMenu({ user, className }: UserMenuProps) {
   const t = useTranslations("common");
   const router = useRouter();
 
@@ -36,7 +37,12 @@ export function UserMenu({ user }: UserMenuProps) {
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button variant="ghost" size="icon" className="rounded-full" aria-label={user.name} />
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn("rounded-full", className)}
+            aria-label={user.name}
+          />
         }
       >
         <Avatar className="size-8">
@@ -53,7 +59,6 @@ export function UserMenu({ user }: UserMenuProps) {
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => router.push(HOME_PATH)}>{t("library")}</DropdownMenuItem>
         <DropdownMenuItem onClick={() => router.push("/settings")}>
           {t("settings")}
         </DropdownMenuItem>

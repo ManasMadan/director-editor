@@ -1,6 +1,6 @@
 "use client";
 
-import { Spinner } from "@repo/ui/components/spinner";
+import { GeminiLoader } from "@repo/ui/components/gemini-loader";
 import { cn } from "@repo/ui/lib/utils";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
@@ -69,7 +69,7 @@ function Placeholder({ clip, state }: { clip: Clip; state: MediaState | undefine
   if (clip.state === "cut" && state !== "failed") {
     return (
       <div className="absolute inset-0 flex items-center justify-center">
-        <Spinner />
+        <GeminiLoader label={t("editor.loading")} />
       </div>
     );
   }

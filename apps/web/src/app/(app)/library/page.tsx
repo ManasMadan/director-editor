@@ -1,6 +1,6 @@
 import { pageTitle } from "@/lib/metadata";
-import { HomePage } from "@/modules/shorts";
+import { LibraryPage } from "@/modules/director";
 
 export const generateMetadata = pageTitle("common.library");
 
-export default HomePage;
+export default LibraryPage;

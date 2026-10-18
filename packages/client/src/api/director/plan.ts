@@ -2,13 +2,10 @@
  * A short's Director plan. While Gemini works it out the plan changes on its own: the
  * `director.changed` realtime nudge refetches it, and a slow poll covers a missed one.
  */
-import type { DirectorPlan } from "@repo/contracts/api";
 import { SECOND_MS } from "@repo/contracts/time";
 import { useQuery } from "@tanstack/react-query";
 import { useApi } from "../../provider";
-
-const planInProgress = (plan: DirectorPlan | undefined) =>
-  plan?.status === "pending" || plan?.status === "analyzing";
+import { planInProgress } from "./progress";
 
 export function useDirectorPlanQuery(videoId: string) {
   const { api } = useApi();

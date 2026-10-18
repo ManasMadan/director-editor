@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { embedUrl, sendCommand, shortUrl } from "./embed";
+import { embedUrl, sendCommand, thumbnailUrl } from "./embed";
 
 describe("YouTube's embed", () => {
   it("plays inline from YouTube's privacy-enhanced domain, muted when asked", () => {
@@ -28,8 +28,8 @@ describe("YouTube's embed", () => {
     });
   });
 
-  it("links to the short on YouTube", () => {
-    expect(shortUrl("jNQXAC9IVRw")).toBe("https://www.youtube.com/shorts/jNQXAC9IVRw");
+  it("shows the short's picture from YouTube's image host", () => {
+    expect(thumbnailUrl("jNQXAC9IVRw")).toBe("https://i.ytimg.com/vi/jNQXAC9IVRw/hqdefault.jpg");
   });
 
   it("sends the player its commands, to YouTube's origin only", () => {

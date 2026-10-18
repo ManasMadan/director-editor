@@ -13,9 +13,17 @@ describe("the site chrome", () => {
     const page = await renderPage(chrome, { url: "/settings" });
     await expect.element(page.getByText("site header")).toBeVisible();
     await expect.element(page.getByRole("main")).toHaveTextContent("page content");
+    expect(page.getByRole("main").element().className).not.toContain("bg-studio");
   });
 
-  it.each(["/library", "/shorts/kJQP7kiw5Fk", "/director/kJQP7kiw5Fk"])(
+  it("puts the library, header and all, on Director's dark stage", async () => {
+    const page = await renderPage(chrome, { url: "/library" });
+    await expect.element(page.getByText("site header")).toBeVisible();
+    await expect.element(page.getByRole("main")).toHaveTextContent("page content");
+    expect(page.getByRole("main").element().parentElement?.className).toContain("bg-studio");
+  });
+
+  it.each(["/director/kJQP7kiw5Fk", "/director/kJQP7kiw5Fk/shoot"])(
     "leaves %s the whole screen",
     async (url) => {
       const page = await renderPage(chrome, { url });

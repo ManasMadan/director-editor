@@ -113,9 +113,13 @@
       "linter": { "rules": { "complexity": { "noExcessiveLinesPerFunction": "off" } } }
     },
     {
-      // Playwright's conditional skip, for the two browser tests that need real
-      // credentials: both are in docs/testing.md's "Skipped tests" table.
-      "includes": ["apps/web/e2e/captcha.spec.ts", "apps/web/e2e/google.spec.ts"],
+      // Playwright's conditional skip, for the browser tests that need real credentials
+      // or real Google services: all are in docs/testing.md's "Skipped tests" table.
+      "includes": [
+        "apps/web/e2e/captcha.spec.ts",
+        "apps/web/e2e/google.spec.ts",
+        "apps/web/e2e/library.spec.ts"
+      ],
       "linter": { "rules": { "suspicious": { "noSkippedTests": "off" } } }
     },
     {

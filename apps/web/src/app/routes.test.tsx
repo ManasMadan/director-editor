@@ -13,20 +13,17 @@ import {
   TwoFactorPage,
   VerifyEmailPage,
 } from "@/modules/auth";
-import { DirectorPage, ReviewPage, ShootPage } from "@/modules/director";
+import { DirectorPage, LibraryPage, ReviewPage, ShootPage } from "@/modules/director";
 import { ProfileSettingsPage, SecuritySettingsPage, SettingsLayout } from "@/modules/settings";
-import { HomePage, SavedPage, ShortsPlayerPage } from "@/modules/shorts";
 import { renderHtml } from "../../test/next-server";
 import * as director from "./(app)/director/[videoId]/page";
 import * as review from "./(app)/director/[videoId]/review/page";
 import * as shoot from "./(app)/director/[videoId]/shoot/page";
 import * as library from "./(app)/library/page";
-import * as saved from "./(app)/saved/page";
 import SettingsRouteLayout from "./(app)/settings/layout";
 import * as profile from "./(app)/settings/page";
 import * as security from "./(app)/settings/security/page";
 import * as short from "./(app)/shorts/[videoId]/page";
-import * as shorts from "./(app)/shorts/page";
 import * as forgotPassword from "./(auth)/forgot-password/page";
 import AuthLayout from "./(auth)/layout";
 import * as resetPassword from "./(auth)/reset-password/page";
@@ -43,8 +40,7 @@ interface Route {
 }
 
 const pages: [string, Route, string, unknown][] = [
-  ["/library", library, en.common.library, HomePage],
-  ["/saved", saved, en.shorts.savedTitle, SavedPage],
+  ["/library", library, en.common.library, LibraryPage],
   ["/settings", profile, en.settings.profile.title, ProfileSettingsPage],
   ["/settings/security", security, en.settings.security.title, SecuritySettingsPage],
   ["/forgot-password", forgotPassword, en.auth.forgotTitle, ForgotPasswordPage],
@@ -70,13 +66,13 @@ describe("route files", () => {
     expect(await route.generateMetadata()).toEqual({ title });
   });
 
-  it("plays the Shorts feed, from the short in the address when there is one", async () => {
-    expect(await rendered(shorts.default)).toEqual(<ShortsPlayerPage />);
-    expect(
-      await rendered(short.default, { params: Promise.resolve({ videoId: "kJQP7kiw5Fk" }) }),
-    ).toEqual(<ShortsPlayerPage videoId="kJQP7kiw5Fk" />);
-    expect(await shorts.generateMetadata()).toEqual({ title: en.shorts.title });
-    expect(await short.generateMetadata()).toEqual({ title: en.shorts.title });
+  it("sends an old link to a short on to its page in Director, for good", async () => {
+    await expect(
+      short.default({
+        params: Promise.resolve({ videoId: "kJQP7kiw5Fk" }),
+        searchParams: Promise.resolve({}),
+      }),
+    ).rejects.toMatchObject({ digest: "NEXT_REDIRECT;replace;/director/kJQP7kiw5Fk;308;" });
   });
 
   it("serves Director's pages for a short, with the shot and audio from the query", async () => {

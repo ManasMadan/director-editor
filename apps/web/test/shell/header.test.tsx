@@ -12,6 +12,8 @@ describe("the site header", () => {
     await expect
       .element(page.getByRole("link", { name: "Sign in" }))
       .toHaveAttribute("href", "/sign-in");
+    // Nowhere to go before signing in.
+    expect(page.getByRole("navigation", { name: "Main" }).query()).toBeNull();
   });
 
   it("holds a place for the account while the session loads", async () => {
@@ -39,15 +41,26 @@ describe("the site header", () => {
     await expect.element(page.getByText(user.email)).toBeVisible();
   });
 
-  it.each([
-    ["Library", "/library"],
-    ["Settings", "/settings"],
-  ])("goes to %s", async (item, path) => {
+  it("leads to the library, marked as the page a member is on", async () => {
+    await signUp();
+    const page = await renderPage(<SiteHeader />, { url: "/settings" });
+    const nav = page.getByRole("navigation", { name: "Main" });
+    const library = nav.getByRole("link", { name: "Library" });
+    await expect.element(library).not.toHaveAttribute("aria-current");
+    await userEvent.click(library);
+    await expect.poll(currentUrl).toBe("/library");
+    const there = await renderPage(<SiteHeader />, { url: "/library" });
+    await expect
+      .element(there.getByRole("link", { name: "Library" }))
+      .toHaveAttribute("aria-current", "page");
+  });
+
+  it("goes to settings from the account's menu", async () => {
     const user = await signUp();
-    const page = await renderPage(<SiteHeader />, { url: "/saved" });
+    const page = await renderPage(<SiteHeader />, { url: "/library" });
     await userEvent.click(page.getByRole("button", { name: user.name }));
-    await userEvent.click(page.getByRole("menuitem", { name: item }));
-    await expect.poll(currentUrl).toBe(path);
+    await userEvent.click(page.getByRole("menuitem", { name: "Settings" }));
+    await expect.poll(currentUrl).toBe("/settings");
   });
 
   it("signs out with a full page load", async () => {

@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from "@repo/ui/components/card";
 import { Field, FieldGroup, FieldLabel } from "@repo/ui/components/field";
+import { GeminiShimmer } from "@repo/ui/components/gemini-loader";
 import {
   Select,
   SelectContent,
@@ -20,7 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@repo/ui/components/select";
-import { Skeleton } from "@repo/ui/components/skeleton";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -57,7 +57,7 @@ export function ProfileCard() {
             }}
           />
         ) : (
-          <Skeleton className="h-48" />
+          <GeminiShimmer className="h-48" />
         )}
       </CardContent>
     </Card>

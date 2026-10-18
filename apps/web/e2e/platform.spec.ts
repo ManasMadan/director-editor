@@ -31,7 +31,7 @@ test("no page logs errors or violates the CSP", async ({ page }) => {
     await page.goto(path);
   }
   await signUp(page);
-  for (const path of ["/library", "/saved", "/settings", "/settings/security"]) {
+  for (const path of ["/library", "/settings", "/settings/security"]) {
     await page.goto(path);
     await settled(page);
   }
@@ -114,7 +114,7 @@ test.describe("accessibility (WCAG 2.2 AA)", () => {
 
   test("signed-in pages", async ({ page }) => {
     await signUp(page);
-    for (const path of ["/library", "/saved", "/settings", "/settings/security"]) {
+    for (const path of ["/library", "/settings", "/settings/security"]) {
       await page.goto(path);
       await settled(page);
       await expectAccessible(page);

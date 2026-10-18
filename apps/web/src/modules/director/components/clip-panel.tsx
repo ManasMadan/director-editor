@@ -2,7 +2,7 @@
 
 import { useApiErrorMessage } from "@repo/client";
 import type { DirectorTake } from "@repo/contracts/api";
-import { Spinner } from "@repo/ui/components/spinner";
+import { GeminiLoader } from "@repo/ui/components/gemini-loader";
 import { Camera, Video } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
@@ -14,10 +14,10 @@ function Review({ take }: { take: DirectorTake }) {
   const errorMessage = useApiErrorMessage();
   if (take.status === "pending" || take.status === "reviewing") {
     return (
-      <p className="flex items-center gap-2 text-sm text-studio-foreground/70">
-        <Spinner />
-        {t("reviewing")}
-      </p>
+      <div className="flex items-center gap-2 text-sm text-studio-foreground/70">
+        <GeminiLoader label={t("reviewing")} size="sm" />
+        <span aria-hidden>{t("reviewing")}</span>
+      </div>
     );
   }
   if (take.status === "failed") {
