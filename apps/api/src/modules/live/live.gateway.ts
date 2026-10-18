@@ -322,29 +322,12 @@ export function mountLive(fastify: FastifyInstance, options: LiveOptions) {
     // What the call is about, for its activity lines, once its query is known to be valid.
     let target: ActivityTarget = {};
     try {
-      const upstream = options.upstream;
-      if (!upstream) {
-        throw new AppError("FEATURE_DISABLED", { params: { feature: "live" } });
-      }
-      const query = querySchema.safeParse(Object.fromEntries(url.searchParams));
-      if (!query.success) {
-        throw new AppError("VALIDATION_FAILED");
-      }
-      target = callTarget(query.data);
-      const caller = await options.caller(headers);
-      updateContext({ orgId: caller.orgId });
-      if (options.liveOff(caller.userId)) {
-        throw new AppError("FEATURE_DISABLED", { params: { feature: "live" } });
-      }
-      // The newest call wins: the member came back (a phone on another network, another
-      // tab) before the old socket was seen to close. The old one hears why it ended.
-      const previous = calling.get(caller.userId);
-      if (previous) {
-        closeWithError(previous, "CONFLICT");
-      }
-      calling.set(caller.userId, client);
+      const { upstream, query } = callAsked(options, url);
+      target = callTarget(query);
+      const caller = await signedIn(options, headers);
+      claim(calling, caller.userId, client);
       userId = caller.userId;
-      const plan = readyPlan(await options.plan(caller, query.data.videoId), query.data.shot);
+      const plan = readyPlan(await options.plan(caller, query.videoId), query.shot);
       // Only a call that can really start is charged.
       await options.spendCallLimit(caller);
       if (client.readyState !== WebSocket.OPEN) {
@@ -357,10 +340,10 @@ export function mountLive(fastify: FastifyInstance, options: LiveOptions) {
         upstream,
         {
           plan,
-          shot: query.data.shot,
-          resumed: query.data.resume === "1",
+          shot: query.shot,
+          resumed: query.resume === "1",
           caller,
-          videoId: query.data.videoId,
+          videoId: query.videoId,
         },
         options,
         early.take(),
@@ -387,6 +370,41 @@ export function mountLive(fastify: FastifyInstance, options: LiveOptions) {
       client.terminate();
     }
   });
+}
+
+/** What the call asks for: Director live on, and a valid query, or why it can't be had. */
+function callAsked(options: Pick<LiveOptions, "upstream">, url: URL) {
+  const upstream = options.upstream;
+  if (!upstream) {
+    throw new AppError("FEATURE_DISABLED", { params: { feature: "live" } });
+  }
+  const query = querySchema.safeParse(Object.fromEntries(url.searchParams));
+  if (!query.success) {
+    throw new AppError("VALIDATION_FAILED");
+  }
+  return { upstream, query: query.data };
+}
+
+/** Who is calling, as `inOrg` resolves it, and that Live isn't off for them. */
+async function signedIn(options: Pick<LiveOptions, "caller" | "liveOff">, headers: Headers) {
+  const caller = await options.caller(headers);
+  updateContext({ orgId: caller.orgId });
+  if (options.liveOff(caller.userId)) {
+    throw new AppError("FEATURE_DISABLED", { params: { feature: "live" } });
+  }
+  return caller;
+}
+
+/**
+ * The newest call wins: the member came back (a phone on another network, another tab)
+ * before the old socket was seen to close. The old one hears why it ended.
+ */
+function claim(calling: Map<UserId, WebSocket>, userId: UserId, client: WebSocket) {
+  const previous = calling.get(userId);
+  if (previous) {
+    closeWithError(previous, "CONFLICT");
+  }
+  calling.set(userId, client);
 }
 
 /**
