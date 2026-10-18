@@ -9,7 +9,7 @@ import { timecode } from "../lib/track";
 
 /** Frosted glass on the dark stage: the shoot screen's one material. */
 export const GLASS =
-  "bg-studio/55 backdrop-blur-xl backdrop-saturate-150 ring-1 ring-studio-foreground/12";
+  "bg-studio/72 backdrop-blur-xl backdrop-saturate-150 ring-1 ring-studio-foreground/12";
 
 /** Story-style segments for the shots: done, this one, still to come. */
 export function ShotProgress({ index, count }: { index: number; count: number }) {

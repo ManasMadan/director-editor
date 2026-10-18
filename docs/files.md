@@ -90,9 +90,9 @@ from the metadata server have no private key to sign a URL with: `getSignedUrl` 
 back to the IAM Credentials API's `signBlob` instead. Pods reach the metadata server
 (169.254.169.254) through `allowMetadataServer: true` in the stack chart, since it's
 otherwise unreachable like the rest of `networkPolicy.privateRanges`. `web` gets
-`STORAGE_ORIGIN=https://storage.googleapis.com`, where GCS's signed URLs are: the CSP's
-`connect-src` already allows it for Director's pose model, but `media-src` (takes playing
-from storage) needs it too. Signed uploads bind Content-Type and Content-Length, as on
+`STORAGE_ORIGIN=https://storage.googleapis.com`, where GCS's signed URLs are: the CSP
+adds it to `connect-src` (uploads) and `media-src` (takes playing from storage). Signed
+uploads bind Content-Type and Content-Length, as on
 S3 (`X-Goog-SignedHeaders=content-length;content-type;host`).
 
 ## Locally

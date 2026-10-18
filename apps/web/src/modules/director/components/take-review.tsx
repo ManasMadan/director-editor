@@ -10,7 +10,10 @@ import { useObjectUrl } from "../hooks/use-object-url";
 import { webVtt } from "../lib/captions";
 import { GLASS } from "./shoot-parts";
 
-/** The take, played over and over with its sound, captioned with the shot's lines. */
+/**
+ * The take, played over and over with its sound. The shot's lines are there as captions to
+ * turn on; off by default, they'd sit under the buttons and aren't always what was said.
+ */
 function TakeLoop({ take, label, script }: { take: Blob; label: string; script: Shot["script"] }) {
   const lang = useLocale();
   const url = useObjectUrl(take);
@@ -34,7 +37,7 @@ function TakeLoop({ take, label, script }: { take: Blob; label: string; script: 
       onLoadedMetadata={(event) => start(event.currentTarget)}
       className="absolute inset-0 size-full bg-studio object-cover"
     >
-      <track kind="captions" src={captions ?? undefined} srcLang={lang} label={label} default />
+      <track kind="captions" src={captions ?? undefined} srcLang={lang} label={label} />
     </video>
   );
 }

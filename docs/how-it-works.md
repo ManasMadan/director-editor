@@ -1,7 +1,7 @@
 # How Director works
 
 What happens underneath each step a creator takes, from pasting a Short to publishing
-their own version. The screens themselves, Director Live's on-device guides, the data
+their own version. The screens themselves, the shoot screen, the data
 model and the demo account are in [director.md](director.md); the services and how a
 request flows through them in [architecture.md](architecture.md); every setting named
 here in [environment.md](environment.md).
@@ -162,99 +162,94 @@ element keeps the link it was first given, so reading the plan again doesn't res
 what's playing; when a link has expired on a page left open, the element takes the
 freshest link the page has, or the page reads the plan once more for new ones.
 
-## The live call
+## Director live
 
-On the shoot screen, "Call Director" starts a voice-and-video call with Gemini Live, the
-native-audio Live API on Vertex AI (`LIVE_MODEL`). The API relays it, because the Live
-API on Vertex takes OAuth credentials, not an API key, and those stay on the server.
+On the shoot screen, the "Start shooting" tap brings Director in: a voice-and-video
+conversation with Gemini Live, the native-audio Live API on Vertex AI (`LIVE_MODEL`), that
+lasts the whole shoot. The API relays it, because the Live API on Vertex takes OAuth
+credentials, not an API key, and those stay on the server. It's on when the API has
+`GOOGLE_CLOUD_PROJECT` set, which `system.info` reports as the `live` feature; when it's
+off, the shoot screen says Director can't join and the shutter still works.
 
 ### The relay
 
 The browser opens a WebSocket to `/api/live?videoId=…&shot=n` on the site's own origin,
-with its session cookie (`apps/web/src/modules/director/lib/call-session.ts`). The API
+with its session cookie (`apps/web/src/modules/director/lib/live-session.ts`). The API
 (`apps/api/src/modules/live/live.gateway.ts`) checks the origin, the session and its
 workspace exactly as any procedure does, that the plan is ready and has that shot, that
-the caller has no other call open, and spends one of their 20 calls an hour. It then
-opens the Live API's WebSocket in the Vertex AI region (`LIVE_LOCATION`) with an access
-token for the VM's service account from the metadata server
-(`apps/api/src/modules/live/google-auth.ts`), and relays both ways
-(`apps/api/src/modules/live/live.relay.ts`). Every message from the browser is validated
-against the schema in `packages/contracts/src/live.ts`, and anything from Gemini the
-relay can't read is dropped.
+the caller doesn't have Director open elsewhere, and spends one of their 20 an hour. It
+then opens the Live API's WebSocket in the Vertex AI region (`LIVE_LOCATION`, or
+`LIVE_API_URL` for the tests' stand-in) with an access token for the VM's service
+account from the metadata server (`apps/api/src/modules/live/google-auth.ts`), and
+relays both ways (`apps/api/src/modules/live/live.relay.ts`). Every message from the
+browser is validated against the schema in `packages/contracts/src/live.ts`, and
+anything from Gemini the relay can't read is dropped.
 
 ### What it tells Gemini
 
-The first message (`apps/api/src/modules/live/live.setup.ts`) sets up the call:
+The first message (`apps/api/src/modules/live/live.setup.ts`) sets it up:
 
 - answer in audio, in the prebuilt voice Sulafat;
-- the persona: a warm director on a video call with someone filming for the first time,
-  one instruction at a time, looking at the camera before talking about framing or
-  light, praise before a fix, and silence while a take records, since the take records
-  the filmer's own voice;
-- the shot, described from the plan (what it is for, where, the framing, the phone's
-  angle, the pose, the steps and the lines), framed as a description of what to film,
-  never as instructions;
-- the five tools, below;
-- voice activity detection that lets the filmer interrupt (barge-in);
+- the persona: a friend helping someone shoot a reel, casual, warm and brief, who
+  answers every turn, never starts or stops a take (the member does, with the shutter),
+  stays silent while a take records, speaks first once it ends, and takes the plan as a
+  starting point, never correcting a line said differently;
+- the shot, described from the plan, framed as a description of what to film, never as
+  instructions;
+- the two tools, below;
+- voice activity detection that lets the member interrupt (barge-in);
 - transcripts of both sides;
-- a sliding context window: audio with video fills the context in about two minutes,
-  and sliding it keeps a ten-minute call going.
+- a sliding context window, and session resumption handles (below).
 
-Then a first turn asks Director to say hello and give the first instruction, so it
-speaks first instead of waiting in silence.
+Then a first turn asks Director to say hi and ask one question, so it speaks first.
+What happens on screen reaches Gemini as short notes in the relay's own words, in square
+brackets, so Gemini can tell them from the member: a move to another shot (with the new
+shot's brief), a flip of the camera ("look at the new view and say what you see"), and a
+take starting (stay silent), ending (speak first) or thrown away.
 
 ### Sound, pictures and words
 
 | Direction | What | Format |
 |---|---|---|
 | browser to Gemini | the microphone | 16 kHz, 16-bit little-endian mono PCM, in chunks of about 100 ms, captured by an AudioWorklet off the main thread |
-| browser to Gemini | the camera | a JPEG 640 pixels wide, about once a second (the relay drops frames sent closer together) |
-| browser to Gemini | a move to another shot | the new shot's brief, as a turn in the same conversation |
-| Gemini to browser | Director's voice | 24 kHz, 16-bit little-endian mono PCM, queued back to back so it plays as one stream, and cut off the moment the filmer talks over it |
-| Gemini to browser | both sides' words | transcripts, shown as live captions |
-| Gemini to browser | tool calls | carried out by the camera screen |
+| browser to Gemini | the camera | a JPEG 640 pixels wide, about once a second (the relay drops frames sent closer together); after a flip, the new camera's first picture goes before the note |
+| browser to Gemini | what the member types | a turn of their own |
+| Gemini to browser | Director's voice | 24 kHz, 16-bit little-endian mono PCM, queued back to back so it plays as one stream, cut off the moment the member talks over it, and dropped while a take records |
+| Gemini to browser | both sides' words | transcripts, shown as captions; each of Director's turns starts a new line |
+| Gemini to browser | tool calls | carried out by the shoot screen, and answered |
 
 The relay also bounds what each side may send: audio at most twice real time over a few
-seconds, a few typed turns and shot moves at a time, and about half a minute of audio
-waiting on Gemini. Past those, or at ten minutes, the call ends and the browser hears why.
+seconds, six typed turns and a plan's worth of shot moves in ten seconds, ten notes in
+ten seconds (more are dropped), and about half a minute of audio waiting on Gemini. Past
+those, or after half an hour, Director goes and the browser hears why.
 
 ### Tools
 
-Gemini can work the camera app with five tools, each with a short reason:
+Gemini has two tools, neither of which can start or stop a take:
 
-| Tool | What the camera screen does |
+| Tool | What the shoot screen does |
 |---|---|
-| `start_recording` | starts the take (the same as the filmer saying "action") |
-| `stop_recording` | stops it ("cut") |
-| `retake` | throws the take away and sets up the shot again |
-| `next_shot` | keeps the take on screen and moves on, or skips ahead before a take |
-| `previous_shot` | goes back a shot, only when the filmer asks |
+| `go_to_shot` (`shot`, from 1) | shows that shot; the camera and Director carry on |
+| `switch_camera` (`to`: front or back) | flips the camera |
 
-The relay passes each call on to the browser and tells Gemini it was done
-(`relayToolCalls`); the shoot screen runs it exactly as it would the filmer's own spoken
-request (`useCallTools` in `apps/web/src/modules/director/pages/shoot.tsx`).
+The relay checks the arguments (a shot the plan has) and hands each call to the browser
+with an id. The browser answers with what really happened: `done`, or refused because a
+take is under way (counting down, recording, being watched back or sent) or the camera
+is off. Only then does Gemini hear the result; an answer that doesn't come within five
+seconds is reported as unknown.
 
-### One call, the whole Short
+### One conversation, the whole shoot
 
-The call is held above the shot's own screen, so it lasts from the first shot to the
-last: when the filmer moves on, the browser sends a `shot` message and Gemini gets the
-new shot's brief in the same conversation, remembering what was said. A call that can't
-start (no microphone, no allowance left for the hour, Gemini unavailable) or drops says
-why and hands the shot back to Director Live, with the take on screen and every take
-already sent untouched. The first time a call reaches Gemini, the API records a
-`call_started` event in BigQuery.
-
-## Director without a call
-
-Without a call, Director Live directs the shot itself: Gemini 3.8 Flash
-(`DIRECTOR_MODEL`) checks a camera frame every few seconds, or at once when the camera
-looks somewhere new, and says where to go (`check_scene`); on-device models track the
-pose and find props; and one voice says the most useful cue at a time. That voice is
-Gemini's text-to-speech (`TTS_MODEL`, `apps/ai/app/speech.py`): the API keeps each line it
-gets back in Cloud Storage, named by a hash of the voice and the words, so a line is
-spoken once for everyone and replayed from a signed link after that. When it fails or
-takes over two seconds, the browser's own speech synthesis says the line instead.
-[director.md](director.md#the-screens-appsweb) describes every guide.
+Gemini's connections last about ten minutes, and a shoot runs longer. The relay opens a
+fresh connection after nine minutes, or as soon as Gemini warns the current one is going
+away (`goAway`), and resumes the conversation there from the latest session resumption
+handle Gemini gave it; without one, it catches the new connection up with the last few
+lines said. The old connection is let go only once the new one is ready, so the member
+never notices, and the hourly allowance counts shoots, not these reconnections. In the
+browser, a dropped line is retried once, silently, after two seconds, picking the
+conversation up (`&resume=1`, no second hello); only if that fails too does the screen
+say why. The first time a shoot reaches Gemini, the API records a `call_started` event
+in BigQuery.
 
 ## Takes and the best take
 

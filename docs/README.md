@@ -10,7 +10,7 @@ for Claude Code.
 
 | Doc | What's in it |
 |---|---|
-| [how-it-works.md](how-it-works.md) | Director underneath: indexing a Short (prompt, schema, retries and fallback, repair, stages, the evaluation), the live call (relay, audio formats, tools), take reviews and the best take, the editor, publishing, analytics |
+| [how-it-works.md](how-it-works.md) | Director underneath: indexing a Short (prompt, schema, retries and fallback, repair, stages, the evaluation), Director live (relay, audio formats, tools, reconnecting), take reviews and the best take, the editor, publishing, analytics |
 | [architecture.md](architecture.md) | the deployables, production on Google Cloud, how a request flows, where each concern lives, the seams, a glossary |
 | [troubleshooting.md](troubleshooting.md) | what the doctor's messages mean, ports, Docker memory, ClamAV, tests that refuse to start |
 | [environment.md](environment.md) | every environment variable, which service reads it and what it switches on |
