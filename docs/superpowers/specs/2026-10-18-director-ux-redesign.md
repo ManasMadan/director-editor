@@ -1664,13 +1664,13 @@ seconds; walk out of frame and back. 5. Type "can you hear me?" and send. 6. Tap
 say "can you see me now?". 7. Tap the shutter, then tap it again during the 3-2-1; then
 start a take, let it run out by itself, watch it back, tap Go again; record one more and
 tap Keep it. 8. Ask Director "can we do shot 3 now?". 9. During a take, tap ✕. 10. Leave
-the shoot running and talking for twelve minutes, moving through shots. *Pass if:*
+the shoot running and talking for twelve minutes, moving through shots. 11. Start a take and swipe back (iPhone) or use the back gesture (Android); tap Stay; then do it again and tap Leave. *Pass if:*
 nothing records in steps 3 and 4; the camera opens on the selfie side; the only controls
 are flip, the shutter, the text box and ✕; Director answers the typed line; after the
 flip Director says something about the back camera's view; the cancelled countdown
 records nothing; Director is silent during takes and speaks first after each one; shot 3
 opens with no black flash and Director still talking; ✕ during a take asks before
-leaving; no "Director lost the connection" or "half an hour" notice by minute twelve.
+leaving, and so does back (Stay keeps the take, Leave goes to the template page); no "Director lost the connection" or "half an hour" notice by minute twelve.
 *Feel:* Director's first word within about 2.5 s of the second tap; answers within about
 a second; no canned-sounding lines.
 
