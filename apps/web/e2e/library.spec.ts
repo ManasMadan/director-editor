@@ -86,7 +86,10 @@ test("a second short of your own is refused, with the starters offered instead [
   request,
 }) => {
   const info = await (await request.post("/rpc/system/info", { data: { json: {} } })).json();
-  test.skip(!info.json.features.director, "Director is off: the API has no YouTube key or AI");
+  test.skip(
+    !info.json.features.director,
+    "Director is off: the API needs YOUTUBE_API_KEY, the AI service and uploads",
+  );
 
   await signUp(page);
   const session = await (await page.request.get("/api/auth/get-session")).json();
