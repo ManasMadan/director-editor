@@ -49,17 +49,43 @@ grafana:
     resources:
       requests: { cpu: 10m, memory: 64Mi }
       limits: { cpu: 100m, memory: 128Mi }
+    # Dashboards are ConfigMaps labelled grafana_dashboard: "1" in any namespace, so
+    # each chart can ship its own next to what it shows.
+    dashboards:
+      searchNamespace: ALL
   # From deploy/platform/secrets/<environment>/grafana.sops.yaml (keys admin-user and
-  # admin-password). Not public: kubectl -n observability port-forward
-  # svc/kube-prometheus-stack-grafana 3000:80.
+  # admin-password). Reached at grafana.<the cluster's zone>, behind the gateway's basic
+  # auth (deploy/platform/internal-tools), and still asks for this login.
   admin:
     existingSecret: grafana-admin
-  # Traces next to the metrics.
+  # Traces and logs next to the metrics, linked both ways: a log line's trace id opens
+  # the trace in Jaeger, and a trace's spans open the logs that mention its id. The
+  # services write the id as trace_id (and the activity log as traceId). `$$` is a
+  # literal `$`: Grafana expands environment variables in these files.
   additionalDataSources:
     - name: Jaeger
       type: jaeger
       uid: jaeger
       url: http://jaeger.observability.svc.cluster.local:16686
+      jsonData:
+        tracesToLogsV2:
+          datasourceUid: loki
+          spanStartTimeShift: -1h
+          spanEndTimeShift: 1h
+          customQuery: true
+          query: '{namespace=~".+"} |= "$${__trace.traceId}"'
+    - name: Loki
+      type: loki
+      uid: loki
+      url: http://loki.observability.svc.cluster.local:3100
+      jsonData:
+        maxLines: 1000
+        derivedFields:
+          - name: traceId
+            datasourceUid: jaeger
+            matcherRegex: '"(?:trace_id|traceId)":"([0-9a-f]{32})"'
+            url: "$${__value.raw}"
+            urlDisplayLabel: Trace in Jaeger
   persistence:
     enabled: true
     storageClassName: local-path

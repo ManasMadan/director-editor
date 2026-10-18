@@ -1,0 +1,6 @@
+# Ships every pod's output to Loki, one per node (deploy/platform/values/alloy.yaml).
+addon: alloy
+namespace: observability
+repoURL: https://grafana.github.io/helm-charts
+chart: alloy
+version: 1.13.1

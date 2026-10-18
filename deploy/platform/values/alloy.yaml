@@ -1,0 +1,109 @@
+# Ships every pod's output to Loki (values/loki.yaml): one Alloy per node (a DaemonSet),
+# each reading the logs of its own node's pods through the Kubernetes API, so it needs no
+# host path and runs unprivileged. Each stream is labelled with the pod's namespace,
+# name and container, and its app.kubernetes.io/component label (Loki label names can't
+# hold dots or slashes: app_kubernetes_io_component), falling back to its
+# app.kubernetes.io/name where it has no component (the application's services are told
+# apart by their name label: api, worker, ai, ...). The lines go as they are: the
+# services log JSON (pino, structlog), which queries parse with `| json`.
+alloy:
+  configMap:
+    content: |
+      discovery.kubernetes "pods" {
+        role = "pod"
+        selectors {
+          role  = "pod"
+          field = "spec.nodeName=" + sys.env("NODE_NAME")
+        }
+      }
+
+      discovery.relabel "pods" {
+        targets = discovery.kubernetes.pods.targets
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          target_label  = "app_kubernetes_io_component"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_component"]
+          regex         = "(.+)"
+          target_label  = "app_kubernetes_io_component"
+        }
+      }
+
+      loki.source.kubernetes "pods" {
+        targets    = discovery.relabel.pods.output
+        forward_to = [loki.write.default.receiver]
+      }
+
+      loki.write "default" {
+        endpoint {
+          url = "http://loki.observability.svc.cluster.local:3100/loki/api/v1/push"
+        }
+      }
+  # The node it runs on: it reads only that node's pods.
+  extraEnv:
+    - name: NODE_NAME
+      valueFrom:
+        fieldRef: { fieldPath: spec.nodeName }
+  # Where it keeps its read positions, on the pod's own scratch volume (the root is
+  # read-only).
+  storagePath: /var/lib/alloy
+  mounts:
+    extra:
+      - { name: data, mountPath: /var/lib/alloy }
+  # No usage reports to Grafana Labs.
+  enableReporting: false
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities: { drop: [ALL] }
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    seccompProfile: { type: RuntimeDefault }
+  resources:
+    requests: { cpu: 20m, memory: 96Mi }
+    limits: { cpu: 500m, memory: 384Mi }
+
+controller:
+  type: daemonset
+  volumes:
+    extra:
+      - { name: data, emptyDir: {} }
+
+global:
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    seccompProfile: { type: RuntimeDefault }
+
+configReloader:
+  resources:
+    requests: { cpu: 5m, memory: 16Mi }
+    limits: { cpu: 50m, memory: 64Mi }
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities: { drop: [ALL] }
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    seccompProfile: { type: RuntimeDefault }
+
+# The CRDs for Alloy's own operator-style components (PodLogs), which nothing here uses.
+crds:
+  create: false

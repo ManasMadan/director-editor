@@ -5,3 +5,11 @@ maxTraces: 20000
 resources:
   requests: { cpu: 50m, memory: 256Mi }
   limits: { cpu: "1", memory: 1Gi }
+
+# A "Logs in Grafana" link on each trace: Loki's lines that carry its id, in Grafana's
+# Explore. Grafana is at grafana.<directZone, or else domain> (the internal tools'
+# host, deploy/platform/internal-tools), which the observability ApplicationSet sets
+# from the cluster; grafanaUrl overrides it. With neither, no link.
+domain: ""
+directZone: ""
+grafanaUrl: ""

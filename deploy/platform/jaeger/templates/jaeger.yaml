@@ -1,9 +1,22 @@
 {{- /*
 The services send OTLP over HTTP to http://jaeger.<namespace>:4318 (the stack chart sets
-OTEL_EXPORTER_OTLP_ENDPOINT to it on clusters with observability). The UI isn't public:
-  kubectl -n observability port-forward svc/jaeger 16686   →   http://localhost:16686
+OTEL_EXPORTER_OTLP_ENDPOINT to it on clusters with observability). The UI is at
+jaeger.<the cluster's zone>, behind the gateway's basic auth (deploy/platform/internal-tools).
 */}}
 {{- $labels := dict "app.kubernetes.io/name" "jaeger" "app.kubernetes.io/instance" .Release.Name }}
+{{- /* Grafana's Explore on Loki, for the lines that carry a trace's id (#{traceID} is
+       Jaeger's placeholder, filled in per trace). */ -}}
+{{- $zone := .Values.directZone | default .Values.domain }}
+{{- $grafana := .Values.grafanaUrl | default (ternary (printf "https://grafana.%s" $zone) "" (ne $zone "")) }}
+{{- $ui := dict }}
+{{- if $grafana }}
+{{- $pane := dict "logs" (dict
+  "datasource" "loki"
+  "queries" (list (dict "refId" "A" "datasource" (dict "type" "loki" "uid" "loki") "expr" "{namespace=~\".+\"} |= \"TRACE_ID\""))
+  "range" (dict "from" "now-24h" "to" "now")) }}
+{{- $url := printf "%s/explore?schemaVersion=1&orgId=1&panes=%s" (trimSuffix "/" $grafana) (toJson $pane | urlquery | replace "TRACE_ID" "#{traceID}") }}
+{{- $ui = dict "linkPatterns" (list (dict "type" "traces" "url" $url "text" "Logs in Grafana")) }}
+{{- end }}
 {{- $config := dict
   "service" (dict
     "extensions" (list "jaeger_storage" "jaeger_query")
@@ -13,7 +26,7 @@ OTEL_EXPORTER_OTLP_ENDPOINT to it on clusters with observability). The UI isn't 
       "exporters" (list "jaeger_storage_exporter"))))
   "extensions" (dict
     "jaeger_storage" (dict "backends" (dict "memory" (dict "memory" (dict "max_traces" .Values.maxTraces))))
-    "jaeger_query" (dict "storage" (dict "traces" "memory")))
+    "jaeger_query" (merge (dict "storage" (dict "traces" "memory")) (ternary (dict "ui" (dict "config_file" "/etc/jaeger/ui.json")) dict (ne (len $ui) 0))))
   "receivers" (dict "otlp" (dict "protocols" (dict
     "grpc" (dict "endpoint" "0.0.0.0:4317")
     "http" (dict "endpoint" "0.0.0.0:4318"))))
@@ -30,6 +43,9 @@ metadata:
 data:
   config.yaml: |
     {{- toYaml $config | nindent 4 }}
+  {{- if $ui }}
+  ui.json: {{ toJson $ui | quote }}
+  {{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -66,7 +82,7 @@ spec:
       labels:
         {{- toYaml $labels | nindent 8 }}
       annotations:
-        checksum/config: {{ toYaml $config | sha256sum }}
+        checksum/config: {{ list $config $ui | toYaml | sha256sum }}
     spec:
       automountServiceAccountToken: false
       securityContext:
