@@ -296,6 +296,78 @@ describe("Director live on the shoot screen", () => {
     expect(currentUrl()).toBe(`/director/${videoId}/shoot?shot=1&audio=voice`);
   });
 
+  it("keeps the member on their shot right after Director changes it, until they ask to move", async () => {
+    canvasCamera();
+    const { videoId, socket } = await shoot();
+    const here = `/director/${videoId}/shoot?shot=0&audio=voice`;
+    socket.say({ type: "tool", id: "t1", call: { name: "adapt_shot", shot: 0, where: "Hall" } });
+    // "ok perfect" after the change isn't asking to move on: Director is told to ask.
+    socket.say({ type: "transcript", who: "you", text: "ok perfect" });
+    socket.say({ type: "tool", id: "t2", call: { name: "go_to_shot", shot: 1 } });
+    socket.say({ type: "tool", id: "t3", call: { name: "skip_shot", shot: 0 } });
+    await expect
+      .poll(() => socket.sentOf("tool_result"))
+      .toEqual([
+        { type: "tool_result", id: "t1", result: "done" },
+        { type: "tool_result", id: "t2", result: "not_asked" },
+        { type: "tool_result", id: "t3", result: "not_asked" },
+      ]);
+    expect(currentUrl()).toBe(here);
+    // Director asked; the member's answer lets it move them.
+    socket.say({ type: "transcript", who: "you", text: "yes please" });
+    socket.say({ type: "tool", id: "t4", call: { name: "go_to_shot", shot: 1 } });
+    await expect.poll(currentUrl).toBe(`/director/${videoId}/shoot?shot=1&audio=voice`);
+    expect(socket.sentOf("tool_result").at(-1)).toEqual({
+      type: "tool_result",
+      id: "t4",
+      result: "done",
+    });
+  });
+
+  it("never moves the member to a shot their version leaves out", async () => {
+    canvasCamera();
+    const { videoId, socket } = await shoot();
+    socket.say({ type: "tool", id: "t1", call: { name: "skip_shot", shot: 1 } });
+    socket.say({ type: "tool", id: "t2", call: { name: "go_to_shot", shot: 1 } });
+    await expect
+      .poll(() => socket.sentOf("tool_result"))
+      .toEqual([
+        { type: "tool_result", id: "t1", result: "done" },
+        { type: "tool_result", id: "t2", result: "not_filmed" },
+      ]);
+    expect(currentUrl()).toBe(`/director/${videoId}/shoot?shot=0&audio=voice`);
+  });
+
+  it("says Director is re-planning while it waits, since it can't speak meanwhile", async () => {
+    canvasCamera();
+    const { page, socket } = await shoot();
+    // However quickly the re-plan comes back, the line was up while it ran.
+    let shown = false;
+    const watch = new MutationObserver(() => {
+      shown ||= document.body.textContent?.includes("re-planning your shots") === true;
+    });
+    watch.observe(document.body, { childList: true, subtree: true, characterData: true });
+    socket.say({ type: "tool", id: "t1", call: { name: "replan", instruction: "one angle" } });
+    await expect.poll(() => socket.sentOf("tool_result"), { timeout: 10_000 }).toHaveLength(1);
+    watch.disconnect();
+    expect(shown).toBe(true);
+    await expect
+      .element(page.getByText("Director's re-planning your shots"))
+      .not.toBeInTheDocument();
+  });
+
+  it("never captions the words Director didn't get to say before the member cut in", async () => {
+    canvasCamera();
+    const { page, socket } = await shoot();
+    socket.say({ type: "audio", pcm16: voice(3) });
+    socket.say({ type: "transcript", who: "director", text: "Hold it " });
+    // These words are seconds into the voice: the member cuts in first.
+    socket.say({ type: "transcript", who: "director", text: "right there and keep going" });
+    socket.say({ type: "interrupted" });
+    await expect.poll(captionTexts).toEqual(["Hold it"]);
+    await expect.element(page.getByText(/keep going/)).not.toBeInTheDocument();
+  });
+
   it("says when the camera's off and can't be switched", async () => {
     const camera = canvasCamera();
     const { socket, page } = await shoot();
@@ -553,8 +625,11 @@ describe("Director's slower line", () => {
     expect(FakeSocket.last.url).toContain("resume=1");
     FakeSocket.last.open();
     await expect
-      .poll(() => FakeSocket.last.sentOf("context"))
-      .toEqual([{ type: "context", adaptations: [{ shot: 0, where: "Inside, by a window" }] }]);
+      .poll(() => FakeSocket.last.sentOf("context").at(-1))
+      .toEqual({
+        type: "context",
+        version: { ...EMPTY_VERSION, shots: [{ shot: 0, where: "Inside, by a window" }] },
+      });
     expect(page.getByText("Slower line").query()).toBeNull();
     await expect.element(page.getByText("Inside, by a window")).toBeVisible();
   });

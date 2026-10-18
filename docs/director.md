@@ -93,10 +93,20 @@ on a laptop), with a top band (the shots, Director, the way out) and a bottom ba
   through the API's relay ([how-it-works.md](how-it-works.md)). The microphone and a
   frame a second go up; Director's voice comes back, and both sides are captioned
   (`components/director-captions.tsx`), so the shoot can be followed with the sound off.
+  The captions keep their own store (`lib/caption-store.ts`), so a transcript chunk
+  re-renders only them, and Director's words show as its queued voice reaches them
+  (`lib/voice-clock.ts`, an even speaking pace from the turn's first sound): words it
+  never got to say before the member cut in never show, and its line ends when its voice
+  does. Gemini's transcript can still trail the voice at a turn's start; how far shows
+  in the relay's "live turn" log (`captionLagMs`) and on the phone in
+  `directorLiveTimings()` (`lib/live-debug.ts`, from the remote inspector's console).
   The captions show the last exchange oldest first, so a reply sits under what it
   answers; the member's line goes eight seconds after Director has answered it, or at
   once on a flip, a countdown or a take review. Screen readers hear each line once it's
-  finished. What the member types in the text box goes to Director as their own words,
+  finished. The relay holds the app's own notes (a move to another shot, a flip, a
+  nudge) until Director's turn ends (`live.gate.ts` in apps/api), because any of them
+  would stop Director mid-sentence; and right after Director changes the plan, the
+  screen moves to another shot only once the member asks (`lib/move-guard.ts`). What the member types in the text box goes to Director as their own words,
   on the take review too. Director talks like a friend helping shoot a reel: it answers
   everything, reads the line back when asked, goes with the member's own wording, and
   nudges once (twice at most) after fifteen quiet seconds. Director

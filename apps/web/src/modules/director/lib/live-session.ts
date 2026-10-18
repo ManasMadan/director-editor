@@ -30,8 +30,10 @@ import {
   openMicrophone,
   type Player,
 } from "./live-audio";
+import { logTurnTiming } from "./live-debug";
 import { base64Of, captureFrame } from "./media";
-import { decodePcm16, encodePcm16 } from "./pcm";
+import { decodePcm16, encodePcm16, PLAYBACK_RATE } from "./pcm";
+import { createVoiceClock, type VoiceClock } from "./voice-clock";
 
 /**
  * Why Director went: the connection dropped without a word, or the API said why (its
@@ -45,15 +47,27 @@ const FRAME_EVERY_MS = SECOND_MS;
 const FRAME_GAP_MS = FRAME_EVERY_MS + 150;
 const FRAME_WIDTH = 640;
 const FRAME_QUALITY = 0.6;
+/**
+ * Past this much waiting to go up the socket (about a frame), a frame is skipped: on a
+ * weak uplink the member's voice must not queue behind pictures, and the next frame
+ * a second later shows the camera just as well.
+ */
+const FRAME_BACKLOG_BYTES = 64 * 1024;
 /** How long a flipped camera may take to show its first picture before it's sent anyway. */
 const NEW_PICTURE_MS = 2 * SECOND_MS;
 
 export interface LiveEvents {
   /** The socket is open: Director can see the member (and hear them, with a microphone). */
   onLive: () => void;
-  onTranscript: (who: Speaker, text: string) => void;
-  /** Director finished what it had to say. */
-  onTurn: () => void;
+  /**
+   * Words from `who`; Director's are heard `delayMs` from now, when its voice reaches
+   * them (voice-clock.ts).
+   */
+  onTranscript: (who: Speaker, text: string, delayMs?: number) => void;
+  /** Director finished what it had to say; its voice plays `delayMs` more. */
+  onTurn: (delayMs?: number) => void;
+  /** The member talked over Director: what it hadn't said yet is dropped. */
+  onInterrupted: () => void;
   /** Director asked the shoot screen to do something; answer it with `answer(id, …)`. */
   onTool: (id: string, call: LiveToolCall) => void;
   onSpeaking: (speaking: boolean) => void;
@@ -65,6 +79,10 @@ export interface LiveEvents {
 
 interface Session {
   player: Player;
+  /** When the voice the player has queued plays, for the captions. */
+  clock: VoiceClock;
+  /** Director's voice is held (a take is recording): nothing queues. */
+  held: boolean;
   microphone: Microphone | null;
   /** The socket, once it's open. */
   live: WebSocket | null;
@@ -113,7 +131,7 @@ async function sendFrame(
   socket: WebSocket,
   video: RefObject<HTMLVideoElement | null>,
 ) {
-  if (session.muted) {
+  if (session.muted || socket.bufferedAmount > FRAME_BACKLOG_BYTES) {
     return;
   }
   try {
@@ -183,20 +201,51 @@ async function noteCamera(
   startFrames(session, socket, video);
 }
 
+/** Director's voice held (dropped unplayed) or let through: what's queued goes. */
+function hold(session: Session, on: boolean) {
+  session.held = on;
+  session.player.hold(on);
+  if (on) {
+    session.clock.flushed();
+  }
+}
+
+/** A chunk of Director's voice, queued to play, and its place on the voice's clock. */
+function play(session: Session, pcm: Int16Array) {
+  session.player.play(pcm);
+  if (!session.held && pcm.length > 0) {
+    session.clock.queued(pcm.length / PLAYBACK_RATE);
+  }
+}
+
+/**
+ * Director's turn is over: its line ends once its voice has played, and the turn's
+ * timing goes to the debug log (live-debug.ts).
+ */
+function turnOver(session: Session, events: LiveEvents) {
+  const left = session.clock.leftMs();
+  logTurnTiming(session.clock.turnOver(), performance.now());
+  events.onTurn(left);
+}
+
 function receive(session: Session, data: unknown, events: LiveEvents) {
   const message = parseServerMessage(data);
   switch (message?.type) {
     case "audio":
-      return session.player.play(decodePcm16(message.pcm16));
+      return play(session, decodePcm16(message.pcm16));
     case "transcript":
-      return events.onTranscript(message.who, message.text);
+      return message.who === "director"
+        ? events.onTranscript("director", message.text, session.clock.wait(message.text))
+        : events.onTranscript("you", message.text);
     case "tool":
       return events.onTool(message.id, message.call);
     // The member talked over Director: what it was still to say is dropped (barge-in).
     case "interrupted":
-      return session.player.flush();
+      session.player.flush();
+      session.clock.flushed();
+      return events.onInterrupted();
     case "turn":
-      return events.onTurn();
+      return turnOver(session, events);
     case "error":
       session.error = message.code;
       return;
@@ -270,6 +319,8 @@ export function startSession(target: Target & { shot: number; held: boolean }) {
   const context = liveAudio();
   const session: Session = {
     player: createPlayer(context, target.events.onSpeaking),
+    clock: createVoiceClock(() => context.currentTime),
+    held: target.held,
     microphone: null,
     live: null,
     frames: 0,
@@ -318,7 +369,7 @@ export function startSession(target: Target & { shot: number; held: boolean }) {
       session.shot = index;
       tellShot(session);
     },
-    hold: (on: boolean) => session.player.hold(on),
+    hold: (on: boolean) => hold(session, on),
     /** How loud Director is right now, from 0 to 1. */
     level: () => session.player.level(),
     /** A typed line for Director; false while there's no one to hear it yet. */

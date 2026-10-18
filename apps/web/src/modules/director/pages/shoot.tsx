@@ -60,11 +60,13 @@ import { useWakeLock } from "../hooks/use-screen";
 import { nextPage, type Phase, type StudioShot, shotPage, useStudio } from "../hooks/use-studio";
 import { useYourVersion, type YourVersionState } from "../hooks/use-your-version";
 import { type AudioMode, parseAudio } from "../lib/audio";
+import { createMoveGuard, type MoveGuard } from "../lib/move-guard";
 import { activeStep } from "../lib/timeline";
 import {
   adaptationOf,
   adapted,
   type ChangedRow,
+  films,
   forgotten,
   nextFilmed,
   ROW_FIELD,
@@ -469,6 +471,10 @@ interface ToolScreen extends Pick<Screen, "props" | "studio" | "camera" | "live"
   marks: Marks;
   /** Director's mark on the roll: what came of it. */
   mark: (call: Extract<LiveToolCall, { name: "mark" }>) => Promise<LiveToolResult>;
+  /** Whether Director may move the member to another shot just now (lib/move-guard.ts). */
+  guard: MoveGuard;
+  /** Whether the shoot is recording as a roll, which only the member's Done ends. */
+  rolling: () => boolean;
 }
 
 type Go = (href: ReturnType<typeof nextPage>) => void;
@@ -485,12 +491,39 @@ function pageAfter(props: StudioShot, version: YourVersion) {
   return nextPage({ ...props, index: next === null ? props.count - 1 : next - 1 });
 }
 
-/** Director left a shot out: if it's this one, the screen moves on past it. */
-function skip(index: number, { props, yours }: ToolScreen, go: Go): LiveToolResult {
+/**
+ * Director left a shot out: if it's this one, the screen moves on past it, once the
+ * member has asked to (lib/move-guard.ts). While a roll records, the last shot left out
+ * never takes them to the editor: only their own Done ends the roll.
+ */
+function skip(index: number, { props, yours, guard, rolling }: ToolScreen, go: Go): LiveToolResult {
+  const current = index === props.index;
+  if (current && !guard.allows()) {
+    return "not_asked";
+  }
   const version = yours.change((now) => skipped(now, index));
-  if (index === props.index) {
+  const lastOne = nextFilmed(version, props.index, props.count) === null;
+  if (current && !(lastOne && rolling())) {
     go(pageAfter(props, version));
   }
+  return "done";
+}
+
+/**
+ * Director moves the member to another shot: not to one their version leaves out, and,
+ * just after it changed their plan, only once they've asked (lib/move-guard.ts).
+ */
+function goTo(shot: number, { props, yours, guard }: ToolScreen, go: Go): LiveToolResult {
+  if (shot === props.index) {
+    return "done";
+  }
+  if (!films(yours.current(), shot)) {
+    return "not_filmed";
+  }
+  if (!guard.allows()) {
+    return "not_asked";
+  }
+  go(shotPage(props.videoId, shot, props.audio, props.retake));
   return "done";
 }
 
@@ -523,13 +556,10 @@ function toolResult(
   screen: ToolScreen,
   go: Go,
 ): LiveToolResult | Promise<LiveToolResult> {
-  const { props, camera, yours } = screen;
+  const { camera } = screen;
   switch (call.name) {
     case "go_to_shot":
-      if (call.shot !== props.index) {
-        go(shotPage(props.videoId, call.shot, props.audio, props.retake));
-      }
-      return "done";
+      return goTo(call.shot, screen, go);
     case "switch_camera":
       if (camera.state !== "live") {
         return "no_camera";
@@ -539,12 +569,31 @@ function toolResult(
     case "skip_shot":
       return skip(call.shot, screen, go);
     case "replan":
-      return yours.replan(call.instruction).then(
-        (): LiveToolResult => "done",
-        (): LiveToolResult => "failed",
-      );
-    default:
-      return versionResult(call, screen);
+      return replan(call.instruction, screen);
+    default: {
+      const result = versionResult(call, screen);
+      if (call.name === "adapt_shot" || call.name === "remember") {
+        screen.guard.planChanged();
+      }
+      return result;
+    }
+  }
+}
+
+/**
+ * Director re-plans what's left. It can't speak while it waits (a re-plan takes a few
+ * seconds, sometimes many), so the member reads that it's on it meanwhile.
+ */
+async function replan(instruction: string, { yours, live, guard }: ToolScreen) {
+  live.working("replanning");
+  try {
+    await yours.replan(instruction);
+    guard.planChanged();
+    return "done";
+  } catch {
+    return "failed";
+  } finally {
+    live.working(null);
   }
 }
 
@@ -636,6 +685,27 @@ function useQuietTakes(live: DirectorLive, studio: Studio) {
   useLayoutEffect(() => hold(quiet), [hold, quiet]);
 }
 
+/**
+ * Director live for the shoot, with what its tool calls reach: the roll's marks and
+ * whether it records (both set up by the screen with the roll), and the guard on moving
+ * the member to another shot, which hears their words.
+ */
+function useShootLive(videoId: string, index: number, camera: Camera, yours: YourVersionState) {
+  const tools = useRef<ToolHandler>(() => undefined);
+  const mark = useRef<ToolScreen["mark"]>(() => Promise.resolve("not_recording"));
+  const rolling = useRef<() => boolean>(() => false);
+  const [moves] = useState(() => createMoveGuard(() => performance.now()));
+  const live = useDirectorLive({
+    videoId,
+    shotIndex: index,
+    video: camera.video,
+    onTool: (id, call) => tools.current(id, call),
+    version: yours.version,
+    onMemberSaid: moves.memberSaid,
+  });
+  return { live, tools, mark, rolling, moves };
+}
+
 interface ShootProps {
   videoId: string;
   plan: ShotPlan;
@@ -662,16 +732,7 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
     audio,
     retake,
   };
-  const tools = useRef<ToolHandler>(() => undefined);
-  // Director's marks go to the roll, which the screen sets up once the shoot starts.
-  const mark = useRef<ToolScreen["mark"]>(() => Promise.resolve("not_recording"));
-  const live = useDirectorLive({
-    videoId,
-    shotIndex: index,
-    video: camera.video,
-    onTool: (id, call) => tools.current(id, call),
-    version: yours.version,
-  });
+  const { live, tools, mark, rolling, moves } = useShootLive(videoId, index, camera, yours);
   useLayoutEffect(() => {
     shared.current = live.share;
   });
@@ -697,7 +758,17 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
     shot: index,
     setup: studio.phase === "setup",
   });
-  useTools(tools, { props, studio, camera, live, yours, marks, mark: (c) => mark.current(c) });
+  useTools(tools, {
+    props,
+    studio,
+    camera,
+    live,
+    yours,
+    marks,
+    mark: (call) => mark.current(call),
+    guard: moves,
+    rolling: () => rolling.current(),
+  });
   const onFlip = useMemberFlip(camera, live);
   useQuietTakes(live, studio);
   useWakeLock();
@@ -713,6 +784,7 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
     leaving,
     marks,
     mark,
+    rolling,
   };
 }
 
@@ -795,6 +867,7 @@ function ShootScreen(shootProps: ShootProps) {
   const roll = useRollShoot({ props: shoot.props, camera, live, wanted: started && rollOn });
   useLayoutEffect(() => {
     shoot.mark.current = roll.mark;
+    shoot.rolling.current = () => roll.rolling;
   });
   const start = () => {
     camera.start();

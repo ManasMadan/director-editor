@@ -824,6 +824,7 @@
       "you": "You said {text}",
       "joining": "Director's joining…",
       "here": "Director",
+      "replanning": "Director's re-planning your shots, one moment…",
       "deaf": "Director can't hear you. Allow the microphone in your browser's settings, or type to it below.",
       "stillFilm": "You can still film: tap the shutter for each take.",
       "retry": "Try again",

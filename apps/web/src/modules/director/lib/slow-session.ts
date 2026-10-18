@@ -4,9 +4,9 @@
  * Director is on, but one turn at a time through `director.chat` instead of a socket.
  * The member's words come from the text box or the browser's dictation (dictation.ts);
  * each turn goes up with a frame of the camera, the shot, what the shoot changed and the
- * last lines said; Director's reply is captioned at once, its tool calls are handed to
- * the screen as Live's are, and the reply is spoken with `director.speak` (Gemini's
- * text-to-speech) in Live's voice.
+ * last lines said; Director's tool calls are handed to the screen as Live's are, and its
+ * reply is spoken with `director.speak` (Gemini's text-to-speech) in Live's voice and
+ * captioned as that voice starts.
  *
  * Turns go one at a time, in order. When Gemini can't be reached, the session stays (the
  * member can keep filming) and says so (`onAway`) until a turn gets through again; when
@@ -205,7 +205,7 @@ class SlowLine {
     try {
       const reply = await this.target.api.chat(input);
       if (!this.over) {
-        await this.reply(reply);
+        this.reply(reply);
       }
     } catch (error) {
       if (!this.over) {
@@ -218,9 +218,9 @@ class SlowLine {
     const { events } = this.target;
     this.setAway(false);
     if (reply.reply) {
-      events.onTranscript("director", reply.reply);
-      events.onTurn();
       this.remember("director", reply.reply);
+      // Not awaited: the next turn needn't wait for this one's voice to be fetched.
+      void this.voice(reply.reply);
     }
     for (const call of reply.calls) {
       this.toolIds += 1;
@@ -228,9 +228,20 @@ class SlowLine {
       this.asked.set(id, call.name);
       events.onTool(id, call);
     }
-    return reply.reply && !this.held
-      ? speakInto(this.target.api, reply.reply, this.player)
-      : undefined;
+  }
+
+  /**
+   * Director's reply, captioned as its voice starts (or once the voice can't be had), not
+   * seconds before it while text-to-speech is fetched.
+   */
+  private async voice(text: string) {
+    if (!this.held) {
+      await speakInto(this.target.api, text, this.player);
+    }
+    if (!this.over) {
+      this.target.events.onTranscript("director", text);
+      this.target.events.onTurn();
+    }
   }
 
   private fail(error: unknown) {
