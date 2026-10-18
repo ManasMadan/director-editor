@@ -1118,6 +1118,11 @@ class AssetDrawingCreate(BaseModel):
         "it), drawn from as the reference picture.",
     )
     demo: bool = Field(description="The caller is a demo guest, with fewer images a video.")
+    clip: bool = Field(
+        default=False,
+        description="A gap's slot: a Veo clip rather than a still (3 a video, none for a "
+        "demo guest).",
+    )
 
 
 class AssetCandidateCreate(BaseModel):

@@ -47,6 +47,7 @@ from app.schemas import (
     ShotPlan,
     StockCredit,
 )
+from app.slots import is_gap_slot, slot_assets
 
 # Images drawn for one member in one video: their own and the plan's defaults they
 # indexed (spec 8.8). A demo guest gets fewer.
@@ -54,6 +55,8 @@ IMAGES_PER_VIDEO = 12
 IMAGES_PER_DEMO_VIDEO = 5
 # A slot's history, newest first, as far back as undo goes.
 HISTORY_LENGTH = 10
+# Veo clips for gaps, a member's in one video: by far the dearest piece (spec 8.8).
+CLIPS_PER_VIDEO = 3
 _DRAWN = ("default", "created")
 
 
@@ -86,11 +89,15 @@ def stock_credit_line(title: str, credit: StockCredit) -> str:
 
 
 class AssetPicker:
-    def __init__(self, queue: DirectorQueue, redis: Redis, *, drawing: bool) -> None:
+    def __init__(
+        self, queue: DirectorQueue, redis: Redis, *, drawing: bool, clip_model: str | None = None
+    ) -> None:
         # Drawing needs the assets job's bucket (MEDIA_BUCKET); uploads and stock don't.
+        # Clips need Veo too (VEO_MODEL); without it a gap's Create tab draws stills.
         self._queue = queue
         self._redis = redis
         self._drawing = drawing
+        self._clip_model = clip_model
 
     async def slots(self, org_id: UUID, user_id: UUID, video_id: str) -> AssetSlotsOut:
         """Every asset slot of the plan with its images (the default and the caller's
@@ -130,7 +137,7 @@ class AssetPicker:
                     1 : HISTORY_LENGTH + 1
                 ],
             )
-            for asset in plan.plan.assets
+            for asset in slot_assets(plan.plan)
         ]
         return AssetSlotsOut(
             slots=slots,
@@ -150,8 +157,12 @@ class AssetPicker:
             raise AppError("FEATURE_DISABLED", {"feature": "director-assets"})
         async with tenant(org_id) as session:
             plan = await _ready_plan(session, org_id, video_id)
-            asset = next((a for a in plan.plan.assets if a.id == asset_id), None)
-            if asset is None or asset.kind not in STILL_KINDS:
+            asset = next((a for a in slot_assets(plan.plan) if a.id == asset_id), None)
+            # A still for an asset, or a still or a Veo clip for a gap (spec 8.7).
+            gap = asset is not None and is_gap_slot(asset)
+            if asset is None or (asset.kind not in STILL_KINDS and not gap):
+                raise AppError("DIRECTOR_ASSET_NOT_FOUND")
+            if body.clip and (not gap or self._clip_model is None or body.baseId is not None):
                 raise AppError("DIRECTOR_ASSET_NOT_FOUND")
             if body.baseId is not None:
                 await _slot_image(session, plan.id, user_id, asset_id, body.baseId)
@@ -168,6 +179,12 @@ class AssetPicker:
                 or await _drawn_today(session, user_id) >= IMAGES_PER_MEMBER_PER_DAY
             ):
                 raise AppError("DIRECTOR_IMAGE_LIMIT")
+            if body.clip and (
+                body.demo
+                or await _clips_in_video(session, plan.id, user_id, self._clip_model)
+                >= CLIPS_PER_VIDEO
+            ):
+                raise AppError("DIRECTOR_IMAGE_LIMIT")
             row = DirectorAsset(
                 org_id=org_id,
                 plan_id=plan.id,
@@ -177,6 +194,9 @@ class AssetPicker:
                 prompt=body.instruction if body.baseId is not None else body.prompt,
                 reference_key=body.referenceKey,
                 base_id=body.baseId,
+                # A clip is made by Veo: the row names its model from the start, which
+                # is how the assets job knows to make a clip of it (app/clips.py).
+                model=self._clip_model if body.clip else None,
                 updated_at=func.now(),
             )
             session.add(row)
@@ -201,7 +221,7 @@ class AssetPicker:
         upload, or a stock picture with its credit."""
         async with tenant(org_id) as session:
             plan = await _ready_plan(session, org_id, video_id)
-            if not any(asset.id == asset_id for asset in plan.plan.assets):
+            if not any(asset.id == asset_id for asset in slot_assets(plan.plan)):
                 raise AppError("DIRECTOR_ASSET_NOT_FOUND")
             row = DirectorAsset(
                 org_id=org_id,
@@ -229,7 +249,7 @@ class AssetPicker:
         its default); the one before stays in the slot's history."""
         async with tenant(org_id) as session:
             plan = await _ready_plan(session, org_id, video_id)
-            if not any(asset.id == asset_id for asset in plan.plan.assets):
+            if not any(asset.id == asset_id for asset in slot_assets(plan.plan)):
                 raise AppError("DIRECTOR_ASSET_NOT_FOUND")
             if body.candidateId is not None:
                 row = await _slot_image(session, plan.id, user_id, asset_id, body.candidateId)
@@ -277,7 +297,7 @@ class AssetPicker:
             return []
         return [
             stock_credit_line(asset.title, StockCredit.model_validate(row.credit))
-            for asset in ShotPlan.model_validate(plan.plan).assets
+            for asset in slot_assets(ShotPlan.model_validate(plan.plan))
             if (row := stock.get(asset.id)) is not None and row.credit is not None
         ]
 
@@ -316,6 +336,22 @@ async def _drawn_in_video(session: AsyncSession, plan_id: UUID, user_id: UUID) -
             DirectorAsset.plan_id == plan_id,
             DirectorAsset.user_id == user_id,
             DirectorAsset.origin.in_(_DRAWN),
+        )
+    )
+    return count or 0
+
+
+async def _clips_in_video(
+    session: AsyncSession, plan_id: UUID, user_id: UUID, clip_model: str | None
+) -> int:
+    count = await session.scalar(
+        select(func.count())
+        .select_from(DirectorAsset)
+        .where(
+            DirectorAsset.plan_id == plan_id,
+            DirectorAsset.user_id == user_id,
+            DirectorAsset.origin == "created",
+            DirectorAsset.model == clip_model,
         )
     )
     return count or 0

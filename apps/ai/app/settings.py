@@ -152,6 +152,13 @@ class Settings(GeminiSettings):
     director_tokens_per_revise: int = Field(
         default=30_000, ge=2_000, alias="DIRECTOR_TOKENS_PER_REVISE"
     )
+    # Veo clips for the gaps of a member's video (app/clips.py), by its short name; empty
+    # turns clips off (a gap's Create tab then draws stills). Each clip is counted against
+    # the workspace's allowance as this many tokens, standing for its price by the second.
+    veo_model: str = Field(default="veo-3.1-lite-generate-preview", alias="VEO_MODEL")
+    director_tokens_per_clip: int = Field(
+        default=60_000, ge=2_000, alias="DIRECTOR_TOKENS_PER_CLIP"
+    )
 
     # Product analytics (app/analytics.py): plans indexed and take reviews, streamed into
     # this BigQuery dataset's `events` table in GOOGLE_CLOUD_PROJECT, the same table

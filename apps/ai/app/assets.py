@@ -41,6 +41,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.activity import Target, log_activity, outcome_of
 from app.branding import unbranding
+from app.clips import Filmmaker
 from app.contracts.error_response import ErrorCode
 from app.contracts.realtime_message import DirectorChanged
 from app.db.models import DirectorAsset, DirectorPlan
@@ -48,6 +49,7 @@ from app.db.session import tenant
 from app.log import log
 from app.realtime import publish_to_org
 from app.schemas import AspectRatio, Asset, AssetKind, ShotPlan
+from app.slots import slot_assets
 from app.storyboards import storyboard_asset, storyboard_id, storyboard_prompt
 from app.usage import Allowance, reserve, settle
 
@@ -349,6 +351,8 @@ class _Job:
     reference_key: str | None = None
     base_key: str | None = None
     base_prompt: str | None = None
+    # A Veo clip for a gap (app/clips.py) rather than a drawn still.
+    clip: bool = False
     # A created plan's storyboard card (origin storyboard): the prompt it's drawn from. Its
     # asset stands in for the card, so it's stored and logged like a default.
     storyboard: str | None = None
@@ -377,12 +381,21 @@ class AssetMaker:
         *,
         monthly: Allowance,
         per_image: int,
+        filmmaker: Filmmaker | None = None,
+        per_clip: int = 0,
     ) -> None:
         self._artist = artist
         self._bucket = bucket
         self._redis = redis
         self._monthly = monthly
         self._per_image = per_image
+        self._filmmaker = filmmaker
+        self._per_clip = per_clip
+
+    @property
+    def clip_model(self) -> str | None:
+        """The Veo model that makes gaps' clips; None when clips are off."""
+        return self._filmmaker.model_name if self._filmmaker else None
 
     async def claim(
         self,
@@ -498,7 +511,7 @@ class AssetMaker:
         if plan is None or plan.status != "ready" or plan.plan is None:
             return []
         shot_plan = ShotPlan.model_validate(plan.plan)
-        assets = {asset.id: asset for asset in shot_plan.assets}
+        assets = {asset.id: asset for asset in slot_assets(shot_plan)}
         cards = {storyboard_id(shot): shot for shot in shot_plan.shots}
         jobs: list[_Job] = []
         for row in pending:
@@ -532,6 +545,7 @@ class AssetMaker:
                         reference_key=row.reference_key,
                         base_key=base.object_key if base else None,
                         base_prompt=base.prompt if base else None,
+                        clip=row.model is not None and row.model == self.clip_model,
                     )
                 )
         return jobs
@@ -580,7 +594,57 @@ class AssetMaker:
             )
         return guarded("\n".join(lines)), quoted_text(prompt), pictures
 
+    async def _film(self, org_id: UUID, plan_id: UUID, job: _Job, *, final: bool) -> None:
+        """Makes a gap's Veo clip, counted against the workspace's allowance as a fixed
+        `per_clip` (Veo is priced by the second, not by tokens)."""
+        filmmaker = self._filmmaker
+        if filmmaker is None:
+            await self._fail(
+                org_id, plan_id, job.row_id, job.asset.id, job.user_id, "FEATURE_DISABLED"
+            )
+            return
+        await self._set(org_id, job.row_id, status="generating")
+        reservation = await reserve(
+            org_id,
+            job.user_id,
+            "director-asset",
+            filmmaker.model_name,
+            most=self._per_clip,
+            monthly=self._monthly,
+        )
+        if reservation is None or reservation.tokens < self._per_clip:
+            if reservation is not None:
+                await settle(reservation, 0, 0)
+            await self._fail(
+                org_id, plan_id, job.row_id, job.asset.id, job.user_id, "AI_BUDGET_EXCEEDED"
+            )
+            return
+        key = f"{KEY_PREFIX}/{plan_id}/{job.asset.id}/{job.row_id}.mp4"
+        used = (0, 0)
+        try:
+            clip = await filmmaker.film(job.prompt or job.asset.prompt)
+            used = (0, self._per_clip)
+            await upload_bytes(self._bucket, key, clip.data, "video/mp4")
+        except Exception:
+            # Veo is dear: a failed clip is never tried again by itself; the member can ask again.
+            log.exception("making a clip failed", plan_id=str(plan_id), asset=job.asset.id)
+            await self._fail(
+                org_id, plan_id, job.row_id, job.asset.id, job.user_id, "UPSTREAM_UNAVAILABLE"
+            )
+            return
+        finally:
+            await settle(reservation, *used)
+        await self._set(org_id, job.row_id, status="ready", object_key=key)
+        log_activity(
+            "director.asset_drawn",
+            target={**self._target(plan_id, job.asset.id, used), "model": filmmaker.model_name},
+            user_id=job.user_id,
+        )
+
     async def _draw(self, org_id: UUID, plan_id: UUID, job: _Job, *, final: bool) -> None:
+        if job.clip:
+            await self._film(org_id, plan_id, job, final=final)
+            return
         await self._set(org_id, job.row_id, status="generating")
         reservation = await reserve(
             org_id,

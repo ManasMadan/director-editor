@@ -63,6 +63,8 @@ export type StockCredit = z.infer<typeof stockCreditSchema>;
 const assetImageSchema = z.object({
   id: imageIdSchema,
   origin: z.enum(["created", "upload", "stock"]),
+  /** A still, or a clip (a gap's Veo clip: AI footage, flagged as synthetic on publish). */
+  media: z.enum(["image", "video"]),
   /** `making` while it's drawn; a short-lived link once `ready` (null with uploads off). */
   status: imageStatus,
   url: z.url().nullable(),
@@ -149,6 +151,8 @@ export const assetsContract = {
         instruction: z.string().trim().min(1).max(ASSET_INSTRUCTION_MAX_LENGTH).optional(),
         baseId: imageIdSchema.optional(),
         referenceFileId: fileIdSchema.optional(),
+        /** A gap's slot (`gap-<n>`, `shot-<n>`): a Veo clip instead of a still. */
+        clip: z.boolean().optional(),
       }),
     )
     .output(assetImageSchema),
