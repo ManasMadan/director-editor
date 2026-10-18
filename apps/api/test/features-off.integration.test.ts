@@ -40,6 +40,7 @@ describe("features off", () => {
         captcha: false,
         director: false,
         files: false,
+        live: false,
       },
       captchaSiteKey: null,
       demo: null,

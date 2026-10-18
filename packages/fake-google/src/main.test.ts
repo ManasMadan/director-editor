@@ -12,7 +12,9 @@ describe("running the mock Google", () => {
     vi.stubEnv("GOOGLE_FAKE_PORT", "0");
     const write = vi.spyOn(process.stdout, "write").mockReturnValue(true);
     const { fake } = await import("./main");
-    expect(write).toHaveBeenCalledWith(`mock Google (Gemini and YouTube) on ${fake.url}\n`);
+    expect(write).toHaveBeenCalledWith(
+      `mock Google (Gemini, its Live API and YouTube) on ${fake.url}\n`,
+    );
     await fake.close();
   });
 

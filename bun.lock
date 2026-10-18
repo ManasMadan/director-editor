@@ -322,6 +322,7 @@
     "packages/fake-google": {
       "name": "@repo/fake-google",
       "dependencies": {
+        "ws": "^8.21.3",
         "zod": "catalog:",
       },
       "devDependencies": {
@@ -329,6 +330,7 @@
         "@repo/typescript-config": "workspace:*",
         "@repo/vitest-config": "workspace:*",
         "@types/node": "catalog:",
+        "@types/ws": "^8.18.1",
         "typescript": "catalog:",
         "vitest": "catalog:",
       },

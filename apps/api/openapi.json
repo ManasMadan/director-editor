@@ -105,7 +105,8 @@
                           "captcha",
                           "director",
                           "files",
-                          "google"
+                          "google",
+                          "live"
                         ],
                         "type": "string"
                       },
