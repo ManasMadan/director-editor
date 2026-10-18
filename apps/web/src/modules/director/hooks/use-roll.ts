@@ -118,5 +118,3 @@ export function useRoll() {
     },
   };
 }
-
-export type RollControls = ReturnType<typeof useRoll>;
