@@ -51,15 +51,19 @@ export function authErrorBody(body: Buffer, status: number, requestId: string) {
   };
 }
 
-/** Who is signed in, when the request carries a session: on the context, for its logs. */
+/**
+ * Who is signed in, when the request carries a session: on the context, for its logs.
+ * Whether anyone is.
+ */
 async function knowCaller(auth: Auth, request: FastifyRequest, headers: Headers) {
   if (!request.headers.cookie?.includes("session_token")) {
-    return;
+    return false;
   }
   const session = await auth.api.getSession({ headers });
   if (session) {
     updateContext(actorContext(session.user));
   }
+  return session !== null;
 }
 
 export function mountAuth(
@@ -78,7 +82,7 @@ export function mountAuth(
       // which any client can write. Replace it with the address Fastify resolved through
       // TRUSTED_PROXIES, so only a trusted gateway can vouch for the client IP.
       headers.set("x-forwarded-for", request.ip);
-      await knowCaller(auth, request, headers);
+      const signedIn = await knowCaller(auth, request, headers);
       const response = await auth.handler(toWebRequest(request, url, headers));
       const answer = await fromWebResponse(reply, response);
       const error =
@@ -92,6 +96,7 @@ export function mountAuth(
         code: error?.code,
         location: response.headers.get("location"),
         body: request.body,
+        signedIn,
       });
       if (failed) {
         activity(failed);

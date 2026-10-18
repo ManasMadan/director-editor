@@ -2,9 +2,12 @@ import { YOUTUBE_UPLOAD_SCOPE } from "@repo/contracts/api";
 import { describe, expect, it } from "vitest";
 import {
   type AuthAnswer,
+  byAdmin,
   failedAuthActivity,
   googleLinked,
   sessionEnded,
+  signedIn,
+  signedUp,
   signInMethod,
 } from "./auth-activity";
 
@@ -21,6 +24,35 @@ describe("how someone signed in", () => {
 
   it("is the demo account, whichever way it came in", () => {
     expect(signInMethod("/sign-in/email", true)).toBe("demo");
+  });
+});
+
+describe("an account or session someone made", () => {
+  const ada = { userId: "u-1", email: "ada@example.com", name: "Ada", demo: false };
+
+  it("is the person's own, as its actor", () => {
+    expect(signedUp(ada, "/sign-up/email")).toEqual({
+      activity: "auth.signed_up",
+      actor: ada,
+      target: { method: "password" },
+    });
+    expect(signedIn(ada, "/sign-in/email")).toEqual({
+      activity: "auth.signed_in",
+      actor: ada,
+      target: { method: "password" },
+    });
+  });
+
+  it("leaves an admin as the actor, with the person it was done to as the target", () => {
+    expect(signedUp(ada, "/admin/create-user")).toEqual({
+      activity: "auth.signed_up",
+      target: { method: "admin", userId: "u-1", email: "ada@example.com" },
+    });
+    expect(signedIn(ada, "/admin/impersonate-user")).toEqual({
+      activity: "auth.signed_in",
+      target: { method: "impersonation", userId: "u-1", email: "ada@example.com" },
+    });
+    expect(byAdmin(undefined)).toBe(false);
   });
 });
 
@@ -58,6 +90,7 @@ describe("an auth answer that went wrong", () => {
     code: "INVALID_EMAIL_OR_PASSWORD",
     location: null,
     body: Buffer.from(JSON.stringify({ email: "ada@example.com", password: "hunter22" })),
+    signedIn: false,
     ...fields,
   });
 
@@ -119,6 +152,20 @@ describe("an auth answer that went wrong", () => {
       outcome: "failed",
       reason: "access_denied",
       target: { method: "google" },
+    });
+  });
+
+  it("is a failed link, not a failed sign-in, for someone already signed in", () => {
+    const location = "/settings?error=access_denied";
+    expect(
+      failedAuthActivity(
+        answer({ path: "/callback/google", status: 302, location, signedIn: true }),
+      ),
+    ).toEqual({
+      activity: "auth.google_linked",
+      outcome: "failed",
+      reason: "access_denied",
+      target: { provider: "google" },
     });
   });
 

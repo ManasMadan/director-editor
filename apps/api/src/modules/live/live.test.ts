@@ -774,7 +774,8 @@ describe("starting a call", () => {
       .fn<LiveOptions["plan"]>()
       .mockReturnValueOnce(loaded.promise)
       .mockReturnValueOnce(broke.promise);
-    const { call, fake, log } = await startApi({ plan });
+    const activity = vi.fn<RecordActivity>();
+    const { call, fake, log } = await startApi({ plan, activity });
     for (const finish of [
       () => loaded.resolve(readyPlan),
       () => broke.reject(new Error("too late")),
@@ -787,6 +788,14 @@ describe("starting a call", () => {
     }
     await vi.waitFor(() => expect(log).toHaveBeenCalledOnce());
     expect(fake.socket).toBeNull();
+    // The first ended before it began; the second failed to start.
+    expect(activity).toHaveBeenCalledWith({
+      activity: "director.call_ended",
+      outcome: "ok",
+      reason: "HUNG_UP",
+      target: { videoId: "dQw4w9WgXcQ", shot: 0, started: false },
+      durationMs: undefined,
+    });
   });
 
   it("refuses an upgrade from another site, or to another path", async () => {

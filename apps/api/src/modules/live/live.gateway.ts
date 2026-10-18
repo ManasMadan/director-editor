@@ -255,7 +255,9 @@ export function mountLive(fastify: FastifyInstance, options: LiveOptions) {
       // Only a call that can really start is charged.
       await options.spendCallLimit(caller.userId);
       if (client.readyState !== WebSocket.OPEN) {
-        return; // hung up while the plan loaded
+        // Hung up while the plan loaded: a call that ended before it began.
+        options.activity(callEnded({ code: null, startedAt: null }, target, options.now()));
+        return;
       }
       const ended = await relayFor(
         client,

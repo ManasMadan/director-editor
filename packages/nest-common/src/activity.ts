@@ -93,3 +93,36 @@ export function outcomeOf(error: unknown): { outcome: ActivityOutcome; reason: s
   }
   return { outcome: ERROR_CODES[code] < 500 ? "refused" : "failed", reason: code };
 }
+
+/**
+ * Lets the first of each key through once a window, for activities a screen asks for on
+ * a timer (a plan polled while it's indexed, a scene checked every few seconds): one line
+ * per person, thing and window instead of one per poll. In memory, so each replica lets
+ * its own first one through; that costs a line, never a Redis call on every poll. It
+ * holds at most `maxKeys` keys: past that it forgets the expired ones, then every one.
+ */
+export function createActivityThrottle(windowMs: number, now = Date.now, maxKeys = 10_000) {
+  const seen = new Map<string, number>();
+  const forgetExpired = (at: number) => {
+    for (const [key, last] of seen) {
+      if (at - last >= windowMs) {
+        seen.delete(key);
+      }
+    }
+    if (seen.size >= maxKeys) {
+      seen.clear();
+    }
+  };
+  return (key: string): boolean => {
+    const at = now();
+    const last = seen.get(key);
+    if (last !== undefined && at - last < windowMs) {
+      return false;
+    }
+    if (seen.size >= maxKeys) {
+      forgetExpired(at);
+    }
+    seen.set(key, at);
+    return true;
+  };
+}

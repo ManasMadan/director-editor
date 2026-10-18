@@ -26,6 +26,43 @@ export function signInMethod(path: string | undefined, demo: boolean): string {
   return method === "social" ? "google" : method;
 }
 
+/** Who an account or session is for, as the hooks read it. */
+export interface Subject {
+  userId: string;
+  email: string;
+  name: string;
+  demo: boolean;
+}
+
+/**
+ * Whether an admin made the change for someone else (the admin plugin's endpoints:
+ * creating a user, impersonating one). Then the admin, already the request's actor,
+ * stays its actor, and the person it was done to is the target.
+ */
+export const byAdmin = (path: string | undefined) => path?.startsWith("/admin/") === true;
+
+/** An account made: by the person signing up, or by an admin for someone. */
+export function signedUp(user: Subject, path: string | undefined): AuthActivity {
+  return byAdmin(path)
+    ? {
+        activity: "auth.signed_up",
+        target: { method: "admin", userId: user.userId, email: user.email },
+      }
+    : {
+        activity: "auth.signed_up",
+        actor: user,
+        target: { method: signInMethod(path, user.demo) },
+      };
+}
+
+/** A session started: the person signing in, or an admin impersonating someone. */
+export function signedIn(user: Subject, path: string | undefined): AuthActivity {
+  const method = signInMethod(path, user.demo);
+  return byAdmin(path)
+    ? { activity: "auth.signed_in", target: { method, userId: user.userId, email: user.email } }
+    : { activity: "auth.signed_in", actor: user, target: { method } };
+}
+
 /** A session that ended: signed out, or revoked (and why). */
 export function sessionEnded(path: string | undefined, userId: string): AuthActivity {
   const reason = sessionEndReason(path);
@@ -89,6 +126,8 @@ export interface AuthAnswer {
   location: string | null;
   /** The raw request body. */
   body: unknown;
+  /** Whether the request came with a session already (a link, not a sign-in). */
+  signedIn: boolean;
 }
 
 /** An OAuth error code (`access_denied`, `state_mismatch`). */
@@ -118,12 +157,20 @@ export function failedAuthActivity(answer: AuthAnswer): AuthActivity | null {
   }
   const googleError = path.startsWith("/callback/") ? callbackError(answer.location) : null;
   if (googleError) {
-    return {
-      activity: "auth.signed_in",
-      outcome: "failed",
-      reason: googleError,
-      target: { method: "google" },
-    };
+    // Someone already signed in was linking Google (or allowing YouTube), not signing in.
+    return answer.signedIn
+      ? {
+          activity: "auth.google_linked",
+          outcome: "failed",
+          reason: googleError,
+          target: { provider: "google" },
+        }
+      : {
+          activity: "auth.signed_in",
+          outcome: "failed",
+          reason: googleError,
+          target: { method: "google" },
+        };
   }
   if (status < 400 || !(SIGN_IN_PATHS.has(path) || path === SIGN_UP_PATH)) {
     return null;

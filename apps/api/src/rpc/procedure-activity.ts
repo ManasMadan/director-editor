@@ -10,7 +10,13 @@
  * never the rest: a body can hold a camera frame, a title someone typed, or a link.
  */
 import type { ActivityName } from "@repo/contracts/activity";
-import { type ActivityTarget, outcomeOf } from "@repo/nest-common";
+import { MINUTE_MS } from "@repo/contracts/time";
+import {
+  type ActivityTarget,
+  createActivityThrottle,
+  currentContext,
+  outcomeOf,
+} from "@repo/nest-common";
 import * as z from "zod";
 import type { RecordActivity } from "../activity";
 
@@ -77,10 +83,30 @@ export function procedureTarget(procedure: string, input: unknown, output?: unkn
   });
 }
 
+/**
+ * Reads a screen asks for on a timer while something is in progress (a plan polled as
+ * it's indexed, the media page, a scene checked every few seconds): logged at most once
+ * per person, thing and THROTTLE_WINDOW_MS when they succeed, so a timeline shows that
+ * someone opened them, not every poll. A failure is always logged.
+ */
+const THROTTLED: ReadonlySet<ActivityName> = new Set<ActivityName>([
+  "director.plan_opened",
+  "director.media_viewed",
+  "director.scene_checked",
+]);
+const THROTTLE_WINDOW_MS = 5 * MINUTE_MS;
+
+/** What makes two polls the same read: who, which, and of which short and shot. */
+function throttleKey(activity: ActivityName, input: unknown) {
+  const { videoId, shotIndex } = inputFacts.parse(input);
+  return [currentContext()?.userId, activity, videoId, shotIndex].join("|");
+}
+
 /** The interceptor: one line per call, after it answers or throws. */
 export function procedureActivity(
   record: RecordActivity,
   now: () => number = () => performance.now(),
+  firstInWindow: (key: string) => boolean = createActivityThrottle(THROTTLE_WINDOW_MS),
 ) {
   return async <T>({
     next,
@@ -96,6 +122,9 @@ export function procedureActivity(
     const activity = PROCEDURE_ACTIVITIES[procedure] ?? "api.called";
     try {
       const output = await next();
+      if (THROTTLED.has(activity) && !firstInWindow(throttleKey(activity, input))) {
+        return output;
+      }
       record({
         activity,
         target: procedureTarget(procedure, input, output),

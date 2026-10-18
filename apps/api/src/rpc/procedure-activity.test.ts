@@ -1,4 +1,5 @@
 import { ORPCError } from "@orpc/server";
+import { runWithContext } from "@repo/nest-common";
 import { describe, expect, it, vi } from "vitest";
 import type { RecordActivity } from "../activity";
 import { procedureActivity, procedureTarget } from "./procedure-activity";
@@ -77,6 +78,33 @@ describe("a procedure call's activity line", () => {
       target: { procedure: "publish.upload", cutId: "c-1", visibility: "public" },
       durationMs: 40,
     });
+  });
+
+  it("logs a polled read once a window per person and shot, and every failure", async () => {
+    const record = vi.fn<RecordActivity>();
+    const seen = new Set<string>();
+    const call = procedureActivity(record, clock(), (key) => !seen.has(key) && !!seen.add(key));
+    const check = (shotIndex: number, next: () => Promise<unknown> = async () => ({})) =>
+      runWithContext({ requestId: "r", userId: "u-1" }, () =>
+        call({ next, path: ["director", "checkScene"], input: { videoId: "v1", shotIndex } }),
+      );
+    await check(0);
+    await check(0);
+    await check(1);
+    await check(0, () => Promise.reject(new Error("boom"))).catch(() => undefined);
+    expect([...seen]).toEqual([
+      "u-1|director.scene_checked|v1|0",
+      "u-1|director.scene_checked|v1|1",
+    ]);
+    expect(record.mock.calls.map(([line]) => [line.target?.shotIndex, line.outcome])).toEqual([
+      [0, undefined],
+      [1, undefined],
+      [0, "failed"],
+    ]);
+    // Anything else isn't throttled.
+    await call({ next: async () => ({}), path: ["user", "me"], input: undefined });
+    await call({ next: async () => ({}), path: ["user", "me"], input: undefined });
+    expect(record).toHaveBeenCalledTimes(5);
   });
 
   it("keeps a publish's YouTube id and a scene check's verdict", () => {

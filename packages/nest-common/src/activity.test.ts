@@ -3,7 +3,7 @@ import { loggerOptions } from "@repo/logger";
 import { pino } from "pino";
 import { describe, expect, it } from "vitest";
 import * as z from "zod";
-import { activityLine, logActivity, outcomeOf } from "./activity";
+import { activityLine, createActivityThrottle, logActivity, outcomeOf } from "./activity";
 import { contextLogFields, runWithContext } from "./context";
 import { AppError } from "./errors";
 
@@ -118,5 +118,34 @@ describe("the outcome of an error", () => {
       outcome: "failed",
       reason: "INTERNAL",
     });
+  });
+});
+
+describe("the activity throttle", () => {
+  it("lets each key through once a window", () => {
+    let clock = 0;
+    const allow = createActivityThrottle(1_000, () => clock);
+    expect(allow("a")).toBe(true);
+    expect(allow("a")).toBe(false);
+    expect(allow("b")).toBe(true);
+    clock = 999;
+    expect(allow("a")).toBe(false);
+    clock = 1_000;
+    expect(allow("a")).toBe(true);
+  });
+
+  it("forgets expired keys when full, and every key when they all still count", () => {
+    let clock = 0;
+    const allow = createActivityThrottle(1_000, () => clock, 2);
+    allow("a");
+    clock = 500;
+    allow("b");
+    clock = 1_200;
+    // Full: "a" has expired and goes, "b" stays.
+    expect(allow("c")).toBe(true);
+    expect(allow("b")).toBe(false);
+    // Full again, nothing expired: it starts over.
+    expect(allow("d")).toBe(true);
+    expect(allow("b")).toBe(true);
   });
 });

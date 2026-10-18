@@ -18,7 +18,15 @@ import { actorContext } from "../http-context";
 import { copySeedTemplates } from "../modules/director/seeds.repository";
 import { requestNotification } from "../notifications";
 import { emitAnyEvent, emitEvent } from "../outbox";
-import { googleLinked, sessionEnded, signInMethod, youtubeGranted } from "./auth-activity";
+import {
+  byAdmin,
+  googleLinked,
+  type Subject,
+  sessionEnded,
+  signedIn,
+  signedUp,
+  youtubeGranted,
+} from "./auth-activity";
 import type { AuthContext } from "./auth-context";
 import { auditEventForAlert, sessionEndReason, sessionMethod } from "./auth-events";
 import { DEMO_LOCKED_PATHS, ownSessionOnly, refuseDemoProfileChange, refuseForDemo } from "./demo";
@@ -162,13 +170,6 @@ function userHooks({ db, record, activity }: AuthContext): DatabaseHooks["user"]
       // seeded templates, in the same transaction: no workspace exists without them.
       after: async (user, ctx) => {
         const userId = userIdOf(user);
-        // The rest of the request (the account linked, the session started) is theirs.
-        updateContext(actorContext(user));
-        activity({
-          activity: "auth.signed_up",
-          actor: actorContext(user),
-          target: { method: signInMethod(ctx?.path, user.demo === true) },
-        });
         await transaction(db, async (tx) => {
           const org = await tx.organization.create({
             data: {
@@ -190,6 +191,8 @@ function userHooks({ db, record, activity }: AuthContext): DatabaseHooks["user"]
             origin,
           );
         });
+        // Only once the account has its workspace: a rollback leaves no "ok" line.
+        logSignedUp(activity, actorContext(user), ctx?.path);
       },
     },
     delete: {
@@ -236,19 +239,34 @@ function userHooks({ db, record, activity }: AuthContext): DatabaseHooks["user"]
   };
 }
 
-/** Who a new session is for, from here on in the request too (the activity lines). */
-async function signedIn(db: AuthContext["db"], userId: UserId) {
-  const user = await db.user.findUniqueOrThrow({
-    where: { id: userId },
-    select: { id: true, email: true, name: true, demo: true },
-  });
-  const signedInActor = actorContext(user);
-  updateContext(signedInActor);
-  return signedInActor;
+/**
+ * Logs a new account. Unless an admin made it, the rest of the request (the account
+ * linked, the session started) is the new person's: they become its actor.
+ */
+function logSignedUp(activity: AuthContext["activity"], user: Subject, path?: string) {
+  if (!byAdmin(path)) {
+    updateContext(user);
+  }
+  activity(signedUp(user, path));
+}
+
+/** Logs a new session, for its person, or for the admin impersonating them. */
+async function logSignedIn(context: AuthContext, userId: UserId, path?: string) {
+  const user = actorContext(
+    await context.db.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { id: true, email: true, name: true, demo: true },
+    }),
+  );
+  if (!byAdmin(path)) {
+    updateContext(user);
+  }
+  context.activity(signedIn(user, path));
 }
 
 /** Sessions start in a workspace, and their start and end are audited and logged. */
-function sessionHooks({ db, record, actor, activity }: AuthContext): DatabaseHooks["session"] {
+function sessionHooks(context: AuthContext): DatabaseHooks["session"] {
+  const { db, record, actor, activity } = context;
   return {
     create: {
       // New sessions start in the user's first workspace (their personal one).
@@ -273,12 +291,7 @@ function sessionHooks({ db, record, actor, activity }: AuthContext): DatabaseHoo
           { userId, sessionId: session.id, method: sessionMethod(ctx?.path) },
           { actorId: userId, orgId: null },
         );
-        const user = await signedIn(db, userId);
-        activity({
-          activity: "auth.signed_in",
-          actor: user,
-          target: { method: signInMethod(ctx?.path, user.demo) },
-        });
+        await logSignedIn(context, userId, ctx?.path);
       },
     },
     delete: {
