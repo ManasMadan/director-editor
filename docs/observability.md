@@ -13,8 +13,10 @@ Traces (Jaeger), metrics (Prometheus) and alerts are described in
 Each service logs JSON to stdout through its own logger: pino in the Node services
 (`@repo/logger`, with `@repo/nest-common`'s request context on top) and structlog in
 `apps/ai` (`app/log.py`). Nothing else ships logs. On a cluster with observability on,
-Loki collects every pod's stdout, labelled with its `namespace`, `pod` and `container`,
-and Grafana reads it. Locally, `bun dev` prints the same lines, readable.
+Alloy sends every pod's stdout to Loki, labelled with its `namespace`, `pod`,
+`container` and `app_kubernetes_io_component` (the pod's component label, or else its
+name: `api`, `worker`, `ai`, ...), and Grafana reads it (`deploy/platform/values/alloy.yaml`
+and `loki.yaml`). Locally, `bun dev` prints the same lines, readable.
 
 Every line written while handling a request or a job carries `requestId`, `userId` and
 `orgId` once they're known, and `traceId` (and `spanId`) while tracing is on, in every
@@ -97,12 +99,17 @@ cluster that has Grafana), each opening on the application's namespace:
   their scores, cuts and publishes, and every refusal and failure by code.
 
 Grafana, Jaeger, Prometheus and Alertmanager are served on hosts of their own under the
-cluster's zone (production: `grafana.director.mmadan.in`, `jaeger.director.mmadan.in`,
-and so on), behind one HTTP password the gateway asks for first (the internal tools
-add-on, `deploy/platform/internal-tools`, and its `internal-tools-auth` Secret). Anyone
-with that password sees these dashboards, so they hold emails, names and addresses but
-never a secret. Without it, a port-forward still works: `kubectl -n observability
-port-forward svc/kube-prometheus-stack-grafana 3000:80`, then <http://localhost:3000>.
+cluster's zone (production: <https://grafana.director.mmadan.in>,
+<https://jaeger.director.mmadan.in>, and so on), behind one HTTP password the gateway
+asks for first, then Grafana's own sign-in. That's the internal tools add-on
+(`deploy/platform/internal-tools`, its `internal-tools-auth` Secret in
+`deploy/platform/secrets/<env>/`), described in deploy/README.md's "Internal tools".
+Anyone with that password sees these dashboards, so they hold emails, names and
+addresses but never a secret. Without it, a port-forward still works:
+`kubectl -n observability port-forward svc/kube-prometheus-stack-grafana 3000:80`, then
+<http://localhost:3000>. In Grafana, the Loki data source has the uid `loki` and
+Jaeger's `jaeger`; a log line's trace id opens its trace, and a trace's "Logs in
+Grafana" opens its lines.
 
 The same in Explore, as LogQL:
 
