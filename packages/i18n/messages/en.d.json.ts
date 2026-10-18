@@ -794,6 +794,22 @@ declare const messages: {
       "wrap": {
         "title": "That's a wrap!",
         "body": "I cut your takes together, best moments first. Make any last changes, then tap Next."
+      },
+      "talk": {
+        "label": "Tell Director what to change",
+        "placeholder": "Tell Director what to change…",
+        "send": "Send",
+        "talk": "Talk to Director",
+        "stop": "Stop and send",
+        "listening": "Listening… tap stop when you're done.",
+        "thinking": "Director's on it…",
+        "heard": "You said: “{text}”",
+        "undo": "Undo",
+        "choices": "Takes to choose from",
+        "choice": "Shot {shot, number}, take {take, number}: {note}",
+        "use": "Use this one",
+        "noMic": "Your microphone isn't available. Type it instead.",
+        "dismiss": "Dismiss"
       }
     },
     "live": {

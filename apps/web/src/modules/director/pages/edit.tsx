@@ -7,9 +7,15 @@ import { useDirectorPlanQuery } from "@repo/client/api/director/plan";
 import { useSaveCutMutation } from "@repo/client/api/director/save-cut";
 import { useDirectorShotsQuery } from "@repo/client/api/director/shots";
 import { useYourVersionQuery } from "@repo/client/api/director/your-version";
-import type { DirectorCut, DirectorShot, ShotPlan, YourVersion } from "@repo/contracts/api";
+import type {
+  DirectorCut,
+  DirectorShot,
+  EditorReply,
+  ShotPlan,
+  YourVersion,
+} from "@repo/contracts/api";
 import { uploadPurposes } from "@repo/contracts/files";
-import type { DirectorTakeId } from "@repo/contracts/ids";
+import { type DirectorTakeId, videoIdSchema } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
 import { buttonVariants } from "@repo/ui/components/button";
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "@repo/ui/components/dialog";
@@ -27,6 +33,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { DirectorGate } from "@/modules/shorts";
@@ -35,6 +42,7 @@ import { EditPlayer } from "../components/edit-player";
 import { SoundPanel, StylePicker, type Tool } from "../components/edit-tools";
 import { MatchCutNotes } from "../components/match-cut";
 import { ShotBoard } from "../components/shot-board";
+import { TellDirector } from "../components/tell-director";
 import { VersionGaps } from "../components/version-gaps";
 import { type EditChoices, useEditHistory } from "../hooks/use-edit-history";
 import { useMatchCuts } from "../hooks/use-match-cuts";
@@ -42,9 +50,19 @@ import { useObjectUrl } from "../hooks/use-object-url";
 import { usePlayback } from "../hooks/use-playback";
 import { shotPage } from "../hooks/use-studio";
 import { type MediaState, useTakeMedia } from "../hooks/use-take-media";
+import { useTellDirector } from "../hooks/use-tell-director";
 import { type AudioMode, parseAudio } from "../lib/audio";
-import { webVtt } from "../lib/captions";
+import { type CaptionLine, webVtt } from "../lib/captions";
 import { type Clip, clipsOf, complete, editLines, editSeconds } from "../lib/edit";
+import {
+  applyActions,
+  arrange,
+  type EditorEffect,
+  editorState,
+  fixLines,
+  UNARRANGED,
+} from "../lib/editor-actions";
+import { gradeFilter } from "../lib/grades";
 import { captionInk } from "../lib/ink";
 import type { MatchCutTransform } from "../lib/match-cuts";
 import { cutPicks, pickedTakes } from "../lib/picks";
@@ -68,6 +86,7 @@ function segmentsOf(
 ): Segment[] {
   return clips.map((clip) => {
     const take = required(loadedTake(media, clip), "a loaded take");
+    const filter = gradeFilter(clip.grade);
     return clip.shot.kind === "video"
       ? {
           kind: "video",
@@ -75,8 +94,9 @@ function segmentsOf(
           startSeconds: clip.from,
           endSeconds: clip.to,
           transform: transforms.get(clip.index),
+          filter,
         }
-      : { kind: "photo", source: take.blob, seconds: clip.seconds };
+      : { kind: "photo", source: take.blob, seconds: clip.seconds, filter };
   });
 }
 
@@ -85,7 +105,7 @@ type Saving =
   | { step: "rendering"; done: number }
   | { step: "uploading" }
   /** With the clips that were rendered, for the saved video's captions track. */
-  | { step: "saved"; video: Blob; clips: readonly Clip[] }
+  | { step: "saved"; video: Blob; lines: readonly CaptionLine[] }
   | { step: "failed"; message: string };
 
 /** What a save is made from: the clips playing, their takes in memory, the choices. */
@@ -113,7 +133,11 @@ async function render(
       audio,
       withSound: choices.sound,
       onProgress,
-      captions: { lines: editLines(clips), style: choices.style, ink: captionInk() },
+      captions: {
+        lines: fixLines(editLines(clips), choices.fixes),
+        style: choices.style,
+        ink: captionInk(),
+      },
       signal,
     });
   } finally {
@@ -155,7 +179,11 @@ function useSaveVideo(videoId: string, title: string) {
       if (signal.aborted) {
         return;
       }
-      setSaving({ step: "saved", video, clips: input.clips });
+      setSaving({
+        step: "saved",
+        video,
+        lines: fixLines(editLines(input.clips), input.choices.fixes),
+      });
     } catch (error) {
       if (!signal.aborted) {
         fail(errorMessage(error));
@@ -202,18 +230,18 @@ function useSaveVideo(videoId: string, title: string) {
 /** The saved video over the editor: to watch, find in My media, download, or keep editing. */
 function Saved({
   video,
-  clips,
+  lines,
   onClose,
 }: {
   video: Blob;
-  clips: readonly Clip[];
+  lines: readonly CaptionLine[];
   onClose: () => void;
 }) {
   const t = useTranslations("director");
   const locale = useLocale();
   const url = useObjectUrl(video);
   const captions = useObjectUrl(
-    useMemo(() => new Blob([webVtt(editLines(clips))], { type: "text/vtt" }), [clips]),
+    useMemo(() => new Blob([webVtt(lines)], { type: "text/vtt" }), [lines]),
   );
   const extension = video.type === "video/mp4" ? "mp4" : "webm";
   return (
@@ -395,16 +423,51 @@ function Transport({ editor }: { editor: EditorState }) {
   );
 }
 
-/** Everything the editor holds: the shots and their picks, the takes, the clock, the choices. */
-function useEditor(
+const NO_CLIPS: readonly Clip[] = [];
+
+/** A take Director offered as a choice, as a clip, so it loads for its preview. */
+function candidateClips(
+  reply: EditorReply | null,
+  byShot: readonly Clip[],
+  shots: readonly DirectorShot[],
+) {
+  return (reply?.choices ?? []).flatMap((choice): Clip[] => {
+    const clip = byShot.find((one) => one.index === choice.shotIndex);
+    const take = shots[choice.shotIndex]?.takes.find((one) => one.id === choice.takeId);
+    if (!clip || !take || take.status !== "ready") {
+      return [];
+    }
+    const from = Math.max(0, choice.atSeconds - 1);
+    return [{ ...clip, take, state: "cut", from, to: from + 2 }];
+  });
+}
+
+/** The shot a request just changed, outlined on the board for a moment. */
+function useHighlight() {
+  const [highlight, setHighlight] = useState<number | null>(null);
+  useEffect(() => {
+    if (highlight === null) {
+      return;
+    }
+    const timer = window.setTimeout(() => setHighlight(null), 1500);
+    return () => window.clearTimeout(timer);
+  }, [highlight]);
+  return { highlight, setHighlight };
+}
+
+/**
+ * The clips that play: each filmed shot's picked take in the member's version (`byShot`,
+ * what Director reads), then the member's order, trims and grades, then the plan's match
+ * cuts lined up.
+ */
+function useArrangedClips(
   videoId: string,
   plan: ShotPlan,
   shots: readonly DirectorShot[],
-  audio: AudioMode,
+  choices: EditChoices,
   version: YourVersion,
 ) {
-  const history = useEditHistory({ style: "pop", sound: audio === "voice", picks: {} });
-  const { picks } = history.choices;
+  const { picks } = choices;
   // Only the shots the member's version films reach the video (and the saved picks).
   const played = useMemo(
     () =>
@@ -414,7 +477,7 @@ function useEditor(
       ),
     [shots, picks, version],
   );
-  const unaligned = useMemo(
+  const byShot = useMemo(
     () =>
       clipsOf(
         plan.shots.map((shot, index) => yourVersion(shot, adaptationOf(version, index)).shot),
@@ -423,14 +486,55 @@ function useEditor(
       ),
     [plan.shots, played, version],
   );
-  // Match cuts are lined up as soon as both takes are in: the clips play the aligned cut.
-  const matchCuts = useMatchCuts(videoId, plan, unaligned);
-  const { clips } = matchCuts;
-  const media = useTakeMedia(clips);
+  const arranged = useMemo(() => arrange(byShot, choices), [byShot, choices]);
+  // The plan's match cuts join shots that follow each other in its order: once the member
+  // reorders or drops shots, they're cut plainly.
+  const inPlanOrder = choices.order === null && choices.dropped.length === 0;
+  const matchCuts = useMatchCuts(videoId, plan, inPlanOrder ? arranged : NO_CLIPS);
+  return { played, byShot, clips: inPlanOrder ? matchCuts.clips : arranged, matchCuts };
+}
+
+/** Everything the editor holds: the shots and their picks, the takes, the clock, the choices. */
+function useEditor(
+  videoId: string,
+  plan: ShotPlan,
+  shots: readonly DirectorShot[],
+  audio: AudioMode,
+  version: YourVersion,
+) {
+  const history = useEditHistory({
+    style: "pop",
+    sound: audio === "voice",
+    picks: {},
+    ...UNARRANGED,
+  });
+  const { picks } = history.choices;
+  const { played, byShot, clips, matchCuts } = useArrangedClips(
+    videoId,
+    plan,
+    shots,
+    history.choices,
+    version,
+  );
+  const [reply, setReply] = useState<EditorReply | null>(null);
+  const media = useTakeMedia([...clips, ...candidateClips(reply, byShot, shots)]);
   const total = editSeconds(clips);
   const playback = usePlayback(total);
   const [tool, setTool] = useState<Tool | null>(null);
+  const { highlight, setHighlight } = useHighlight();
+  const showShot = (shotIndex: number) => {
+    setHighlight(shotIndex);
+    const clip = clips.find((one) => one.index === shotIndex);
+    if (clip) {
+      playback.seek(clip.at);
+    }
+  };
+  // Only the shots that play go into a saved cut: a dropped one isn't in the video.
+  const playing = new Map(
+    [...played].filter(([index]) => clips.some((clip) => clip.index === index)),
+  );
   return {
+    byShot,
     clips,
     media,
     total,
@@ -438,18 +542,28 @@ function useEditor(
     history,
     tool,
     setTool,
-    lines: useMemo(() => editLines(clips), [clips]),
+    reply,
+    setReply,
+    highlight,
+    showShot,
+    lines: useMemo(
+      () => fixLines(editLines(clips), history.choices.fixes),
+      [clips, history.choices.fixes],
+    ),
     matchCuts,
-    cutPicks: cutPicks(played),
-    ready: complete(clips) && clips.every((clip) => loadedTake(media, clip)),
+    cutPicks: cutPicks(playing),
+    ready: clips.length > 0 && complete(clips) && clips.every((clip) => loadedTake(media, clip)),
     left: clips.filter((clip) => clip.state === "missing").length,
     pick: (shotIndex: number, takeId: DirectorTakeId) => {
-      history.change({ picks: { ...picks, [shotIndex]: takeId } });
-      const clip = required(
-        clips.find((shown) => shown.index === shotIndex),
-        "the shot picked",
-      );
-      playback.seek(clip.at);
+      const { trims } = history.choices;
+      history.change({
+        picks: { ...picks, [shotIndex]: takeId },
+        // The new take plays the part its own review kept.
+        trims: Object.fromEntries(
+          Object.entries(trims).filter(([index]) => Number(index) !== shotIndex),
+        ),
+      });
+      showShot(shotIndex);
     },
     seek: (clip: Clip) => {
       playback.pause();
@@ -550,6 +664,54 @@ function WrapCall({ ready, play }: { ready: boolean; play: () => void }) {
   );
 }
 
+/**
+ * The "tell Director" bar's requests: each answer that changes something is one step in
+ * the edit history (one Undo), the shots it changed are outlined, and what only the page
+ * can do (undo, redo, reshooting a shot) is done here.
+ */
+function useTalk(videoId: string, editor: EditorState, audio: AudioMode) {
+  const router = useRouter();
+  const { history } = editor;
+  const effects: Record<EditorEffect["kind"], (effect: EditorEffect) => void> = {
+    undo: (effect) => repeat(effect, history.undo),
+    redo: (effect) => repeat(effect, history.redo),
+    reshoot: (effect) => {
+      if (effect.kind === "reshoot") {
+        router.push(shotPage(videoId, effect.shotIndex, audio, true));
+      }
+    },
+    // The asset picker and the soundtrack join here: Director has already said what it
+    // would make; until they're in the editor, nothing more happens.
+    asset: () => undefined,
+    music: () => undefined,
+  };
+  const talk = useTellDirector(videoIdSchema.parse(videoId), (reply) => {
+    editor.setReply(reply);
+    if (reply.outcome !== "applied") {
+      return;
+    }
+    const step = applyActions(history.choices, reply.actions, editor.byShot);
+    if (step.choices !== history.choices) {
+      history.change(step.choices);
+    }
+    for (const effect of step.effects) {
+      effects[effect.kind](effect);
+    }
+    const first = step.shots[0];
+    if (first !== undefined) {
+      editor.showShot(first);
+    }
+  });
+  return talk;
+}
+
+function repeat(effect: EditorEffect, once: () => void) {
+  const steps = "steps" in effect ? effect.steps : 1;
+  for (let step = 0; step < steps; step++) {
+    once();
+  }
+}
+
 function Editor({
   videoId,
   plan,
@@ -569,7 +731,12 @@ function Editor({
   const t = useTranslations("director");
   const editor = useEditor(videoId, plan, shots, audio, version);
   const saver = useSaveVideo(videoId, plan.title);
+  const talk = useTalk(videoId, editor, audio);
   const { playback, history, clips, media } = editor;
+  const dismiss = () => {
+    editor.setReply(null);
+    talk.dismiss();
+  };
   const save = () => {
     playback.pause();
     void saver.save({
@@ -634,10 +801,33 @@ function Editor({
           onPick={editor.pick}
           onSeek={editor.seek}
           locked={saver.busy}
+          highlight={editor.highlight}
         />
+        <div inert={saver.busy} className={cn(saver.busy && "opacity-40")}>
+          <TellDirector
+            reply={editor.reply}
+            pending={talk.pending}
+            error={talk.error}
+            shots={shots}
+            media={media}
+            onSend={(request) =>
+              void talk.send(request, editorState(editor.byShot, history.choices, false))
+            }
+            onListen={playback.pause}
+            onPick={(shotIndex, takeId) => {
+              editor.pick(shotIndex, takeId);
+              dismiss();
+            }}
+            onUndo={() => {
+              history.undo();
+              dismiss();
+            }}
+            onDismiss={dismiss}
+          />
+        </div>
       </div>
       {saver.saving.step === "saved" ? (
-        <Saved video={saver.saving.video} clips={saver.saving.clips} onClose={saver.close} />
+        <Saved video={saver.saving.video} lines={saver.saving.lines} onClose={saver.close} />
       ) : null}
     </div>
   );

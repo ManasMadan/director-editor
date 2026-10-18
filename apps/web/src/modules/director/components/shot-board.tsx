@@ -30,6 +30,8 @@ interface ColumnProps {
   retakeHref: ShotPage;
   onPick: (shotIndex: number, takeId: DirectorTakeId) => void;
   onSeek: (clip: Clip) => void;
+  /** Just changed by a request to Director: outlined for a moment. */
+  highlighted: boolean;
 }
 
 /** The shot's number, title and length, over a bar that fills as the clock plays it. */
@@ -234,7 +236,10 @@ function ShotColumn({
     <fieldset
       ref={column}
       aria-label={t("editor.clip", { index: clip.index + 1, title: clip.shot.title })}
-      className="flex h-full min-w-0 shrink-0 snap-start flex-col gap-2 overflow-y-auto overscroll-y-contain px-1 [scrollbar-width:none]"
+      className={cn(
+        "flex h-full min-w-0 shrink-0 snap-start flex-col gap-2 overflow-y-auto overscroll-y-contain rounded-xl px-1 ring-2 ring-transparent transition-[box-shadow] duration-300 ease-out [scrollbar-width:none]",
+        props.highlighted && "ring-record",
+      )}
       style={{ width: columnWidth(clip.seconds) }}
     >
       <ShotHeader clip={clip} progress={props.progress} onSeek={props.onSeek} />
@@ -296,6 +301,7 @@ export function ShotBoard({
   onPick,
   onSeek,
   locked = false,
+  highlight = null,
 }: {
   clips: readonly Clip[];
   shots: readonly DirectorShot[];
@@ -308,6 +314,8 @@ export function ShotBoard({
   onSeek: (clip: Clip) => void;
   /** While the video is being made: nothing on the board takes a tap. */
   locked?: boolean;
+  /** The shot a request to Director just changed, outlined and brought into view. */
+  highlight?: number | null;
 }) {
   const t = useTranslations("director.editor");
   const columns = useRef(new Map<number, HTMLFieldSetElement>());
@@ -328,6 +336,13 @@ export function ShotBoard({
         ?.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
     }
   }, [active, playing]);
+  useEffect(() => {
+    if (highlight !== null) {
+      columns.current
+        .get(highlight)
+        ?.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
+    }
+  }, [highlight]);
 
   return (
     <section
@@ -353,6 +368,7 @@ export function ShotBoard({
           retakeHref={shotHref(clip.index)}
           onPick={pick}
           onSeek={onSeek}
+          highlighted={highlight === clip.index}
         />
       ))}
       <p className="sr-only" aria-live="polite">

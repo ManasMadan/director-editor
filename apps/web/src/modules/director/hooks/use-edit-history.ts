@@ -1,18 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import type { CaptionStyle } from "../lib/captions";
+import type { EditorChoices } from "../lib/editor-actions";
 import { type History, historyOf, push, redo, undo } from "../lib/history";
-import type { Picks } from "../lib/picks";
 
-/** What the member decides in the editor, all of it undoable. */
-export interface EditChoices {
-  style: CaptionStyle;
-  /** Whether the takes' own sound goes into the video. */
-  sound: boolean;
-  /** The takes the member picked over Director's, by shot (lib/picks.ts). */
-  picks: Picks;
-}
+/** What the member decides in the editor, all of it undoable (lib/editor-actions.ts). */
+export type EditChoices = EditorChoices;
 
 export function useEditHistory(initial: EditChoices) {
   const [history, setHistory] = useState<History<EditChoices>>(() => historyOf(initial));

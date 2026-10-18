@@ -1,9 +1,10 @@
 import { directorTakeIdSchema } from "@repo/contracts/ids";
 import { describe, expect, it } from "vitest";
 import { type EditChoices, useEditHistory } from "@/modules/director/hooks/use-edit-history";
+import { UNARRANGED } from "@/modules/director/lib/editor-actions";
 import { renderHook } from "./support";
 
-const initial: EditChoices = { style: "pop", sound: true, picks: {} };
+const initial: EditChoices = { style: "pop", sound: true, picks: {}, ...UNARRANGED };
 const take = directorTakeIdSchema.parse(crypto.randomUUID());
 
 describe("useEditHistory", () => {
