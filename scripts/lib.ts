@@ -145,6 +145,39 @@ export function runSync(command: string, args: string[], options: SpawnSyncOptio
   };
 }
 
+/**
+ * The variables that tie git to one repository (`git rev-parse --local-env-vars`). Git sets
+ * some of them for a hook it runs, GIT_DIR above all, and every git command started below
+ * the hook inherits them: a test's `git init` and `git config` in a temporary folder then
+ * write to the real repository instead.
+ */
+export const GIT_REPOSITORY_VARIABLES = [
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_CONFIG",
+  "GIT_CONFIG_PARAMETERS",
+  "GIT_CONFIG_COUNT",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_IMPLICIT_WORK_TREE",
+  "GIT_GRAFT_FILE",
+  "GIT_INDEX_FILE",
+  "GIT_NO_REPLACE_OBJECTS",
+  "GIT_REPLACE_REF_BASE",
+  "GIT_PREFIX",
+  "GIT_SHALLOW_FILE",
+  "GIT_COMMON_DIR",
+];
+
+/** `env` without git's repository variables, so git finds each repository from its folder. */
+export function withoutGitRepository(env: NodeJS.ProcessEnv): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(env).flatMap(([key, value]) =>
+      value === undefined || GIT_REPOSITORY_VARIABLES.includes(key) ? [] : [[key, value]],
+    ),
+  );
+}
+
 /** Whether something accepts connections on `host`:`port` within `timeoutMs`. */
 export async function listening(port: number, timeoutMs = 1000, host = "127.0.0.1") {
   const socket = connect({ host, port });

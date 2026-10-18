@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
 import {
   copyFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -706,6 +708,29 @@ describe("the commands a step runs", () => {
       "set\n",
     );
     expect(logged.join("")).toBe("out\nerr\n");
+  });
+
+  // Git runs the hook with GIT_DIR set: a test's `git init` and `git config` in a temporary
+  // folder would otherwise write to this repository (its identity, core.bare).
+  it("keeps the repository git runs the hook in from the commands' git", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "pre-push-git-"));
+    // Another repository stands in for this one: were it leaked, `git init` would make it.
+    const hooked = join(dir, "hooked.git");
+    const environment = { ...process.env, GIT_DIR: hooked, GIT_INDEX_FILE: join(hooked, "index") };
+    try {
+      const exec = spawnExec(new AbortController().signal, () => undefined, environment);
+      const printed = await exec("sh", ["-c", "printenv GIT_DIR GIT_INDEX_FILE || echo none"], {
+        quiet: true,
+      });
+      expect(printed.stdout).toBe("none\n");
+      const work = join(dir, "work");
+      mkdirSync(work);
+      expect((await exec("git", ["init", "-q"], { cwd: work, quiet: true })).status).toBe(0);
+      expect(existsSync(join(work, ".git"))).toBe(true);
+      expect(existsSync(hooked)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("says when a command doesn't exist", async () => {
