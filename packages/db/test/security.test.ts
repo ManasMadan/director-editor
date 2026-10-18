@@ -261,6 +261,12 @@ describe("least privilege", () => {
       /row-level security/,
     );
     await expect(copy(seed(orgB))).rejects.toThrow(/row-level security/);
+    // Only finished seeds: one the AI service would take for a plan still to write is refused.
+    for (const unfinished of [{ status: "pending" }, { stage: "queued" }]) {
+      await expect(copy({ ...seed(orgA), videoId: "Seed_Short3", ...unfinished })).rejects.toThrow(
+        /row-level security/,
+      );
+    }
     await expect(
       tenantTx(api, orgA, (tx) =>
         tx.directorPlan.create({

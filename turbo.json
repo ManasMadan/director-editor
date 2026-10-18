@@ -44,6 +44,12 @@
     "test": {
       "dependsOn": ["gen", "^gen"]
     },
+    // The ai's unit tests also read the seed templates, which live in packages/contracts
+    // (a package apps/ai doesn't depend on), so a change there must miss the cache too.
+    "@repo/ai#test": {
+      "dependsOn": ["gen", "^gen"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/contracts/src/director-seeds.json"]
+    },
     // Integration tests talk to real Postgres/Valkey/Mailpit: never cached, since a
     // cache hit would skip checking the live dependencies.
     "test:integration": {

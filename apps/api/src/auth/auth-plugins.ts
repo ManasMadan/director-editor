@@ -126,7 +126,8 @@ function workspaceHooks({
     beforeUpdateOrganization: async ({ organization: org }) => refusePersonal(org),
     // A team's library starts with Director's seeded templates, like a personal one's.
     // better-auth has already written the workspace, so they're copied together with its
-    // audit event; should that fail, the seed backfill copies them later.
+    // audit event: should that fail, the request errors for a workspace that exists, its
+    // audit event is lost with the copy, and only the seeds come back (the backfill).
     afterCreateOrganization: async ({ organization: org, user }) => {
       const [orgId, userId] = [orgIdOf(org), userIdOf(user)];
       await memberships.forget(orgId, userId);

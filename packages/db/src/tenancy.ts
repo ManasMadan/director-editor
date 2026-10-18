@@ -111,7 +111,9 @@ export function tenantTx<T>(db: Db, orgId: OrgId, fn: (tx: Tx) => Promise<T>): P
 /**
  * Scopes the rest of a transaction to a workspace, for a unit that starts on non-tenant
  * data and goes on to tenant rows: creating a workspace (whose id only exists once it's
- * inserted) and giving it its starting data in the same transaction.
+ * inserted) and giving it its starting data in the same transaction. Only for a
+ * `transaction()` unit: a `tenantTx` is already one workspace's, and must never be moved
+ * to another.
  */
 export async function enterTenant(tx: Tx, orgId: OrgId): Promise<void> {
   await setScope(tx, "app.org_id", orgId);
