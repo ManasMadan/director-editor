@@ -228,7 +228,9 @@ templates in its personal workspace. Run again, it only sets the password and th
 and copies any seed the library is missing: what judges did with the account (its own
 indexed Short, takes and cuts) stays. `--reset` starts over: it deletes the account and the
 workspaces only it belongs to, and everything made in them, then makes it again with only
-the seeds.
+the seeds. It doesn't check the password against public breaches, even with
+`PASSWORD_BREACH_CHECK` on: the sign-in page shows it to everyone anyway, so the check
+would protect nothing, and the command never depends on Have I Been Pwned being up.
 
 Everyone shares the account, so (`apps/api/src/auth/demo.ts`):
 
