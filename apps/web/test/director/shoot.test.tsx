@@ -160,10 +160,11 @@ describe("starting to shoot", () => {
     const page = await renderPage(<ShootRoute videoId={videoId} />, {
       url: `/director/${videoId}/shoot?shot=0&audio=voice`,
     });
+    // With Live on, the shoot records as one roll: the short version of what that means.
     await expect
       .element(
         page.getByText(
-          "Director sees and hears you while you get set. A take records only when you tap the shutter.",
+          "Director records the whole time you're shooting, chat included. Only the clips you use go in your video. Pause any time.",
         ),
       )
       .toBeVisible();
