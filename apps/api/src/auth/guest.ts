@@ -38,7 +38,7 @@ import { features } from "../features";
 import type { AuthContext } from "./auth-context";
 
 /** Where the web app's "Try it now" signs in. */
-export const GUEST_SIGN_IN_PATH = "/sign-in/guest";
+const GUEST_SIGN_IN_PATH = "/sign-in/guest";
 
 /** RFC 2606 reserves `.invalid`: no address on it can receive mail, or ever be anyone's. */
 const GUEST_EMAIL_DOMAIN = "guest.invalid";
@@ -46,10 +46,10 @@ const GUEST_EMAIL_DOMAIN = "guest.invalid";
 const i18n = createI18n(bundledMessages);
 
 /** A new guest's address: unique, and never a real mailbox. */
-export const guestEmail = () => `guest-${randomUUID()}@${GUEST_EMAIL_DOMAIN}`;
+const guestEmail = () => `guest-${randomUUID()}@${GUEST_EMAIL_DOMAIN}`;
 
 /** When a guest made `now` is deleted. */
-export const guestUntilFrom = (now: Date) =>
+const guestUntilFrom = (now: Date) =>
   new Date(now.getTime() + DEMO_GUEST_LIFETIME_S * SECOND_MS);
 
 /** Refuses another guest while `limit` are still live. */

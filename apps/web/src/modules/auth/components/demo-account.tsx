@@ -10,7 +10,7 @@ import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { useAuthErrorMessage } from "../hooks/use-auth-error";
 
-export interface DemoAccount {
+interface DemoAccount {
   email: string;
   password: string;
 }

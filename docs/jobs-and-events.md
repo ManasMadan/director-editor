@@ -69,7 +69,7 @@ lets it in (`deploy/charts/data/templates/valkey.yaml`).
 | `events-notifications` | `event` | the outbox relay | notifications (security alerts, and suppressing an address that hard-bounced) |
 | `files` | `process` | api (upload completed) | worker |
 | `ai-director` | `plan`, `review-take` | ai (FastAPI and its worker) | ai worker (Python) |
-| `maintenance` | `outbox-retention`, `audit-partitions`, `session-retention`, `files-cleanup` | worker (job schedulers) | worker |
+| `maintenance` | `outbox-retention`, `audit-partitions`, `session-retention`, `files-cleanup`, `demo-guests` | worker (job schedulers) | worker |
 
 Scheduled work uses BullMQ job schedulers upserted at boot (`maintenance.processor.ts`),
 so each occurrence runs once whatever the replica count.

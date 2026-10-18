@@ -13,7 +13,7 @@ needs, granted in migrations (often column by column).
 
 | Schema | Owner | Also used by |
 |---|---|---|
-| `auth` | api (better-auth: users, sessions, organizations) | notifications reads user identity columns; worker purges expired rows through `auth.purge_expired()` |
+| `auth` | api (better-auth: users, sessions, organizations) | notifications reads user identity columns; worker purges expired rows through `auth.purge_expired()`, and expired demo guests (with their workspaces) through `auth.purge_expired_guests()` |
 | `app` | api (product data: short reactions, its outbox) | worker reads the outbox and stamps `published_at` |
 | `audit` | worker (append-only, partitioned by month) | api reads its organization's rows |
 | `webhooks` | webhooks (inbound events, its outbox) | worker relays the outbox |
