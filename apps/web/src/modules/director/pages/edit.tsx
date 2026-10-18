@@ -30,6 +30,7 @@ import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { DirectorGate } from "@/modules/shorts";
+import { BackToPicks } from "../components/directors-picks";
 import { EditPlayer } from "../components/edit-player";
 import { SoundPanel, StylePicker, type Tool } from "../components/edit-tools";
 import { MatchCutNotes } from "../components/match-cut";
@@ -617,6 +618,11 @@ function Editor({
         ) : null}
         <MatchCutNotes cuts={editor.matchCuts.cuts} />
         <VersionGaps plan={plan} version={version} />
+        <BackToPicks
+          shots={shots}
+          picks={history.choices.picks}
+          onReset={(picks) => history.change({ picks })}
+        />
         <ShotBoard
           clips={clips}
           shots={shots}
