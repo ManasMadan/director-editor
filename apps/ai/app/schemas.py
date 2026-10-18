@@ -64,6 +64,7 @@ MAX_MEDIA_KEY = 200
 def _unset(value: object) -> bool:
     return value is None
 
+
 type KeypointName = Literal[
     "nose",
     "left_shoulder",

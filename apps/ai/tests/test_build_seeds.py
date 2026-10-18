@@ -304,9 +304,7 @@ async def test_main_keeps_the_media_of_a_seed_whose_plan_came_out_the_same(
     seeds = tmp_path / "seeds.json"
     seeds.write_text(json.dumps([{"videoId": "22k0fZarxh8"}]))
     templates = tmp_path / "templates.json"
-    previous = [
-        _template(_with_media(shot_plan())).model_copy(update={"model": GEMINI_MODEL})
-    ]
+    previous = [_template(_with_media(shot_plan())).model_copy(update={"model": GEMINI_MODEL})]
     write_templates(previous, templates)
     for key, value in gemini_env(gemini[0].url).items():
         monkeypatch.setenv(key, value)

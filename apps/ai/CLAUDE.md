@@ -18,6 +18,11 @@ TypeScript client is `packages/ai-client`.
 - After changing the plan schema (`ShotPlan`): `bun run --filter @repo/ai seeds:build`
   re-indexes the 6 seed Shorts on Vertex AI into `packages/contracts/src/director-seeds.json`
   (commit it; the API copies it into every new workspace)
+- Then `bun run --filter @repo/ai seeds:media -- --bucket <bucket> [--dry-run]` makes
+  each seed's storyboard cards, preview clips and music on Vertex AI (Nano Banana, Veo,
+  Lyria) as the signed-in gcloud account, uploads them and writes their keys into the
+  same file; it only makes what's missing, so run it again after a failure
+  (`scripts/seed_media.py`)
 
 ## Where things are
 

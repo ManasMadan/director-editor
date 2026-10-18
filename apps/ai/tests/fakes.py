@@ -160,6 +160,83 @@ def gemini_error(status: int, reason: str, message: str = "") -> Callable[[bytes
     return reply
 
 
+# Google's media models on Vertex AI, as google-genai's client calls them
+# (scripts/seed_media.py): Nano Banana and Lyria through generateContent, Veo through a
+# long-running prediction it polls with fetchPredictOperation.
+VERTEX_PROJECT = "test-project"
+
+
+def vertex_path(location: str, model: str, method: str) -> str:
+    return (
+        f"/v1beta1/projects/{VERTEX_PROJECT}/locations/{location}"
+        f"/publishers/google/models/{model}:{method}"
+    )
+
+
+def vertex_inline(mime_type: str, data: bytes) -> Callable[[bytes], Reply]:
+    """generateContent answering with a text part (Lyria's caption, a model's remark)
+    and then one inline file: an image, or a track."""
+
+    def reply(_body: bytes) -> Reply:
+        part = {"inlineData": {"mimeType": mime_type, "data": base64.b64encode(data).decode()}}
+        return 200, {
+            "candidates": [{"content": {"role": "model", "parts": [{"text": "Here it is."}, part]}}]
+        }
+
+    return reply
+
+
+def vertex_text_only(_body: bytes) -> Reply:
+    """generateContent answering in words only: what a model does when it won't draw."""
+    return 200, {"candidates": [{"content": {"role": "model", "parts": [{"text": "No."}]}}]}
+
+
+def veo_operation(model: str) -> str:
+    """A Veo operation's name: the client polls the model its name says."""
+    return (
+        f"projects/{VERTEX_PROJECT}/locations/us-central1/publishers/google/models/{model}"
+        "/operations/veo-1"
+    )
+
+
+def veo_started(model: str) -> Callable[[bytes], Reply]:
+    def reply(_body: bytes) -> Reply:
+        return 200, {"name": veo_operation(model)}
+
+    return reply
+
+
+def veo_polls(model: str, *replies: Reply) -> Callable[[bytes], Reply]:
+    """fetchPredictOperation answering with each of `replies` in turn (then the last one
+    for good), as `model`'s operation."""
+    remaining = list(replies)
+
+    def reply(_body: bytes) -> Reply:
+        status, body = remaining.pop(0) if len(remaining) > 1 else remaining[0]
+        return status, {"name": veo_operation(model), **body}
+
+    return reply
+
+
+VEO_RUNNING: Reply = (200, {"done": False})
+
+
+def veo_done(data: bytes) -> Reply:
+    video = {"bytesBase64Encoded": base64.b64encode(data).decode(), "mimeType": "video/mp4"}
+    return 200, {"done": True, "response": {"videos": [video]}}
+
+
+def veo_failed(message: str) -> Reply:
+    return 200, {"done": True, "error": {"code": 3, "message": message}}
+
+
+# Every clip held back by the safety filters: the operation succeeds with no video.
+VEO_FILTERED: Reply = (
+    200,
+    {"done": True, "response": {"raiMediaFilteredCount": 1, "raiMediaFilteredReasons": ["x"]}},
+)
+
+
 BIGQUERY_PROJECT = "test-project"
 BIGQUERY_DATASET = "director"
 # tabledata.insertAll on the events table, as google-cloud-bigquery's client asks for it.

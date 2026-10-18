@@ -340,6 +340,7 @@ file below 100%, or one no test loads.
 | `biome.jsonc` | `noConsole` off in `scripts/`, the hooks, config files and the API's command-line scripts | they talk to whoever runs them through the console |
 | `apps/ai/tests/test_plan_repair.py` | `# noqa: S311` | a deterministic seed for a reproducible fuzz test, not a cryptographic use |
 | `apps/ai/app/audio.py` | `# pyright: ignore[reportMissingTypeStubs]` on the import, `# pyright: ignore[reportUnknownMemberType]` on the upload | google-cloud-storage ships no stubs |
+| `apps/ai/scripts/seed_media.py` | `# pyright: ignore[reportMissingTypeStubs]` on the import, `# pyright: ignore[reportUnknownMemberType]` on the upload | google-cloud-storage ships no stubs |
 | `apps/ai/app/queues.py` | `# pyright: ignore[reportMissingTypeStubs, reportUnknownMemberType, reportArgumentType]` | bullmq ships no stubs and leaves job data untyped |
 | `apps/ai/app/google_auth.py` | `# pyright: ignore[reportUnknownMemberType]` | google-auth's `jwt.decode` (its ID-token check) is untyped; the claims it returns are validated with a Pydantic model |
 | `apps/ai/app/main.py` | `# pyright: ignore[reportUnknownMemberType]` | redis-py's options are untyped |
