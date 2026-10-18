@@ -90,7 +90,20 @@ export async function Proof() {
 }
 
 /** The Google Cloud services Director runs on today, each with what it does here. */
-const SERVICES = ["argon", "flash", "live", "storage", "bigquery", "youtube", "signIn"] as const;
+const SERVICES = [
+  "argon",
+  "flash",
+  "live",
+  "tts",
+  "nanoBanana",
+  "veo",
+  "lyria",
+  "storage",
+  "cloudRun",
+  "bigquery",
+  "youtube",
+  "signIn",
+] as const;
 
 export async function Cloud() {
   const t = await getTranslations("home");

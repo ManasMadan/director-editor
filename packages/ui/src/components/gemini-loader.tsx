@@ -14,22 +14,25 @@ const SIZE_CLASSES = {
  * loading; it is always the accessible name (set as `aria-label`, since `role="status"`
  * doesn't take its name from content) and, with `showLabel`, is also drawn as a caption
  * under the sparkle. Respects `prefers-reduced-motion`: the glow and sparkle hold still,
- * gradient and all, instead of animating.
+ * gradient and all, instead of animating. `as="span"` renders it as a span, for inside
+ * a button or other phrasing content, where a div isn't allowed.
  */
 function GeminiLoader({
   label,
   showLabel = false,
   size = "md",
+  as: Root = "div",
   className,
   ...props
-}: React.ComponentProps<"div"> & {
+}: React.HTMLAttributes<HTMLElement> & {
   label: string;
   showLabel?: boolean;
   size?: "sm" | "md" | "lg";
+  as?: "div" | "span";
 }) {
   const gradientId = useId();
   return (
-    <div
+    <Root
       data-slot="gemini-loader"
       data-size={size}
       role="status"
@@ -61,7 +64,7 @@ function GeminiLoader({
         />
       </span>
       {showLabel ? <span className="text-sm text-muted-foreground">{label}</span> : null}
-    </div>
+    </Root>
   );
 }
 

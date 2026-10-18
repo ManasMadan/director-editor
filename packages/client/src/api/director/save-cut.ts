@@ -18,7 +18,14 @@ interface CutInput {
   picks: DirectorCut["picks"];
   title: string;
   file: File;
-  /** The member cancelled or left: the upload stops, and no cut is saved. */
+  /**
+   * The member cancelled or left: the upload stops, and no cut is saved. A cancel that
+   * comes after the upload completed leaves its file behind, checked and ready but in no
+   * cut: the files contract has no delete to call, and the worker's cleanup only removes
+   * files still pending after a day, so a ready `director-cut-video` with no cut is a known
+   * leftover. One that comes once the cut is being recorded is too late to stop it: the
+   * cut is saved and shows in My media, though the editor says nothing of it.
+   */
   signal?: AbortSignal;
 }
 

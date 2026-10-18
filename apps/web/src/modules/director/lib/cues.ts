@@ -141,12 +141,21 @@ function countCue(left: number, from: number, words: Words): Cue {
   return cue(`count:${left}`, text, 20 - left, "guide", ONCE);
 }
 
-/** A step as recording reaches it; the first opens with "Action!", two sentences said as one. */
+/** A step as said when recording reaches it; the first opens with "Action!", as one line. */
+function stepLine(index: number, instruction: string, words: Words) {
+  return index === 0 ? `${words.action} ${instruction}` : instruction;
+}
+
+/** Each of a shot's steps as Director says it, in order (to have them spoken ahead). */
+export function stepLines(steps: readonly { instruction: string }[], words: Words): string[] {
+  return steps.map((step, index) => stepLine(index, step.instruction, words));
+}
+
+/** A step as recording reaches it. */
 function stepCue(step: NonNullable<Perception["step"]>, words: Words): Cue {
-  const text = step.index === 0 ? `${words.action} ${step.instruction}` : step.instruction;
   return cue(
     `step:${step.index}`,
-    text,
+    stepLine(step.index, step.instruction, words),
     20 + step.index,
     step.index === 0 ? "cheer" : "guide",
     ONCE,

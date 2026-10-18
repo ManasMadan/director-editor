@@ -2,13 +2,29 @@
  * A template's page: the original and its storyboard, how each shot is filmed and what's
  * filmed of it, and the button to start; before that, Gemini at work or why it failed.
  */
+import { directorSeeds } from "@repo/contracts/director-seeds";
 import { fileIdSchema } from "@repo/contracts/ids";
-import { describe, expect, it, vi } from "vitest";
-import { commands, userEvent } from "vitest/browser";
+import { SECOND_MS } from "@repo/contracts/time";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { page as browser, commands, userEvent } from "vitest/browser";
 import { DirectorPage } from "@/modules/director";
+import { LiveUpdates } from "@/modules/shell";
 import { currentUrl, renderPage } from "../render";
-import { signUp } from "../users";
-import { newVideoId, planShot, readyPlan, shotPlan, take } from "./support";
+import { api, currentSession, signUp } from "../users";
+import {
+  newVideoId,
+  photo,
+  planShot,
+  readyPlan,
+  recordVideo,
+  shotPlan,
+  silentWav,
+  take,
+} from "./support";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const fileId = () => fileIdSchema.parse(crypto.randomUUID());
 const hero = () => document.querySelector("iframe") as HTMLIFrameElement;
@@ -132,6 +148,50 @@ describe("Director's page for a ready plan", () => {
     expect(currentUrl()).toBe(`/director/${videoId}/shoot?shot=0&audio=original`);
   });
 
+  it("keeps every shot of a long short within reach in the strip on a phone", async () => {
+    await browser.viewport(360, 780);
+    try {
+      const videoId = newVideoId();
+      const shots = Array.from({ length: 11 }, (_, index) =>
+        planShot({ title: `Shot ${index + 1}` }),
+      );
+      await readyPlan(videoId, shotPlan({ shots }));
+      const page = await showPlan(videoId);
+      const strip = page.getByRole("list", { name: "Storyboard" });
+      const inStrip = (index: number) =>
+        strip.getByRole("button", { name: `Watch shot ${index}: Shot ${index}` });
+      const within = (index: number) => {
+        const button = inStrip(index).element().getBoundingClientRect();
+        const list = strip.element().getBoundingClientRect();
+        return button.left >= list.left - 0.5 && button.right <= list.right + 0.5;
+      };
+      const last = inStrip(11);
+      await expect.element(last).toBeInTheDocument();
+      // The strip scrolls on its own; the page itself doesn't scroll sideways. Opening
+      // the page scrolls nothing.
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+      expect(strip.element().scrollLeft).toBe(0);
+      expect(within(11)).toBe(false);
+
+      // Watching a shot from its card brings it into view in the strip, and back again.
+      await userEvent.click(page.getByRole("button", { name: "Watch shot 11: Shot 11" }).last());
+      await expect.element(last).toHaveAttribute("aria-pressed", "true");
+      await expect.poll(() => within(11)).toBe(true);
+      // Still big enough to tap.
+      expect(last.element().getBoundingClientRect().width).toBeGreaterThanOrEqual(36);
+      await userEvent.click(page.getByRole("button", { name: "Watch shot 1: Shot 1" }).last());
+      await expect.element(inStrip(1)).toHaveAttribute("aria-pressed", "true");
+      await expect.poll(() => within(1)).toBe(true);
+      // One already in view stays where it is.
+      const scrolled = strip.element().scrollLeft;
+      await userEvent.click(inStrip(2));
+      await expect.element(inStrip(2)).toHaveAttribute("aria-pressed", "true");
+      expect(strip.element().scrollLeft).toBe(scrolled);
+    } finally {
+      await browser.viewport(414, 896);
+    }
+  });
+
   it.each([
     ["music", "This short is set to music: you'll film along to the original audio."],
     ["none", "This short has no sound to match."],
@@ -167,7 +227,6 @@ describe("Director's page for a ready plan", () => {
       const page = await showPlan(videoId);
       await userEvent.click(page.getByRole("button", { name: "Watch shot 2: The look" }).first());
       expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior });
-      vi.restoreAllMocks();
     },
   );
 
@@ -285,5 +344,305 @@ describe("Director's page before the plan is ready", () => {
     await userEvent.click(page.getByRole("button", { name: "Try again" }));
     await expect.poll(() => commands.failedRequests("/rpc/director/plan")).toBeGreaterThan(tried);
     expect(await commands.answeredRequests("/rpc/director/index")).toBe(0);
+  });
+});
+
+/** A blob's bytes as base64, for `serveRequests`. */
+async function base64(blob: Blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  return btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
+}
+
+/**
+ * Storage's answers for a seed's media, which the local stack doesn't hold: a picture for
+ * every storyboard card, a clip for every preview and a track for the music.
+ */
+async function serveSeedMedia() {
+  const [picture, clip, track] = await Promise.all([
+    photo(),
+    recordVideo(1),
+    fetch(silentWav(2)).then((response) => response.blob()),
+  ]);
+  await commands.serveRequests(String.raw`/seed-media/.+\.png\?`, {
+    contentType: "image/jpeg",
+    base64: await base64(picture),
+  });
+  await commands.serveRequests(String.raw`/seed-media/.+\.mp4\?`, {
+    contentType: "video/webm",
+    base64: await base64(clip),
+  });
+  await commands.serveRequests(String.raw`/seed-media/.+/music\.mp3\?`, {
+    contentType: "audio/wav",
+    base64: await base64(track),
+  });
+}
+
+describe("a seeded template's media", () => {
+  const seed = directorSeeds.find(({ videoId }) => videoId === "_HonL1arbaA");
+  if (!seed) {
+    throw new Error("the seed this test reads is gone");
+  }
+  const [first, second] = seed.plan.shots;
+  const seeded = (source: "seed" | "user" = "seed") =>
+    commands.fakeDirector(seed.videoId, { plan: { status: "ready", source, plan: seed.plan } });
+  const altOf = (shot = first) => `Storyboard for ${shot?.title}: ${shot?.scene}`;
+  const card = (shot = first) =>
+    [...document.querySelectorAll("img")].find((image) => image.alt === altOf(shot)) ?? null;
+  const videos = () => [...document.querySelectorAll("video")];
+  // The music plays from an Audio of its own, outside the page: found by what it plays.
+  const played = () => vi.spyOn(HTMLMediaElement.prototype, "play");
+  let play: ReturnType<typeof played>;
+  beforeEach(() => {
+    play = played();
+  });
+  const soundtrack = () =>
+    play.mock.contexts
+      .filter((media) => media instanceof HTMLMediaElement)
+      .find((media) => media.src.includes("/music.mp3"));
+  const planReads = () => commands.answeredRequests("/rpc/director/plan");
+  /** Every link a preview <video> is put on the page with, from now on. */
+  function clipsShown() {
+    const shown: string[] = [];
+    const watch = new MutationObserver((changes) => {
+      // A <video> put on the page, or one given another link.
+      const touched = changes.flatMap((change) => [change.target, ...change.addedNodes]);
+      for (const node of new Set(touched)) {
+        if (node instanceof HTMLVideoElement && node.src !== shown.at(-1)) {
+          shown.push(node.src);
+        }
+      }
+    });
+    watch.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["src"],
+    });
+    onTestFinished(() => watch.disconnect());
+    return shown;
+  }
+  const sketches = (page: Awaited<ReturnType<typeof showPlan>>) =>
+    page.getByRole("img", { name: /where you stand in the picture/ }).elements().length;
+
+  it("shows each shot's Nano Banana storyboard, plays its Veo preview in place, and the Lyria soundtrack", async () => {
+    await serveSeedMedia();
+    await seeded();
+    const page = await showPlan(seed.videoId);
+
+    // Every shot's card shows its storyboard, loaded lazily, with nothing playing yet.
+    await expect.element(page.getByAltText(altOf())).toBeVisible();
+    expect(card()?.getAttribute("loading")).toBe("lazy");
+    expect(card()?.src).toContain(`seed-media/${seed.videoId}/shot-0.png`);
+    card()?.scrollIntoView();
+    await expect.poll(() => card()?.naturalWidth).toBeGreaterThan(0);
+    expect(page.getByText("Storyboard by Nano Banana").elements()).toHaveLength(
+      seed.plan.shots.length,
+    );
+    expect(videos()).toEqual([]);
+
+    // Tapped, the shot's preview plays in its place: muted, looping, inline.
+    await userEvent.click(page.getByRole("button", { name: "Play the Veo preview of shot 1" }));
+    await expect.poll(() => videos().length).toBe(1);
+    const [clip] = videos();
+    expect(clip?.src).toContain(`seed-media/${seed.videoId}/shot-0.mp4`);
+    expect(clip?.muted).toBe(true);
+    expect(clip?.loop).toBe(true);
+    expect(clip?.playsInline).toBe(true);
+    await expect.poll(() => clip?.paused).toBe(false);
+    await expect.element(page.getByText("Preview made with Veo")).toBeVisible();
+    expect(card()).toBeNull();
+
+    // One at a time: the next shot's preview stops this one.
+    await userEvent.click(page.getByRole("button", { name: "Play the Veo preview of shot 2" }));
+    await expect
+      .poll(() => videos().map((video) => video.src))
+      .toEqual([expect.stringContaining(`seed-media/${seed.videoId}/shot-1.mp4`)]);
+    expect(card()).not.toBeNull();
+    await userEvent.click(page.getByRole("button", { name: "Pause the preview of shot 2" }));
+    expect(videos()).toEqual([]);
+    expect(card(second)).not.toBeNull();
+
+    // The seed's music, on a player of its own, loaded only once it's played.
+    await expect.element(page.getByText("Soundtrack, made with Lyria")).toBeVisible();
+    expect(await commands.answeredRequests("/music.mp3")).toBe(0);
+    const music = page.getByRole("button", { name: "Play the soundtrack" });
+    await expect.element(music).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(music);
+    expect(soundtrack()?.src).toContain(`seed-media/${seed.videoId}/music.mp3`);
+    await expect.poll(() => soundtrack()?.paused).toBe(false);
+    await expect.element(music).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(music);
+    await expect.poll(() => soundtrack()?.paused).toBe(true);
+    await expect.element(music).toHaveAttribute("aria-pressed", "false");
+    // Nothing failed, so the plan was read once.
+    expect(await planReads()).toBe(1);
+  });
+
+  it("keeps the soundtrack, a preview and the storyboards as they are when the plan is read again", async () => {
+    await serveSeedMedia();
+    await seeded();
+    await signUp();
+    // With the site's live updates, whose nudge reads the plan again.
+    const page = await renderPage(
+      <>
+        <LiveUpdates />
+        <DirectorPage videoId={seed.videoId} />
+      </>,
+      { url: `/director/${seed.videoId}` },
+    );
+    const opened = Date.now();
+    await expect.element(page.getByAltText(altOf())).toBeVisible();
+    const pictures = () => [...document.querySelectorAll("img")].map((image) => image.src);
+    await userEvent.click(page.getByRole("button", { name: "Play the Veo preview of shot 1" }));
+    await expect.poll(() => videos()[0]?.paused).toBe(false);
+    const clip = videos()[0]?.src;
+    // The other shots' storyboards, the first's playing as its preview.
+    const shown = pictures();
+    expect(shown).toHaveLength(seed.plan.shots.length - 1);
+    const music = page.getByRole("button", { name: "Play the soundtrack" });
+    await userEvent.click(music);
+    await expect.poll(() => soundtrack()?.paused).toBe(false);
+
+    // Links are signed to the second: a read a second later has new ones for everything.
+    await expect.poll(() => Date.now() - opened).toBeGreaterThan(SECOND_MS);
+    const { session } = await currentSession();
+    // Nudged until the page's realtime stream, which may still be connecting, hears it.
+    await expect
+      .poll(async () => {
+        await commands.publishRealtime(`org:${session.activeOrganizationId}`, {
+          type: "director.changed",
+        });
+        return planReads();
+      })
+      .toBeGreaterThan(1);
+    const fresh = await api.director.plan({ videoId: seed.videoId });
+    expect(fresh.plan?.musicUrl).not.toBe(soundtrack()?.src);
+
+    // What was working keeps the link it had: nothing stops, restarts or loads again.
+    expect(soundtrack()?.paused).toBe(false);
+    await expect.element(music).toHaveAttribute("aria-pressed", "true");
+    expect(videos().map((video) => [video.src, video.paused])).toEqual([[clip, false]]);
+    expect(pictures()).toEqual(shown);
+  });
+
+  it("plays from the plan's freshest link when the one it was first given has run out", async () => {
+    await serveSeedMedia();
+    await seeded();
+    await signUp();
+    const page = await renderPage(
+      <>
+        <LiveUpdates />
+        <DirectorPage videoId={seed.videoId} />
+      </>,
+      { url: `/director/${seed.videoId}` },
+    );
+    const opened = Date.now();
+    await expect.element(page.getByAltText(altOf())).toBeVisible();
+    // Every link of the first read is signed at the same moment, which the storyboard's tells.
+    const signedAt = (link: string | undefined) =>
+      new URL(link ?? "http://none").searchParams.get("X-Amz-Date");
+    const firstRead = signedAt(card()?.src);
+    expect(firstRead).not.toBeNull();
+    // The plan is read again a second on (a nudge), with every link signed anew...
+    await expect.poll(() => Date.now() - opened).toBeGreaterThan(SECOND_MS);
+    const { session } = await currentSession();
+    await expect
+      .poll(async () => {
+        await commands.publishRealtime(`org:${session.activeOrganizationId}`, {
+          type: "director.changed",
+        });
+        return planReads();
+      })
+      .toBeGreaterThan(1);
+    const reads = await planReads();
+    // ...and then the first read's links run out.
+    await commands.failRequests(`X-Amz-Date=${firstRead}`, { status: 403 });
+    const clips = clipsShown();
+    await userEvent.click(page.getByRole("button", { name: "Play the Veo preview of shot 2" }));
+    // The run-out link gives way to the fresher one the page already has: no read needed.
+    await expect.poll(() => videos()[0]?.paused).toBe(false);
+    expect(signedAt(videos()[0]?.src)).not.toBe(firstRead);
+    expect(clips.map(signedAt)).toEqual([firstRead, signedAt(videos()[0]?.src)]);
+    expect(await planReads()).toBe(reads);
+  });
+
+  it("shows no media on a member's own plan, even of the same Short", async () => {
+    await serveSeedMedia();
+    await seeded("user");
+    const page = await showPlan(seed.videoId);
+    await expect.element(page.getByRole("heading", { level: 3, name: first?.title })).toBeVisible();
+    expect(card()).toBeNull();
+    expect(page.getByText("Storyboard by Nano Banana").query()).toBeNull();
+    expect(page.getByText("Soundtrack, made with Lyria").query()).toBeNull();
+    expect(page.getByRole("button", { name: /Veo preview/ }).query()).toBeNull();
+    // The cards look as they always have: the framing sketch where a storyboard would be.
+    expect(sketches(page)).toBe(seed.plan.shots.length);
+  });
+
+  it("reads the plan again once for links that ran out, then leaves out what still fails", async () => {
+    await serveSeedMedia();
+    await commands.failRequests(".mp4?", { status: 403 });
+    await commands.failRequests("music.mp3?", { status: 403 });
+    await seeded();
+    const page = await showPlan(seed.videoId);
+    const clips = clipsShown();
+    const opened = Date.now();
+    const play = page.getByRole("button", { name: "Play the Veo preview of shot 1" });
+    // A second on, so the links read again are signed anew.
+    await expect.poll(() => Date.now() - opened).toBeGreaterThan(SECOND_MS);
+    await userEvent.click(play);
+    // The clip's link failed: the plan is read again for fresh links, and the card is back.
+    await expect.poll(planReads).toBe(2);
+    await expect.element(play).toBeVisible();
+    expect(card()).not.toBeNull();
+    // Failing again so soon, it isn't read a third time: the clip is left out. It was the
+    // fresh link that was tried.
+    await userEvent.click(play);
+    await expect.poll(() => new Set(clips).size).toBe(2);
+    await expect
+      .element(page.getByRole("button", { name: /preview of shot 1$/ }))
+      .not.toBeInTheDocument();
+    expect(card()).not.toBeNull();
+    await userEvent.click(page.getByRole("button", { name: "Play the soundtrack" }));
+    await expect.element(page.getByText("Soundtrack, made with Lyria")).not.toBeInTheDocument();
+    expect(await planReads()).toBe(2);
+  });
+
+  it("never shows a broken storyboard: one that won't load gives way to the framing sketch", async () => {
+    // A seed of its own: a link signed in the same second as another test's is the same
+    // link, and the browser would show the picture it kept from then.
+    const other = directorSeeds.find(({ videoId }) => videoId === "WvGUjw7OwZo");
+    if (!other) {
+      throw new Error("the seed this test reads is gone");
+    }
+    await commands.failRequests("/seed-media/", { status: 403 });
+    await commands.fakeDirector(other.videoId, {
+      plan: { status: "ready", source: "seed", plan: other.plan },
+    });
+    const page = await showPlan(other.videoId);
+    // Each card loads as it comes near the screen.
+    const scrolledThrough = () => {
+      for (const image of document.querySelectorAll("img")) {
+        image.scrollIntoView();
+      }
+    };
+    await expect
+      .element(page.getByRole("heading", { level: 3, name: other.plan.shots[0]?.title }))
+      .toBeVisible();
+    await expect
+      .poll(() => {
+        scrolledThrough();
+        return planReads();
+      })
+      .toBe(2);
+    await expect
+      .poll(() => {
+        scrolledThrough();
+        return other.plan.shots.filter((shot) => card(shot)).length;
+      })
+      .toBe(0);
+    expect(page.getByText("Storyboard by Nano Banana").query()).toBeNull();
+    expect(sketches(page)).toBe(other.plan.shots.length);
+    expect(await planReads()).toBe(2);
   });
 });

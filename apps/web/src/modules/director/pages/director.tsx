@@ -3,7 +3,8 @@
 import { errorCode, useApiErrorMessage } from "@repo/client";
 import { useDirectorPlanQuery } from "@repo/client/api/director/plan";
 import { useDirectorShotsQuery } from "@repo/client/api/director/shots";
-import type { DirectorPlan, Shot, ShotPlan } from "@repo/contracts/api";
+import type { DirectorPlan, ServedShotPlan, Shot, ShotPlan } from "@repo/contracts/api";
+import { MINUTE_MS } from "@repo/contracts/time";
 import { Button, buttonVariants } from "@repo/ui/components/button";
 import { GeminiLoader } from "@repo/ui/components/gemini-loader";
 import { cn } from "@repo/ui/lib/utils";
@@ -15,16 +16,18 @@ import {
   Film,
   Mic,
   Music,
+  Pause,
+  Play,
   Sparkles,
   Volume2,
   VolumeX,
 } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DirectorGate, type EmbedOptions, sendCommand, YouTubeEmbed } from "@/modules/shorts";
 import { IndexProgress } from "../components/index-progress";
-import { ShotList, Storyboard } from "../components/shot-list";
+import { type MediaLinks, ShotList, Storyboard, useMediaLink } from "../components/shot-list";
 import { type AudioMode, defaultAudio, offersVoice } from "../lib/audio";
 import { indexStep, nextShot } from "../lib/library";
 import { timecode } from "../lib/track";
@@ -166,7 +169,7 @@ function TemplateBar({
   return (
     <header className="sticky top-0 z-20 flex items-center gap-2 bg-studio px-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2">
       <BackLink />
-      <h1 className="min-w-0 flex-1 truncate text-base font-semibold">{title}</h1>
+      <h1 className="line-clamp-2 min-w-0 flex-1 text-base font-semibold">{title}</h1>
       <button
         type="button"
         onClick={onToggleSound}
@@ -253,7 +256,114 @@ function scrollToPlayer() {
   window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
 }
 
-function Ready({ plan }: { plan: DirectorPlan & { plan: ShotPlan } }) {
+/**
+ * Music on a loop from `url`, played and paused by the member. An Audio of its own
+ * rather than an <audio> element, which would want a captions track: music has no words.
+ * Nothing loads until it's played, a fresh link starts over, and leaving stops it.
+ */
+function useLoop(url: string | undefined, onFailed: () => void) {
+  const [playing, setPlaying] = useState(false);
+  const audio = useRef<HTMLAudioElement>(null);
+  const failed = useRef(onFailed);
+  useLayoutEffect(() => {
+    failed.current = onFailed;
+  });
+  useEffect(() => {
+    if (!url) {
+      return;
+    }
+    const element = new Audio();
+    element.preload = "none";
+    element.loop = true;
+    element.src = url;
+    const listening = new AbortController();
+    const { signal } = listening;
+    element.addEventListener("play", () => setPlaying(true), { signal });
+    element.addEventListener("pause", () => setPlaying(false), { signal });
+    element.addEventListener(
+      "error",
+      () => {
+        setPlaying(false);
+        failed.current();
+      },
+      { signal },
+    );
+    audio.current = element;
+    return () => {
+      listening.abort();
+      element.pause();
+      // Its pause listener is gone by now: the button mustn't go on saying it plays.
+      setPlaying(false);
+    };
+  }, [url]);
+  const toggle = () => {
+    if (audio.current?.paused) {
+      // A link that fails says so through the element's error, which drops the player.
+      audio.current.play().catch(() => undefined);
+    } else {
+      audio.current?.pause();
+    }
+  };
+  return { playing, toggle };
+}
+
+/**
+ * A seed's music, made with Lyria, on a player of its own; a track that won't play is
+ * left out rather than shown broken.
+ */
+function Soundtrack({ url, media }: { url: string | undefined; media: MediaLinks }) {
+  const t = useTranslations("director.template");
+  const track = useMediaLink(url, media);
+  const { playing, toggle } = useLoop(track.url, track.failed);
+  if (!track.url) {
+    return null;
+  }
+  return (
+    <div className="flex items-center gap-3 rounded-full bg-studio-foreground/5 py-1.5 pr-4 pl-1.5">
+      <button
+        type="button"
+        onClick={toggle}
+        aria-label={t("playSoundtrack")}
+        aria-pressed={playing}
+        className="flex size-10 shrink-0 items-center justify-center rounded-full bg-studio-foreground text-studio transition-transform active:scale-95"
+      >
+        {playing ? (
+          <Pause className="size-4 fill-current" aria-hidden />
+        ) : (
+          <Play className="size-4 translate-x-px fill-current" aria-hidden />
+        )}
+      </button>
+      <p className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium">
+        <Music className="size-4 shrink-0 text-studio-foreground/60" aria-hidden />
+        {t("soundtrack")}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * A seed's media links, from the plan as last read. They last an hour (a page left open
+ * outlives them): once one fails, the plan is read again, at most once a minute, so links
+ * that keep failing are left out instead of asked for over and over.
+ */
+function useMediaLinks(read: number, refetch: () => void): MediaLinks {
+  const last = useRef(Number.NEGATIVE_INFINITY);
+  const refresh = () => {
+    if (Date.now() - last.current > MINUTE_MS) {
+      last.current = Date.now();
+      refetch();
+    }
+  };
+  return { read, refresh };
+}
+
+function Ready({
+  plan,
+  media,
+}: {
+  plan: DirectorPlan & { plan: ServedShotPlan };
+  media: MediaLinks;
+}) {
   const t = useTranslations("director");
   const shots = plan.plan.shots;
   const taken = useDirectorShotsQuery(plan.videoId);
@@ -277,6 +387,7 @@ function Ready({ plan }: { plan: DirectorPlan & { plan: ShotPlan } }) {
       />
       <div className="flex flex-col gap-6 px-4 pt-2 pb-36">
         <p className="text-sm text-studio-foreground/70">{plan.plan.summary}</p>
+        <Soundtrack url={plan.plan.musicUrl} media={media} />
         <section className="flex flex-col gap-2">
           <p className="font-semibold">
             {t("needs", { shots: shots.length, videos, photos: shots.length - videos })}
@@ -286,7 +397,13 @@ function Ready({ plan }: { plan: DirectorPlan & { plan: ShotPlan } }) {
         <Sound plan={plan} value={chosen} onChange={setChosen} />
         <section className="flex flex-col gap-3">
           <h2 className="text-sm font-semibold text-studio-foreground/80">{t("inOrder")}</h2>
-          <ShotList shots={shots} takes={taken.data} watching={watching} onWatch={watch} />
+          <ShotList
+            shots={shots}
+            takes={taken.data}
+            watching={watching}
+            onWatch={watch}
+            media={media}
+          />
         </section>
       </div>
       <div className="fixed inset-x-0 bottom-0 z-10 bg-linear-to-t from-studio via-studio/95 to-transparent px-4 pt-10 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
@@ -380,8 +497,9 @@ function NotReady({
 function Plan({ videoId }: { videoId: string }) {
   const plan = useDirectorPlanQuery(videoId);
   const current = plan.data;
+  const media = useMediaLinks(plan.dataUpdatedAt, () => void plan.refetch());
   if (current?.status === "ready" && current.plan) {
-    return <Ready plan={{ ...current, plan: current.plan }} />;
+    return <Ready plan={{ ...current, plan: current.plan }} media={media} />;
   }
   return (
     <>

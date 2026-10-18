@@ -434,6 +434,33 @@ describe("the editor", { tags: ["files"] }, () => {
     expect(await api.director.media()).toEqual([]);
   });
 
+  it("shows nothing saved when the member cancels as the cut is being recorded", {
+    timeout: 60_000,
+  }, async () => {
+    await commands.storageCors();
+    const { user, videoId } = await filmedShort();
+    const page = await openEditor(videoId, undefined);
+    const before = await completed();
+    const send = window.fetch.bind(window);
+    vi.spyOn(window, "fetch").mockImplementation((input, init) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.includes("/rpc/director/saveCut")) {
+        // Cancel, tapped just as the cut goes to be recorded: too late to stop it.
+        page
+          .getByRole("button", { name: "Cancel" })
+          .element()
+          .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      }
+      return send(input, init);
+    });
+    await userEvent.click(page.getByRole("button", { name: "Save video" }));
+    await passCut(user, before);
+    // Recorded all the same (it shows in My media), but the member was told nothing saved.
+    await expect.poll(() => api.director.media(), { timeout: 20_000 }).toHaveLength(1);
+    await expect.element(page.getByRole("button", { name: "Save video" })).toBeEnabled();
+    expect(page.getByRole("dialog", { name: "Saved to My media" }).query()).toBeNull();
+  });
+
   it("stops rendering when the member leaves mid-render, and saves nothing", {
     timeout: 60_000,
   }, async () => {

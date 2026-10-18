@@ -56,4 +56,18 @@ describe("the landing page", () => {
     );
     expect(html).not.toContain("every indexing");
   });
+
+  it("lists every Google Cloud service Director runs on, with what each does here", async () => {
+    const html = await renderHtml(await HomePage({ signedIn: false }));
+    for (const [name, use] of [
+      ["Gemini text-to-speech", "Gives Director its voice while you film."],
+      ["Nano Banana on Vertex AI", "Drew the storyboard card of every shot in the templates."],
+      ["Veo on Vertex AI", "Made the preview clip of every shot in the templates."],
+      ["Lyria on Vertex AI", "Wrote each template&#x27;s soundtrack."],
+      ["Cloud Run", "Runs the indexer, where Gemini watches each Short."],
+    ]) {
+      expect(html).toContain(name);
+      expect(html).toContain(use);
+    }
+  });
 });

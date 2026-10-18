@@ -84,9 +84,29 @@ declare const messages: {
         "name": "Gemini Live API",
         "use": "Directs you by voice and sees your camera while you film."
       },
+      "tts": {
+        "name": "Gemini text-to-speech",
+        "use": "Gives Director its voice while you film."
+      },
+      "nanoBanana": {
+        "name": "Nano Banana on Vertex AI",
+        "use": "Drew the storyboard card of every shot in the templates."
+      },
+      "veo": {
+        "name": "Veo on Vertex AI",
+        "use": "Made the preview clip of every shot in the templates."
+      },
+      "lyria": {
+        "name": "Lyria on Vertex AI",
+        "use": "Wrote each template's soundtrack."
+      },
       "storage": {
         "name": "Cloud Storage",
         "use": "Keeps your takes and finished videos."
+      },
+      "cloudRun": {
+        "name": "Cloud Run",
+        "use": "Runs the indexer, where Gemini watches each Short."
       },
       "bigquery": {
         "name": "BigQuery",
@@ -643,7 +663,14 @@ declare const messages: {
       "filmed": "Filmed",
       "scored": "Filmed, {score, number}/100",
       "needsRetake": "Needs a retake ({score, number}/100)",
-      "reviewing": "Director is reviewing your take"
+      "reviewing": "Director is reviewing your take",
+      "storyboardAlt": "Storyboard for {title}: {scene}",
+      "storyboardBy": "Storyboard by Nano Banana",
+      "previewBy": "Preview made with Veo",
+      "playPreview": "Play the Veo preview of shot {index, number}",
+      "pausePreview": "Pause the preview of shot {index, number}",
+      "soundtrack": "Soundtrack, made with Lyria",
+      "playSoundtrack": "Play the soundtrack"
     },
     "editor": {
       "title": "Edit your video",
