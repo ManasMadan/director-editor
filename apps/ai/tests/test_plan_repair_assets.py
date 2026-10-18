@@ -303,7 +303,10 @@ def test_a_plan_takes_another_index_s_assets_and_edits_without_changing_its_shot
     newer = repair_plan(
         plan(
             assets=[asset(id="Chart", sourceEndSeconds=40)],
-            edits=[edit("layout", layout="split", assetId="Chart", endSeconds=40)],
+            edits=[
+                edit("layout", layout="split", assetId="Chart", endSeconds=40),
+                edit("overlay", mark="circle", box=BOX, startSeconds=2, endSeconds=30),
+            ],
             shots=[shot(sourceStartSeconds=0, sourceEndSeconds=40, durationSeconds=40)],
         ),
         video_seconds=None,
@@ -314,9 +317,12 @@ def test_a_plan_takes_another_index_s_assets_and_edits_without_changing_its_shot
     [chart] = merged.assets
     # Fitted to this plan's own Short, which ends at 10 s.
     assert (chart.id, chart.sourceEndSeconds) == ("chart", 10)
-    [layout] = merged.edits
+    layout, overlay = merged.edits
     assert isinstance(layout, LayoutEdit)
     assert (layout.assetId, layout.endSeconds) == ("chart", 10)
+    # Its box goes through the draft's four numbers and back.
+    assert isinstance(overlay, OverlayEdit)
+    assert (overlay.box.model_dump(), overlay.endSeconds) == (BOX, 10)
 
 
 def test_an_edit_s_words_carry_no_branding_of_the_original_s() -> None:
