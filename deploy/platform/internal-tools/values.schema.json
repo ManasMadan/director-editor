@@ -26,6 +26,11 @@
           "host": { "type": "string", "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$" },
           "observability": { "type": "boolean" },
           "home": { "type": "string", "pattern": "^/" },
+          "protectedPaths": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "pattern": "^/" }
+          },
           "openPaths": {
             "type": "array",
             "items": { "type": "string", "pattern": "^/" }

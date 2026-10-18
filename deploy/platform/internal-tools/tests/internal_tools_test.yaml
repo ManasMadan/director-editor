@@ -39,7 +39,7 @@ tests:
           path: "spec.rules[1]"
           value:
             name: home
-            matches: [{ path: { type: Exact, value: / } }]
+            matches: [{ path: { type: Exact, value: / }, method: GET }]
             filters:
               - type: RequestRedirect
                 requestRedirect: { path: { type: ReplaceFullPath, replaceFullPath: /admin/ }, statusCode: 302 }
@@ -72,6 +72,14 @@ tests:
           value: [{ path: { type: PathPrefix, value: /api } }, { path: { type: PathPrefix, value: /auth } }]
       - notExists: { path: "spec.rules[0].filters" }
       - equal: { path: "spec.rules[2].name", value: protected }
+
+  - it: protects only the console's page on a storage host, leaving its signed API calls to the server
+    documentSelector: { path: "spec.hostnames[0]", value: storage.example.com }
+    asserts:
+      - equal: { path: "spec.rules[0].name", value: open }
+      - equal: { path: "spec.rules[0].matches", value: [{ path: { type: PathPrefix, value: / } }] }
+      - equal: { path: "spec.rules[2].name", value: protected }
+      - equal: { path: "spec.rules[2].matches", value: [{ path: { type: PathPrefix, value: /rustfs/console } }] }
 
   - it: has no observability tools on a cluster without observability
     asserts:

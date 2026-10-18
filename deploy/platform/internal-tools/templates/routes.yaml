@@ -46,10 +46,11 @@ spec:
         - {{ toJson $backend }}
     {{- end }}
     {{- with $tool.home }}
-    # The bare host goes to the tool's page.
+    # The bare host goes to the tool's page (GET only: an API may answer POST /).
     - name: home
       matches:
         - path: { type: Exact, value: / }
+          method: GET
       filters:
         - type: RequestRedirect
           requestRedirect:
@@ -58,7 +59,9 @@ spec:
     {{- end }}
     - name: protected
       matches:
-        - path: { type: PathPrefix, value: / }
+        {{- range $tool.protectedPaths | default (list "/") }}
+        - path: { type: PathPrefix, value: {{ . | quote }} }
+        {{- end }}
       filters:
         - type: RequestHeaderModifier
           requestHeaderModifier:

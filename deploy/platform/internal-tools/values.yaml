@@ -21,7 +21,8 @@ basicAuth:
   secretName: internal-tools-auth
 
 # The tools: the host's first label, and the Service it routes to. `home` is where the
-# bare host redirects to, for a tool whose page isn't at /. `openPaths` are path
+# bare host redirects to, for a tool whose page isn't at /. `protectedPaths` (default
+# /) are the path prefixes that ask for the basic-auth password. `openPaths` are path
 # prefixes left to the tool's own sign-in, without basic auth: requests the tool's page
 # makes with its own Authorization header, which basic auth would refuse. Everything
 # else asks for the basic-auth password, and the Authorization header it adds is
@@ -56,12 +57,19 @@ tools:
     openPaths: [/jmap, /api]
     service: { namespace: mail, name: mail-admin, port: 8080 }
   # RustFS's consoles (deploy/charts/data, storage.<server>.console), in the
-  # environment's namespace.
+  # environment's namespace. The console's page is behind basic auth; the requests it
+  # makes once signed in are S3 and admin API calls signed with the server's keys
+  # (AWS signatures in Authorization), which basic auth would refuse, so they go to the
+  # server as they are, and it refuses anything not signed with its keys.
   storage:
     host: storage
     home: /rustfs/console/
+    protectedPaths: [/rustfs/console]
+    openPaths: [/]
     service: { namespace: director-editor, name: director-editor-uploads, port: 9001 }
   backups:
     host: backups
     home: /rustfs/console/
+    protectedPaths: [/rustfs/console]
+    openPaths: [/]
     service: { namespace: director-editor, name: director-editor-backups, port: 9001 }
