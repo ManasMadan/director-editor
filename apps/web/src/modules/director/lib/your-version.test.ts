@@ -1,6 +1,16 @@
-import type { Shot } from "@repo/contracts/api";
+import { EMPTY_VERSION, type Shot } from "@repo/contracts/api";
 import { describe, expect, it } from "vitest";
-import { adaptationList, adapted, NO_ADAPTATIONS, yourVersion } from "./your-version";
+import {
+  adapted,
+  films,
+  forgotten,
+  nextFilmed,
+  remembered,
+  restored,
+  restoredRow,
+  skipped,
+  yourVersion,
+} from "./your-version";
 
 const original: Shot = {
   kind: "video",
@@ -66,14 +76,53 @@ describe("the member's version of a shot", () => {
   });
 
   it("adds each change to what the shot already had", () => {
-    const first = adapted(NO_ADAPTATIONS, { shot: 1, where: "Inside" });
+    const first = adapted(EMPTY_VERSION, { shot: 1, where: "Inside" });
     const second = adapted(first, { shot: 1, action: "Wave" });
     const third = adapted(second, { shot: 1, where: "The kitchen" });
-    expect(third[1]).toEqual({ shot: 1, where: "The kitchen", action: "Wave" });
-    expect(adaptationList(adapted(third, { shot: 0, line: "Hi" }))).toEqual([
+    expect(third.shots).toEqual([{ shot: 1, where: "The kitchen", action: "Wave" }]);
+    expect(adapted(third, { shot: 0, line: "Hi" }).shots).toEqual([
       { shot: 0, line: "Hi" },
       { shot: 1, where: "The kitchen", action: "Wave" },
     ]);
-    expect(NO_ADAPTATIONS).toEqual({});
+  });
+
+  it("takes their framing and camera too", () => {
+    const version = yourVersion(original, { shot: 0, framing: "Waist up", camera: "back" });
+    expect(version.shot.framing.note).toBe("Waist up");
+    expect(version.shot.camera).toBe("back");
+    expect([...version.changed]).toEqual(["framing"]);
+  });
+
+  it("puts one row back, then the whole shot, and drops a shot with nothing left changed", () => {
+    const changed = adapted(EMPTY_VERSION, { shot: 0, where: "Inside", line: "Hi" });
+    expect(restoredRow(changed, 0, "where").shots).toEqual([{ shot: 0, line: "Hi" }]);
+    expect(restoredRow(restoredRow(changed, 0, "where"), 0, "line").shots).toEqual([]);
+    expect(restoredRow(changed, 3, "where")).toBe(changed);
+    const away = skipped({ ...changed, gaps: [0] }, 0);
+    expect(restored(away, 0)).toEqual(EMPTY_VERSION);
+  });
+
+  it("remembers a note once, forgets it whatever its case, and keeps the newest twelve", () => {
+    const inside = remembered(EMPTY_VERSION, { kind: "place", note: "Inside" });
+    expect(remembered(inside, { kind: "place", note: "inside" }).notes).toEqual([
+      { kind: "place", note: "inside" },
+    ]);
+    expect(forgotten(inside, "INSIDE").notes).toEqual([]);
+    let many = EMPTY_VERSION;
+    for (let note = 0; note < 14; note += 1) {
+      many = remembered(many, { kind: "other", note: `Note ${note}` });
+    }
+    expect(many.notes.map(({ note }) => note)).toEqual(
+      Array.from({ length: 12 }, (_, at) => `Note ${at + 2}`),
+    );
+  });
+
+  it("skips a shot once, and finds the next one they film", () => {
+    const version = skipped(skipped({ ...EMPTY_VERSION, gaps: [2] }, 1), 1);
+    expect(version.skipped).toEqual([1]);
+    expect(films(version, 0)).toBe(true);
+    expect(films(version, 2)).toBe(false);
+    expect(nextFilmed(version, 0, 4)).toBe(3);
+    expect(nextFilmed(version, 3, 4)).toBeNull();
   });
 });

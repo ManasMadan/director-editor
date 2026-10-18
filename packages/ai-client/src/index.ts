@@ -35,6 +35,7 @@ import {
   listDirectorMedia,
   listDirectorTakes,
   locateDirectorTarget,
+  reviseDirectorVersion,
   speakDirectorLine,
   writeDirectorPublishCopy,
 } from "./generated/sdk.gen";
@@ -53,6 +54,7 @@ import type {
   MatchCutRequest,
   PlanEditRequest,
   PublishCopyRequest,
+  ReviseRequest,
   SceneCheckRequest,
   SpeechRequest,
 } from "./generated/types.gen";
@@ -267,6 +269,12 @@ function directorCalls(forCall: ClientFor) {
     },
     async alignMatchCut(caller: AiCaller, body: MatchCutRequest) {
       return unwrap(alignDirectorMatchCut({ client: await forCall(caller), body }));
+    },
+    /** The member's version of a template, re-planned from one instruction. */
+    async revise(caller: AiCaller, videoId: string, body: ReviseRequest) {
+      return unwrap(
+        reviseDirectorVersion({ client: await forCall(caller), path: { video_id: videoId }, body }),
+      );
     },
   };
 }

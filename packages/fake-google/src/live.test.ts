@@ -213,6 +213,37 @@ describe("the mock Live API", () => {
     });
   });
 
+  it("remembers a constraint and re-plans by it, and skips the shot it's on", async () => {
+    const live = await connect();
+    live.send({ setup: { model: "m" } });
+    await live.nth(0);
+    live.send(turn("I'm switching indoors"));
+    live.send(turn("honestly one angle is fine"));
+    live.send(turn("skip this one"));
+    await live.nth(3);
+    const toolCall = z.object({
+      toolCall: z.object({
+        functionCalls: z.array(z.object({ name: z.string(), args: z.unknown() })),
+      }),
+    });
+    const calls = live.received
+      .slice(1)
+      .map((message) =>
+        toolCall.parse(message).toolCall.functionCalls.map(({ name, args }) => ({ name, args })),
+      );
+    expect(calls).toEqual([
+      [
+        { name: "remember", args: { kind: "place", note: "Indoors" } },
+        { name: "replan", args: { instruction: "film every shot indoors" } },
+      ],
+      [
+        { name: "remember", args: { kind: "angles", note: "One angle" } },
+        { name: "replan", args: { instruction: "one position, front camera" } },
+      ],
+      [{ name: "skip_shot", args: { shot: 1 } }],
+    ]);
+  });
+
   it("nudges once on a quiet note, says it'll wait on the second, and keeps the rest to itself", async () => {
     const live = await connect();
     live.send({ setup: { model: "m" } });

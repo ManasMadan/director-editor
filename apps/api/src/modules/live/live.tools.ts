@@ -15,6 +15,7 @@ import {
   type LiveToolCall,
   type LiveToolResult,
   liveAdaptation,
+  liveToolCall,
 } from "@repo/contracts/live";
 import { NOT_FOUND_RESPONSE, pointAtCall } from "./live.marks";
 import { toolArgsSchemas } from "./live.messages";
@@ -34,6 +35,10 @@ export const TOOL_RESPONSES: Record<LiveToolResult | "unknown", object> = {
     why: "Recording is paused. Only their own tap on Resume starts it again.",
   },
   not_recording: { result: "refused", why: "Nothing is recording right now." },
+  failed: {
+    result: "failed",
+    why: "It didn't work just now. Say so in a few words and carry on with the shot as it is.",
+  },
 };
 
 /** The call for the browser, or what Gemini hears at once because it can't be done. */
@@ -59,19 +64,26 @@ function adaptCall(plan: ShotPlan, raw: unknown): ToolCheck {
   if (!args.success) {
     return { response: { error: "shot must be a whole number, the rest text" } };
   }
-  const { shot, where, action, line } = args.data;
+  const { shot, where, action, line, framing, camera } = args.data;
   const count = plan.shots.length;
   if (shot < 1 || shot > count) {
     return noShot(shot, count);
   }
-  const adaptation = liveAdaptation.safeParse({ shot: shot - 1, where, action, line });
+  const adaptation = liveAdaptation.safeParse({
+    shot: shot - 1,
+    where,
+    action,
+    line,
+    framing,
+    camera,
+  });
   if (!adaptation.success) {
-    const error = `each of where, action and line is one to ${LIVE_ADAPTATION_MAX_LENGTH} characters`;
+    const error = `each of where, action, line and framing is one to ${LIVE_ADAPTATION_MAX_LENGTH} characters`;
     return { response: { error } };
   }
   const { data } = adaptation;
-  if (!(data.where || data.action || data.line)) {
-    return { response: { error: "say what changed: where, action or line" } };
+  if (!(data.where || data.action || data.line || data.framing || data.camera)) {
+    return { response: { error: "say what changed: where, action, line, framing or camera" } };
   }
   return { call: { name: "adapt_shot", ...data } };
 }
@@ -90,6 +102,33 @@ function markCall(raw: unknown): ToolCheck {
   return {
     call: { name: "mark", event, ...(line ? { line } : {}), ...(note ? { note } : {}) },
   };
+}
+
+/**
+ * The tools that change the member's version as a whole (remember, forget, skip, restore,
+ * re-plan): their arguments read with the contract, and a shot the plan has.
+ */
+function versionCall(
+  plan: ShotPlan,
+  name: Exclude<LiveTool, "go_to_shot" | "switch_camera" | "adapt_shot" | "point_at" | "mark">,
+  raw: unknown,
+): ToolCheck {
+  const args = toolArgsSchemas[name].safeParse(raw ?? {});
+  if (!args.success) {
+    return { response: { error: `the arguments don't fit ${name}` } };
+  }
+  const fields: Record<string, unknown> = { ...args.data, name };
+  if ("shot" in args.data) {
+    const count = plan.shots.length;
+    if (args.data.shot < 1 || args.data.shot > count) {
+      return noShot(args.data.shot, count);
+    }
+    fields.shot = args.data.shot - 1;
+  }
+  const call = liveToolCall.safeParse(fields);
+  return call.success
+    ? { call: call.data }
+    : { response: { error: `the arguments don't fit ${name}` } };
 }
 
 /** Gemini's call of `name` with `raw` arguments, checked against the plan. */
@@ -120,5 +159,7 @@ export function checkTool(plan: ShotPlan, name: LiveTool, raw: unknown): ToolChe
       return pointAtCall(raw);
     case "mark":
       return markCall(raw);
+    default:
+      return versionCall(plan, name, raw);
   }
 }

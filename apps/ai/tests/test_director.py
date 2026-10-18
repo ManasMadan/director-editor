@@ -48,6 +48,7 @@ from app.schemas import (
     IndexResult,
     Located,
     PublishCopy,
+    ReviseResult,
     SceneCheck,
 )
 from app.settings import get_settings
@@ -1490,6 +1491,96 @@ def test_a_post_with_no_budget_left_is_refused(client: TestClient) -> None:
     spend_the_month(org)
     response = publish_copy(client, org, user, cut.id)
     assert (response.status_code, error_of(response).code) == (429, "AI_BUDGET_EXCEEDED")
+
+
+# ------------------------------------------------------------------------------ re-planning
+
+YOURS: dict[str, object] = {
+    "notes": [{"kind": "place", "note": "Inside"}],
+    "shots": [{"shot": 0, "where": "By the window"}],
+    "skipped": [],
+    "gaps": [],
+}
+REVISION: dict[str, object] = {
+    "shots": [
+        {
+            "shot": 1,
+            "status": "film",
+            "where": None,
+            "action": None,
+            "line": None,
+            "framing": "Waist up",
+            "camera": "front",
+        },
+        {
+            "shot": 2,
+            "status": "gap",
+            "where": None,
+            "action": None,
+            "line": None,
+            "framing": None,
+            "camera": None,
+        },
+    ],
+    "summary": "Everything's from right here now.",
+}
+
+
+def revise(
+    client: TestClient, org: UUID, user: UUID, video: str = VIDEO, instruction: str = "one angle"
+) -> httpx.Response:
+    return client.post(
+        f"/v1/director/plans/{video}/revisions",
+        json={"instruction": instruction, "version": YOURS},
+        headers=headers(org, user),
+    )
+
+
+def test_gemini_re_plans_the_member_s_version(
+    client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    org, user = new_org()
+    _ = ready_plan(client, org, user)
+    gemini[1][GEMINI_PATH] = gemini_output(REVISION, tokens=900)
+    response = revise(client, org, user)
+    assert response.status_code == 200, response.text
+    assert ReviseResult.model_validate_json(response.content) == ReviseResult.model_validate(
+        {
+            "version": {
+                "notes": [{"kind": "place", "note": "Inside"}],
+                "shots": [
+                    {"shot": 0, "where": "By the window", "framing": "Waist up", "camera": "front"}
+                ],
+                "skipped": [],
+                "gaps": [1],
+            },
+            "summary": "Everything's from right here now.",
+        }
+    )
+    # Gemini reads the plan's shots, their version, what they've told Director and the
+    # instruction.
+    sent = gemini[0].received[-1][1]
+    for part in [b"The top", b"By the window", b"place: Inside", b"one angle"]:
+        assert part in sent, part
+    assert usage(org, "director-revise") == 900
+
+
+def test_a_re_plan_needs_a_ready_plan_and_gemini(
+    client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    org, user = new_org()
+    missing = revise(client, org, user)
+    assert error_of(missing).code == "DIRECTOR_PLAN_NOT_FOUND"
+    plan = index_plan(client, org, user)
+    pending = revise(client, org, user)
+    assert error_of(pending).code == "DIRECTOR_PLAN_NOT_READY"
+    on_app_loop(client, lambda: director().analyze(org, plan.id, user))
+    gemini[1][GEMINI_PATH] = gemini_error(503, "UNAVAILABLE")
+    failed = revise(client, org, user)
+    assert (failed.status_code, error_of(failed).code) == (502, "UPSTREAM_UNAVAILABLE")
+    spend_the_month(org)
+    broke = revise(client, org, user)
+    assert (broke.status_code, error_of(broke).code) == (429, "AI_BUDGET_EXCEEDED")
 
 
 # ------------------------------------------------------------------------------- scene checks

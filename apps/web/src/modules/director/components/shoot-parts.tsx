@@ -2,7 +2,7 @@
 
 import type { Shot } from "@repo/contracts/api";
 import { cn } from "@repo/ui/lib/utils";
-import { SwitchCamera, X } from "lucide-react";
+import { RotateCcw, SwitchCamera, X } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { timecode } from "../lib/track";
@@ -87,18 +87,54 @@ export function LeaveLink({
   );
 }
 
+/** A changed row's text, "changed for you", and ↺ to put the original back. */
+function ChangedText({
+  text,
+  label,
+  onRestore,
+}: {
+  text: string;
+  label: string;
+  onRestore: (() => void) | undefined;
+}) {
+  const t = useTranslations("director.shoot.card");
+  return (
+    // Keyed on the text by the card, so a further change glows again.
+    <dd className="-mx-1 animate-[live-changed_1.6s_ease-out_both] rounded-md px-1">
+      <span className="line-clamp-2">{text}</span>
+      <span className="flex items-center gap-1 text-xs text-guide">
+        {t("changed")}
+        {onRestore ? (
+          <button
+            type="button"
+            onClick={onRestore}
+            aria-label={t("restore", { row: label })}
+            title={t("restore", { row: label })}
+            className="-my-3 flex size-11 items-center justify-center rounded-full transition-transform active:scale-90"
+          >
+            <RotateCcw className="size-3.5" aria-hidden />
+          </button>
+        ) : null}
+      </span>
+    </dd>
+  );
+}
+
 /**
- * What to do in this shot, as the member has it: where, what, and the line to say. A row
- * Director changed for them glows once and says so.
+ * What to do in this shot, as the member has it: where, what, the line to say and, once
+ * Director changed it, the framing. A row Director changed for them glows once, says so,
+ * and has ↺ to put the original back (`onRestore`).
  */
 export function ShotCard({
   shot,
   index,
   changed = NO_CHANGES,
+  onRestore,
 }: {
   shot: Shot;
   index: number;
   changed?: ReadonlySet<ChangedRow>;
+  onRestore?: (row: ChangedRow) => void;
 }) {
   const t = useTranslations("director.shoot.card");
   const what = shot.steps[0]?.instruction ?? shot.pose.description;
@@ -107,6 +143,7 @@ export function ShotCard({
     { id: "where", text: shot.scene },
     { id: "do", text: what },
     ...(line ? [{ id: "say" as const, text: t("line", { line }) }] : []),
+    ...(changed.has("framing") ? [{ id: "framing" as const, text: shot.framing.note }] : []),
   ];
   return (
     <section
@@ -121,14 +158,12 @@ export function ShotCard({
           <div key={row.id} className="contents">
             <dt className="text-studio-foreground/65">{t(row.id)}</dt>
             {changed.has(row.id) ? (
-              // Keyed on the text, so a further change glows again.
-              <dd
+              <ChangedText
                 key={row.text}
-                className="-mx-1 animate-[live-changed_1.6s_ease-out_both] rounded-md px-1"
-              >
-                <span className="line-clamp-2">{row.text}</span>
-                <span className="block text-xs text-guide">{t("changed")}</span>
-              </dd>
+                text={row.text}
+                label={t(row.id)}
+                onRestore={onRestore ? () => onRestore(row.id) : undefined}
+              />
             ) : (
               <dd className="line-clamp-2">{row.text}</dd>
             )}

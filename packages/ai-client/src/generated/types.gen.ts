@@ -1245,6 +1245,19 @@ export type MatchCutTransform = {
     y: number;
 };
 
+export type MemoryKind = 'place' | 'people' | 'props' | 'time' | 'angles' | 'comfort' | 'style' | 'other';
+
+/**
+ * MemoryNote
+ */
+export type MemoryNote = {
+    kind: MemoryKind;
+    /**
+     * Note
+     */
+    note: string;
+};
+
 /**
  * OverlayEdit
  *
@@ -1377,6 +1390,28 @@ export type PublishOriginal = {
      * Title
      */
     title: string;
+};
+
+/**
+ * ReviseRequest
+ */
+export type ReviseRequest = {
+    /**
+     * Instruction
+     */
+    instruction: string;
+    version: YourVersion;
+};
+
+/**
+ * ReviseResult
+ */
+export type ReviseResult = {
+    /**
+     * Summary
+     */
+    summary: string;
+    version: YourVersion;
 };
 
 /**
@@ -1527,6 +1562,8 @@ export type Shot = {
     title: string;
 };
 
+export type ShotIndex = number;
+
 export type ShotKind = 'video' | 'photo';
 
 export type ShotMode = 'on-camera' | 'voice-over' | 'asset';
@@ -1592,6 +1629,23 @@ export type ShotStep = {
      * One imperative sentence, read out loud.
      */
     instruction: string;
+};
+
+/**
+ * ShotVersion
+ *
+ * A shot as the member's version changes it; a field left out is the original's.
+ */
+export type ShotVersion = {
+    action?: VersionRow | null;
+    /**
+     * Camera
+     */
+    camera?: 'front' | 'back' | null;
+    framing?: VersionRow | null;
+    line?: VersionRow | null;
+    shot: ShotIndex;
+    where?: VersionRow | null;
 };
 
 /**
@@ -1772,6 +1826,30 @@ export type TransitionEdit = {
      * Type
      */
     type: 'transition';
+};
+
+export type VersionRow = string;
+
+/**
+ * YourVersion
+ */
+export type YourVersion = {
+    /**
+     * Gaps
+     */
+    gaps: Array<ShotIndex>;
+    /**
+     * Notes
+     */
+    notes: Array<MemoryNote>;
+    /**
+     * Shots
+     */
+    shots: Array<ShotVersion>;
+    /**
+     * Skipped
+     */
+    skipped: Array<ShotIndex>;
 };
 
 export type DependenciesData = {
@@ -2494,6 +2572,46 @@ export type ListDirectorCutsResponses = {
 };
 
 export type ListDirectorCutsResponse = ListDirectorCutsResponses[keyof ListDirectorCutsResponses];
+
+export type ReviseDirectorVersionData = {
+    body: ReviseRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path: {
+        /**
+         * Video Id
+         */
+        video_id: string;
+    };
+    query?: never;
+    url: '/v1/director/plans/{video_id}/revisions';
+};
+
+export type ReviseDirectorVersionErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type ReviseDirectorVersionError = ReviseDirectorVersionErrors[keyof ReviseDirectorVersionErrors];
+
+export type ReviseDirectorVersionResponses = {
+    /**
+     * Successful Response
+     */
+    200: ReviseResult;
+};
+
+export type ReviseDirectorVersionResponse = ReviseDirectorVersionResponses[keyof ReviseDirectorVersionResponses];
 
 export type ListDirectorTakesData = {
     body?: never;

@@ -8,15 +8,16 @@
  * Without a microphone (refused, or none on the device) Director still sees and speaks,
  * and reads what the member types: `onHearing(false)` says so, and nothing ends.
  */
+import type { MemoryNote, YourVersion } from "@repo/contracts/api";
 import type { ErrorCode } from "@repo/contracts/errors";
 import type {
   Facing,
-  LiveAdaptation,
   LiveClientMessage,
   LiveRollState,
   LiveTakeState,
   LiveToolCall,
   LiveToolResult,
+  RestorableRow,
 } from "@repo/contracts/live";
 import { required } from "@repo/contracts/objects";
 import { SECOND_MS } from "@repo/contracts/time";
@@ -206,23 +207,20 @@ interface Target {
   url: string;
   video: RefObject<HTMLVideoElement | null>;
   events: LiveEvents;
-  /** What the shoot has changed so far: a fresh connection hears it first. */
-  adaptations: () => LiveAdaptation[];
+  /** The member's version so far (memory, changed shots, skips): a fresh connection hears it first. */
+  version: () => YourVersion;
 }
 
 function connect(
   session: Session,
-  { url, video, events, adaptations }: Target,
+  { url, video, events, version }: Target,
   finish: (failure: LiveFailure) => void,
 ) {
   const socket = new WebSocket(url);
   socket.onopen = () => {
     session.live = socket;
     events.onLive();
-    const changed = adaptations();
-    if (changed.length > 0) {
-      send(socket, { type: "context", adaptations: changed });
-    }
+    send(socket, { type: "context", version: version() });
     tellShot(session);
     session.microphone?.listen((pcm) => {
       if (!session.muted) {
@@ -235,6 +233,31 @@ function connect(
   // The API says why before it hangs up; a close without a word is a dropped line.
   socket.onclose = () => finish(session.error ?? "dropped");
   return socket;
+}
+
+/** The roll (the continuous recording), told to the relay while it's there. */
+function rollControls(session: Session, whenLive: (act: (live: WebSocket) => void) => void) {
+  return {
+    /** Where the roll is. */
+    roll: (state: LiveRollState) => whenLive((live) => send(live, { type: "roll", state })),
+    /** Paused: nothing of the member goes to Director (their microphone, their camera). */
+    mute: (on: boolean) => {
+      session.muted = on;
+    },
+  };
+}
+
+/** What the member changed in their version, told to the relay while it's there. */
+function versionControls(whenLive: (act: (live: WebSocket) => void) => void) {
+  return {
+    /** The member's version changed: Director is briefed with it from now on. */
+    share: (version: YourVersion) => whenLive((live) => send(live, { type: "context", version })),
+    /** The member took a chip away: Director lets it go. */
+    forgot: (note: MemoryNote) => whenLive((live) => send(live, { type: "forgot", ...note })),
+    /** The member put a row of the card back to the original's. */
+    restored: (shot: number, row: RestorableRow) =>
+      whenLive((live) => send(live, { type: "restored", shot, row })),
+  };
 }
 
 /**
@@ -310,12 +333,8 @@ export function startSession(target: Target & { shot: number; held: boolean }) {
     camera: (facing: Facing) => noteCamera(session, target.video, facing),
     /** Where the member's take is. */
     take: (state: LiveTakeState) => whenLive((live) => send(live, { type: "take", state })),
-    /** Where the roll is. */
-    roll: (state: LiveRollState) => whenLive((live) => send(live, { type: "roll", state })),
-    /** Paused: nothing of the member goes to Director (their microphone, their camera). */
-    mute: (on: boolean) => {
-      session.muted = on;
-    },
+    ...rollControls(session, whenLive),
+    ...versionControls(whenLive),
   };
 }
 

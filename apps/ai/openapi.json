@@ -2352,6 +2352,39 @@
         "title": "MatchCutTransform",
         "type": "object"
       },
+      "MemoryKind": {
+        "enum": [
+          "place",
+          "people",
+          "props",
+          "time",
+          "angles",
+          "comfort",
+          "style",
+          "other"
+        ],
+        "type": "string"
+      },
+      "MemoryNote": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/MemoryKind"
+          },
+          "note": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "note"
+        ],
+        "title": "MemoryNote",
+        "type": "object"
+      },
       "OverlayEdit": {
         "description": "Something drawn over the frame: an asset, or a mark (a circle, an underline).",
         "properties": {
@@ -2608,6 +2641,44 @@
           "channel"
         ],
         "title": "PublishOriginal",
+        "type": "object"
+      },
+      "ReviseRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "instruction": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Instruction",
+            "type": "string"
+          },
+          "version": {
+            "$ref": "#/components/schemas/YourVersion"
+          }
+        },
+        "required": [
+          "instruction",
+          "version"
+        ],
+        "title": "ReviseRequest",
+        "type": "object"
+      },
+      "ReviseResult": {
+        "properties": {
+          "summary": {
+            "maxLength": 300,
+            "title": "Summary",
+            "type": "string"
+          },
+          "version": {
+            "$ref": "#/components/schemas/YourVersion"
+          }
+        },
+        "required": [
+          "version",
+          "summary"
+        ],
+        "title": "ReviseResult",
         "type": "object"
       },
       "SceneCheck": {
@@ -2870,6 +2941,11 @@
         "title": "Shot",
         "type": "object"
       },
+      "ShotIndex": {
+        "exclusiveMaximum": 12.0,
+        "minimum": 0.0,
+        "type": "integer"
+      },
       "ShotKind": {
         "enum": [
           "video",
@@ -2995,6 +3071,75 @@
           "cameraMove"
         ],
         "title": "ShotStep",
+        "type": "object"
+      },
+      "ShotVersion": {
+        "additionalProperties": false,
+        "description": "A shot as the member's version changes it; a field left out is the original's.",
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VersionRow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "camera": {
+            "anyOf": [
+              {
+                "enum": [
+                  "front",
+                  "back"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera"
+          },
+          "framing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VersionRow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "line": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VersionRow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shot": {
+            "$ref": "#/components/schemas/ShotIndex"
+          },
+          "where": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VersionRow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "shot"
+        ],
+        "title": "ShotVersion",
         "type": "object"
       },
       "SpeechRequest": {
@@ -3351,6 +3496,56 @@
           "anchor"
         ],
         "title": "TransitionEdit",
+        "type": "object"
+      },
+      "VersionRow": {
+        "maxLength": 300,
+        "minLength": 1,
+        "type": "string"
+      },
+      "YourVersion": {
+        "additionalProperties": false,
+        "properties": {
+          "gaps": {
+            "items": {
+              "$ref": "#/components/schemas/ShotIndex"
+            },
+            "maxItems": 12,
+            "title": "Gaps",
+            "type": "array"
+          },
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryNote"
+            },
+            "maxItems": 12,
+            "title": "Notes",
+            "type": "array"
+          },
+          "shots": {
+            "items": {
+              "$ref": "#/components/schemas/ShotVersion"
+            },
+            "maxItems": 12,
+            "title": "Shots",
+            "type": "array"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/ShotIndex"
+            },
+            "maxItems": 12,
+            "title": "Skipped",
+            "type": "array"
+          }
+        },
+        "required": [
+          "notes",
+          "shots",
+          "skipped",
+          "gaps"
+        ],
+        "title": "YourVersion",
         "type": "object"
       }
     }
@@ -4727,6 +4922,89 @@
           }
         },
         "summary": "List Director Cuts"
+      }
+    },
+    "/v1/director/plans/{video_id}/revisions": {
+      "post": {
+        "description": "The member's version of a template, re-planned by Gemini from one instruction.",
+        "operationId": "reviseDirectorVersion",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "video_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{11}$",
+              "title": "Video Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviseResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Revise Director Version"
       }
     },
     "/v1/director/plans/{video_id}/takes": {

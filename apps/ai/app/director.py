@@ -58,6 +58,7 @@ from app.picker import AssetPicker
 from app.publish_copy import PUBLISH_INSTRUCTIONS, tidy
 from app.queues import DirectorQueue
 from app.realtime import publish_to_org
+from app.revise import REVISE_INSTRUCTIONS, apply_revision, revise_prompt
 from app.schemas import (
     MAX_SHOT_SECONDS,
     AlignRequest,
@@ -75,6 +76,9 @@ from app.schemas import (
     PublishCopy,
     PublishCopyDraft,
     PublishCopyRequest,
+    ReviseRequest,
+    ReviseResult,
+    RevisionDraft,
     SceneCheck,
     Shot,
     ShotPlan,
@@ -97,6 +101,9 @@ WATCH_TIMEOUT_SECONDS = 120.0
 # own wait for this service (packages/ai-client, 30 s), with room to answer: past that,
 # the tokens would be spent on a post nobody gets.
 COPY_TIMEOUT_SECONDS = 25.0
+# A re-plan is asked for mid-shoot, with Director telling the member it's on it: the same
+# bound as a post, under apps/api's own wait for this service.
+REVISE_TIMEOUT_SECONDS = 25.0
 # The partial unique index that holds each member to one short of their own (Prisma's
 # ai.prisma, DirectorPlan).
 ONE_USER_INDEX = "director_plan_one_user_index"
@@ -287,6 +294,7 @@ class Budgets:
     per_review: int
     per_publish_copy: int
     per_alignment: int = 12_000
+    per_revise: int = 30_000
 
 
 def _google_provider(settings: GeminiSettings) -> GoogleProvider | GoogleCloudProvider:
@@ -565,6 +573,13 @@ class Director:
             output_type=PublishCopyDraft,
             instructions=PUBLISH_INSTRUCTIONS,
             model_settings=ModelSettings(thinking="low", timeout=COPY_TIMEOUT_SECONDS),
+            defer_model_check=True,
+        )
+        self._reviser = Agent(
+            model,
+            output_type=RevisionDraft,
+            instructions=REVISE_INSTRUCTIONS,
+            model_settings=ModelSettings(thinking="low", timeout=REVISE_TIMEOUT_SECONDS),
             defer_model_check=True,
         )
 
@@ -1229,6 +1244,37 @@ class Director:
             await settle(reservation, used.inputTokens, used.outputTokens)
         return result.alignment
 
+    # ------------------------------------------------------------------------ your version
+
+    async def revise(
+        self, org_id: UUID, user_id: UUID, video_id: str, body: ReviseRequest
+    ) -> ReviseResult:
+        """The member's version re-planned from one instruction (DIRECTOR_PLAN_NOT_FOUND,
+        DIRECTOR_PLAN_NOT_READY, AI_BUDGET_EXCEEDED, UPSTREAM_UNAVAILABLE when Gemini
+        fails). Nothing is kept here: apps/api keeps the version."""
+        plan = await self.plan(org_id, video_id)
+        if plan.status != "ready" or plan.plan is None:
+            raise AppError("DIRECTOR_PLAN_NOT_READY")
+        shots = ShotPlan.model_validate(plan.plan)
+        reservation = await self._reserve(
+            org_id, user_id, "director-revise", self._budgets.per_revise
+        )
+        if reservation is None:
+            raise AppError("AI_BUDGET_EXCEEDED")
+        usage = RunUsage()
+        try:
+            result = await self._reviser.run(
+                revise_prompt(shots, body),
+                usage=usage,
+                usage_limits=UsageLimits(total_tokens_limit=reservation.tokens),
+            )
+        except Exception:
+            log.exception("re-planning failed", video_id=video_id)
+            raise AppError("UPSTREAM_UNAVAILABLE", {"service": "gemini"}) from None
+        finally:
+            await settle(reservation, usage.input_tokens, usage.output_tokens)
+        return apply_revision(shots, body.version, result.output)
+
     async def _download(self, url: str) -> tuple[bytes, TakeContentType]:
         """The take's bytes and type, read from its presigned URL up to MAX_TAKE_BYTES."""
         async with self._http.stream("GET", url, timeout=TAKE_DOWNLOAD_SECONDS) as response:
@@ -1361,6 +1407,7 @@ def create_director(
             per_review=settings.director_tokens_per_review,
             per_publish_copy=settings.director_tokens_per_publish_copy,
             per_alignment=settings.director_tokens_per_alignment,
+            per_revise=settings.director_tokens_per_revise,
         ),
         queue,
         redis,

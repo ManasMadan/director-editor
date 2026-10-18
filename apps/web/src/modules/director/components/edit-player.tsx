@@ -56,13 +56,13 @@ function useVideoSync(
   useEffect(() => {
     for (const [index, video] of videos) {
       video.muted = !sound;
-      if (active && clips[index] === active) {
+      if (active && active.index === index) {
         follow(video, active, { time, playing, onStall });
       } else {
         video.pause();
       }
     }
-  }, [videos, clips, active, time, playing, sound, onStall]);
+  }, [videos, active, time, playing, sound, onStall]);
   return active;
 }
 

@@ -18,7 +18,13 @@
  * Swapping the model or the provider: `ChatUpstream` says where requests go; the request
  * and response shapes are Vertex AI's generateContent, in their JSON form.
  */
-import type { DirectorChatInput, DirectorChatReply, ShotPlan } from "@repo/contracts/api";
+import {
+  type DirectorChatInput,
+  type DirectorChatReply,
+  EMPTY_VERSION,
+  type ShotPlan,
+  type YourVersion,
+} from "@repo/contracts/api";
 import type { LiveToolCall } from "@repo/contracts/live";
 import { SECOND_MS } from "@repo/contracts/time";
 import { AppError, describeError } from "@repo/nest-common";
@@ -27,6 +33,7 @@ import type { GoogleAuth } from "./google-auth";
 import type { LiveLog } from "./live.relay";
 import {
   cameraMessage,
+  forgotMessage,
   functionDeclarations,
   rollMessage,
   systemInstruction,
@@ -121,6 +128,8 @@ function turnText(input: DirectorChatInput): { text: string; answer: boolean } {
       return noteOf(takeMessage(turn.state, shotIndex));
     case "roll":
       return noteOf(rollMessage(turn.state));
+    case "forgot":
+      return noteOf(forgotMessage({ kind: turn.memory, note: turn.note }));
   }
 }
 
@@ -150,6 +159,14 @@ function userContent(input: DirectorChatInput, text: string): Content {
       { text },
     ],
   };
+}
+
+/**
+ * The member's version this turn carries: the whole of it, or (from an older screen)
+ * only the shots Director changed.
+ */
+function versionOf(input: DirectorChatInput): YourVersion {
+  return input.version ?? { ...EMPTY_VERSION, shots: input.adaptations };
 }
 
 /** The words of an answer, and its function calls. */
@@ -182,8 +199,7 @@ export class DirectorChat {
     if (!turn.answer) {
       return { reply: "", calls: [] };
     }
-    const version = input.adaptations.find((a) => a.shot === input.shotIndex);
-    const system = `${systemInstruction(plan, input.shotIndex, version)}\n\n${SLOWER}`;
+    const system = `${systemInstruction(plan, input.shotIndex, versionOf(input))}\n\n${SLOWER}`;
     const contents: Content[] = [userContent(input, turn.text)];
     const first = await this.generate(upstream, system, contents);
     const { text, calls: raw } = read(first);

@@ -62,6 +62,8 @@ from app.schemas import (
     PlanEditRequest,
     PublishCopy,
     PublishCopyRequest,
+    ReviseRequest,
+    ReviseResult,
     SceneCheck,
     SceneCheckRequest,
     ShotPlan,
@@ -303,6 +305,17 @@ async def locate_director_target(
 ) -> Located:
     """Where something Director names is in one camera frame, for a mark on screen."""
     return await director.locate(caller.org_id, caller.user_id, body.target, body.image)
+
+
+@app.post("/v1/director/plans/{video_id}/revisions", operation_id="reviseDirectorVersion")
+async def revise_director_version(
+    video_id: Annotated[str, Path(pattern=VIDEO_ID_PATTERN)],
+    body: ReviseRequest,
+    caller: CallerDep,
+    director: DirectorDep,
+) -> ReviseResult:
+    """The member's version of a template, re-planned by Gemini from one instruction."""
+    return await director.revise(caller.org_id, caller.user_id, video_id, body)
 
 
 @app.post("/v1/director/takes", operation_id="createDirectorTake", status_code=201)

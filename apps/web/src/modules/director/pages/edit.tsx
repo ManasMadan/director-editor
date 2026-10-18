@@ -6,7 +6,8 @@ import { useApiErrorMessage } from "@repo/client";
 import { useDirectorPlanQuery } from "@repo/client/api/director/plan";
 import { useSaveCutMutation } from "@repo/client/api/director/save-cut";
 import { useDirectorShotsQuery } from "@repo/client/api/director/shots";
-import type { DirectorCut, DirectorShot, ShotPlan } from "@repo/contracts/api";
+import { useYourVersionQuery } from "@repo/client/api/director/your-version";
+import type { DirectorCut, DirectorShot, ShotPlan, YourVersion } from "@repo/contracts/api";
 import { uploadPurposes } from "@repo/contracts/files";
 import type { DirectorTakeId } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
@@ -33,6 +34,7 @@ import { EditPlayer } from "../components/edit-player";
 import { SoundPanel, StylePicker, type Tool } from "../components/edit-tools";
 import { MatchCutNotes } from "../components/match-cut";
 import { ShotBoard } from "../components/shot-board";
+import { VersionGaps } from "../components/version-gaps";
 import { type EditChoices, useEditHistory } from "../hooks/use-edit-history";
 import { useMatchCuts } from "../hooks/use-match-cuts";
 import { useObjectUrl } from "../hooks/use-object-url";
@@ -47,6 +49,7 @@ import type { MatchCutTransform } from "../lib/match-cuts";
 import { cutPicks, pickedTakes } from "../lib/picks";
 import { MAX_SECONDS, type Segment, stitch } from "../lib/stitch";
 import { timecode } from "../lib/track";
+import { adaptationOf, films, yourVersion } from "../lib/your-version";
 
 /**
  * A filmed clip's take once it's in memory (not while it loads, nor when it couldn't be).
@@ -397,11 +400,28 @@ function useEditor(
   plan: ShotPlan,
   shots: readonly DirectorShot[],
   audio: AudioMode,
+  version: YourVersion,
 ) {
   const history = useEditHistory({ style: "pop", sound: audio === "voice", picks: {} });
   const { picks } = history.choices;
-  const played = useMemo(() => pickedTakes(shots, picks), [shots, picks]);
-  const unaligned = useMemo(() => clipsOf(plan.shots, played), [plan.shots, played]);
+  // Only the shots the member's version films reach the video (and the saved picks).
+  const played = useMemo(
+    () =>
+      pickedTakes(
+        shots.filter((shot) => films(version, shot.index)),
+        picks,
+      ),
+    [shots, picks, version],
+  );
+  const unaligned = useMemo(
+    () =>
+      clipsOf(
+        plan.shots.map((shot, index) => yourVersion(shot, adaptationOf(version, index)).shot),
+        played,
+        (index) => films(version, index),
+      ),
+    [plan.shots, played, version],
+  );
   // Match cuts are lined up as soon as both takes are in: the clips play the aligned cut.
   const matchCuts = useMatchCuts(videoId, plan, unaligned);
   const { clips } = matchCuts;
@@ -424,7 +444,10 @@ function useEditor(
     left: clips.filter((clip) => clip.state === "missing").length,
     pick: (shotIndex: number, takeId: DirectorTakeId) => {
       history.change({ picks: { ...picks, [shotIndex]: takeId } });
-      const clip = required(clips[shotIndex], "the shot picked");
+      const clip = required(
+        clips.find((shown) => shown.index === shotIndex),
+        "the shot picked",
+      );
       playback.seek(clip.at);
     },
     seek: (clip: Clip) => {
@@ -532,15 +555,18 @@ function Editor({
   shots,
   audio,
   wrap,
+  version,
 }: {
   videoId: string;
   plan: ShotPlan;
   shots: readonly DirectorShot[];
   audio: AudioMode;
   wrap: boolean;
+  /** The member's version: its skipped shots and gaps aren't in the video. */
+  version: YourVersion;
 }) {
   const t = useTranslations("director");
-  const editor = useEditor(videoId, plan, shots, audio);
+  const editor = useEditor(videoId, plan, shots, audio, version);
   const saver = useSaveVideo(videoId, plan.title);
   const { playback, history, clips, media } = editor;
   const save = () => {
@@ -590,6 +616,7 @@ function Editor({
           </p>
         ) : null}
         <MatchCutNotes cuts={editor.matchCuts.cuts} />
+        <VersionGaps plan={plan} version={version} />
         <ShotBoard
           clips={clips}
           shots={shots}
@@ -640,6 +667,7 @@ function Edit({
   const plan = useDirectorPlanQuery(videoId);
   const ready = plan.data?.status === "ready" ? plan.data.plan : null;
   const shots = useDirectorShotsQuery(videoId, ready !== null);
+  const version = useYourVersionQuery(videoId);
   if (plan.isError) {
     return (
       <div className="flex h-dvh flex-col items-center justify-center gap-4 p-8 text-center">
@@ -657,7 +685,14 @@ function Edit({
       </p>
     );
   }
-  if (!ready || !shots.data) {
+  if (version.isError) {
+    return (
+      <p role="alert" className="p-4 text-sm text-studio-error">
+        {errorMessage(version.error)}
+      </p>
+    );
+  }
+  if (!ready || !shots.data || !version.data) {
     return <Loading />;
   }
   return (
@@ -667,6 +702,7 @@ function Edit({
       shots={shots.data}
       audio={parseAudio(audio, ready)}
       wrap={wrap}
+      version={version.data}
     />
   );
 }

@@ -633,7 +633,13 @@ declare const messages: {
         "do": "Do",
         "say": "Say",
         "line": "“{line}”",
-        "changed": "changed for you"
+        "framing": "Framing",
+        "changed": "changed for you",
+        "restore": "Put the original back: {row}"
+      },
+      "memory": {
+        "label": "What Director remembers",
+        "forget": "Forget “{note}”"
       },
       "tell": {
         "label": "Tell Director",
@@ -736,6 +742,11 @@ declare const messages: {
       "noStoryboard": "Director is still drawing this shot"
     },
     "editor": {
+      "version": {
+        "label": "Shots not in your video",
+        "gap": "Shot {index, number} · {title}: a gap, not filmed",
+        "skipped": "Shot {index, number} · {title}: skipped"
+      },
       "title": "Edit your video",
       "loadingTakes": "Loading your takes…",
       "save": "Save video",

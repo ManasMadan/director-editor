@@ -2,8 +2,9 @@
  * The edit, from the plan and the take picked for each shot (lib/picks.ts): one clip per
  * shot, laid end to end. A filmed clip plays the part of its take Gemini kept (or the
  * whole take when it kept none); a shot not filmed yet, or whose take is still being
- * reviewed, holds its place for the shot's length. The captions are the shots' scripts
- * moved to where their clips play.
+ * reviewed, holds its place for the shot's length. A shot the member's version doesn't
+ * film (skipped, or a gap the edit fills) has no clip. The captions are the shots'
+ * scripts moved to where their clips play.
  */
 import type { DirectorTake, Shot } from "@repo/contracts/api";
 import type { CaptionLine } from "./captions";
@@ -30,9 +31,16 @@ function stateOf(take: DirectorTake | undefined): ClipState {
   return take.status === "pending" || take.status === "reviewing" ? "reviewing" : "cut";
 }
 
-export function clipsOf(shots: readonly Shot[], picked: Map<number, DirectorTake>): Clip[] {
+export function clipsOf(
+  shots: readonly Shot[],
+  picked: Map<number, DirectorTake>,
+  filmed: (index: number) => boolean = () => true,
+): Clip[] {
   let at = 0;
-  return shots.map((shot, index) => {
+  return shots.flatMap((shot, index) => {
+    if (!filmed(index)) {
+      return [];
+    }
     const take = picked.get(index);
     const state = stateOf(take);
     const best = state === "cut" ? take : undefined;
@@ -43,7 +51,7 @@ export function clipsOf(shots: readonly Shot[], picked: Map<number, DirectorTake
     const seconds = shot.kind === "video" && state === "cut" ? to - from : shot.durationSeconds;
     const clip: Clip = { index, shot, take: take ?? null, state, at, seconds, from, to };
     at += seconds;
-    return clip;
+    return [clip];
   });
 }
 

@@ -13,6 +13,14 @@ import {
   DIRECTOR_MARK_LABEL_MAX_LENGTH,
   DIRECTOR_MAX_SHOTS,
 } from "./api/director";
+import {
+  MEMORY_KINDS,
+  memoryNoteSchema,
+  REVISE_INSTRUCTION_MAX_LENGTH,
+  shotVersionSchema,
+  VERSION_ROW_MAX_LENGTH,
+  yourVersionSchema,
+} from "./api/your-version";
 import { errorCode } from "./errors";
 
 export const LIVE_PATH = "/api/live";
@@ -30,6 +38,11 @@ export const LIVE_TOOLS = [
   "mark",
   "adapt_shot",
   "point_at",
+  "restore_shot",
+  "skip_shot",
+  "replan",
+  "remember",
+  "forget",
 ] as const;
 export type LiveTool = (typeof LIVE_TOOLS)[number];
 
@@ -41,7 +54,9 @@ const LIVE_TOOL_ID_MAX_LENGTH = 64;
 /** A mark's line or note: Director's few words on an attempt. */
 export const LIVE_MARK_TEXT_MAX_LENGTH = 300;
 /** One row of a shot as the member's version has it: a sentence, not a script. */
-export const LIVE_ADAPTATION_MAX_LENGTH = 300;
+export const LIVE_ADAPTATION_MAX_LENGTH = VERSION_ROW_MAX_LENGTH;
+/** Why Director skipped a shot, in its words: a few, for the log. */
+const LIVE_WHY_MAX_LENGTH = 200;
 
 const shotIndex = z
   .int()
@@ -49,18 +64,12 @@ const shotIndex = z
   .max(DIRECTOR_MAX_SHOTS - 1);
 export const facing = z.enum(["front", "back"]);
 export type Facing = z.infer<typeof facing>;
-const adaptedRow = z.string().trim().min(1).max(LIVE_ADAPTATION_MAX_LENGTH);
-
 /**
  * The member's version of a shot, as Director changed it from what they said: where to
- * be, what to do, the line. Each is optional; one left out stays the original's.
+ * be, what to do, the line, the framing and the camera. Each is optional; one left out
+ * stays the original's (@repo/contracts your-version.ts).
  */
-export const liveAdaptation = z.object({
-  shot: shotIndex,
-  where: adaptedRow.optional(),
-  action: adaptedRow.optional(),
-  line: adaptedRow.optional(),
-});
+export const liveAdaptation = shotVersionSchema;
 export type LiveAdaptation = z.infer<typeof liveAdaptation>;
 
 /** A tool call as the browser carries it out: which, and with what (a shot is 0-based). */
@@ -84,13 +93,31 @@ export const liveToolCall = z.discriminatedUnion("name", [
     line: z.string().trim().min(1).max(LIVE_MARK_TEXT_MAX_LENGTH).optional(),
     note: z.string().trim().min(1).max(LIVE_MARK_TEXT_MAX_LENGTH).optional(),
   }),
+  /** Puts the original back for a shot: its changes gone, filmed again if skipped. */
+  z.object({ name: z.literal("restore_shot"), shot: shotIndex }),
+  /** Leaves a shot out of the member's video, and moves on past it. */
+  z.object({
+    name: z.literal("skip_shot"),
+    shot: shotIndex,
+    why: z.string().trim().max(LIVE_WHY_MAX_LENGTH).optional(),
+  }),
+  /** Re-plans what's left (director.revise), from one instruction. */
+  z.object({
+    name: z.literal("replan"),
+    instruction: z.string().trim().min(1).max(REVISE_INSTRUCTION_MAX_LENGTH),
+  }),
+  /** Remembers something for the rest of the shoot: a chip on screen. */
+  memoryNoteSchema.extend({ name: z.literal("remember") }),
+  /** Forgets something it remembered: the chip goes. */
+  z.object({ name: z.literal("forget"), note: memoryNoteSchema.shape.note }),
 ]);
 export type LiveToolCall = z.infer<typeof liveToolCall>;
 
 /**
  * What came of a tool call: done; refused because a take is under way, the camera is
  * off, the roll is paused (only the member's touch resumes it) or nothing is recording;
- * or what Director pointed at isn't in the picture.
+ * what Director pointed at isn't in the picture; or failed (a re-plan the model couldn't
+ * make).
  */
 export const LIVE_TOOL_RESULTS = [
   "done",
@@ -99,6 +126,7 @@ export const LIVE_TOOL_RESULTS = [
   "not_found",
   "paused",
   "not_recording",
+  "failed",
 ] as const;
 export type LiveToolResult = (typeof LIVE_TOOL_RESULTS)[number];
 
@@ -106,6 +134,10 @@ export type LiveToolResult = (typeof LIVE_TOOL_RESULTS)[number];
  * Where a take is: counting in (the 3-2-1), the count called off, recording, just
  * recorded (the member is watching it back), or thrown away to go again.
  */
+/** The rows of a shot the member can put back to the original's from the card. */
+const RESTORABLE_ROWS = ["where", "action", "line", "framing", "camera"] as const;
+export type RestorableRow = (typeof RESTORABLE_ROWS)[number];
+
 export const LIVE_TAKE_STATES = [
   "countdown",
   "cancelled",
@@ -145,13 +177,19 @@ export const liveClientMessage = z.discriminatedUnion("type", [
   z.object({ type: z.literal("take"), state: z.enum(LIVE_TAKE_STATES) }),
   z.object({ type: z.literal("roll"), state: z.enum(LIVE_ROLL_STATES) }),
   /**
-   * What this shoot already changed, sent as Director (re)joins, so a fresh connection
-   * knows the member's version of each shot.
+   * The member's version (what Director remembers, the shots changed, skipped and left as
+   * gaps), sent as Director (re)joins and after every change, so the relay always briefs
+   * Gemini with the version the screen shows.
    */
+  z.object({ type: z.literal("context"), version: yourVersionSchema }),
+  /** The member tapped the x on a chip: Director forgets it and says so. */
   z.object({
-    type: z.literal("context"),
-    adaptations: z.array(liveAdaptation).max(DIRECTOR_MAX_SHOTS),
+    type: z.literal("forgot"),
+    kind: z.enum(MEMORY_KINDS),
+    note: memoryNoteSchema.shape.note,
   }),
+  /** The member put a changed row of the card back to the original's. */
+  z.object({ type: z.literal("restored"), shot: shotIndex, row: z.enum(RESTORABLE_ROWS) }),
 ]);
 export type LiveClientMessage = z.infer<typeof liveClientMessage>;
 

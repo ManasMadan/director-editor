@@ -612,6 +612,25 @@ export const zMatchCutAlignment = z.object({
     withinTolerance: z.boolean()
 });
 
+export const zMemoryKind = z.enum([
+    'place',
+    'people',
+    'props',
+    'time',
+    'angles',
+    'comfort',
+    'style',
+    'other'
+]);
+
+/**
+ * MemoryNote
+ */
+export const zMemoryNote = z.object({
+    kind: zMemoryKind,
+    note: z.string().min(1).max(60)
+});
+
 /**
  * OverlayEdit
  *
@@ -736,6 +755,8 @@ export const zScriptLine = z.object({
     startSeconds: z.number().gte(0).lte(60),
     text: z.string().min(1).max(240)
 });
+
+export const zShotIndex = z.int().gte(0).lt(12);
 
 export const zShotKind = z.enum(['video', 'photo']);
 
@@ -1049,6 +1070,48 @@ export const zPlanEditRequest = z.object({
     videoId: z.string().regex(/^[A-Za-z0-9_-]{11}$/)
 });
 
+export const zVersionRow = z.string().min(1).max(300);
+
+/**
+ * ShotVersion
+ *
+ * A shot as the member's version changes it; a field left out is the original's.
+ */
+export const zShotVersion = z.object({
+    action: zVersionRow.nullish(),
+    camera: z.enum(['front', 'back']).nullish(),
+    framing: zVersionRow.nullish(),
+    line: zVersionRow.nullish(),
+    shot: zShotIndex,
+    where: zVersionRow.nullish()
+});
+
+/**
+ * YourVersion
+ */
+export const zYourVersion = z.object({
+    gaps: z.array(zShotIndex).max(12),
+    notes: z.array(zMemoryNote).max(12),
+    shots: z.array(zShotVersion).max(12),
+    skipped: z.array(zShotIndex).max(12)
+});
+
+/**
+ * ReviseRequest
+ */
+export const zReviseRequest = z.object({
+    instruction: z.string().min(1).max(300),
+    version: zYourVersion
+});
+
+/**
+ * ReviseResult
+ */
+export const zReviseResult = z.object({
+    summary: z.string().max(300),
+    version: zYourVersion
+});
+
 /**
  * Successful Response
  */
@@ -1290,6 +1353,22 @@ export const zListDirectorCutsPath = z.object({
  * Successful Response
  */
 export const zListDirectorCutsResponse = z.array(zDirectorCutOut);
+
+export const zReviseDirectorVersionBody = zReviseRequest;
+
+export const zReviseDirectorVersionHeaders = z.object({
+    authorization: z.string().nullish(),
+    'x-request-id': z.string().nullish()
+});
+
+export const zReviseDirectorVersionPath = z.object({
+    video_id: z.string().regex(/^[A-Za-z0-9_-]{11}$/)
+});
+
+/**
+ * Successful Response
+ */
+export const zReviseDirectorVersionResponse = zReviseResult;
 
 export const zListDirectorTakesHeaders = z.object({
     authorization: z.string().nullish(),

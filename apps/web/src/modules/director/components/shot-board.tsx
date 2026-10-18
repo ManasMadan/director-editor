@@ -332,11 +332,11 @@ export function ShotBoard({
 }) {
   const t = useTranslations("director.editor");
   const columns = useRef(new Map<number, HTMLFieldSetElement>());
-  const active = clips.find((clip) => time < clip.at + clip.seconds)?.index ?? clips.length - 1;
+  const active = (clips.find((clip) => time < clip.at + clip.seconds) ?? clips.at(-1))?.index;
 
   // While it plays, the shot playing comes into view (not while the member looks around).
   useEffect(() => {
-    if (playing) {
+    if (playing && active !== undefined) {
       columns.current
         .get(active)
         ?.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });

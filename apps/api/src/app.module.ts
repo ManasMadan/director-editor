@@ -17,6 +17,7 @@ import { PublishModule } from "./modules/publish";
 import { RealtimeModule } from "./modules/realtime";
 import { RecordingModule } from "./modules/recording";
 import { UserModule } from "./modules/user";
+import { YourVersionModule } from "./modules/your-version";
 import { NotificationsProducerModule } from "./notifications";
 
 @Module({
@@ -45,6 +46,7 @@ import { NotificationsProducerModule } from "./notifications";
     DirectorModule,
     AssetsModule,
     PublishModule,
+    YourVersionModule,
   ],
 })
 export class AppModule {}

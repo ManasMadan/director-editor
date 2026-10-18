@@ -17,10 +17,14 @@
  * side closes, Gemini fails, or it reaches its time limit; the browser hears why as an
  * `error` message just before its socket closes.
  */
-import { DIRECTOR_MAX_SHOTS, type ShotPlan } from "@repo/contracts/api";
+import {
+  DIRECTOR_MAX_SHOTS,
+  EMPTY_VERSION,
+  type ShotPlan,
+  type YourVersion,
+} from "@repo/contracts/api";
 import { ERROR_CODES, type ErrorCode } from "@repo/contracts/errors";
 import {
-  type LiveAdaptation,
   type LiveClientMessage,
   type LiveServerMessage,
   type LiveTool,
@@ -40,11 +44,16 @@ import {
 } from "./live.messages";
 import { Pacer } from "./live.pacer";
 import {
+  adaptationOf,
+  briefOf,
   cameraMessage,
   catchUpMessage,
+  forgotMessage,
   greetingMessage,
+  memoryOf,
   noiseMessage,
   quietMessage,
+  restoredMessage,
   resumedMessage,
   rollMessage,
   shotMessage,
@@ -66,9 +75,9 @@ export interface RelayOptions {
   auth: GoogleAuth;
   /**
    * The first message on an upstream connection, for the shot the member is on and their
-   * version of it; `handle` resumes the conversation a previous connection had.
+   * version of the plan; `handle` resumes the conversation a previous connection had.
    */
-  setup: (shot: number, handle: string | null, adaptation?: LiveAdaptation) => object;
+  setup: (shot: number, handle: string | null, version: YourVersion) => object;
   /** The plan Director directs, and the shot it starts on. */
   plan: ShotPlan;
   shot: number;
@@ -111,6 +120,16 @@ const NOTES = 10;
 const UPSTREAM_MAX_BUFFERED_BYTES = 1024 * 1024;
 /** How long Gemini waits to hear what came of a tool call before it's told nobody knows. */
 const TOOL_ANSWER_MS = 5 * SECOND_MS;
+/**
+ * A re-plan is a model call of its own (director.revise), answered within the AI
+ * service's own bound: Gemini waits that long for it, plus the trip there and back.
+ */
+const REPLAN_ANSWER_MS = 30 * SECOND_MS;
+/** The tools whose answer takes longer than an ordinary one's. */
+const ANSWER_WITHIN: Partial<Record<LiveTool, number>> = {
+  point_at: POINT_AT_ANSWER_MS,
+  replan: REPLAN_ANSWER_MS,
+};
 /** What's kept of the conversation, to catch a fresh connection up: lines, and each's length. */
 const RECENT_LINES = 8;
 const RECENT_LINE_LENGTH = 300;
@@ -147,8 +166,8 @@ interface Line {
   retired: boolean;
   /** It picked up a previous connection's conversation from a handle. */
   resumed: boolean;
-  /** The member's version of its shot that its setup described, if any. */
-  briefed: LiveAdaptation | undefined;
+  /** What its setup said of the member's version (briefOf), to tell it of a newer one. */
+  briefed: string;
   setupTimer: NodeJS.Timeout | undefined;
 }
 
@@ -156,7 +175,7 @@ interface Line {
 interface Pending {
   line: Line;
   /** The member's version of a shot, applied once the browser has shown it. */
-  adaptation?: LiveAdaptation;
+  adaptation?: YourVersion["shots"][number];
   /** Gemini's own id for the call, which its answer must carry. */
   geminiId: string | undefined;
   name: LiveTool;
@@ -205,8 +224,8 @@ export class LiveRelay {
   private startedAt: number | null = null;
   /** The shot the browser is on, which Gemini directs. */
   private shot: number;
-  /** The member's version of each shot they changed, by shot. */
-  private readonly adaptations = new Map<number, LiveAdaptation>();
+  /** The member's version of the plan, as the browser last sent it (and Director changed it). */
+  private version: YourVersion = EMPTY_VERSION;
   private readonly pacer: Pacer;
 
   constructor(
@@ -259,15 +278,15 @@ export class LiveRelay {
       ready: false,
       retired: false,
       resumed: false,
-      briefed: undefined,
+      briefed: "",
       setupTimer: undefined,
     };
     this[as] = line;
     socket.on("open", () => {
       line.shot = this.shot;
       line.resumed = this.handle !== null;
-      line.briefed = this.adaptations.get(line.shot);
-      send(line, this.options.setup(line.shot, this.handle, line.briefed));
+      line.briefed = briefOf(this.version, line.shot);
+      send(line, this.options.setup(line.shot, this.handle, this.version));
       line.setupTimer = setTimeout(() => {
         this.options.log("error", {}, "live setup never completed");
         this.end("UPSTREAM_UNAVAILABLE");
@@ -319,13 +338,13 @@ export class LiveRelay {
       case "tool_result":
         return this.answerTool(message.id, message.result);
       case "context":
-        for (const adaptation of message.adaptations) {
-          // A shot with nothing changed is the original: there's no version to describe.
-          if (adaptation.where || adaptation.action || adaptation.line) {
-            this.adaptations.set(adaptation.shot, adaptation);
-          }
-        }
+        // The screen's version is the member's: it replaces whatever the relay held.
+        this.version = message.version;
         return;
+      case "forgot":
+        return this.note(forgotMessage(message));
+      case "restored":
+        return this.note(restoredMessage(message.shot, message.row));
       case "camera":
         this.pacer.heard();
         return this.note(cameraMessage(message.facing));
@@ -366,7 +385,7 @@ export class LiveRelay {
     const line = this.ready;
     if (line) {
       line.shot = index;
-      send(line, shotMessage(this.options.plan, index, this.adaptations.get(index)));
+      send(line, shotMessage(this.options.plan, index, this.version));
     }
   }
 
@@ -472,11 +491,10 @@ export class LiveRelay {
     line.ready = true;
     const moved = line.shot !== this.shot;
     line.shot = this.shot;
-    const adaptation = this.adaptations.get(this.shot);
     // The member's version arrived after the setup went (the browser sends it as it joins):
     // Director knows it before it says anything.
-    if (!moved && adaptation && adaptation !== line.briefed) {
-      send(line, versionMessage(adaptation));
+    if (!moved && briefOf(this.version, this.shot) !== line.briefed) {
+      send(line, versionMessage(this.version, this.shot));
     }
     if (line === this.next) {
       this.takeOver(line);
@@ -490,7 +508,7 @@ export class LiveRelay {
     }
     // The member moved on while this connection got ready: it opens on the shot they're on.
     if (moved) {
-      send(line, shotMessage(this.options.plan, this.shot, adaptation));
+      send(line, shotMessage(this.options.plan, this.shot, this.version));
     }
     clearTimeout(this.rotateTimer);
     this.rotateTimer = setTimeout(() => this.rotate(), this.options.rotateAfterMs);
@@ -576,8 +594,10 @@ export class LiveRelay {
     }
     this.toolIds += 1;
     const id = `tool-${this.toolIds}`;
-    const within = name === "point_at" ? POINT_AT_ANSWER_MS : TOOL_ANSWER_MS;
-    const timer = setTimeout(() => this.answerTool(id, "unknown"), within);
+    const timer = setTimeout(
+      () => this.answerTool(id, "unknown"),
+      ANSWER_WITHIN[name] ?? TOOL_ANSWER_MS,
+    );
     // An attempt under way: no nudges while it runs, as with a take.
     if (browserCall.call.name === "mark") {
       this.pacer.take(browserCall.call.event === "start");
@@ -600,10 +620,16 @@ export class LiveRelay {
     clearTimeout(pending.timer);
     const { line, geminiId, name, adaptation } = pending;
     if (adaptation && result === "done") {
-      const { shot } = adaptation;
-      this.adaptations.set(shot, { ...this.adaptations.get(shot), ...adaptation });
+      const others = this.version.shots.filter(({ shot }) => shot !== adaptation.shot);
+      const merged = { ...adaptationOf(this.version, adaptation.shot), ...adaptation };
+      this.version = { ...this.version, shots: [...others, merged] };
     }
-    const response = TOOL_RESPONSES[result];
+    // A re-plan's answer carries the new version (the browser sent it just before), so
+    // Director confirms what really changed.
+    const response =
+      name === "replan" && result === "done"
+        ? { result: "done", yourVersion: memoryOf(this.version) }
+        : TOOL_RESPONSES[result];
     if (!line.retired && line.socket.readyState === WebSocket.OPEN) {
       send(line, { toolResponse: { functionResponses: [{ id: geminiId, name, response }] } });
     }
