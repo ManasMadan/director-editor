@@ -292,9 +292,16 @@ describe("Director live on the shoot screen", () => {
     await expect.element(page.getByText("REC"), { timeout: 6_000 }).toBeVisible();
     socket.say({ type: "audio", pcm16: voice(1) });
     socket.say({ type: "transcript", who: "director", text: "Shh." });
+    // Director speaks the moment the take shows, before anything else has run: it's heard.
+    const reviewed = new MutationObserver(() => {
+      if (document.querySelector('[aria-label="Your take, on loop"]')) {
+        reviewed.disconnect();
+        socket.say({ type: "transcript", who: "director", text: "Lovely." });
+      }
+    });
+    reviewed.observe(document.body, { childList: true, subtree: true });
     await userEvent.click(page.getByRole("button", { name: "Stop recording" }));
     await expect.element(page.getByLabelText("Your take, on loop")).toBeVisible();
-    socket.say({ type: "transcript", who: "director", text: "Lovely." });
     await expect.poll(captionTexts).toEqual(["Lovely."]);
     await userEvent.click(page.getByRole("button", { name: "Go again" }));
     // A countdown called off is told too.

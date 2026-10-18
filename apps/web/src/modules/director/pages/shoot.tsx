@@ -472,8 +472,9 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
   const { hold } = live;
   const quiet = studio.phase === "countdown" || studio.phase === "recording";
   // Director's voice would talk over the 3-2-1 and end up in the take: it's held (dropped,
-  // and not captioned) from the first number to the take's end.
-  useEffect(() => hold(quiet), [hold, quiet]);
+  // and not captioned) from the first number to the take's end. Set before the screen
+  // paints, so nothing Director says once the review shows is dropped as if mid-take.
+  useLayoutEffect(() => hold(quiet), [hold, quiet]);
   useWakeLock();
   return { props, camera, live, studio, onFlip, leaving };
 }
