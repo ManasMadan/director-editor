@@ -10,8 +10,8 @@ postgres:
     enabled: true
     retention: 14d
   # The weekly restore drill (deploy/README.md, "Backups and restore") runs a second
-  # Postgres as large as this one, which one 16 GB machine can't spare. Turn it on with
-  # a bigger machine or a second node.
+  # Postgres as large as this one beside it, for as long as the drill takes. Off for now;
+  # the 32 GB machine has the memory for it (2 GB more, at the drill's peak).
   drill:
     enabled: false
 storage:
