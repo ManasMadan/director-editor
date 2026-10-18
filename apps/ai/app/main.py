@@ -13,6 +13,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Annotated
+from uuid import UUID
 
 import httpx
 from fastapi import Depends, FastAPI, Path, Request, Response
@@ -39,6 +40,8 @@ from app.schemas import (
     DirectorTakeCreate,
     DirectorTakeOut,
     HealthResponse,
+    PublishCopy,
+    PublishCopyRequest,
     SceneCheck,
     SceneCheckRequest,
     ShotPlan,
@@ -302,3 +305,20 @@ async def speak_director_line(
     """A line in Director's voice (Gemini's text-to-speech), as a WAV file."""
     audio = await speaker.speak(caller.org_id, caller.user_id, body.text, body.voice)
     return Response(content=audio, media_type="audio/wav")
+
+
+@app.get("/v1/director/cuts/{cut_id}", operation_id="getDirectorCut")
+async def get_director_cut(
+    cut_id: UUID, caller: CallerDep, director: DirectorDep
+) -> DirectorCutOut:
+    """One of the caller's cuts (DIRECTOR_CUT_NOT_FOUND unless it's theirs)."""
+    return _cut_out(*await director.cut(caller.org_id, caller.user_id, cut_id))
+
+
+@app.post("/v1/director/publish-copy", operation_id="writeDirectorPublishCopy")
+async def write_director_publish_copy(
+    body: PublishCopyRequest, caller: CallerDep, director: DirectorDep
+) -> PublishCopy:
+    """Gemini's YouTube post for one of the caller's cuts: a title, a description and
+    hashtags in the Short's language, and the credits to the original."""
+    return await director.publish_copy(caller.org_id, caller.user_id, body)

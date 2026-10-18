@@ -12,7 +12,7 @@ coerced or dropped.
 """
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -443,3 +443,55 @@ class DirectorCutOut(BaseModel):
     youtubeVideoId: str | None
     visibility: Visibility | None
     createdAt: datetime
+
+
+# ------------------------------------------------------------------------- publishing
+# The YouTube post for a cut: Gemini drafts it (PublishCopyDraft, the model's output
+# type) and app/publish_copy.py tidies the draft into PublishCopy, which is what apps/api's
+# contract accepts (packages/contracts src/api/publish.ts). Its limits are that
+# contract's: YouTube's 100-character title less the " #Shorts" apps/api adds, and room
+# in YouTube's 5,000-byte description for the hashtags, credits and the original's link.
+MAX_PUBLISH_TITLE = 91
+MAX_PUBLISH_DESCRIPTION = 3_000
+MAX_PUBLISH_CREDITS = 300
+MAX_PUBLISH_HASHTAGS = 15
+MAX_PUBLISH_HASHTAG = 40
+
+
+class PublishOriginal(BaseModel):
+    """The original Short as YouTube shows it, for the credits."""
+
+    model_config = REQUEST
+
+    title: str = Field(min_length=1, max_length=200)
+    channel: str = Field(min_length=1, max_length=200)
+
+
+class PublishCopyRequest(BaseModel):
+    model_config = REQUEST
+
+    # A JSON string, so not strict (strict wants a UUID object, which JSON can't carry).
+    cutId: UUID = Field(strict=False)
+    original: PublishOriginal | None = Field(
+        description="The original Short, when YouTube still shows it."
+    )
+
+
+class PublishCopyDraft(BaseModel):
+    """Gemini's draft of the post: the model's output type. No length bounds on the list
+    (Vertex AI refuses a schema with minItems/maxItems; see the top of this module):
+    app/publish_copy.py holds the draft to PublishCopy's limits instead."""
+
+    title: str = Field(description="A catchy title, at most 80 characters, without hashtags.")
+    description: str = Field(description="Two or three short sentences, without links.")
+    hashtags: list[str] = Field(description="Three to eight single words, without the #.")
+    credits: str = Field(description="One line crediting the original creator.")
+
+
+class PublishCopy(BaseModel):
+    title: str = Field(min_length=1, max_length=MAX_PUBLISH_TITLE)
+    description: str = Field(max_length=MAX_PUBLISH_DESCRIPTION)
+    hashtags: list[Annotated[str, Field(min_length=1, max_length=MAX_PUBLISH_HASHTAG)]] = Field(
+        max_length=MAX_PUBLISH_HASHTAGS, description="Single words, without the #."
+    )
+    credits: str = Field(max_length=MAX_PUBLISH_CREDITS)

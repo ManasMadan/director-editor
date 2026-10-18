@@ -45,6 +45,7 @@ from app.schemas import (
     DirectorTakeOut,
     IndexRequest,
     IndexResult,
+    PublishCopy,
     SceneCheck,
 )
 from app.settings import get_settings
@@ -1057,7 +1058,11 @@ def _broken_director() -> Director:
         _Broken(),
         GEMINI_MODEL,
         Budgets(
-            monthly=2_000_000, per_plan=PLAN_TOKENS, per_scene_check=12_000, per_review=120_000
+            monthly=2_000_000,
+            per_plan=PLAN_TOKENS,
+            per_scene_check=12_000,
+            per_review=120_000,
+            per_publish_copy=20_000,
         ),
         DirectorQueue(str(settings.redis_url)),
         services().redis,
@@ -1360,6 +1365,115 @@ def test_a_cut_s_picks_are_the_member_s_takes_of_those_shots(client: TestClient)
     refused = save_cut(client, org, teammate, [(0, take.id)])
     assert error_of(refused).code == "DIRECTOR_TAKE_NOT_FOUND"
     assert cuts_of(client, org, user, "/v1/director/cuts") == []
+
+
+# ------------------------------------------------------------------------------- publishing
+
+
+def a_cut(client: TestClient, org: UUID, user: UUID) -> DirectorCutOut:
+    """A cut of the user's, of a ready plan (the take in it not reviewed yet)."""
+    _ = ready_plan(client, org, user)
+    take = add_take(client, org, user, "http://storage/t")
+    response = save_cut(client, org, user, [(0, take.id)])
+    assert response.status_code == 201, response.text
+    return DirectorCutOut.model_validate_json(response.content)
+
+
+def new_teammate() -> UUID:
+    teammate = uuid4()
+    with migrator() as db:
+        db.execute(
+            'INSERT INTO auth."user" (id, name, email, updated_at) VALUES (%s, %s, %s, now())',
+            (teammate, "T", f"{teammate}@test.dev"),
+        )
+    return teammate
+
+
+def test_a_cut_is_read_by_its_member_only(client: TestClient) -> None:
+    org, user = new_org()
+    cut = a_cut(client, org, user)
+    response = client.get(f"/v1/director/cuts/{cut.id}", headers=headers(org, user))
+    assert response.status_code == 200, response.text
+    assert DirectorCutOut.model_validate_json(response.content) == cut
+    teammate = new_teammate()
+    other, member = new_org()
+    for caller in [headers(org, teammate), headers(other, member)]:
+        refused = client.get(f"/v1/director/cuts/{cut.id}", headers=caller)
+        assert (refused.status_code, error_of(refused).code) == (404, "DIRECTOR_CUT_NOT_FOUND")
+
+
+COPY: dict[str, object] = {
+    "title": "Three looks, one mirror #Shorts",
+    "description": "My take on the GRWM trend.",
+    "hashtags": ["#GRWM", "fit check", "grwm"],
+    "credits": "Inspired by Maya's Short, recreated with Director.",
+}
+ORIGINAL: dict[str, object] = {"title": "3 looks in 30 seconds", "channel": "Maya Styles"}
+
+
+def publish_copy(
+    client: TestClient,
+    org: UUID,
+    user: UUID,
+    cut_id: UUID,
+    original: dict[str, object] | None = ORIGINAL,
+) -> httpx.Response:
+    return client.post(
+        "/v1/director/publish-copy",
+        json={"cutId": str(cut_id), "original": original},
+        headers=headers(org, user),
+    )
+
+
+def test_gemini_writes_the_post_for_a_cut(
+    client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    org, user = new_org()
+    cut = a_cut(client, org, user)
+    gemini[1][GEMINI_PATH] = gemini_output(COPY, tokens=700)
+    response = publish_copy(client, org, user, cut.id)
+    assert response.status_code == 200, response.text
+    assert PublishCopy.model_validate_json(response.content) == PublishCopy(
+        title="Three looks, one mirror",
+        description="My take on the GRWM trend.",
+        hashtags=["GRWM", "fitcheck"],
+        credits="Inspired by Maya's Short, recreated with Director.",
+    )
+    # Gemini gets the original's plan, its title and channel, and the cut's own title.
+    sent = gemini[0].received[-1][1]
+    for part in [b"Get ready with me", b"First, the top.", b"Maya Styles", b"My look"]:
+        assert part in sent, part
+    assert usage(org, "director-publish") == 700
+    # Without the original (YouTube no longer shows it), from the plan alone.
+    without = publish_copy(client, org, user, cut.id, original=None)
+    assert without.status_code == 200, without.text
+    assert b"Maya Styles" not in gemini[0].received[-1][1]
+
+
+def test_a_post_is_written_only_for_the_member_s_own_cut(client: TestClient) -> None:
+    org, user = new_org()
+    cut = a_cut(client, org, user)
+    for caller, cut_id in [(user, uuid4()), (new_teammate(), cut.id)]:
+        refused = publish_copy(client, org, caller, cut_id)
+        assert error_of(refused).code == "DIRECTOR_CUT_NOT_FOUND"
+
+
+def test_a_post_gemini_can_t_write_is_an_upstream_failure(
+    client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    org, user = new_org()
+    cut = a_cut(client, org, user)
+    gemini[1][GEMINI_PATH] = gemini_error(503, "UNAVAILABLE")
+    response = publish_copy(client, org, user, cut.id)
+    assert (response.status_code, error_of(response).code) == (502, "UPSTREAM_UNAVAILABLE")
+
+
+def test_a_post_with_no_budget_left_is_refused(client: TestClient) -> None:
+    org, user = new_org()
+    cut = a_cut(client, org, user)
+    spend_the_month(org)
+    response = publish_copy(client, org, user, cut.id)
+    assert (response.status_code, error_of(response).code) == (429, "AI_BUDGET_EXCEEDED")
 
 
 # ------------------------------------------------------------------------------- scene checks

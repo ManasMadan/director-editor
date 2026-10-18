@@ -82,6 +82,20 @@ export const ERROR_CODES = {
   DIRECTOR_TAKE_KIND_MISMATCH: 422,
   /** A live call sent more than a person could say or type (each second costs Gemini time). */
   DIRECTOR_CALL_TOO_FAST: 429,
+  /** No cut of the member's has this id. */
+  DIRECTOR_CUT_NOT_FOUND: 404,
+  // Publishing a cut to YouTube Shorts
+  /** The shared demo account can't publish: everyone trying Director signs in to it. */
+  PUBLISH_DEMO_DISABLED: 403,
+  /**
+   * No Google account is linked, or it hasn't allowed uploads to YouTube (or that
+   * permission was taken back): the client asks for it (better-auth linkSocial) and retries.
+   */
+  PUBLISH_NEEDS_YOUTUBE: 403,
+  /** The cut's video isn't uploaded and checked yet, or is gone from storage. */
+  PUBLISH_CUT_NOT_READY: 409,
+  /** The Google account has no YouTube channel to publish to yet. */
+  PUBLISH_NO_CHANNEL: 409,
   // The next three are only ever a plan's or take's error, never an HTTP answer.
   /** Gemini couldn't watch the video (private, age-restricted, removed). */
   DIRECTOR_VIDEO_UNREADABLE: 422,

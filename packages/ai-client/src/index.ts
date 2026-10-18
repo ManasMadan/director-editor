@@ -17,6 +17,7 @@ import {
   checkDirectorScene,
   createDirectorCut,
   createDirectorTake,
+  getDirectorCut,
   getDirectorLibrary,
   getDirectorPlan,
   indexDirectorPlan,
@@ -24,12 +25,14 @@ import {
   listDirectorMedia,
   listDirectorTakes,
   speakDirectorLine,
+  writeDirectorPublishCopy,
 } from "./generated/sdk.gen";
 import type {
   DirectorCutCreate,
   DirectorTakeCreate,
   ErrorCode,
   ErrorIssue,
+  PublishCopyRequest,
   SceneCheckRequest,
   SpeechRequest,
 } from "./generated/types.gen";
@@ -153,6 +156,12 @@ function directorCalls(forCall: (caller: AiCaller) => Promise<ReturnType<typeof 
         throw new AiServiceError(502, "UPSTREAM_UNAVAILABLE");
       }
       return new Uint8Array(await data.arrayBuffer());
+    },
+    async getCut(caller: AiCaller, cutId: string) {
+      return unwrap(getDirectorCut({ client: await forCall(caller), path: { cut_id: cutId } }));
+    },
+    async writePublishCopy(caller: AiCaller, body: PublishCopyRequest) {
+      return unwrap(writeDirectorPublishCopy({ client: await forCall(caller), body }));
     },
   };
 }
