@@ -20,6 +20,7 @@ from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.schemas import (
+    AssetImageStatus,
     AudioStatus,
     PlanSource,
     PlanStage,
@@ -139,6 +140,40 @@ class DirectorTake(Base):
     best_end_ms: Mapped[int | None] = mapped_column(Integer)
     score: Mapped[int | None] = mapped_column(Integer)
     feedback: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime.datetime] = _now()
+    updated_at: Mapped[datetime.datetime] = mapped_column(TIMESTAMP(timezone=True, precision=3))
+
+
+class DirectorAsset(Base):
+    __tablename__ = "director_asset"
+    __table_args__: TableArgs = (
+        Index("director_asset_org_id_id_idx", "org_id", text("id DESC")),
+        Index("director_asset_plan_id_idx", "plan_id"),
+        Index("director_asset_user_id_created_at_idx", "user_id", "created_at"),
+        # One default image per asset of a plan (app/assets.py).
+        Index(
+            "director_asset_one_default",
+            "plan_id",
+            "asset_id",
+            unique=True,
+            postgresql_where=text("origin = 'default'::text"),
+        ),
+        {"schema": "ai"},
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    plan_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("ai.director_plan.id", ondelete="CASCADE", onupdate="CASCADE"),
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    asset_id: Mapped[str] = mapped_column(Text)
+    origin: Mapped[str] = mapped_column(Text, server_default=text("'default'::text"))
+    status: Mapped[AssetImageStatus] = mapped_column(Text, server_default=text("'pending'::text"))
+    object_key: Mapped[str | None] = mapped_column(Text)
+    model: Mapped[str | None] = mapped_column(Text)
+    error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime.datetime] = _now()
     updated_at: Mapped[datetime.datetime] = mapped_column(TIMESTAMP(timezone=True, precision=3))
 

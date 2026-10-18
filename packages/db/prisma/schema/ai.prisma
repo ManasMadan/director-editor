@@ -69,6 +69,7 @@ model DirectorPlan {
   takes        DirectorTake[]
   cuts         DirectorCut[]
   recordings   RecordingSession[]
+  assets       DirectorAsset[]
 
   @@unique([orgId, videoId])
   @@unique([createdBy], map: "director_plan_one_user_index", where: raw("source = 'user' AND status <> 'failed'"))
@@ -149,5 +150,41 @@ model DirectorCut {
   @@index([userId])
   @@index([fileId])
   @@map("director_cut")
+  @@schema("ai")
+}
+
+/// An image made for one of a plan's assets (the plan's `assets`, apps/ai/app/schemas.py):
+/// its default, drawn by Nano Banana from the asset's prompt right after the plan is
+/// indexed, so it's there by the time anyone shoots. Counted per member against the daily
+/// image limit (ai.images_today), and in ai.usage like every model call.
+model DirectorAsset {
+  id           String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  orgId        String       @map("org_id") @db.Uuid
+  planId       String       @map("plan_id") @db.Uuid
+  /// Whose daily limit it counts against: the member who indexed the plan.
+  userId       String?      @map("user_id") @db.Uuid
+  /// The asset's id in the plan ("chart").
+  assetId      String       @map("asset_id")
+  /// default (made after indexing); the asset picker adds its own.
+  origin       String       @default("default")
+  /// pending (queued) | generating | ready | failed
+  status       String       @default("pending")
+  /// Its object key in storage, once ready: director-assets/<planId>/<assetId>.<ext>.
+  objectKey    String?      @map("object_key")
+  /// The model that drew it.
+  model        String?
+  /// Why it failed (an error code).
+  error        String?
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  plan         DirectorPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([planId, assetId], map: "director_asset_one_default", where: raw("origin = 'default'"))
+  @@index([orgId, id(sort: Desc)])
+  @@index([planId])
+  @@index([userId, createdAt])
+  @@map("director_asset")
   @@schema("ai")
 }
