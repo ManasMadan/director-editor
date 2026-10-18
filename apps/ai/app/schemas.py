@@ -456,6 +456,8 @@ MAX_PUBLISH_DESCRIPTION = 3_000
 MAX_PUBLISH_CREDITS = 300
 MAX_PUBLISH_HASHTAGS = 15
 MAX_PUBLISH_HASHTAG = 40
+# YouTube's longest description, in UTF-8 bytes, hashtags, credits and link included.
+YOUTUBE_DESCRIPTION_MAX_BYTES = 5_000
 
 
 class PublishOriginal(BaseModel):

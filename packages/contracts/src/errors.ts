@@ -96,6 +96,11 @@ export const ERROR_CODES = {
   PUBLISH_CUT_NOT_READY: 409,
   /** The Google account has no YouTube channel to publish to yet. */
   PUBLISH_NO_CHANNEL: 409,
+  /**
+   * Director's YouTube uploads for today are used up: its own daily cap
+   * (PUBLISH_DAILY_LIMIT), or YouTube's quota for the project.
+   */
+  PUBLISH_QUOTA_EXHAUSTED: 429,
   // The next three are only ever a plan's or take's error, never an HTTP answer.
   /** Gemini couldn't watch the video (private, age-restricted, removed). */
   DIRECTOR_VIDEO_UNREADABLE: 422,

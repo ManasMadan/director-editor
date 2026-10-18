@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { directorCutIdSchema, videoIdSchema } from "../ids";
 import {
   descriptionBytes,
+  fitsYouTube,
   PUBLISH_DESCRIPTION_MAX_LENGTH,
   publishContract,
   publishCopySchema,
@@ -65,6 +66,14 @@ describe("the upload's input", () => {
   it("is unlisted unless asked otherwise", async () => {
     const parsed = await uploadInput?.["~standard"].validate({ ...copy, cutId });
     expect(parsed && "value" in parsed && parsed.value).toMatchObject({ visibility: "unlisted" });
+  });
+
+  it("fits YouTube's description limit counted in bytes, link and all", () => {
+    const fits = (description: string) =>
+      fitsYouTube({ description, hashtags: ["grwm"], credits: "By Maya" });
+    expect(fits("a".repeat(PUBLISH_DESCRIPTION_MAX_LENGTH))).toBe(true);
+    // Within the length limit, but three bytes a character.
+    expect(fits("あ".repeat(1_700))).toBe(false);
   });
 
   it("refuses a description that would run past YouTube's limit in bytes", async () => {

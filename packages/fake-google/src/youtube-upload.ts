@@ -7,8 +7,9 @@
  *
  * Like YouTube it needs an access token whose grant includes an upload scope, refuses a
  * Google account with no channel (here, any address starting `no-channel`), checks the
- * metadata, and keeps every upload private until the app has passed Google's audit
- * (`audited`), whatever privacy was asked for.
+ * metadata, keeps every upload private until the app has passed Google's audit
+ * (`audited`), whatever privacy was asked for, and refuses every upload while the
+ * project's quota is spent (`quotaSpent`).
  */
 import { randomBytes } from "node:crypto";
 import * as z from "zod";
@@ -61,7 +62,15 @@ function refuse(status: number, reason: string): Answer {
 
 const videoId = () => randomBytes(8).toString("base64url").slice(0, 11);
 
-export function createYouTubeUploads({ url, audited }: { url: () => string; audited: boolean }) {
+export function createYouTubeUploads({
+  url,
+  audited,
+  quotaSpent,
+}: {
+  url: () => string;
+  audited: boolean;
+  quotaSpent: () => boolean;
+}) {
   const sessions = new Map<string, Session>();
   const uploads: YouTubeUpload[] = [];
 
@@ -86,6 +95,9 @@ export function createYouTubeUploads({ url, audited }: { url: () => string; audi
       }
       if (grant.email.startsWith("no-channel")) {
         return refuse(401, "youtubeSignupRequired");
+      }
+      if (quotaSpent()) {
+        return refuse(403, "quotaExceeded");
       }
       const metadata = metadataSchema.safeParse(JSON.parse(body || "{}"));
       const length = Number(headers.length);

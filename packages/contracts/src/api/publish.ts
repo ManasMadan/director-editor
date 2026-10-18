@@ -24,6 +24,7 @@ const errors = errorsOf(
   "PUBLISH_NEEDS_YOUTUBE",
   "PUBLISH_CUT_NOT_READY",
   "PUBLISH_NO_CHANNEL",
+  "PUBLISH_QUOTA_EXHAUSTED",
 );
 
 /**
@@ -42,6 +43,12 @@ const PUBLISH_HASHTAGS_MAX = 15;
 const PUBLISH_HASHTAG_MAX_LENGTH = 40;
 /** YouTube's longest description, in UTF-8 bytes. */
 const YOUTUBE_DESCRIPTION_MAX_BYTES = 5_000;
+/**
+ * Videos Director publishes a day (a UTC day), across every member: each upload costs a
+ * large share of the project's daily YouTube Data API quota, which indexing's reads draw
+ * on too. Past it, PUBLISH_QUOTA_EXHAUSTED until midnight UTC.
+ */
+export const PUBLISH_DAILY_LIMIT = 5;
 
 // YouTube refuses a title or description with angle brackets in it (invalidTitle,
 // invalidDescription).
@@ -106,6 +113,13 @@ export function descriptionBytes(description: string) {
 // the input names the cut, not the Short.
 const LONGEST_LINK_ID = videoIdSchema.parse("x".repeat(11));
 
+/**
+ * Whether the description YouTube would get from this copy fits YouTube's limit in
+ * bytes: the one check the API's input and the publish sheet both make.
+ */
+export const fitsYouTube = (copy: Omit<PublishCopy, "title">) =>
+  descriptionBytes(youtubeDescription(copy, LONGEST_LINK_ID)) <= YOUTUBE_DESCRIPTION_MAX_BYTES;
+
 export const publishContract = {
   /**
    * Gemini's draft of the YouTube copy for a cut of the caller's: a title, a
@@ -131,7 +145,9 @@ export const publishContract = {
    * upload from an app it hasn't audited private). The demo account can't publish
    * (PUBLISH_DEMO_DISABLED); without a Google account allowed to upload to YouTube it's
    * PUBLISH_NEEDS_YOUTUBE, which the client answers by asking for that and trying again.
-   * A cut that's published, or being published, is answered as it is.
+   * Past PUBLISH_DAILY_LIMIT videos a day, or once YouTube says the project's quota is
+   * spent, it's PUBLISH_QUOTA_EXHAUSTED. A cut that's published, or being published, is
+   * answered as it is.
    */
   upload: base
     .errors(errors)
@@ -151,12 +167,7 @@ export const publishContract = {
           cutId: directorCutIdSchema,
           visibility: z.enum(publishVisibilities).default("unlisted"),
         })
-        .refine(
-          (input) =>
-            descriptionBytes(youtubeDescription(input, LONGEST_LINK_ID)) <=
-            YOUTUBE_DESCRIPTION_MAX_BYTES,
-          { path: ["description"], message: "too long for YouTube" },
-        ),
+        .refine(fitsYouTube, { path: ["description"], message: "too long for YouTube" }),
     )
     .output(directorCutSchema),
 };

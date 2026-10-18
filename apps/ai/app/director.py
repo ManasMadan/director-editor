@@ -85,8 +85,10 @@ TAKE_DOWNLOAD_SECONDS = 60.0
 # a video. Past these, the call has failed.
 SCENE_TIMEOUT_SECONDS = 20.0
 WATCH_TIMEOUT_SECONDS = 120.0
-# A YouTube post is written while the member waits in the publish sheet.
-COPY_TIMEOUT_SECONDS = 30.0
+# A YouTube post is written while the member waits in the publish sheet. Under apps/api's
+# own wait for this service (packages/ai-client, 30 s), with room to answer: past that,
+# the tokens would be spent on a post nobody gets.
+COPY_TIMEOUT_SECONDS = 25.0
 # The partial unique index that holds each member to one short of their own (Prisma's
 # ai.prisma, DirectorPlan).
 ONE_USER_INDEX = "director_plan_one_user_index"

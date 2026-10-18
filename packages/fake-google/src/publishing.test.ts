@@ -238,6 +238,21 @@ describe("the mock YouTube upload", () => {
     expect([signup.status, await reason(signup)]).toEqual([401, "youtubeSignupRequired"]);
   });
 
+  it("says the project's quota is spent while a test says so, for reads and uploads", async () => {
+    const { access_token } = await signIn("quota@example.com", UPLOAD_SCOPE);
+    fake.exhaustQuota(true);
+    const refused = await start(access_token, metadata());
+    const read = await fetch(`${fake.url}/youtube/v3/videos?id=HasaZYkwYds&key=k`);
+    fake.exhaustQuota(false);
+    const reasonOf = async (response: Response) =>
+      z
+        .object({ error: z.object({ errors: z.array(z.object({ reason: z.string() })) }) })
+        .parse(await response.json()).error.errors[0]?.reason;
+    expect([refused.status, await reasonOf(refused)]).toEqual([403, "quotaExceeded"]);
+    expect([read.status, await reasonOf(read)]).toEqual([403, "quotaExceeded"]);
+    expect((await start(access_token, metadata())).status).toBe(200);
+  });
+
   it("refuses metadata YouTube would, and a video that isn't the declared size", async () => {
     const { access_token } = await signIn("strict@example.com", UPLOAD_SCOPE);
     for (const body of [metadata("unlisted", "a <b>"), metadata("everyone"), {}]) {

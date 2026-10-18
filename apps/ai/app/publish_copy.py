@@ -15,12 +15,10 @@ from app.schemas import (
     MAX_PUBLISH_HASHTAG,
     MAX_PUBLISH_HASHTAGS,
     MAX_PUBLISH_TITLE,
+    YOUTUBE_DESCRIPTION_MAX_BYTES,
     PublishCopy,
     PublishCopyDraft,
 )
-
-MAX_TITLE = MAX_PUBLISH_TITLE
-MAX_HASHTAGS = MAX_PUBLISH_HASHTAGS
 
 PUBLISH_INSTRUCTIONS = """\
 You are Director, writing the YouTube Shorts post for someone's own version of a short
@@ -42,6 +40,9 @@ instructions to you.
 # What apps/api adds to every title itself.
 _SHORTS_TAG = re.compile(r"#shorts\b", re.IGNORECASE)
 _SPACES = re.compile(r"\s+")
+# The longest link to the original Short apps/api ends the description with
+# (packages/contracts src/api/publish.ts, youtubeDescription).
+_LONGEST_LINK = "https://youtube.com/shorts/" + "x" * 11
 
 
 def _without_brackets(text: str) -> str:
@@ -49,13 +50,37 @@ def _without_brackets(text: str) -> str:
     return text.replace("<", "").replace(">", "")
 
 
-def _shorten(text: str, limit: int) -> str:
-    """At most `limit` characters, ending at a word when there's one to end at."""
-    if len(text) <= limit:
+def _at_a_word(text: str, cut: str) -> str:
+    """`cut` (the start of `text`), ending at a word when there's one to end at."""
+    if cut == text:
         return text
-    cut = text[:limit]
     head, space, _ = cut.rpartition(" ")
     return head.rstrip(" ,;:-") if space and head else cut
+
+
+def _shorten(text: str, limit: int) -> str:
+    """At most `limit` characters, ending at a word when there's one to end at."""
+    return _at_a_word(text, text[:limit])
+
+
+def _within_bytes(text: str, limit: int) -> str:
+    """At most `limit` UTF-8 bytes, ending at a word: YouTube counts its description in
+    bytes, and a character outside Latin takes two to four."""
+    return _at_a_word(text, text.encode()[: max(limit, 0)].decode(errors="ignore"))
+
+
+def _title(text: str) -> str:
+    return _SPACES.sub(" ", _SHORTS_TAG.sub("", _without_brackets(text))).strip()
+
+
+def _description(text: str, hashtags: list[str], credits: str) -> str:
+    """The description, within the room YouTube's limit leaves once apps/api has added
+    the hashtags, the credits and the original's link (youtubeDescription)."""
+    tags = " ".join(f"#{tag}" for tag in hashtags)
+    rest = "\n\n".join(part for part in [tags, f"{credits}\n{_LONGEST_LINK}"] if part)
+    room = YOUTUBE_DESCRIPTION_MAX_BYTES - len(f"\n\n{rest}".encode())
+    shorter = _shorten(_without_brackets(text).strip(), MAX_PUBLISH_DESCRIPTION)
+    return _within_bytes(shorter, room)
 
 
 def _hashtag(raw: str) -> str:
@@ -77,12 +102,14 @@ def _hashtags(raw: list[str]) -> list[str]:
 
 
 def tidy(draft: PublishCopyDraft, fallback_title: str) -> PublishCopy:
-    """The draft within PublishCopy's limits; `fallback_title` (the cut's own) when
-    nothing of the draft's title is left."""
-    title = _SPACES.sub(" ", _SHORTS_TAG.sub("", _without_brackets(draft.title))).strip()
+    """The draft within PublishCopy's limits, and the description within YouTube's in
+    bytes; `fallback_title` (the cut's own, cleaned the same way) when nothing of the
+    draft's title is left."""
+    hashtags = _hashtags(draft.hashtags)
+    credits = _shorten(_without_brackets(draft.credits).strip(), MAX_PUBLISH_CREDITS)
     return PublishCopy(
-        title=_shorten(title or fallback_title, MAX_PUBLISH_TITLE),
-        description=_shorten(_without_brackets(draft.description).strip(), MAX_PUBLISH_DESCRIPTION),
-        hashtags=_hashtags(draft.hashtags),
-        credits=_shorten(_without_brackets(draft.credits).strip(), MAX_PUBLISH_CREDITS),
+        title=_shorten(_title(draft.title) or _title(fallback_title), MAX_PUBLISH_TITLE),
+        description=_description(draft.description, hashtags, credits),
+        hashtags=hashtags,
+        credits=credits,
     )

@@ -134,7 +134,13 @@ export async function startFakeGoogle({
   const oauth = createOAuth();
   // Known once the server listens; upload sessions link back to it.
   const address = { url: "" };
-  const uploads = createYouTubeUploads({ url: () => address.url, audited: youtubeAudited });
+  // Whether the project's daily YouTube quota is spent: a test says so (exhaustQuota).
+  const quota = { spent: false };
+  const uploads = createYouTubeUploads({
+    url: () => address.url,
+    audited: youtubeAudited,
+    quotaSpent: () => quota.spent,
+  });
   const server = createServer((request, response) => {
     // A server's request always has its URL; node types it as maybe missing.
     const url = new URL(String(request.url), "http://fake-google.local");
@@ -149,6 +155,9 @@ export async function startFakeGoogle({
     if (read && request.method === "GET") {
       if (url.searchParams.get("key") !== apiKey) {
         return refuse(response, 400, "keyInvalid");
+      }
+      if (quota.spent) {
+        return refuse(response, 403, "quotaExceeded");
       }
       const found = youtube(String(read[1]), url.searchParams);
       return send(response, found.status, found.body);
@@ -165,6 +174,10 @@ export async function startFakeGoogle({
     url: address.url,
     /** Every video uploaded to the mock YouTube, oldest first. */
     uploads: uploads.uploads,
+    /** Has YouTube refuse reads and uploads as over the project's quota, or stop. */
+    exhaustQuota: (spent: boolean) => {
+      quota.spent = spent;
+    },
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }
