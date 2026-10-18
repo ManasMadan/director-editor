@@ -51,7 +51,10 @@ export type Segment =
   | { kind: "photo"; source: Blob; seconds: number };
 
 /** Sets `ctx` up to draw the frame with `transform` applied (the CSS preview's maths). */
-export function applyTransform(ctx: CanvasRenderingContext2D, transform: FrameTransform) {
+export function applyTransform(
+  ctx: Pick<CanvasRenderingContext2D, "translate" | "rotate" | "scale">,
+  transform: FrameTransform,
+) {
   ctx.translate(OUTPUT_WIDTH / 2 + transform.x, OUTPUT_HEIGHT / 2 + transform.y);
   ctx.rotate((transform.rotation * Math.PI) / 180);
   ctx.scale(transform.scale, transform.scale);
