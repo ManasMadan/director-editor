@@ -1,5 +1,5 @@
 /**
- * The call's sound in the browser: the microphone, captured off the main thread by an
+ * Director live's sound in the browser: the microphone, captured off the main thread by an
  * AudioWorklet and handed over as 16 kHz PCM, and Director's voice, its 24 kHz chunks
  * queued back to back so it plays as one stream, and dropped at once when the member
  * talks over it (barge-in). The level of what plays animates Director's orb.
@@ -23,7 +23,7 @@ class Capture extends AudioWorkletProcessor {
     this.chunk = new Float32Array(options.processorOptions.chunk);
     this.filled = 0;
     this.running = true;
-    // Told to stop when the call ends: returning false lets the audio thread drop it.
+    // Told to stop when Director goes: returning false lets the audio thread drop it.
     this.port.onmessage = () => {
       this.running = false;
     };
@@ -47,18 +47,18 @@ let shared: AudioContext | null = null;
 const loaded = new WeakSet<AudioContext>();
 
 /**
- * The page's one audio context for calls. Browsers let a page make sound only once the
- * member has interacted with it: made (or woken) by the tap that starts the first call,
- * the same context then serves the next shot's call, which starts by itself.
+ * The page's one audio context for Director live. Browsers let a page make sound only
+ * once the member has interacted with it: made (or woken) by the "Start shooting" tap,
+ * the same context then serves every reconnection after it, which start by themselves.
  */
-export function callAudio(): AudioContext {
+export function liveAudio(): AudioContext {
   shared ??= new AudioContext();
   void shared.resume();
   return shared;
 }
 
-/** Lets the audio hardware rest once the camera screen is left. */
-export function restCallAudio() {
+/** Lets the audio hardware rest once the shoot screen is left. */
+export function restLiveAudio() {
   void shared?.suspend();
 }
 
@@ -85,7 +85,7 @@ export interface Microphone {
 /**
  * The microphone, cleaned up by the browser (echo cancellation keeps Director's own voice
  * from coming back as the member's). `onLost` hears when it goes away by itself: unplugged,
- * or the permission taken back mid-call.
+ * or the permission taken back mid-shoot.
  */
 export async function openMicrophone(
   context: AudioContext,
@@ -97,10 +97,10 @@ export async function openMicrophone(
   });
   let source: MediaStreamAudioSourceNode;
   try {
-    // Throws for a stream with no sound in it: the call can't hear anyone then.
+    // Throws for a stream with no sound in it: Director can't hear anyone then.
     source = context.createMediaStreamSource(stream);
   } catch (error) {
-    // The microphone is on by now: it mustn't stay on for a call that won't happen.
+    // The microphone is on by now: it mustn't stay on when Director can't use it.
     stopStream(stream);
     throw error;
   }

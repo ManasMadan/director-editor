@@ -1,18 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { callUrl, NO_CAPTIONS, parseServerMessage, withTranscript } from "./live-call";
+import { liveUrl, NO_CAPTIONS, parseServerMessage, withTranscript } from "./live";
 
-describe("the call's address", () => {
+describe("Director live's address", () => {
   it("is the API's live route on the page's own origin, over TLS when the page is", () => {
-    expect(callUrl({ protocol: "https:", host: "director.mmadan.in" }, "abcdefghijk", 2)).toBe(
+    expect(liveUrl({ protocol: "https:", host: "director.mmadan.in" }, "abcdefghijk", 2)).toBe(
       "wss://director.mmadan.in/api/live?videoId=abcdefghijk&shot=2",
     );
-    expect(callUrl({ protocol: "http:", host: "localhost:3000" }, "abc", 0)).toBe(
+    expect(liveUrl({ protocol: "http:", host: "localhost:3000" }, "abc", 0)).toBe(
       "ws://localhost:3000/api/live?videoId=abc&shot=0",
+    );
+  });
+
+  it("says when Director is coming straight back, so it doesn't say hello again", () => {
+    expect(liveUrl({ protocol: "http:", host: "localhost:3000" }, "abc", 1, true)).toBe(
+      "ws://localhost:3000/api/live?videoId=abc&shot=1&resume=1",
     );
   });
 });
 
-describe("what the call says", () => {
+describe("what Director live says", () => {
   const json = (value: unknown) => JSON.stringify(value);
 
   it("reads every message the relay sends", () => {
@@ -25,9 +31,8 @@ describe("what the call says", () => {
       who: "you",
       text: "hi",
     });
-    expect(
-      parseServerMessage(json({ type: "tool", name: "next_shot", args: { reason: "good" } })),
-    ).toEqual({ type: "tool", name: "next_shot", args: { reason: "good" } });
+    const tool = { type: "tool", id: "tool-1", call: { name: "go_to_shot", shot: 1 } };
+    expect(parseServerMessage(json(tool))).toEqual(tool);
     expect(parseServerMessage(json({ type: "interrupted" }))).toEqual({ type: "interrupted" });
     expect(parseServerMessage(json({ type: "error", code: "RATE_LIMITED" }))).toEqual({
       type: "error",
@@ -44,9 +49,8 @@ describe("what the call says", () => {
 
   it("ignores what isn't one of them", () => {
     expect(parseServerMessage("not json")).toBeNull();
-    expect(parseServerMessage(json({ type: "tool", name: "delete_everything", args: {} }))).toBe(
-      null,
-    );
+    const unknown = { type: "tool", id: "tool-1", call: { name: "start_recording" } };
+    expect(parseServerMessage(json(unknown))).toBeNull();
     expect(parseServerMessage(json({ type: "audio", pcm16: "%%%" }))).toBeNull();
     expect(parseServerMessage(new ArrayBuffer(4))).toBeNull();
   });

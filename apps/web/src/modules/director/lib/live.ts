@@ -1,9 +1,8 @@
 /**
- * The video call with Director, as the browser sees it: where it connects (the API's
- * live route, on the page's own origin like /rpc), what the API sends down it (the
- * shared schema in @repo/contracts/live), and the captions built from both sides'
- * transcripts. What can't be read is ignored, the way the relay ignores what it can't
- * read from Gemini.
+ * Director live, as the browser sees it: where it connects (the API's live route, on the
+ * page's own origin like /rpc), what the API sends down it (the shared schema in
+ * @repo/contracts/live), and the captions built from both sides' transcripts. What can't
+ * be read is ignored, the way the relay ignores what it can't read from Gemini.
  */
 import { LIVE_PATH, type LiveServerMessage, liveServerMessage } from "@repo/contracts/live";
 
@@ -18,7 +17,7 @@ function parseJson(text: string): unknown {
   }
 }
 
-/** A frame from the call's socket, or null when it isn't a message this page knows. */
+/** A frame from the socket, or null when it isn't a message this page knows. */
 export function parseServerMessage(data: unknown): LiveServerMessage | null {
   if (typeof data !== "string") {
     return null;
@@ -27,14 +26,22 @@ export function parseServerMessage(data: unknown): LiveServerMessage | null {
   return parsed.success ? parsed.data : null;
 }
 
-/** The call's WebSocket URL for a short, starting on one of its shots, on the page's origin. */
-export function callUrl(
+/**
+ * Director live's WebSocket URL for a short, starting on one of its shots, on the page's
+ * origin. `resume`: Director was lost a moment ago and is coming straight back, so it
+ * carries on without saying hello again.
+ */
+export function liveUrl(
   page: Pick<Location, "protocol" | "host">,
   videoId: string,
   shotIndex: number,
+  resume = false,
 ): string {
   const scheme = page.protocol === "https:" ? "wss" : "ws";
   const query = new URLSearchParams({ videoId, shot: String(shotIndex) });
+  if (resume) {
+    query.set("resume", "1");
+  }
   return `${scheme}://${page.host}${LIVE_PATH}?${query}`;
 }
 

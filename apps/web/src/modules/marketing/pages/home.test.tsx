@@ -52,7 +52,7 @@ describe("the landing page", () => {
     const html = await renderHtml(await HomePage({ signedIn: false }));
     expect(html).toContain("Built on Google Cloud");
     expect(html).toContain(
-      "Logs each Short Director indexes, each live call it starts and every take review&#x27;s score.",
+      "Logs each Short Director indexes, each shoot Director joins and every take review&#x27;s score.",
     );
     expect(html).not.toContain("every indexing");
   });

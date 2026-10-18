@@ -33,7 +33,6 @@ import { EditPlayer } from "../components/edit-player";
 import { SoundPanel, StylePicker, type Tool } from "../components/edit-tools";
 import { ShotBoard } from "../components/shot-board";
 import { type EditChoices, useEditHistory } from "../hooks/use-edit-history";
-import { useMemory } from "../hooks/use-memory";
 import { useObjectUrl } from "../hooks/use-object-url";
 import { usePlayback } from "../hooks/use-playback";
 import { shotPage } from "../hooks/use-studio";
@@ -43,7 +42,6 @@ import { webVtt } from "../lib/captions";
 import { type Clip, clipsOf, complete, editLines, editSeconds } from "../lib/edit";
 import { captionInk } from "../lib/ink";
 import { cutPicks, pickedTakes } from "../lib/picks";
-import { hush, say } from "../lib/speech";
 import { MAX_SECONDS, type Segment, stitch } from "../lib/stitch";
 import { timecode } from "../lib/track";
 
@@ -468,26 +466,18 @@ function Panel({ editor, tool, audio }: { editor: EditorState; tool: Tool; audio
 }
 
 /**
- * Arriving from the last shot: Director calls the wrap (aloud, when the member has its
- * voice on) and plays the cut it made of the takes, once they've all loaded, so the
- * editor opens on the finished video ready for last changes.
+ * Arriving from the last shot: the wrap card, and the cut Director made of the takes
+ * playing once they've all loaded, so the editor opens on the finished video ready for
+ * last changes.
  */
 function WrapCall({ ready, play }: { ready: boolean; play: () => void }) {
-  const t = useTranslations("director.live");
-  const locale = useLocale();
+  const t = useTranslations("director.editor");
   const [shown, setShown] = useState(true);
   const played = useRef(false);
-  const { speak } = useMemory().memory;
   useEffect(() => {
-    if (speak) {
-      say(t("say.wrap"), locale);
-    }
     const timer = window.setTimeout(() => setShown(false), 4500);
-    return () => {
-      window.clearTimeout(timer);
-      hush();
-    };
-  }, [t, locale, speak]);
+    return () => window.clearTimeout(timer);
+  }, []);
   useEffect(() => {
     if (ready && !played.current) {
       played.current = true;
