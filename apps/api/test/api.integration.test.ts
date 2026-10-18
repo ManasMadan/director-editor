@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import http from "node:http";
 import { ORPCError } from "@orpc/client";
 import { ORGANIZATION_LIMIT } from "@repo/contracts/auth";
+import { directorSeeds } from "@repo/contracts/director-seeds";
 import { orgIdSchema } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
 import { realtimeChannel } from "@repo/contracts/realtime";
@@ -1256,6 +1257,10 @@ describe("account deletion", () => {
       ),
     );
 
+  // Every workspace starts with the seeded templates in its library, so a workspace with
+  // one plan of its own holds those and that one.
+  const withOwnPlan = directorSeeds.length + 1;
+
   /** Counts an organization's plans and says whether the org still exists. */
   const orgState = (orgId: string) =>
     inOrganization(orgId, async (client) => {
@@ -1275,7 +1280,7 @@ describe("account deletion", () => {
       "the active workspace",
     );
     await addPlan(orgId);
-    expect(await orgState(orgId)).toEqual({ exists: true, plans: 1 });
+    expect(await orgState(orgId)).toEqual({ exists: true, plans: withOwnPlan });
 
     expect((await session.auth("/delete-user", { password })).status).toBe(200);
     expect(await orgState(orgId)).toEqual({ exists: false, plans: 0 });
@@ -1318,7 +1323,7 @@ describe("account deletion", () => {
       200,
     );
     // The team and the member's data survive.
-    expect(await orgState(team.body.id)).toEqual({ exists: true, plans: 1 });
+    expect(await orgState(team.body.id)).toEqual({ exists: true, plans: withOwnPlan });
   });
 });
 
