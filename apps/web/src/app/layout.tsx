@@ -41,7 +41,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       suppressHydrationWarning
       className={cn(GeistSans.variable, GeistMono.variable)}
     >
-      <body className="min-h-dvh font-sans antialiased">
+      <body className="flex min-h-dvh flex-col font-sans antialiased">
         <Providers locale={locale} timeZone={timeZone} messages={messages} nonce={nonce}>
           <PreferenceSync timeZone={timeZone} />
           <LiveUpdates />

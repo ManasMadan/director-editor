@@ -28,7 +28,8 @@ export function SiteChrome({
   return (
     <>
       {header}
-      <main className="mx-auto w-full max-w-5xl px-4 py-10">{children}</main>
+      {/* Grows to fill the screen, so a short page's footer sits at the bottom of it. */}
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10">{children}</main>
       {footer}
     </>
   );

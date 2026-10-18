@@ -88,7 +88,7 @@ declare const messages: {
       },
       "bigquery": {
         "name": "BigQuery",
-        "use": "Logs each live call Director starts and every take review's score."
+        "use": "Logs each Short Director indexes, each live call it starts and every take review's score."
       },
       "youtube": {
         "name": "YouTube Data API",
