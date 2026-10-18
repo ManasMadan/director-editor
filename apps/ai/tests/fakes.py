@@ -233,7 +233,7 @@ def veo_failed(message: str) -> Reply:
 # Every clip held back by the safety filters: the operation succeeds with no video.
 VEO_FILTERED: Reply = (
     200,
-    {"done": True, "response": {"raiMediaFilteredCount": 1, "raiMediaFilteredReasons": ["x"]}},
+    {"done": True, "response": {"raiMediaFilteredCount": 1, "raiMediaFilteredReasons": ["why"]}},
 )
 
 

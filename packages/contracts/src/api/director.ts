@@ -180,7 +180,6 @@ const mediaUrl = z.url().optional();
 const servedShotSchema = shotSchema
   .omit({ storyboardKey: true, previewKey: true })
   .extend({ storyboardUrl: mediaUrl, previewUrl: mediaUrl });
-export type ServedShot = z.infer<typeof servedShotSchema>;
 const servedShotPlanSchema = shotPlanSchema
   .omit({ shots: true, musicKey: true })
   .extend({ shots: z.array(servedShotSchema).min(1).max(DIRECTOR_MAX_SHOTS), musicUrl: mediaUrl });

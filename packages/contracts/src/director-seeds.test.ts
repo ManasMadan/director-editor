@@ -20,23 +20,24 @@ describe("Director's seeded templates", () => {
   });
 
   it("keep a seed's media keys, which a seed may or may not have yet", () => {
-    const first = required(committed[0], "a committed seed");
-    const [shot] = first.plan.shots;
+    const first = required(directorSeeds[0], "a committed seed");
+    const { musicKey, shots, ...barePlan } = first.plan;
+    const { storyboardKey, previewKey, ...bareShot } = required(shots[0], "a shot");
+    const bare = { ...first, plan: { ...barePlan, shots: [bareShot] } };
     const media = {
       ...first,
       plan: {
-        ...first.plan,
+        ...barePlan,
         musicKey: `seed-media/${first.videoId}/music.mp3`,
         shots: [
           {
-            ...shot,
+            ...bareShot,
             storyboardKey: `seed-media/${first.videoId}/shot-0.png`,
             previewKey: `seed-media/${first.videoId}/shot-0.mp4`,
           },
         ],
       },
     };
-    const bare = { ...first, plan: { ...first.plan, shots: [shot] } };
     expect(directorSeedsSchema.parse([media, ...committed.slice(1)])[0]).toEqual(media);
     const [parsed] = directorSeedsSchema.parse([bare, ...committed.slice(1)]);
     expect(parsed?.plan).not.toHaveProperty("musicKey");

@@ -164,6 +164,7 @@ const cuts: {
 
 function planOut(plan: StandInPlan) {
   const now = new Date().toISOString();
+  const written = plan.media ? withMedia(plan.videoId) : PLAN;
   return {
     id: plan.id,
     videoId: plan.videoId,
@@ -171,7 +172,7 @@ function planOut(plan: StandInPlan) {
     status: plan.status,
     stage: plan.status === "ready" ? "ready" : "queued",
     error: null,
-    plan: plan.status === "ready" ? (plan.media ? withMedia(plan.videoId) : PLAN) : null,
+    plan: plan.status === "ready" ? written : null,
     model: plan.status === "ready" ? "gemini-test" : null,
     audioStatus: plan.audioKey ? "ready" : "none",
     audioKey: plan.audioKey,

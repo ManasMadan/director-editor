@@ -4,6 +4,8 @@ models' client is exercised against a local stand-in for Vertex AI's media endpo
 (tests/fakes.py), never against Vertex itself, so those are integration tests (a local
 HTTP server)."""
 
+import asyncio
+import gc
 import os
 import subprocess
 import sys
@@ -13,6 +15,7 @@ from unittest.mock import patch
 
 import pytest
 from google.auth.credentials import AnonymousCredentials, Credentials
+from google.genai import errors as genai_errors
 from google.oauth2.credentials import Credentials as UserCredentials
 from pydantic import BaseModel
 
@@ -52,6 +55,7 @@ from tests.fakes import (
     VERTEX_PROJECT,
     Fake,
     Reply,
+    gemini_error,
     serve,
     veo_done,
     veo_failed,
@@ -548,6 +552,7 @@ async def models_at(fake: Fake) -> VertexMediaModels:
         settings_for(GOOGLE_BASE_URL=fake.url),
         "seed-bucket",
         poll_seconds=0,
+        retry_seconds=0,
         token_command=PRINTS_A_TOKEN,
     )
     assert isinstance(models, VertexMediaModels)
@@ -577,6 +582,76 @@ async def test_nano_banana_draws_a_portrait_card(vertex: Vertex) -> None:
         "imageConfig": {"aspectRatio": "9:16", "imageSize": "1K"},
     }
     assert "a card" in body
+
+
+@pytest.mark.integration
+async def test_the_models_keep_their_connections_open_for_the_whole_run(vertex: Vertex) -> None:
+    """google-genai closes a client's connections once nothing holds the client, so the
+    models must hold theirs: a storyboard asked for well after connecting still lands."""
+    fake, handlers = vertex
+    handlers[vertex_path("global", STORYBOARD_MODEL, "generateContent")] = vertex_inline(
+        "image/png", b"\x89PNG"
+    )
+    models = await models_at(fake)
+    gc.collect()
+    await asyncio.sleep(0)
+
+    assert await models.storyboard("a card") == (b"\x89PNG", "image/png")
+    assert await models.storyboard("another card") == (b"\x89PNG", "image/png")
+
+
+def _in_turn(*replies: Callable[[bytes], Reply]) -> Callable[[bytes], Reply]:
+    """Each handler once, in turn, then the last one for good."""
+    remaining = list(replies)
+
+    def reply(body: bytes) -> Reply:
+        return (remaining.pop(0) if len(remaining) > 1 else remaining[0])(body)
+
+    return reply
+
+
+QUOTA_SPENT = gemini_error(429, "RESOURCE_EXHAUSTED", "Quota exceeded for veo")
+
+
+@pytest.mark.integration
+async def test_a_spent_quota_is_waited_out_and_tried_again(vertex: Vertex) -> None:
+    """Vertex answers 429 once a model's per-minute quota is spent (Veo's is a few
+    requests a minute): each call waits and tries again rather than failing its medium."""
+    fake, handlers = vertex
+    start = vertex_path(PREVIEW_LOCATION, PREVIEW_MODEL, "predictLongRunning")
+    poll = vertex_path(PREVIEW_LOCATION, PREVIEW_MODEL, "fetchPredictOperation")
+    image = vertex_path("global", STORYBOARD_MODEL, "generateContent")
+    handlers[start] = _in_turn(QUOTA_SPENT, QUOTA_SPENT, veo_started(PREVIEW_MODEL))
+    handlers[poll] = _in_turn(QUOTA_SPENT, veo_polls(PREVIEW_MODEL, veo_done(b"mp4")))
+    handlers[image] = _in_turn(QUOTA_SPENT, vertex_inline("image/png", b"\x89PNG"))
+    models = await models_at(fake)
+
+    assert await models.preview("a clip", 4) == (b"mp4", "video/mp4")
+    assert await models.storyboard("a card") == (b"\x89PNG", "image/png")
+    paths = [path for path, _ in fake.received]
+    assert (paths.count(start), paths.count(poll), paths.count(image)) == (3, 2, 2)
+
+
+@pytest.mark.integration
+async def test_a_quota_still_spent_after_every_retry_fails_the_medium(vertex: Vertex) -> None:
+    fake, handlers = vertex
+    path = vertex_path("global", MUSIC_MODEL, "generateContent")
+    handlers[path] = QUOTA_SPENT
+
+    with pytest.raises(genai_errors.ClientError, match="RESOURCE_EXHAUSTED"):
+        await (await models_at(fake)).music("a track")
+    assert [received for received, _ in fake.received].count(path) == seed_media.QUOTA_ATTEMPTS
+
+
+@pytest.mark.integration
+async def test_any_other_refusal_fails_the_medium_at_once(vertex: Vertex) -> None:
+    fake, handlers = vertex
+    path = vertex_path("global", MUSIC_MODEL, "generateContent")
+    handlers[path] = gemini_error(400, "INVALID_ARGUMENT")
+
+    with pytest.raises(genai_errors.ClientError, match="INVALID_ARGUMENT"):
+        await (await models_at(fake)).music("a track")
+    assert [received for received, _ in fake.received].count(path) == 1
 
 
 @pytest.mark.integration
@@ -623,7 +698,7 @@ async def test_veo_is_polled_until_its_clip_is_ready(vertex: Vertex) -> None:
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    ("outcome", "match"), [(veo_failed("quota"), "quota"), (VEO_FILTERED, "no video")]
+    ("outcome", "match"), [(veo_failed("quota"), "quota"), (VEO_FILTERED, "no video: .*why")]
 )
 async def test_a_clip_veo_fails_or_filters_out_fails(
     vertex: Vertex, outcome: Reply, match: str

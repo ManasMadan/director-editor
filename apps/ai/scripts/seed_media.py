@@ -37,12 +37,15 @@ import asyncio
 import sys
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
+from functools import partial
+from http import HTTPStatus
 from pathlib import Path
 from typing import Literal, Protocol
 
 from google import genai
 from google.auth.credentials import Credentials
 from google.cloud import storage  # pyright: ignore[reportMissingTypeStubs]  # no stubs shipped
+from google.genai import errors as genai_errors
 from google.genai.types import (
     GenerateContentConfig,
     GenerateContentResponse,
@@ -73,6 +76,9 @@ PREVIEW_USD_PER_SECOND = 0.03
 MUSIC_USD = 0.04
 # Veo takes about 40 seconds a clip; how often to ask whether it's done.
 POLL_SECONDS = 10.0
+# A spent quota (429) is per minute: wait 20 s, then 40, 80 and 160 before giving up.
+QUOTA_ATTEMPTS = 5
+QUOTA_RETRY_SECONDS = 20.0
 GCLOUD_TOKEN = ("gcloud", "auth", "print-access-token")
 PREVIEW_NEGATIVE_PROMPT = "text, captions, subtitles, logos, watermarks, brand names"
 
@@ -323,56 +329,84 @@ class VertexMediaModels:
     `PREVIEW_LOCATION`."""
 
     def __init__(
-        self, images: genai.Client, videos: genai.Client, poll_seconds: float = POLL_SECONDS
+        self,
+        images: genai.Client,
+        videos: genai.Client,
+        poll_seconds: float = POLL_SECONDS,
+        retry_seconds: float = QUOTA_RETRY_SECONDS,
     ) -> None:
+        # Held for the whole run: google-genai closes a client's connections as soon as
+        # nothing holds the client, and its `models` alone doesn't.
+        self._images = images
         self._content: _ContentModels = images.aio.models
         self._videos = videos
         self._poll_seconds = poll_seconds
+        self._retry_seconds = retry_seconds
+
+    async def _retried[T](self, call: Callable[[], Awaitable[T]]) -> T:
+        """`call`, tried again after a wait while Vertex answers 429: a model's quota per
+        minute is spent (Veo's is a few requests), which a wait fixes. Any other refusal,
+        or a quota still spent after `QUOTA_ATTEMPTS`, fails at once."""
+        attempt, wait = 1, self._retry_seconds
+        while True:
+            try:
+                return await call()
+            except genai_errors.ClientError as error:
+                if error.code != HTTPStatus.TOO_MANY_REQUESTS or attempt == QUOTA_ATTEMPTS:
+                    raise
+                log.info("quota spent, waiting", attempt=attempt, seconds=wait)
+                await asyncio.sleep(wait)
+                attempt, wait = attempt + 1, wait * 2
 
     async def storyboard(self, prompt: str) -> Media:
-        response = await self._content.generate_content(
-            model=STORYBOARD_MODEL,
-            contents=prompt,
-            config=GenerateContentConfig(
-                response_modalities=["IMAGE"],
-                image_config=ImageConfig(aspect_ratio="9:16", image_size="1K"),
-            ),
+        config = GenerateContentConfig(
+            response_modalities=["IMAGE"],
+            image_config=ImageConfig(aspect_ratio="9:16", image_size="1K"),
+        )
+        response = await self._retried(
+            lambda: self._content.generate_content(
+                model=STORYBOARD_MODEL, contents=prompt, config=config
+            )
         )
         return _inline(response, "image")
 
     async def music(self, prompt: str) -> Media:
         # Lyria 3 answers with its caption of the track as text alongside the audio, and
         # refuses a request that asks for the audio alone.
-        response = await self._content.generate_content(
-            model=MUSIC_MODEL,
-            contents=prompt,
-            config=GenerateContentConfig(response_modalities=["AUDIO", "TEXT"]),
+        config = GenerateContentConfig(response_modalities=["AUDIO", "TEXT"])
+        response = await self._retried(
+            lambda: self._content.generate_content(
+                model=MUSIC_MODEL, contents=prompt, config=config
+            )
         )
         return _inline(response, "audio")
 
     async def preview(self, prompt: str, seconds: int) -> Media:
-        operation = await self._videos.aio.models.generate_videos(
-            model=PREVIEW_MODEL,
-            prompt=prompt,
-            config=GenerateVideosConfig(
-                aspect_ratio="9:16",
-                duration_seconds=seconds,
-                resolution="720p",
-                number_of_videos=1,
-                generate_audio=False,
-                person_generation="allow_adult",
-                negative_prompt=PREVIEW_NEGATIVE_PROMPT,
-            ),
+        config = GenerateVideosConfig(
+            aspect_ratio="9:16",
+            duration_seconds=seconds,
+            resolution="720p",
+            number_of_videos=1,
+            generate_audio=False,
+            person_generation="allow_adult",
+            negative_prompt=PREVIEW_NEGATIVE_PROMPT,
+        )
+        operation = await self._retried(
+            lambda: self._videos.aio.models.generate_videos(
+                model=PREVIEW_MODEL, prompt=prompt, config=config
+            )
         )
         while not operation.done:
             await asyncio.sleep(self._poll_seconds)
-            operation = await self._videos.aio.operations.get(operation)
+            operation = await self._retried(partial(self._videos.aio.operations.get, operation))
         if operation.error:
             raise RuntimeError(f"Veo failed: {operation.error}")
-        videos = operation.response.generated_videos if operation.response else None
-        video = videos[0].video if videos else None
+        answer = operation.response
+        video = answer.generated_videos[0].video if answer and answer.generated_videos else None
         if video is None or not video.video_bytes:
-            raise RuntimeError("Veo answered with no video (its safety filters held it back)")
+            # Its safety filters held the clip back; the reasons say which filter.
+            reasons = answer.rai_media_filtered_reasons if answer else None
+            raise RuntimeError(f"Veo answered with no video: {reasons}")
         return video.video_bytes, video.mime_type or "video/mp4"
 
 
@@ -408,6 +442,7 @@ async def connect_vertex(
     settings: Settings,
     bucket: str,
     poll_seconds: float = POLL_SECONDS,
+    retry_seconds: float = QUOTA_RETRY_SECONDS,
     token_command: Sequence[str] = GCLOUD_TOKEN,
 ) -> tuple[MediaModels, Upload]:
     project = settings.google_cloud_project
@@ -434,7 +469,7 @@ async def connect_vertex(
         )
 
     models = VertexMediaModels(
-        client(settings.vertex_location), client(PREVIEW_LOCATION), poll_seconds
+        client(settings.vertex_location), client(PREVIEW_LOCATION), poll_seconds, retry_seconds
     )
     return models, gcs_upload(bucket, credentials, project)
 
