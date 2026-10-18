@@ -7,7 +7,8 @@
  * `userId` of a cut a test sets), as My media lists them. A workspace's library is what a
  * test sets for it (`PUT /__fake/library/<orgId>`, the `fakeLibrary` command), and
  * indexing a short adds to it as the real service does: once per member, a short already
- * there answered with its plan.
+ * there answered with its plan. A short's asset slots are what the test sets (`assets`),
+ * else none.
  * A cut's YouTube post, and the cut as publishing reads it, are what a test sets
  * for it (`PUT /__fake/cuts/<cutId>`, the `fakeCut` command). Where publishing got is
  * what the API wrote on the cut's row in the tests' database, read back as apps/ai reads
@@ -51,7 +52,18 @@ interface DirectorShort {
   plan?: Record<string, unknown>;
   takes: Record<string, unknown>[];
   cuts: Record<string, unknown>[];
+  /** The asset picker's slots, when the test sets them; none otherwise. */
+  assets?: Record<string, unknown>;
 }
+
+/** A plan's asset slots with nothing in them, and the member's images (apps/ai's limits). */
+const NO_ASSETS = {
+  slots: [],
+  imagesUsed: 0,
+  imagesPerVideo: 12,
+  imagesToday: 0,
+  imagesPerDay: 30,
+};
 
 /** Who the API says is calling: the subject of its token (checked by the real service). */
 function callerOf(request: IncomingMessage): string {
@@ -250,6 +262,10 @@ function directorRoute(
     return found
       ? { status: 200, body: planBody(plan[1], found) }
       : notFound("DIRECTOR_PLAN_NOT_FOUND");
+  }
+  const assets = /^GET \/v1\/director\/plans\/([\w-]{11})\/assets$/.exec(route);
+  if (assets?.[1]) {
+    return { status: 200, body: short(assets[1]).assets ?? NO_ASSETS };
   }
   const takes = /^GET \/v1\/director\/plans\/([\w-]{11})\/takes$/.exec(route);
   if (takes?.[1]) {
