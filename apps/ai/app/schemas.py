@@ -45,6 +45,18 @@ MAX_SHOT_SECONDS = 60
 MAX_SHOT_STEPS = 10
 MAX_SCRIPT_LINES = 20
 MAX_POSE_KEYPOINTS = 13
+# What a template needs beyond the member's own filming (packages/contracts' director.ts
+# mirrors these): at most one asset per image a video may have made (12, the image limit
+# per video), and room for a busy edit (captions, a layout, overlays, cuts).
+MAX_ASSETS = 12
+MAX_EDITS = 40
+MAX_ASSET_TEXT_LINES = 12
+MAX_ASSET_ID = 40
+# An asset's id: lowercase words joined by hyphens ("chart", "end-card"). It names the
+# asset's default image in storage too (app/assets.py), so nothing else gets through.
+ASSET_ID_PATTERN = r"^[a-z0-9]+(-[a-z0-9]+)*$"
+# A colour on an edit: "#RRGGBB".
+COLOR_PATTERN = r"^#[0-9A-Fa-f]{6}$"
 # A camera frame for a scene check, base64: a 640-pixel JPEG is 40-120 kB.
 MAX_FRAME_BASE64 = 400_000
 # The most one plan may reserve (DIRECTOR_TOKENS_PER_PLAN's ceiling): a whole workspace's
@@ -79,6 +91,38 @@ type CameraMove = Literal[
     "tilt-down",
 ]
 type Direction = Literal["none", "left", "right", "forward", "back", "turn-left", "turn-right"]
+# What a shot's take is: a clip or a photo.
+type ShotKind = Literal["video", "photo"]
+# What the edit uses of it: the member on camera (as every shot was before modes), only
+# their voice (a voice-over, the picture an asset or B-roll: a video take), or nothing,
+# the asset taking its place (an end card, a full-screen graphic: a photo take stands
+# in until the editor places the asset). Beside `kind` rather than in it: a new value of
+# `kind` would break the API's clients, which a new field doesn't.
+type ShotMode = Literal["on-camera", "voice-over", "asset"]
+type AssetKind = Literal[
+    "image", "cutout", "text-card", "background", "broll", "music", "sfx", "end-card"
+]
+# Where a slot's piece comes from by default: made with AI from the reference, stock, or
+# the member's own upload.
+type AssetSource = Literal["create", "stock", "upload"]
+# The shapes Nano Banana draws in, and half of a vertical split screen (9:8).
+type AspectRatio = Literal["9:16", "3:4", "4:5", "1:1", "9:8", "5:4", "4:3", "16:9"]
+type EditType = Literal[
+    "layout", "overlay", "grade", "text", "transition", "speed", "end-card", "gap"
+]
+# The edits' enums are plain aliases, not `type` statements, so a schema inlines them:
+# a nullable one is then `anyOf: [{enum}, {null}]`, the shape Vertex AI has always been
+# sent, rather than a `$ref` inside an `anyOf` (tests/test_planner_schema.py).
+LayoutKind = Literal["full", "split", "picture-in-picture"]
+Entrance = Literal["cut", "fade", "slide", "pop", "draw"]
+Mark = Literal["circle", "underline", "arrow", "box", "highlight", "tick", "cross"]
+Grade = Literal["black-and-white", "warm", "cool", "high-contrast", "vintage", "vivid"]
+GradeTarget = Literal["all", "camera", "assets"]
+TextStyle = Literal["title", "lower-third", "captions", "label", "callout"]
+TextPosition = Literal["top", "middle", "bottom", "between-halves"]
+CaptionStyle = Literal["word-by-word", "line", "boxed"]
+TransitionKind = Literal["cut", "match-cut", "whip", "fade", "zoom", "spin", "glitch"]
+Easing = Literal["linear", "ease-in", "ease-out", "ease-in-out"]
 
 
 class Box(BaseModel):
@@ -137,7 +181,12 @@ class ScriptLine(BaseModel):
 
 
 class Shot(BaseModel):
-    kind: Literal["video", "photo"]
+    kind: ShotKind
+    mode: ShotMode = Field(
+        default="on-camera",
+        description="on-camera: the viewer films it; voice-over: only their voice is used; "
+        "asset: nothing is filmed, an asset takes its place.",
+    )
     title: str = Field(min_length=1, max_length=80)
     purpose: str = Field(
         min_length=1,
@@ -168,6 +217,275 @@ class Shot(BaseModel):
     )
 
 
+# --------------------------------------------------------------------- assets and edits
+# What a Short needs beyond the member filming themselves: the pieces it shows (a chart
+# under the speaker, a headline card, an end card, B-roll, music) and the editing done
+# over the footage (a split screen, captions, a grade, overlays, transitions). Times are
+# seconds of the original, like a shot's source range: the editor maps them onto the
+# member's takes through the shots' source ranges.
+#
+# Director never takes the original's pictures: an asset's reference describes the
+# original's piece precisely enough to make a fresh one (docs/director.md's rule against
+# downloading YouTube's pictures, and the creator's rights), and its prompt is what Nano
+# Banana makes the default from (app/assets.py) and what the Create tab starts from.
+
+
+# The drafts' docstrings go to Gemini as their schema's description, so they say what
+# the thing is and nothing else; why each differs from its stored model is here instead.
+# AssetReferenceDraft's `text` and `brands` carry no length bound (see the module
+# comment): `repair_plan` trims them.
+class AssetReferenceDraft(BaseModel):
+    """The original's piece, described precisely enough to recreate its look."""
+
+    subject: str = Field(min_length=1, max_length=300, description="What it shows.")
+    composition: str = Field(
+        min_length=1, max_length=300, description="Its layout and framing: what sits where."
+    )
+    style: str = Field(
+        min_length=1,
+        max_length=200,
+        description='How it is made: "flat vector infographic", "photo", "hand-drawn".',
+    )
+    palette: str = Field(
+        min_length=1, max_length=200, description='Its colours, or "black and white".'
+    )
+    blackAndWhite: bool
+    aspectRatio: AspectRatio
+    text: list[str] = Field(
+        description="Every line of text on it, word for word; empty when there is none."
+    )
+    brands: list[str] = Field(
+        description="The original creator's own identity on it: their name, their "
+        "channel's, school's "
+        "or business's name, handles and websites, each as written; never a product or "
+        "tool the Short is about. Empty when none."
+    )
+    mood: str = Field(min_length=1, max_length=160)
+
+
+class AssetReference(AssetReferenceDraft):
+    """The original's piece, described precisely enough to recreate its look."""
+
+    text: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(
+        max_length=MAX_ASSET_TEXT_LINES,
+        description="Every line of text on it, word for word; empty when there is none.",
+    )
+    # The original creator's own identity, the plan's included (app/plan_repair.py): never
+    # drawn into the member's version (app/branding.py). A plan written before it reads
+    # with none.
+    brands: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(
+        default_factory=list[str], max_length=MAX_ASSET_TEXT_LINES
+    )
+
+
+class _AssetFields(BaseModel):
+    """What `Asset` and the planner's `AssetDraft` share: everything but its id's pattern
+    and its reference (see `ShotDraft` on why neither subclasses the other)."""
+
+    id: str = Field(
+        min_length=1,
+        max_length=MAX_ASSET_ID,
+        description='Lowercase words joined by hyphens, unique in the plan: "chart".',
+    )
+    kind: AssetKind
+    title: str = Field(
+        min_length=1, max_length=80, description='A short name for it: "The archetypes chart".'
+    )
+    role: str = Field(
+        min_length=1, max_length=240, description="What it does in the Short, and where it sits."
+    )
+    description: str = Field(
+        min_length=1, max_length=600, description="The original's piece, in a sentence or two."
+    )
+    prompt: str = Field(
+        min_length=1,
+        max_length=1_500,
+        description="What to ask an image model for to make a fresh one in the original's "
+        "style, in English, with any text on it in quotes.",
+    )
+    sourceStartSeconds: float = Field(
+        ge=0, le=MAX_SHORT_SECONDS, description="When it first shows in the original."
+    )
+    sourceEndSeconds: float = Field(
+        ge=0, le=MAX_SHORT_SECONDS, description="When it's last seen in the original."
+    )
+    defaultSource: AssetSource
+    personalisable: bool = Field(description="The member could make it about their own topic.")
+    ask: str | None = Field(
+        max_length=160,
+        description='What to ask the member for when it is theirs: "a photo of your dog".',
+    )
+    secondScreen: bool = Field(description="The original shows it on another screen in shot.")
+
+
+# `repair_plan` makes an AssetDraft's id one the pattern allows (and unique), fits its
+# timing into the Short, and trims its text.
+class AssetDraft(_AssetFields):
+    """Something the Short shows that the viewer can't film themselves."""
+
+    reference: AssetReferenceDraft
+
+
+class Asset(_AssetFields):
+    id: str = Field(min_length=1, max_length=MAX_ASSET_ID, pattern=ASSET_ID_PATTERN)
+    sourceEndSeconds: float = Field(ge=0.1, le=MAX_SHORT_SECONDS)
+    reference: AssetReference
+
+
+# An EditDraft is one flat shape for every edit type: `repair_plan` turns it into its
+# type's own model (`Edit`), keeps it inside the Short and in order, and drops one it
+# can't make whole. Every field is required and nullable with no default, and the box is
+# four numbers rather than a nested object, so the schema Vertex AI is sent keeps to
+# what it has always accepted from this service (`sceneLandmark`'s shape) and stays
+# small (tests/test_planner_schema.py).
+class EditDraft(BaseModel):
+    """One edit: fill only the fields its type uses (each field names its types), null
+    the rest."""
+
+    type: EditType
+    startSeconds: float = Field(ge=0, le=MAX_SHORT_SECONDS, description="In the original.")
+    endSeconds: float = Field(ge=0, le=MAX_SHORT_SECONDS)
+    layout: LayoutKind | None = Field(description="layout")
+    assetId: str | None = Field(max_length=MAX_ASSET_ID, description="layout, overlay, end-card")
+    cameraOn: Literal["top", "bottom"] | None = Field(
+        description="layout: split, where the camera picture goes"
+    )
+    cameraShare: float | None = Field(
+        description="layout: split, the camera's share of the height (0.5: half)"
+    )
+    boxX: float | None = Field(
+        description="layout: picture-in-picture; overlay: the box's left edge (0 to 1)"
+    )
+    boxY: float | None = Field(description="its top edge (0 to 1)")
+    boxWidth: float | None = Field(description="its width (0 to 1)")
+    boxHeight: float | None = Field(description="its height (0 to 1)")
+    inset: Literal["camera", "asset"] | None = Field(
+        description="layout: picture-in-picture, what sits in the box"
+    )
+    mark: Mark | None = Field(description="overlay, when it's not an asset")
+    color: str | None = Field(description='overlay, text: "#RRGGBB"')
+    entry: Entrance | None = Field(description="overlay")
+    exit: Entrance | None = Field(description="overlay")
+    grade: Grade | None = Field(description="grade")
+    target: GradeTarget | None = Field(description="grade")
+    style: TextStyle | None = Field(description="text")
+    text: str | None = Field(max_length=240, description="text (null for captions), end-card")
+    position: TextPosition | None = Field(description="text")
+    captionStyle: CaptionStyle | None = Field(description="text: captions")
+    highlightColor: str | None = Field(description='text: "#RRGGBB"')
+    transition: TransitionKind | None = Field(description="transition")
+    anchor: str | None = Field(max_length=120, description="transition: a match cut's anchor")
+    fromRate: float | None = Field(description="speed: 1 is normal speed")
+    toRate: float | None = Field(description="speed")
+    easing: Easing | None = Field(description="speed")
+    description: str | None = Field(
+        max_length=240, description="gap: what the B-roll or cutaway shows"
+    )
+
+
+class LayoutEdit(BaseModel):
+    """How the frame is shared: the camera full frame (or an asset, for a voice-over), a
+    split with the camera on top or at the bottom taking `cameraShare` of the height and
+    the asset in the rest, or picture-in-picture with the `inset` in `box`."""
+
+    type: Literal["layout"]
+    startSeconds: float = Field(ge=0, le=MAX_SHORT_SECONDS)
+    endSeconds: float = Field(ge=0.1, le=MAX_SHORT_SECONDS)
+    layout: LayoutKind
+    assetId: str | None = Field(max_length=MAX_ASSET_ID)
+    cameraOn: Literal["top", "bottom"] | None
+    cameraShare: float | None = Field(ge=0.2, le=0.8)
+    box: Box | None
+    inset: Literal["camera", "asset"] | None
+
+
+class OverlayEdit(BaseModel):
+    """Something drawn over the frame: an asset, or a mark (a circle, an underline)."""
+
+    type: Literal["overlay"]
+    startSeconds: float = Field(ge=0, le=MAX_SHORT_SECONDS)
+    endSeconds: float = Field(ge=0.1, le=MAX_SHORT_SECONDS)
+    assetId: str | None = Field(max_length=MAX_ASSET_ID)
+    mark: Mark | None
+    color: str | None = Field(pattern=COLOR_PATTERN)
+    box: Box
+    entry: Entrance
+    exit: Entrance
+
+
+class GradeEdit(BaseModel):
+    type: Literal["grade"]
+    startSeconds: float = Field(ge=0, le=MAX_SHORT_SECONDS)
+    endSeconds: float = Field(ge=0.1, le=MAX_SHORT_SECONDS)
+    grade: Grade
+    target: GradeTarget
+
+
+class TextEdit(BaseModel):
+    """Words on screen. Captions carry no text of their own: they're the member's words."""
+
+    type: Literal["text"]
+    startSeconds: float = Field(ge=0, le=MAX_SHORT_SECONDS)
+    endSeconds: float = Field(ge=0.1, le=MAX_SHORT_SECONDS)
+    style: TextStyle
+    text: str | None = Field(min_length=1, max_length=240)
+    position: TextPosition
+    captionStyle: CaptionStyle | None
+    color: str | None = Field(pattern=COLOR_PATTERN)
+    highlightColor: str | None = Field(pattern=COLOR_PATTERN)
+
+
+class TransitionEdit(BaseModel):
+    """Into whatever starts at `startSeconds`, lasting until `endSeconds`."""
+
+    type: Literal["transition"]
+    startSeconds: float = Field(ge=0, le=MAX_SHORT_SECONDS)
+    endSeconds: float = Field(ge=0.1, le=MAX_SHORT_SECONDS)
+    transition: TransitionKind
+    anchor: str | None = Field(
+        min_length=1, max_length=120, description="A match cut's anchor: what lines up."
+    )
+
+
+class SpeedEdit(BaseModel):
+    type: Literal["speed"]
+    startSeconds: float = Field(ge=0, le=MAX_SHORT_SECONDS)
+    endSeconds: float = Field(ge=0.1, le=MAX_SHORT_SECONDS)
+    fromRate: float = Field(ge=0.1, le=8)
+    toRate: float = Field(ge=0.1, le=8)
+    easing: Easing
+
+
+class EndCardEdit(BaseModel):
+    type: Literal["end-card"]
+    startSeconds: float = Field(ge=0, le=MAX_SHORT_SECONDS)
+    endSeconds: float = Field(ge=0.1, le=MAX_SHORT_SECONDS)
+    assetId: str | None = Field(max_length=MAX_ASSET_ID)
+    text: str | None = Field(min_length=1, max_length=240)
+
+
+class GapEdit(BaseModel):
+    """A moment to fill with B-roll or a cutaway: what it shows, for as long as it lasts."""
+
+    type: Literal["gap"]
+    startSeconds: float = Field(ge=0, le=MAX_SHORT_SECONDS)
+    endSeconds: float = Field(ge=0.1, le=MAX_SHORT_SECONDS)
+    description: str = Field(min_length=1, max_length=240)
+
+
+type Edit = Annotated[
+    LayoutEdit
+    | OverlayEdit
+    | GradeEdit
+    | TextEdit
+    | TransitionEdit
+    | SpeedEdit
+    | EndCardEdit
+    | GapEdit,
+    Field(discriminator="type"),
+]
+
+
 class ShotPlan(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     format: str = Field(min_length=1, max_length=60, description='The trend, e.g. "GRWM".')
@@ -175,6 +493,14 @@ class ShotPlan(BaseModel):
     audio: Literal["speech", "music", "speech-and-music", "none"]
     durationSeconds: float = Field(ge=0.5, le=MAX_SHORT_SECONDS)
     shots: list[Shot] = Field(min_length=1, max_length=MAX_SHOTS)
+    # A plan written before assets and edits existed reads with neither.
+    assets: list[Asset] = Field(default_factory=list[Asset], max_length=MAX_ASSETS)
+    edits: list[Edit] = Field(default_factory=list[Edit], max_length=MAX_EDITS)
+    # The original creator's own identity anywhere in the Short (app/branding.py): never
+    # in the member's version's words. A plan written before it reads with none.
+    brands: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(
+        default_factory=list[str], max_length=MAX_ASSET_TEXT_LINES
+    )
 
 
 class TargetPoseDraft(TargetPose):
@@ -197,7 +523,11 @@ class ShotDraft(BaseModel):
     (`ShotPlanDraft`, below) are re-declared here instead of narrowed in an override.
     """
 
-    kind: Literal["video", "photo"]
+    kind: ShotKind
+    mode: ShotMode = Field(
+        description="on-camera: the viewer films it; voice-over: only their voice is used; "
+        "asset: nothing is filmed, an asset takes its place.",
+    )
     title: str = Field(min_length=1, max_length=80)
     purpose: str = Field(
         min_length=1,
@@ -239,6 +569,20 @@ class ShotPlanDraft(BaseModel):
     audio: Literal["speech", "music", "speech-and-music", "none"]
     durationSeconds: float = Field(ge=0.5, le=MAX_SHORT_SECONDS)
     shots: list[ShotDraft]
+    # Required, with no default, like every draft field (EditDraft's docstring says why).
+    assets: list[AssetDraft] = Field(
+        description="What the Short shows that the viewer can't film themselves; empty when "
+        "there's nothing."
+    )
+    edits: list[EditDraft] = Field(
+        description="The editing over the footage, in order; empty when there's none."
+    )
+    brands: list[str] = Field(
+        description="The original creator's own identity in the Short: their name, their "
+        "channel's, school's "
+        "or business's name, handles and websites, each as written; never a product or "
+        "tool the Short is about. Empty when none."
+    )
 
 
 # The database checks them too (director_plan_status_check, director_take_status_check,
@@ -249,6 +593,9 @@ PlanStage = Literal["queued", "watching", "writing", "ready", "failed"]
 AudioStatus = Literal["ready", "failed", "none"]
 TakeStatus = Literal["pending", "reviewing", "ready", "failed"]
 TakeKind = Literal["video", "photo"]
+# A default asset image: queued with the plan, being drawn, stored, or given up on
+# (director_asset_status_check).
+AssetImageStatus = Literal["pending", "generating", "ready", "failed"]
 PublishStatus = Literal["none", "uploading", "published", "failed"]
 # YouTube's privacy statuses, as a cut was published.
 Visibility = Literal["private", "unlisted", "public"]
@@ -260,6 +607,18 @@ class DirectorPlanCreate(BaseModel):
     model_config = REQUEST
 
     videoId: str = Field(pattern=VIDEO_ID_PATTERN)
+
+
+class AssetImageOut(BaseModel):
+    """The default image made for one of a plan's assets (app/assets.py)."""
+
+    assetId: str = Field(min_length=1, max_length=MAX_ASSET_ID, pattern=ASSET_ID_PATTERN)
+    status: AssetImageStatus
+    objectKey: str | None = Field(
+        max_length=200,
+        description="Its key in MEDIA_BUCKET once it's ready; apps/api turns it into a "
+        "short-lived link.",
+    )
 
 
 class DirectorPlanOut(BaseModel):
@@ -275,6 +634,14 @@ class DirectorPlanOut(BaseModel):
     audioKey: str | None = Field(
         description="The original audio's object key in storage, once captured; apps/api "
         "turns it into a short-lived link."
+    )
+    # Optional in the contract: an API from before asset images still reads the plan.
+    assetImages: list[AssetImageOut] = Field(
+        default_factory=list[AssetImageOut],
+        max_length=MAX_ASSETS,
+        description="The default images made for the plan's assets, on a plan read on its "
+        "own (getDirectorPlan); empty in the library and for a seeded template, whose are "
+        "committed with it.",
     )
     createdAt: datetime
     updatedAt: datetime

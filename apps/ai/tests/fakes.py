@@ -105,6 +105,32 @@ def gemini_output(args: Mapping[str, object], *, tokens: int = 1_000) -> Callabl
     return reply
 
 
+ASSET_MODEL = "gemini-test-image"
+ASSET_PATH = f"/v1beta/models/{ASSET_MODEL}:generateContent"
+
+
+def gemini_image(data: bytes, *, mime_type: str = "image/png") -> Callable[[bytes], Reply]:
+    """The Gemini API's generateContent answering an image request (responseModalities
+    IMAGE) as Nano Banana does: the image inline, its prompt's tokens and the image's."""
+
+    def reply(_body: bytes) -> Reply:
+        part = {"inlineData": {"mimeType": mime_type, "data": base64.b64encode(data).decode()}}
+        return 200, {
+            "candidates": [
+                {"content": {"role": "model", "parts": [part]}, "finishReason": "STOP", "index": 0}
+            ],
+            "usageMetadata": {
+                "promptTokenCount": 300,
+                "candidatesTokenCount": 1_290,
+                "totalTokenCount": 1_590,
+            },
+            "modelVersion": ASSET_MODEL,
+            "responseId": "fake-image",
+        }
+
+    return reply
+
+
 TTS_MODEL = "gemini-test-tts"
 TTS_PATH = f"/v1beta/models/{TTS_MODEL}:generateContent"
 # What the Gemini 2.5 TTS models answer with: raw 16-bit little-endian mono samples.

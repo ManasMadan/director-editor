@@ -109,7 +109,15 @@ const sceneDirections = [
 const seconds = z.number().min(0).max(DIRECTOR_MAX_SHOT_SECONDS);
 
 const shotSchema = z.object({
+  /** What its take is: a clip or a photo. */
   kind: z.enum(["video", "photo"]),
+  /**
+   * What the edit uses of it: the member on camera; only their voice (a voice-over, the
+   * picture an asset or B-roll, from a video take); or nothing, an asset taking its place
+   * (an end card, a full-screen graphic: a photo take stands in until the editor places
+   * it). A plan written before modes is all on camera.
+   */
+  mode: z.enum(["on-camera", "voice-over", "asset"]).default("on-camera"),
   title: z.string(),
   purpose: z.string(),
   /** Where it appears in the original. */
@@ -150,6 +158,146 @@ const shotSchema = z.object({
 });
 export type Shot = z.infer<typeof shotSchema>;
 
+// What a Short needs beyond the member filming themselves: the pieces it shows (assets)
+// and the editing over the footage (edits). Times are seconds of the original, like a
+// shot's source range; the editor maps them onto the member's takes through the shots'
+// source ranges. An asset is never the original's picture: its reference describes it
+// precisely enough to make a fresh one, from its prompt.
+const DIRECTOR_MAX_ASSETS = 12;
+const DIRECTOR_MAX_EDITS = 40;
+const sourceSeconds = z.number().min(0).max(SHORT_MAX_SECONDS);
+const sourceEnd = z.number().min(0.1).max(SHORT_MAX_SECONDS);
+const assetId = z.string().max(40);
+const color = z
+  .string()
+  .regex(/^#[0-9A-Fa-f]{6}$/)
+  .nullable();
+const assetKinds = [
+  "image",
+  "cutout",
+  "text-card",
+  "background",
+  "broll",
+  "music",
+  "sfx",
+  "end-card",
+] as const;
+const entrances = ["cut", "fade", "slide", "pop", "draw"] as const;
+
+const assetSchema = z.object({
+  /** Lowercase words joined by hyphens, unique in the plan ("chart"). */
+  id: z
+    .string()
+    .max(40)
+    .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/),
+  kind: z.enum(assetKinds),
+  /** A short name for it: "The archetypes chart". */
+  title: z.string(),
+  /** What it does in the Short, and where it sits. */
+  role: z.string(),
+  /** The original's piece, in a sentence or two. */
+  description: z.string(),
+  /** What it prompts an image model with: the Create tab's prompt, filled in. */
+  prompt: z.string(),
+  sourceStartSeconds: sourceSeconds,
+  sourceEndSeconds: sourceEnd,
+  defaultSource: z.enum(["create", "stock", "upload"]),
+  /** The member could make it about their own topic. */
+  personalisable: z.boolean(),
+  /** What to ask the member for when it's theirs: "a photo of your dog". */
+  ask: z.string().nullable(),
+  /** The original shows it on another screen in shot. */
+  secondScreen: z.boolean(),
+  /** The original's piece, described precisely enough to recreate its look. */
+  reference: z.object({
+    subject: z.string(),
+    composition: z.string(),
+    style: z.string(),
+    palette: z.string(),
+    blackAndWhite: z.boolean(),
+    aspectRatio: z.enum(["9:16", "3:4", "4:5", "1:1", "9:8", "5:4", "4:3", "16:9"]),
+    /** Every line of text on it, word for word. */
+    text: z.array(z.string()),
+    /**
+     * The original creator's own identity on it (their name, their channel, school or
+     * business, handles, sites): never drawn into the member's version. A plan written
+     * before it reads with none.
+     */
+    brands: z.array(z.string()).default([]),
+    mood: z.string(),
+  }),
+});
+export type Asset = z.infer<typeof assetSchema>;
+
+const timed = { startSeconds: sourceSeconds, endSeconds: sourceEnd };
+const editSchema = z.discriminatedUnion("type", [
+  /**
+   * How the frame is shared: the camera full frame (or an asset, for a voice-over), a
+   * split with the camera on top or at the bottom taking `cameraShare` of the height and
+   * the asset in the rest, or picture-in-picture with the `inset` in `box`.
+   */
+  z.object({
+    type: z.literal("layout"),
+    ...timed,
+    layout: z.enum(["full", "split", "picture-in-picture"]),
+    assetId: assetId.nullable(),
+    cameraOn: z.enum(["top", "bottom"]).nullable(),
+    cameraShare: z.number().min(0.2).max(0.8).nullable(),
+    box: boxSchema.nullable(),
+    inset: z.enum(["camera", "asset"]).nullable(),
+  }),
+  /** Something drawn over the frame: an asset, or a mark (a circle, an underline). */
+  z.object({
+    type: z.literal("overlay"),
+    ...timed,
+    assetId: assetId.nullable(),
+    mark: z.enum(["circle", "underline", "arrow", "box", "highlight", "tick", "cross"]).nullable(),
+    color,
+    box: boxSchema,
+    entry: z.enum(entrances),
+    exit: z.enum(entrances),
+  }),
+  z.object({
+    type: z.literal("grade"),
+    ...timed,
+    grade: z.enum(["black-and-white", "warm", "cool", "high-contrast", "vintage", "vivid"]),
+    target: z.enum(["all", "camera", "assets"]),
+  }),
+  /** Words on screen. Captions carry no text of their own: they're the member's words. */
+  z.object({
+    type: z.literal("text"),
+    ...timed,
+    style: z.enum(["title", "lower-third", "captions", "label", "callout"]),
+    text: z.string().nullable(),
+    position: z.enum(["top", "middle", "bottom", "between-halves"]),
+    captionStyle: z.enum(["word-by-word", "line", "boxed"]).nullable(),
+    color,
+    highlightColor: color,
+  }),
+  z.object({
+    type: z.literal("transition"),
+    ...timed,
+    transition: z.enum(["cut", "match-cut", "whip", "fade", "zoom", "spin", "glitch"]),
+    /** A match cut's anchor: what lines up. */
+    anchor: z.string().nullable(),
+  }),
+  z.object({
+    type: z.literal("speed"),
+    ...timed,
+    fromRate: z.number().min(0.1).max(8),
+    toRate: z.number().min(0.1).max(8),
+    easing: z.enum(["linear", "ease-in", "ease-out", "ease-in-out"]),
+  }),
+  z.object({
+    type: z.literal("end-card"),
+    ...timed,
+    assetId: assetId.nullable(),
+    text: z.string().nullable(),
+  }),
+  /** A moment to fill with B-roll or a cutaway: what it shows, for as long as it lasts. */
+  z.object({ type: z.literal("gap"), ...timed, description: z.string() }),
+]);
+
 export const shotPlanSchema = z.object({
   title: z.string(),
   /** The trend, e.g. "GRWM". */
@@ -158,17 +306,39 @@ export const shotPlanSchema = z.object({
   audio: z.enum(["speech", "music", "speech-and-music", "none"]),
   durationSeconds: z.number().min(0.5),
   shots: z.array(shotSchema).min(1).max(DIRECTOR_MAX_SHOTS),
+  /** A plan written before assets and edits existed reads with neither. */
+  assets: z.array(assetSchema).max(DIRECTOR_MAX_ASSETS).default([]),
+  edits: z.array(editSchema).max(DIRECTOR_MAX_EDITS).default([]),
+  /**
+   * The original creator's own identity anywhere in the Short: never in the member's
+   * version. Optional, so a plan typed before it still is one.
+   */
+  brands: z.array(z.string()).max(12).optional(),
 });
 export type ShotPlan = z.infer<typeof shotPlanSchema>;
 
 // A plan as the API serves it. A seeded template opened on its own (`director.plan`, not
 // the library) also links its media, made once for each seed (director-seeds.ts's
 // `media`): short-lived links to a storyboard card and a preview clip per shot and a
-// music track, while uploads are on. A plan names no storage path itself.
+// music track, while uploads are on. Opened on its own, any plan also says how each
+// asset's default image is coming along (a seed's are made with its media). A plan names
+// no storage path itself.
 const mediaUrl = z.url().optional();
 const servedShotSchema = shotSchema.extend({ storyboardUrl: mediaUrl, previewUrl: mediaUrl });
+const servedAssetSchema = assetSchema.extend({
+  /**
+   * Its default image, drawn right after indexing: `making` until it's there, then a
+   * short-lived link while it's `ready` and uploads are on; absent when none is made
+   * (footage and sound, past the limits, or in the library).
+   */
+  image: z
+    .object({ status: z.enum(["making", "ready", "failed"]), url: z.url().nullable() })
+    .optional(),
+});
+export type ServedAsset = z.infer<typeof servedAssetSchema>;
 const servedShotPlanSchema = shotPlanSchema.extend({
   shots: z.array(servedShotSchema).min(1).max(DIRECTOR_MAX_SHOTS),
+  assets: z.array(servedAssetSchema).max(DIRECTOR_MAX_ASSETS).default([]),
   musicUrl: mediaUrl,
 });
 export type ServedShotPlan = z.infer<typeof servedShotPlanSchema>;

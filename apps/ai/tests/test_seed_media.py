@@ -20,6 +20,7 @@ from google.genai import errors as genai_errors
 from google.oauth2.credentials import Credentials as UserCredentials
 from pydantic import BaseModel
 
+from app.assets import image_prompt
 from app.schemas import Shot, ShotPlan
 from app.settings import Settings
 from scripts import seed_media
@@ -68,6 +69,7 @@ from tests.fakes import (
     vertex_path,
     vertex_text_only,
 )
+from tests.test_plan_repair_assets import REFERENCE, asset
 from tests.tokens import SECRET
 
 VIDEO = "22k0fZarxh8"
@@ -75,6 +77,7 @@ OTHER = "152Jy2c3XSM"
 
 PERSON_SHOT: dict[str, object] = {
     "kind": "video",
+    "mode": "on-camera",
     "title": "Intro in the Market",
     "purpose": "hook: introduce the observation, curious and friendly",
     "sourceStartSeconds": 0,
@@ -182,6 +185,10 @@ class FakeModels:
     async def music(self, prompt: str) -> Media:
         self._check("music", prompt)
         return b"track", self.music_type
+
+    async def asset(self, prompt: str, aspect_ratio: str) -> Media:
+        self._check("asset", prompt)
+        return f"png {aspect_ratio}".encode(), "image/png"
 
 
 class Uploads:
@@ -295,6 +302,64 @@ def test_what_already_has_a_key_is_skipped() -> None:
     )
 
     assert [(job.kind, job.shot) for job in media_jobs([done])] == [("preview", 1)]
+
+
+def with_assets(media: dict[str, object] | None = None) -> SeedTemplate:
+    """A seed whose plan has a chart, music and an end card, as seeds:assets fills in."""
+    plan = {
+        **PLAN,
+        "assets": [
+            asset(id="chart"),
+            asset(id="music", kind="music"),
+            asset(id="end-card", kind="end-card", reference={**REFERENCE, "aspectRatio": "9:16"}),
+        ],
+    }
+    return SeedTemplate.model_validate(
+        {**template().model_dump(), "plan": plan, **({"media": media} if media else {})}
+    )
+
+
+def test_each_still_among_a_seed_s_assets_is_a_job_until_it_has_a_key() -> None:
+    jobs = [job for job in media_jobs([with_assets()]) if job.kind == "asset"]
+    chart, end_card = ShotPlan.model_validate(with_assets().plan.model_dump()).assets[::2]
+
+    assert [(job.asset_id, job.aspect_ratio, job.shot) for job in jobs] == [
+        ("chart", "5:4", None),
+        ("end-card", "9:16", None),
+    ]
+    assert [job.prompt for job in jobs] == [image_prompt(chart), image_prompt(end_card)]
+    drawn = with_assets(
+        {"shots": [{}, {}], "assets": {"chart": f"{AT}/asset-chart.png"}},
+    )
+    assert [job.asset_id for job in media_jobs([drawn]) if job.kind == "asset"] == ["end-card"]
+    assert estimated_usd(jobs) == pytest.approx(2 * seed_media.STORYBOARD_USD)
+
+
+async def test_an_asset_s_image_is_uploaded_and_its_key_written_by_its_id() -> None:
+    templates = [with_assets()]
+    uploads = Uploads()
+    jobs = [job for job in media_jobs(templates) if job.kind == "asset"]
+    billed: list[Job] = []
+    failures = await generate(
+        templates, jobs, FakeModels(), uploads, lambda _t: None, billed.append
+    )
+
+    assert failures == 0
+    media = templates[0].media
+    assert media is not None
+    assert media.assets == {
+        "chart": f"{AT}/asset-chart.png",
+        "end-card": f"{AT}/asset-end-card.png",
+    }
+    assert uploads.objects[f"{AT}/asset-chart.png"] == (b"png 5:4", "image/png")
+    # The file it's written to reads back, its keys checked against the plan's assets.
+    assert SeedTemplate.model_validate(templates[0].model_dump()).media == media
+
+
+def test_a_seed_s_asset_image_key_must_be_its_own_asset_s() -> None:
+    for assets in ({"logo": f"{AT}/asset-logo.png"}, {"chart": f"{AT}/asset-end-card.png"}):
+        with pytest.raises(ValueError, match="isn't this seed's media"):
+            with_assets({"shots": [{}, {}], "assets": assets})
 
 
 def test_previews_stop_at_the_cap_counting_every_clip_ever_billed() -> None:
@@ -756,6 +821,20 @@ async def test_nano_banana_draws_a_portrait_card(vertex: Vertex) -> None:
         "imageConfig": {"aspectRatio": "9:16", "imageSize": "1K"},
     }
     assert "a card" in body
+
+
+@pytest.mark.integration
+async def test_nano_banana_draws_an_asset_in_its_own_shape(vertex: Vertex) -> None:
+    fake, handlers = vertex
+    path = vertex_path("global", STORYBOARD_MODEL, "generateContent")
+    handlers[path] = vertex_inline("image/png", b"\x89PNG")
+
+    assert await (await models_at(fake)).asset("a chart", "5:4") == (b"\x89PNG", "image/png")
+    _, request = _request(fake, path)
+    assert request.generationConfig == {
+        "responseModalities": ["IMAGE"],
+        "imageConfig": {"aspectRatio": "5:4", "imageSize": "1K"},
+    }
 
 
 @pytest.mark.integration

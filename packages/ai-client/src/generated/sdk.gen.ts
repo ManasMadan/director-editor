@@ -208,6 +208,8 @@ export const indexDirectorPlan = <ThrowOnError extends boolean = false>(options:
 
 /**
  * Get Director Plan
+ *
+ * The workspace's plan for a short, with the default images of its assets.
  */
 export const getDirectorPlan = <ThrowOnError extends boolean = false>(options: Options<GetDirectorPlanData, ThrowOnError>): RequestResult<GetDirectorPlanResponses, GetDirectorPlanErrors, ThrowOnError> => (options.client ?? client).get<GetDirectorPlanResponses, GetDirectorPlanErrors, ThrowOnError>({
     requestValidator: async (data) => await z.object({

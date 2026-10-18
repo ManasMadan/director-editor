@@ -1,0 +1,42 @@
+{
+  "title": "AiDirectorAssetsJob",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "meta": {
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        },
+        "orgId": {
+          "type": "string"
+        }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "planId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "orgId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "planId",
+        "orgId"
+      ]
+    }
+  },
+  "required": [
+    "meta",
+    "payload"
+  ]
+}

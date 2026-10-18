@@ -24,22 +24,24 @@ export const DIRECTOR_SEED_COUNT = 6;
  * the AI service's scripts through director-seed-media.json), then, for the seed, its own
  * folder, its shot's position and the right kind of file.
  */
-const mediaKey = z
+const storedKey = z
   .string()
   .max(mediaKeyRules.keyMaxLength)
-  .regex(new RegExp(mediaKeyRules.keyPattern))
-  .optional();
+  .regex(new RegExp(mediaKeyRules.keyPattern));
+const mediaKey = storedKey.optional();
 
 const seedMediaSchema = z.strictObject({
   /** The music track. */
   music: mediaKey,
   /** One entry per shot of the plan, in its order. */
   shots: z.array(z.strictObject({ storyboard: mediaKey, preview: mediaKey })),
+  /** The default image of each asset of the plan that has one, by the asset's id. */
+  assets: z.record(z.string(), storedKey).optional(),
 });
 type SeedMedia = z.infer<typeof seedMediaSchema>;
 
 /** Every key `media` names, each with the only keys it may be for this seed. */
-function expectedKeys(videoId: string, media: SeedMedia) {
+function expectedKeys(videoId: string, assetIds: readonly string[], media: SeedMedia) {
   const at = `seed-media/${videoId}`;
   return [
     { key: media.music, allowed: [`${at}/music.mp3`, `${at}/music.wav`] },
@@ -47,6 +49,11 @@ function expectedKeys(videoId: string, media: SeedMedia) {
       { key: shot.storyboard, allowed: [`${at}/shot-${index}.png`, `${at}/shot-${index}.jpg`] },
       { key: shot.preview, allowed: [`${at}/shot-${index}.mp4`] },
     ]),
+    // An asset the plan hasn't may have no key at all.
+    ...Object.entries(media.assets ?? {}).map(([id, key]) => ({
+      key,
+      allowed: assetIds.includes(id) ? [`${at}/asset-${id}.png`, `${at}/asset-${id}.jpg`] : [],
+    })),
   ];
 }
 
@@ -68,7 +75,8 @@ const directorSeedSchema = z
     if (media.shots.length !== plan.shots.length) {
       context.addIssue({ code: "custom", path: ["media", "shots"], message: "one per shot" });
     }
-    for (const { key, allowed } of expectedKeys(videoId, media)) {
+    const assetIds = plan.assets.map((asset) => asset.id);
+    for (const { key, allowed } of expectedKeys(videoId, assetIds, media)) {
       if (key !== undefined && !allowed.includes(key)) {
         context.addIssue({ code: "custom", path: ["media"], message: `${key} isn't this seed's` });
       }

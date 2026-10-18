@@ -1,5 +1,6 @@
-"""The indexing evaluation: indexes the 12 Shorts in evals/shorts.json (the 6 seeds and 6
-hard cases) for real, with Gemini on Vertex AI, the same way the plan job indexes a
+"""The indexing evaluation: indexes the 16 Shorts in evals/shorts.json (the 6 seeds, 6
+hard cases and 4 that need more than the viewer filming: assets, voice-overs and edits)
+for real, with Gemini on Vertex AI, the same way the plan job indexes a
 member's own Short (`app.indexing.index_short`, its retries and fallback included), and
 says for each one whether the plan is usable. Run from the repo root:
 
@@ -8,17 +9,20 @@ says for each one whether the plan is usable. Run from the repo root:
 That runs `python -m evals.index_shorts --live` from apps/ai with the repo's .env loaded
 (apps/ai/package.json), like scripts/build_seeds.py. `--live` is required: every run
 spends real tokens on every Short, so it never starts by accident. `--only <videoId>`
-(repeatable) re-runs just those. It needs the same settings as indexing in the app
-(INDEX_MODEL, INDEX_FALLBACK_MODEL, and Vertex AI's GOOGLE_* settings), and each Short
-gets the app's own budget, DIRECTOR_TOKENS_PER_PLAN, so one that is too long for the app
-fails here too.
+(repeatable) re-runs just those, and `--save <dir>` writes each plan there. It needs the
+same settings as indexing in the app (INDEX_MODEL, INDEX_FALLBACK_MODEL, and Vertex AI's
+GOOGLE_* settings), and each Short gets the app's own budget, DIRECTOR_TOKENS_PER_PLAN,
+so one that is too long for the app fails here too.
 
-The bar: every Short indexes, and every shot of its plan has a scene, a framing, a
-phone angle and at least one step. The command prints a line per Short (its shots,
-whether it has a script and a pose, which fields `repair_plan` had to change, the model
-that answered and how long it took) and a summary, and exits non-zero unless every
-Short passed. The Shorts run one at a time: Vertex AI's quotas are per minute, and
-gemini-4-argon sometimes answers a video with a 500 that `index_short` retries anyway.
+The bar: every Short indexes, every shot of its plan has a scene, a framing, a phone
+angle and at least one step, every asset has a prompt and a reference to make it from,
+and a Short whose row says what it `expect`s (a split screen, a still to make, voice-over
+shots, captions, B-roll gaps, an end card) gets a plan that has it. The command prints a
+line per Short (its shots, whether it has a script and a pose, how many assets and edits,
+which fields `repair_plan` had to change, the model that answered and how long it took)
+and a summary, and exits non-zero unless every Short passed. The Shorts run one at a
+time: Vertex AI's quotas are per minute, and gemini-4-argon sometimes answers a video
+with a 500 that `index_short` retries anyway.
 """
 
 import argparse
@@ -32,20 +36,60 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter
 from pydantic_ai.usage import RunUsage, UsageLimits
 
+from app.assets import STILL_KINDS
 from app.director import create_index_model, create_planner_agent
 from app.indexing import index_short
 from app.log import configure_logging, log
-from app.schemas import VIDEO_ID_PATTERN, ShotPlan, ShotPlanDraft
+from app.schemas import (
+    VIDEO_ID_PATTERN,
+    CaptionStyle,
+    GapEdit,
+    LayoutEdit,
+    LayoutKind,
+    ShotMode,
+    ShotPlan,
+    ShotPlanDraft,
+    TextEdit,
+)
 from app.settings import Settings, get_settings
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 SHORTS_PATH = APP_ROOT / "evals" / "shorts.json"
 # argparse's own exit status for a command used wrongly.
 USAGE_ERROR = 2
+# How far from 50/50 a split may be measured and still be halves: the editor snaps one
+# that close to halves.
+HALVES_TOLERANCE = 0.08
+
+
+class Expectation(BaseModel):
+    """What a Short's plan must have beyond filmable shots, from looking at the Short (spec
+    7.5's acceptance, as far as a plan can show it): a layout edit of this kind, split in
+    halves (50% +/- 8% of the height, where the editor snaps a split to halves); at least
+    this many stills to make, one of them describing each of `stillText` (in its subject
+    or its text); a shot in each of these modes, and none on camera when `voiceOnly`;
+    captions, in this style and on a split's seam; lower thirds; a B-roll gap; an end
+    card."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    layout: LayoutKind | None = None
+    halves: bool = False
+    stills: int = Field(default=0, ge=0)
+    stillText: list[str] = Field(default_factory=list[str])
+    modes: list[ShotMode] = Field(default_factory=list[ShotMode])
+    voiceOnly: bool = False
+    captions: bool = False
+    captionStyle: CaptionStyle | None = None
+    captionsBetweenHalves: bool = False
+    lowerThirds: bool = False
+    gaps: bool = False
+    endCard: bool = False
 
 
 class EvalShort(BaseModel):
-    """One row of shorts.json: the Short, and why it's in the evaluation."""
+    """One row of shorts.json: the Short, why it's in the evaluation, and what its plan
+    is expected to have."""
 
     model_config = ConfigDict(strict=True, extra="forbid")
 
@@ -54,6 +98,7 @@ class EvalShort(BaseModel):
     channel: str = Field(min_length=1)
     kind: str = Field(min_length=1)
     why: str = Field(min_length=1)
+    expect: Expectation = Field(default_factory=Expectation)
 
 
 class Indexed(BaseModel):
@@ -91,6 +136,14 @@ class ShortResult(BaseModel):
         return len(self.plan.shots) if self.plan else 0
 
     @property
+    def assets(self) -> int:
+        return len(self.plan.assets) if self.plan else 0
+
+    @property
+    def edits(self) -> int:
+        return len(self.plan.edits) if self.plan else 0
+
+    @property
     def has_script(self) -> bool:
         return self.plan is not None and any(shot.script for shot in self.plan.shots)
 
@@ -107,11 +160,13 @@ def load_shorts(path: Path = SHORTS_PATH) -> list[EvalShort]:
     return _SHORTS.validate_json(path.read_text())
 
 
-def judge(plan: ShotPlan) -> list[str]:
+def judge(plan: ShotPlan, expect: Expectation | None = None) -> list[str]:
     """What keeps `plan` from being filmable, shot by shot: a scene, a framing and a step
-    a filmer can actually read. Blank text gets past the schema (a space is a character);
-    a shot with no framing or phone angle at all doesn't (ShotPlan refuses it, and
-    indexing fails instead), so those are always there by the time a plan is judged."""
+    a filmer can actually read; then what keeps its assets from being made (a prompt and
+    a subject to make each from), and what `expect`ed it doesn't have. Blank text gets
+    past the schema (a space is a character); a shot with no framing or phone angle at
+    all doesn't (ShotPlan refuses it, and indexing fails instead), so those are always
+    there by the time a plan is judged."""
     problems: list[str] = []
     for number, shot in enumerate(plan.shots, start=1):
         if not shot.scene.strip():
@@ -120,7 +175,110 @@ def judge(plan: ShotPlan) -> list[str]:
             problems.append(f"shot {number}: no framing")
         if not any(step.instruction.strip() for step in shot.steps):
             problems.append(f"shot {number}: no step")
-    return problems
+    for asset in plan.assets:
+        if not asset.prompt.strip() or not asset.reference.subject.strip():
+            problems.append(f"asset {asset.id}: nothing to make it from")
+    return problems + _missing(plan, expect or Expectation())
+
+
+def _missing(plan: ShotPlan, expect: Expectation) -> list[str]:
+    """What `expect` asks of the plan that it hasn't."""
+    return [
+        problem
+        for met, problem in [
+            *_layout_checks(plan, expect),
+            *_still_checks(plan, expect),
+            *_shot_checks(plan, expect),
+            *_text_checks(plan, expect),
+            *_ending_checks(plan, expect),
+        ]
+        if not met
+    ]
+
+
+type Check = tuple[bool, str]
+
+
+def _layout_checks(plan: ShotPlan, expect: Expectation) -> list[Check]:
+    layouts = [edit for edit in plan.edits if isinstance(edit, LayoutEdit)]
+    halves = any(
+        edit.layout == "split"
+        and edit.cameraShare is not None
+        and round(abs(edit.cameraShare - 0.5), 6) <= HALVES_TOLERANCE
+        for edit in layouts
+    )
+    return [
+        (
+            expect.layout is None or any(edit.layout == expect.layout for edit in layouts),
+            f"no {expect.layout} layout",
+        ),
+        (halves or not expect.halves, "no split in halves"),
+    ]
+
+
+def _still_checks(plan: ShotPlan, expect: Expectation) -> list[Check]:
+    stills = [asset for asset in plan.assets if asset.kind in STILL_KINDS]
+    described = [
+        " ".join([asset.reference.subject, *asset.reference.text]).lower() for asset in stills
+    ]
+    return [
+        (len(stills) >= expect.stills, f"{len(stills)} of {expect.stills} stills to make"),
+        *[
+            (any(word.lower() in each for each in described), f"no still describing {word}")
+            for word in expect.stillText
+        ],
+    ]
+
+
+def _shot_checks(plan: ShotPlan, expect: Expectation) -> list[Check]:
+    on_camera = any(shot.mode == "on-camera" for shot in plan.shots)
+    return [
+        *[
+            (any(shot.mode == mode for shot in plan.shots), f"no {mode} shot")
+            for mode in expect.modes
+        ],
+        (not (expect.voiceOnly and on_camera), "a shot on camera"),
+    ]
+
+
+def _text_checks(plan: ShotPlan, expect: Expectation) -> list[Check]:
+    texts = [edit for edit in plan.edits if isinstance(edit, TextEdit)]
+    captions = [edit for edit in texts if edit.style == "captions"]
+    styled = any(edit.captionStyle == expect.captionStyle for edit in captions)
+    between = any(edit.position == "between-halves" for edit in captions)
+    return [
+        (bool(captions) or not expect.captions, "no captions"),
+        (expect.captionStyle is None or styled, f"no {expect.captionStyle} captions"),
+        (between or not expect.captionsBetweenHalves, "no captions between the halves"),
+        (_lower_thirds(plan, texts) or not expect.lowerThirds, "no lower thirds"),
+    ]
+
+
+def _lower_thirds(plan: ShotPlan, texts: list[TextEdit]) -> bool:
+    """Whether the plan labels what's on screen: a lower third, or a label or callout
+    over a B-roll gap (the editor puts the member's words there either way; spec 8.9's
+    "lower thirds in the member's words")."""
+    gaps = [edit for edit in plan.edits if isinstance(edit, GapEdit)]
+    return any(
+        edit.style == "lower-third"
+        or (
+            edit.style in {"label", "callout"}
+            and any(
+                edit.startSeconds < gap.endSeconds and gap.startSeconds < edit.endSeconds
+                for gap in gaps
+            )
+        )
+        for edit in texts
+    )
+
+
+def _ending_checks(plan: ShotPlan, expect: Expectation) -> list[Check]:
+    edits = {edit.type for edit in plan.edits}
+    end_card = "end-card" in edits or any(asset.kind == "end-card" for asset in plan.assets)
+    return [
+        ("gap" in edits or not expect.gaps, "no B-roll gap"),
+        (end_card or not expect.endCard, "no end card"),
+    ]
 
 
 def repaired_fields(draft: ShotPlanDraft, plan: ShotPlan) -> list[str]:
@@ -176,7 +334,7 @@ async def evaluate_short(short: EvalShort, index: Indexer, clock: Clock) -> Shor
         model=entry.model,
         plan=entry.plan,
         repaired=repaired_fields(entry.draft, entry.plan),
-        problems=judge(entry.plan),
+        problems=judge(entry.plan, short.expect),
         error=None,
     )
 
@@ -199,7 +357,8 @@ def describe(result: ShortResult) -> str:
     """One Short's line: pass or fail, what its plan holds, and what went wrong."""
     line = (
         f"{'PASS' if result.passed else 'FAIL'} {result.short.videoId} {result.short.kind} "
-        f"shots={result.shots} script={_yes(result.has_script)} pose={_yes(result.has_pose)} "
+        f"shots={result.shots} assets={result.assets} edits={result.edits} "
+        f"script={_yes(result.has_script)} pose={_yes(result.has_pose)} "
         f"model={result.model or 'none'} {result.seconds:.1f}s"
     )
     if result.error is not None:
@@ -224,12 +383,27 @@ def summary(results: list[ShortResult]) -> str:
     )
 
 
-async def run_eval(shorts: list[EvalShort], index: Indexer, clock: Clock) -> int:
+async def run_eval(
+    shorts: list[EvalShort], index: Indexer, clock: Clock, save: Path | None = None
+) -> int:
     """Evaluates `shorts`, prints the summary, and answers the command's exit status: 0
-    only when there was something to evaluate and every Short passed."""
+    only when there was something to evaluate and every Short passed. With `save`, each
+    plan is also written there as `<videoId>.json`, to read what Gemini made of it."""
     results = await evaluate(shorts, index, clock)
     log.info(summary(results))
+    if save is not None:
+        save_plans(results, save)
     return 0 if results and all(result.passed for result in results) else 1
+
+
+def save_plans(results: list[ShortResult], save: Path) -> None:
+    """Each Short's plan as `<videoId>.json` in `save` (a Short with none has no file)."""
+    save.mkdir(parents=True, exist_ok=True)
+    for result in results:
+        if result.plan is not None:
+            (save / f"{result.short.videoId}.json").write_text(
+                result.plan.model_dump_json(indent=2)
+            )
 
 
 def settings_indexer(settings: Settings) -> Indexer:
@@ -261,6 +435,7 @@ class Arguments(argparse.Namespace):
     live: bool
     only: list[str]
     shorts: Path
+    save: Path | None
 
 
 def _arguments(argv: list[str]) -> Arguments:
@@ -268,6 +443,7 @@ def _arguments(argv: list[str]) -> Arguments:
     parser.add_argument("--live", action="store_true", help="Index on Vertex AI for real.")
     parser.add_argument("--only", action="append", default=[], help="Just this video id.")
     parser.add_argument("--shorts", type=Path, default=SHORTS_PATH, help="The Shorts' file.")
+    parser.add_argument("--save", type=Path, default=None, help="Write each plan here.")
     return parser.parse_args(argv, namespace=Arguments())
 
 
@@ -284,7 +460,7 @@ async def main(argv: list[str]) -> int:
             log.error("not in the Shorts' file", video_ids=sorted(unknown))
             return USAGE_ERROR
         shorts = [short for short in shorts if short.videoId in arguments.only]
-    return await run_eval(shorts, settings_indexer(get_settings()), time.monotonic)
+    return await run_eval(shorts, settings_indexer(get_settings()), time.monotonic, arguments.save)
 
 
 if __name__ == "__main__":

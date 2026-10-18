@@ -9586,6 +9586,15 @@
                                           ],
                                           "type": "string"
                                         },
+                                        "mode": {
+                                          "enum": [
+                                            "on-camera",
+                                            "voice-over",
+                                            "asset"
+                                          ],
+                                          "type": "string",
+                                          "default": "on-camera"
+                                        },
                                         "title": {
                                           "type": "string"
                                         },
@@ -9855,6 +9864,749 @@
                                         "steps",
                                         "script"
                                       ]
+                                    }
+                                  },
+                                  "assets": {
+                                    "type": "array",
+                                    "maxItems": 12,
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "maxLength": 40,
+                                          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+                                        },
+                                        "kind": {
+                                          "enum": [
+                                            "image",
+                                            "cutout",
+                                            "text-card",
+                                            "background",
+                                            "broll",
+                                            "music",
+                                            "sfx",
+                                            "end-card"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "title": {
+                                          "type": "string"
+                                        },
+                                        "role": {
+                                          "type": "string"
+                                        },
+                                        "description": {
+                                          "type": "string"
+                                        },
+                                        "prompt": {
+                                          "type": "string"
+                                        },
+                                        "sourceStartSeconds": {
+                                          "type": "number",
+                                          "minimum": 0,
+                                          "maximum": 180
+                                        },
+                                        "sourceEndSeconds": {
+                                          "type": "number",
+                                          "minimum": 0.1,
+                                          "maximum": 180
+                                        },
+                                        "defaultSource": {
+                                          "enum": [
+                                            "create",
+                                            "stock",
+                                            "upload"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "personalisable": {
+                                          "type": "boolean"
+                                        },
+                                        "ask": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "secondScreen": {
+                                          "type": "boolean"
+                                        },
+                                        "reference": {
+                                          "type": "object",
+                                          "properties": {
+                                            "subject": {
+                                              "type": "string"
+                                            },
+                                            "composition": {
+                                              "type": "string"
+                                            },
+                                            "style": {
+                                              "type": "string"
+                                            },
+                                            "palette": {
+                                              "type": "string"
+                                            },
+                                            "blackAndWhite": {
+                                              "type": "boolean"
+                                            },
+                                            "aspectRatio": {
+                                              "enum": [
+                                                "9:16",
+                                                "3:4",
+                                                "4:5",
+                                                "1:1",
+                                                "9:8",
+                                                "5:4",
+                                                "4:3",
+                                                "16:9"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "text": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "brands": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              },
+                                              "default": []
+                                            },
+                                            "mood": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "subject",
+                                            "composition",
+                                            "style",
+                                            "palette",
+                                            "blackAndWhite",
+                                            "aspectRatio",
+                                            "text",
+                                            "mood"
+                                          ]
+                                        },
+                                        "image": {
+                                          "type": "object",
+                                          "properties": {
+                                            "status": {
+                                              "enum": [
+                                                "making",
+                                                "ready",
+                                                "failed"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "url": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "string",
+                                                  "format": "uri"
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "status",
+                                            "url"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "title",
+                                        "role",
+                                        "description",
+                                        "prompt",
+                                        "sourceStartSeconds",
+                                        "sourceEndSeconds",
+                                        "defaultSource",
+                                        "personalisable",
+                                        "ask",
+                                        "secondScreen",
+                                        "reference"
+                                      ]
+                                    },
+                                    "default": []
+                                  },
+                                  "edits": {
+                                    "type": "array",
+                                    "maxItems": 40,
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": {
+                                              "const": "layout"
+                                            },
+                                            "startSeconds": {
+                                              "type": "number",
+                                              "minimum": 0,
+                                              "maximum": 180
+                                            },
+                                            "endSeconds": {
+                                              "type": "number",
+                                              "minimum": 0.1,
+                                              "maximum": 180
+                                            },
+                                            "layout": {
+                                              "enum": [
+                                                "full",
+                                                "split",
+                                                "picture-in-picture"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "assetId": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "string",
+                                                  "maxLength": 40
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            },
+                                            "cameraOn": {
+                                              "anyOf": [
+                                                {
+                                                  "enum": [
+                                                    "top",
+                                                    "bottom"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            },
+                                            "cameraShare": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "number",
+                                                  "minimum": 0.2,
+                                                  "maximum": 0.8
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            },
+                                            "box": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "x": {
+                                                      "type": "number",
+                                                      "minimum": 0,
+                                                      "maximum": 1
+                                                    },
+                                                    "y": {
+                                                      "type": "number",
+                                                      "minimum": 0,
+                                                      "maximum": 1
+                                                    },
+                                                    "width": {
+                                                      "type": "number",
+                                                      "minimum": 0.01,
+                                                      "maximum": 1
+                                                    },
+                                                    "height": {
+                                                      "type": "number",
+                                                      "minimum": 0.01,
+                                                      "maximum": 1
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "x",
+                                                    "y",
+                                                    "width",
+                                                    "height"
+                                                  ]
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            },
+                                            "inset": {
+                                              "anyOf": [
+                                                {
+                                                  "enum": [
+                                                    "camera",
+                                                    "asset"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "type",
+                                            "startSeconds",
+                                            "endSeconds",
+                                            "layout",
+                                            "assetId",
+                                            "cameraOn",
+                                            "cameraShare",
+                                            "box",
+                                            "inset"
+                                          ]
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": {
+                                              "const": "overlay"
+                                            },
+                                            "startSeconds": {
+                                              "type": "number",
+                                              "minimum": 0,
+                                              "maximum": 180
+                                            },
+                                            "endSeconds": {
+                                              "type": "number",
+                                              "minimum": 0.1,
+                                              "maximum": 180
+                                            },
+                                            "assetId": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "string",
+                                                  "maxLength": 40
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            },
+                                            "mark": {
+                                              "anyOf": [
+                                                {
+                                                  "enum": [
+                                                    "circle",
+                                                    "underline",
+                                                    "arrow",
+                                                    "box",
+                                                    "highlight",
+                                                    "tick",
+                                                    "cross"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            },
+                                            "color": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "string",
+                                                  "pattern": "^#[0-9A-Fa-f]{6}$"
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            },
+                                            "box": {
+                                              "type": "object",
+                                              "properties": {
+                                                "x": {
+                                                  "type": "number",
+                                                  "minimum": 0,
+                                                  "maximum": 1
+                                                },
+                                                "y": {
+                                                  "type": "number",
+                                                  "minimum": 0,
+                                                  "maximum": 1
+                                                },
+                                                "width": {
+                                                  "type": "number",
+                                                  "minimum": 0.01,
+                                                  "maximum": 1
+                                                },
+                                                "height": {
+                                                  "type": "number",
+                                                  "minimum": 0.01,
+                                                  "maximum": 1
+                                                }
+                                              },
+                                              "required": [
+                                                "x",
+                                                "y",
+                                                "width",
+                                                "height"
+                                              ]
+                                            },
+                                            "entry": {
+                                              "enum": [
+                                                "cut",
+                                                "fade",
+                                                "slide",
+                                                "pop",
+                                                "draw"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "exit": {
+                                              "enum": [
+                                                "cut",
+                                                "fade",
+                                                "slide",
+                                                "pop",
+                                                "draw"
+                                              ],
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "type",
+                                            "startSeconds",
+                                            "endSeconds",
+                                            "assetId",
+                                            "mark",
+                                            "color",
+                                            "box",
+                                            "entry",
+                                            "exit"
+                                          ]
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": {
+                                              "const": "grade"
+                                            },
+                                            "startSeconds": {
+                                              "type": "number",
+                                              "minimum": 0,
+                                              "maximum": 180
+                                            },
+                                            "endSeconds": {
+                                              "type": "number",
+                                              "minimum": 0.1,
+                                              "maximum": 180
+                                            },
+                                            "grade": {
+                                              "enum": [
+                                                "black-and-white",
+                                                "warm",
+                                                "cool",
+                                                "high-contrast",
+                                                "vintage",
+                                                "vivid"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "target": {
+                                              "enum": [
+                                                "all",
+                                                "camera",
+                                                "assets"
+                                              ],
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "type",
+                                            "startSeconds",
+                                            "endSeconds",
+                                            "grade",
+                                            "target"
+                                          ]
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": {
+                                              "const": "text"
+                                            },
+                                            "startSeconds": {
+                                              "type": "number",
+                                              "minimum": 0,
+                                              "maximum": 180
+                                            },
+                                            "endSeconds": {
+                                              "type": "number",
+                                              "minimum": 0.1,
+                                              "maximum": 180
+                                            },
+                                            "style": {
+                                              "enum": [
+                                                "title",
+                                                "lower-third",
+                                                "captions",
+                                                "label",
+                                                "callout"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "text": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "string"
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            },
+                                            "position": {
+                                              "enum": [
+                                                "top",
+                                                "middle",
+                                                "bottom",
+                                                "between-halves"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "captionStyle": {
+                                              "anyOf": [
+                                                {
+                                                  "enum": [
+                                                    "word-by-word",
+                                                    "line",
+                                                    "boxed"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            },
+                                            "color": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "string",
+                                                  "pattern": "^#[0-9A-Fa-f]{6}$"
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            },
+                                            "highlightColor": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "string",
+                                                  "pattern": "^#[0-9A-Fa-f]{6}$"
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "type",
+                                            "startSeconds",
+                                            "endSeconds",
+                                            "style",
+                                            "text",
+                                            "position",
+                                            "captionStyle",
+                                            "color",
+                                            "highlightColor"
+                                          ]
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": {
+                                              "const": "transition"
+                                            },
+                                            "startSeconds": {
+                                              "type": "number",
+                                              "minimum": 0,
+                                              "maximum": 180
+                                            },
+                                            "endSeconds": {
+                                              "type": "number",
+                                              "minimum": 0.1,
+                                              "maximum": 180
+                                            },
+                                            "transition": {
+                                              "enum": [
+                                                "cut",
+                                                "match-cut",
+                                                "whip",
+                                                "fade",
+                                                "zoom",
+                                                "spin",
+                                                "glitch"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "anchor": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "string"
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "type",
+                                            "startSeconds",
+                                            "endSeconds",
+                                            "transition",
+                                            "anchor"
+                                          ]
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": {
+                                              "const": "speed"
+                                            },
+                                            "startSeconds": {
+                                              "type": "number",
+                                              "minimum": 0,
+                                              "maximum": 180
+                                            },
+                                            "endSeconds": {
+                                              "type": "number",
+                                              "minimum": 0.1,
+                                              "maximum": 180
+                                            },
+                                            "fromRate": {
+                                              "type": "number",
+                                              "minimum": 0.1,
+                                              "maximum": 8
+                                            },
+                                            "toRate": {
+                                              "type": "number",
+                                              "minimum": 0.1,
+                                              "maximum": 8
+                                            },
+                                            "easing": {
+                                              "enum": [
+                                                "linear",
+                                                "ease-in",
+                                                "ease-out",
+                                                "ease-in-out"
+                                              ],
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "type",
+                                            "startSeconds",
+                                            "endSeconds",
+                                            "fromRate",
+                                            "toRate",
+                                            "easing"
+                                          ]
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": {
+                                              "const": "end-card"
+                                            },
+                                            "startSeconds": {
+                                              "type": "number",
+                                              "minimum": 0,
+                                              "maximum": 180
+                                            },
+                                            "endSeconds": {
+                                              "type": "number",
+                                              "minimum": 0.1,
+                                              "maximum": 180
+                                            },
+                                            "assetId": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "string",
+                                                  "maxLength": 40
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            },
+                                            "text": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "string"
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "type",
+                                            "startSeconds",
+                                            "endSeconds",
+                                            "assetId",
+                                            "text"
+                                          ]
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": {
+                                              "const": "gap"
+                                            },
+                                            "startSeconds": {
+                                              "type": "number",
+                                              "minimum": 0,
+                                              "maximum": 180
+                                            },
+                                            "endSeconds": {
+                                              "type": "number",
+                                              "minimum": 0.1,
+                                              "maximum": 180
+                                            },
+                                            "description": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "type",
+                                            "startSeconds",
+                                            "endSeconds",
+                                            "description"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "default": []
+                                  },
+                                  "brands": {
+                                    "type": "array",
+                                    "maxItems": 12,
+                                    "items": {
+                                      "type": "string"
                                     }
                                   },
                                   "musicUrl": {
@@ -11347,6 +12099,15 @@
                                     ],
                                     "type": "string"
                                   },
+                                  "mode": {
+                                    "enum": [
+                                      "on-camera",
+                                      "voice-over",
+                                      "asset"
+                                    ],
+                                    "type": "string",
+                                    "default": "on-camera"
+                                  },
                                   "title": {
                                     "type": "string"
                                   },
@@ -11616,6 +12377,749 @@
                                   "steps",
                                   "script"
                                 ]
+                              }
+                            },
+                            "assets": {
+                              "type": "array",
+                              "maxItems": 12,
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "maxLength": 40,
+                                    "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "image",
+                                      "cutout",
+                                      "text-card",
+                                      "background",
+                                      "broll",
+                                      "music",
+                                      "sfx",
+                                      "end-card"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "title": {
+                                    "type": "string"
+                                  },
+                                  "role": {
+                                    "type": "string"
+                                  },
+                                  "description": {
+                                    "type": "string"
+                                  },
+                                  "prompt": {
+                                    "type": "string"
+                                  },
+                                  "sourceStartSeconds": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 180
+                                  },
+                                  "sourceEndSeconds": {
+                                    "type": "number",
+                                    "minimum": 0.1,
+                                    "maximum": 180
+                                  },
+                                  "defaultSource": {
+                                    "enum": [
+                                      "create",
+                                      "stock",
+                                      "upload"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "personalisable": {
+                                    "type": "boolean"
+                                  },
+                                  "ask": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "secondScreen": {
+                                    "type": "boolean"
+                                  },
+                                  "reference": {
+                                    "type": "object",
+                                    "properties": {
+                                      "subject": {
+                                        "type": "string"
+                                      },
+                                      "composition": {
+                                        "type": "string"
+                                      },
+                                      "style": {
+                                        "type": "string"
+                                      },
+                                      "palette": {
+                                        "type": "string"
+                                      },
+                                      "blackAndWhite": {
+                                        "type": "boolean"
+                                      },
+                                      "aspectRatio": {
+                                        "enum": [
+                                          "9:16",
+                                          "3:4",
+                                          "4:5",
+                                          "1:1",
+                                          "9:8",
+                                          "5:4",
+                                          "4:3",
+                                          "16:9"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "text": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "brands": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "default": []
+                                      },
+                                      "mood": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "subject",
+                                      "composition",
+                                      "style",
+                                      "palette",
+                                      "blackAndWhite",
+                                      "aspectRatio",
+                                      "text",
+                                      "mood"
+                                    ]
+                                  },
+                                  "image": {
+                                    "type": "object",
+                                    "properties": {
+                                      "status": {
+                                        "enum": [
+                                          "making",
+                                          "ready",
+                                          "failed"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "url": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "format": "uri"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "status",
+                                      "url"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "kind",
+                                  "title",
+                                  "role",
+                                  "description",
+                                  "prompt",
+                                  "sourceStartSeconds",
+                                  "sourceEndSeconds",
+                                  "defaultSource",
+                                  "personalisable",
+                                  "ask",
+                                  "secondScreen",
+                                  "reference"
+                                ]
+                              },
+                              "default": []
+                            },
+                            "edits": {
+                              "type": "array",
+                              "maxItems": 40,
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "const": "layout"
+                                      },
+                                      "startSeconds": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 180
+                                      },
+                                      "endSeconds": {
+                                        "type": "number",
+                                        "minimum": 0.1,
+                                        "maximum": 180
+                                      },
+                                      "layout": {
+                                        "enum": [
+                                          "full",
+                                          "split",
+                                          "picture-in-picture"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "assetId": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "maxLength": 40
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "cameraOn": {
+                                        "anyOf": [
+                                          {
+                                            "enum": [
+                                              "top",
+                                              "bottom"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "cameraShare": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number",
+                                            "minimum": 0.2,
+                                            "maximum": 0.8
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "box": {
+                                        "anyOf": [
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "x": {
+                                                "type": "number",
+                                                "minimum": 0,
+                                                "maximum": 1
+                                              },
+                                              "y": {
+                                                "type": "number",
+                                                "minimum": 0,
+                                                "maximum": 1
+                                              },
+                                              "width": {
+                                                "type": "number",
+                                                "minimum": 0.01,
+                                                "maximum": 1
+                                              },
+                                              "height": {
+                                                "type": "number",
+                                                "minimum": 0.01,
+                                                "maximum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "x",
+                                              "y",
+                                              "width",
+                                              "height"
+                                            ]
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "inset": {
+                                        "anyOf": [
+                                          {
+                                            "enum": [
+                                              "camera",
+                                              "asset"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "startSeconds",
+                                      "endSeconds",
+                                      "layout",
+                                      "assetId",
+                                      "cameraOn",
+                                      "cameraShare",
+                                      "box",
+                                      "inset"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "const": "overlay"
+                                      },
+                                      "startSeconds": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 180
+                                      },
+                                      "endSeconds": {
+                                        "type": "number",
+                                        "minimum": 0.1,
+                                        "maximum": 180
+                                      },
+                                      "assetId": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "maxLength": 40
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "mark": {
+                                        "anyOf": [
+                                          {
+                                            "enum": [
+                                              "circle",
+                                              "underline",
+                                              "arrow",
+                                              "box",
+                                              "highlight",
+                                              "tick",
+                                              "cross"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "color": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "pattern": "^#[0-9A-Fa-f]{6}$"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "box": {
+                                        "type": "object",
+                                        "properties": {
+                                          "x": {
+                                            "type": "number",
+                                            "minimum": 0,
+                                            "maximum": 1
+                                          },
+                                          "y": {
+                                            "type": "number",
+                                            "minimum": 0,
+                                            "maximum": 1
+                                          },
+                                          "width": {
+                                            "type": "number",
+                                            "minimum": 0.01,
+                                            "maximum": 1
+                                          },
+                                          "height": {
+                                            "type": "number",
+                                            "minimum": 0.01,
+                                            "maximum": 1
+                                          }
+                                        },
+                                        "required": [
+                                          "x",
+                                          "y",
+                                          "width",
+                                          "height"
+                                        ]
+                                      },
+                                      "entry": {
+                                        "enum": [
+                                          "cut",
+                                          "fade",
+                                          "slide",
+                                          "pop",
+                                          "draw"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "exit": {
+                                        "enum": [
+                                          "cut",
+                                          "fade",
+                                          "slide",
+                                          "pop",
+                                          "draw"
+                                        ],
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "startSeconds",
+                                      "endSeconds",
+                                      "assetId",
+                                      "mark",
+                                      "color",
+                                      "box",
+                                      "entry",
+                                      "exit"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "const": "grade"
+                                      },
+                                      "startSeconds": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 180
+                                      },
+                                      "endSeconds": {
+                                        "type": "number",
+                                        "minimum": 0.1,
+                                        "maximum": 180
+                                      },
+                                      "grade": {
+                                        "enum": [
+                                          "black-and-white",
+                                          "warm",
+                                          "cool",
+                                          "high-contrast",
+                                          "vintage",
+                                          "vivid"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "target": {
+                                        "enum": [
+                                          "all",
+                                          "camera",
+                                          "assets"
+                                        ],
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "startSeconds",
+                                      "endSeconds",
+                                      "grade",
+                                      "target"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "const": "text"
+                                      },
+                                      "startSeconds": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 180
+                                      },
+                                      "endSeconds": {
+                                        "type": "number",
+                                        "minimum": 0.1,
+                                        "maximum": 180
+                                      },
+                                      "style": {
+                                        "enum": [
+                                          "title",
+                                          "lower-third",
+                                          "captions",
+                                          "label",
+                                          "callout"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "text": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "position": {
+                                        "enum": [
+                                          "top",
+                                          "middle",
+                                          "bottom",
+                                          "between-halves"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "captionStyle": {
+                                        "anyOf": [
+                                          {
+                                            "enum": [
+                                              "word-by-word",
+                                              "line",
+                                              "boxed"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "color": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "pattern": "^#[0-9A-Fa-f]{6}$"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "highlightColor": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "pattern": "^#[0-9A-Fa-f]{6}$"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "startSeconds",
+                                      "endSeconds",
+                                      "style",
+                                      "text",
+                                      "position",
+                                      "captionStyle",
+                                      "color",
+                                      "highlightColor"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "const": "transition"
+                                      },
+                                      "startSeconds": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 180
+                                      },
+                                      "endSeconds": {
+                                        "type": "number",
+                                        "minimum": 0.1,
+                                        "maximum": 180
+                                      },
+                                      "transition": {
+                                        "enum": [
+                                          "cut",
+                                          "match-cut",
+                                          "whip",
+                                          "fade",
+                                          "zoom",
+                                          "spin",
+                                          "glitch"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "anchor": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "startSeconds",
+                                      "endSeconds",
+                                      "transition",
+                                      "anchor"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "const": "speed"
+                                      },
+                                      "startSeconds": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 180
+                                      },
+                                      "endSeconds": {
+                                        "type": "number",
+                                        "minimum": 0.1,
+                                        "maximum": 180
+                                      },
+                                      "fromRate": {
+                                        "type": "number",
+                                        "minimum": 0.1,
+                                        "maximum": 8
+                                      },
+                                      "toRate": {
+                                        "type": "number",
+                                        "minimum": 0.1,
+                                        "maximum": 8
+                                      },
+                                      "easing": {
+                                        "enum": [
+                                          "linear",
+                                          "ease-in",
+                                          "ease-out",
+                                          "ease-in-out"
+                                        ],
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "startSeconds",
+                                      "endSeconds",
+                                      "fromRate",
+                                      "toRate",
+                                      "easing"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "const": "end-card"
+                                      },
+                                      "startSeconds": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 180
+                                      },
+                                      "endSeconds": {
+                                        "type": "number",
+                                        "minimum": 0.1,
+                                        "maximum": 180
+                                      },
+                                      "assetId": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "maxLength": 40
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "text": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "startSeconds",
+                                      "endSeconds",
+                                      "assetId",
+                                      "text"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "const": "gap"
+                                      },
+                                      "startSeconds": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 180
+                                      },
+                                      "endSeconds": {
+                                        "type": "number",
+                                        "minimum": 0.1,
+                                        "maximum": 180
+                                      },
+                                      "description": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "startSeconds",
+                                      "endSeconds",
+                                      "description"
+                                    ]
+                                  }
+                                ]
+                              },
+                              "default": []
+                            },
+                            "brands": {
+                              "type": "array",
+                              "maxItems": 12,
+                              "items": {
+                                "type": "string"
                               }
                             },
                             "musicUrl": {
@@ -13091,6 +14595,15 @@
                                     ],
                                     "type": "string"
                                   },
+                                  "mode": {
+                                    "enum": [
+                                      "on-camera",
+                                      "voice-over",
+                                      "asset"
+                                    ],
+                                    "type": "string",
+                                    "default": "on-camera"
+                                  },
                                   "title": {
                                     "type": "string"
                                   },
@@ -13360,6 +14873,749 @@
                                   "steps",
                                   "script"
                                 ]
+                              }
+                            },
+                            "assets": {
+                              "type": "array",
+                              "maxItems": 12,
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "maxLength": 40,
+                                    "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "image",
+                                      "cutout",
+                                      "text-card",
+                                      "background",
+                                      "broll",
+                                      "music",
+                                      "sfx",
+                                      "end-card"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "title": {
+                                    "type": "string"
+                                  },
+                                  "role": {
+                                    "type": "string"
+                                  },
+                                  "description": {
+                                    "type": "string"
+                                  },
+                                  "prompt": {
+                                    "type": "string"
+                                  },
+                                  "sourceStartSeconds": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 180
+                                  },
+                                  "sourceEndSeconds": {
+                                    "type": "number",
+                                    "minimum": 0.1,
+                                    "maximum": 180
+                                  },
+                                  "defaultSource": {
+                                    "enum": [
+                                      "create",
+                                      "stock",
+                                      "upload"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "personalisable": {
+                                    "type": "boolean"
+                                  },
+                                  "ask": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "secondScreen": {
+                                    "type": "boolean"
+                                  },
+                                  "reference": {
+                                    "type": "object",
+                                    "properties": {
+                                      "subject": {
+                                        "type": "string"
+                                      },
+                                      "composition": {
+                                        "type": "string"
+                                      },
+                                      "style": {
+                                        "type": "string"
+                                      },
+                                      "palette": {
+                                        "type": "string"
+                                      },
+                                      "blackAndWhite": {
+                                        "type": "boolean"
+                                      },
+                                      "aspectRatio": {
+                                        "enum": [
+                                          "9:16",
+                                          "3:4",
+                                          "4:5",
+                                          "1:1",
+                                          "9:8",
+                                          "5:4",
+                                          "4:3",
+                                          "16:9"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "text": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "brands": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "default": []
+                                      },
+                                      "mood": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "subject",
+                                      "composition",
+                                      "style",
+                                      "palette",
+                                      "blackAndWhite",
+                                      "aspectRatio",
+                                      "text",
+                                      "mood"
+                                    ]
+                                  },
+                                  "image": {
+                                    "type": "object",
+                                    "properties": {
+                                      "status": {
+                                        "enum": [
+                                          "making",
+                                          "ready",
+                                          "failed"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "url": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "format": "uri"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "status",
+                                      "url"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "kind",
+                                  "title",
+                                  "role",
+                                  "description",
+                                  "prompt",
+                                  "sourceStartSeconds",
+                                  "sourceEndSeconds",
+                                  "defaultSource",
+                                  "personalisable",
+                                  "ask",
+                                  "secondScreen",
+                                  "reference"
+                                ]
+                              },
+                              "default": []
+                            },
+                            "edits": {
+                              "type": "array",
+                              "maxItems": 40,
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "const": "layout"
+                                      },
+                                      "startSeconds": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 180
+                                      },
+                                      "endSeconds": {
+                                        "type": "number",
+                                        "minimum": 0.1,
+                                        "maximum": 180
+                                      },
+                                      "layout": {
+                                        "enum": [
+                                          "full",
+                                          "split",
+                                          "picture-in-picture"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "assetId": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "maxLength": 40
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "cameraOn": {
+                                        "anyOf": [
+                                          {
+                                            "enum": [
+                                              "top",
+                                              "bottom"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "cameraShare": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number",
+                                            "minimum": 0.2,
+                                            "maximum": 0.8
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "box": {
+                                        "anyOf": [
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "x": {
+                                                "type": "number",
+                                                "minimum": 0,
+                                                "maximum": 1
+                                              },
+                                              "y": {
+                                                "type": "number",
+                                                "minimum": 0,
+                                                "maximum": 1
+                                              },
+                                              "width": {
+                                                "type": "number",
+                                                "minimum": 0.01,
+                                                "maximum": 1
+                                              },
+                                              "height": {
+                                                "type": "number",
+                                                "minimum": 0.01,
+                                                "maximum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "x",
+                                              "y",
+                                              "width",
+                                              "height"
+                                            ]
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "inset": {
+                                        "anyOf": [
+                                          {
+                                            "enum": [
+                                              "camera",
+                                              "asset"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "startSeconds",
+                                      "endSeconds",
+                                      "layout",
+                                      "assetId",
+                                      "cameraOn",
+                                      "cameraShare",
+                                      "box",
+                                      "inset"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "const": "overlay"
+                                      },
+                                      "startSeconds": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 180
+                                      },
+                                      "endSeconds": {
+                                        "type": "number",
+                                        "minimum": 0.1,
+                                        "maximum": 180
+                                      },
+                                      "assetId": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "maxLength": 40
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "mark": {
+                                        "anyOf": [
+                                          {
+                                            "enum": [
+                                              "circle",
+                                              "underline",
+                                              "arrow",
+                                              "box",
+                                              "highlight",
+                                              "tick",
+                                              "cross"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "color": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "pattern": "^#[0-9A-Fa-f]{6}$"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "box": {
+                                        "type": "object",
+                                        "properties": {
+                                          "x": {
+                                            "type": "number",
+                                            "minimum": 0,
+                                            "maximum": 1
+                                          },
+                                          "y": {
+                                            "type": "number",
+                                            "minimum": 0,
+                                            "maximum": 1
+                                          },
+                                          "width": {
+                                            "type": "number",
+                                            "minimum": 0.01,
+                                            "maximum": 1
+                                          },
+                                          "height": {
+                                            "type": "number",
+                                            "minimum": 0.01,
+                                            "maximum": 1
+                                          }
+                                        },
+                                        "required": [
+                                          "x",
+                                          "y",
+                                          "width",
+                                          "height"
+                                        ]
+                                      },
+                                      "entry": {
+                                        "enum": [
+                                          "cut",
+                                          "fade",
+                                          "slide",
+                                          "pop",
+                                          "draw"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "exit": {
+                                        "enum": [
+                                          "cut",
+                                          "fade",
+                                          "slide",
+                                          "pop",
+                                          "draw"
+                                        ],
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "startSeconds",
+                                      "endSeconds",
+                                      "assetId",
+                                      "mark",
+                                      "color",
+                                      "box",
+                                      "entry",
+                                      "exit"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "const": "grade"
+                                      },
+                                      "startSeconds": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 180
+                                      },
+                                      "endSeconds": {
+                                        "type": "number",
+                                        "minimum": 0.1,
+                                        "maximum": 180
+                                      },
+                                      "grade": {
+                                        "enum": [
+                                          "black-and-white",
+                                          "warm",
+                                          "cool",
+                                          "high-contrast",
+                                          "vintage",
+                                          "vivid"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "target": {
+                                        "enum": [
+                                          "all",
+                                          "camera",
+                                          "assets"
+                                        ],
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "startSeconds",
+                                      "endSeconds",
+                                      "grade",
+                                      "target"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "const": "text"
+                                      },
+                                      "startSeconds": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 180
+                                      },
+                                      "endSeconds": {
+                                        "type": "number",
+                                        "minimum": 0.1,
+                                        "maximum": 180
+                                      },
+                                      "style": {
+                                        "enum": [
+                                          "title",
+                                          "lower-third",
+                                          "captions",
+                                          "label",
+                                          "callout"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "text": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "position": {
+                                        "enum": [
+                                          "top",
+                                          "middle",
+                                          "bottom",
+                                          "between-halves"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "captionStyle": {
+                                        "anyOf": [
+                                          {
+                                            "enum": [
+                                              "word-by-word",
+                                              "line",
+                                              "boxed"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "color": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "pattern": "^#[0-9A-Fa-f]{6}$"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "highlightColor": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "pattern": "^#[0-9A-Fa-f]{6}$"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "startSeconds",
+                                      "endSeconds",
+                                      "style",
+                                      "text",
+                                      "position",
+                                      "captionStyle",
+                                      "color",
+                                      "highlightColor"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "const": "transition"
+                                      },
+                                      "startSeconds": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 180
+                                      },
+                                      "endSeconds": {
+                                        "type": "number",
+                                        "minimum": 0.1,
+                                        "maximum": 180
+                                      },
+                                      "transition": {
+                                        "enum": [
+                                          "cut",
+                                          "match-cut",
+                                          "whip",
+                                          "fade",
+                                          "zoom",
+                                          "spin",
+                                          "glitch"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "anchor": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "startSeconds",
+                                      "endSeconds",
+                                      "transition",
+                                      "anchor"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "const": "speed"
+                                      },
+                                      "startSeconds": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 180
+                                      },
+                                      "endSeconds": {
+                                        "type": "number",
+                                        "minimum": 0.1,
+                                        "maximum": 180
+                                      },
+                                      "fromRate": {
+                                        "type": "number",
+                                        "minimum": 0.1,
+                                        "maximum": 8
+                                      },
+                                      "toRate": {
+                                        "type": "number",
+                                        "minimum": 0.1,
+                                        "maximum": 8
+                                      },
+                                      "easing": {
+                                        "enum": [
+                                          "linear",
+                                          "ease-in",
+                                          "ease-out",
+                                          "ease-in-out"
+                                        ],
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "startSeconds",
+                                      "endSeconds",
+                                      "fromRate",
+                                      "toRate",
+                                      "easing"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "const": "end-card"
+                                      },
+                                      "startSeconds": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 180
+                                      },
+                                      "endSeconds": {
+                                        "type": "number",
+                                        "minimum": 0.1,
+                                        "maximum": 180
+                                      },
+                                      "assetId": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "maxLength": 40
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "text": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "startSeconds",
+                                      "endSeconds",
+                                      "assetId",
+                                      "text"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "const": "gap"
+                                      },
+                                      "startSeconds": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 180
+                                      },
+                                      "endSeconds": {
+                                        "type": "number",
+                                        "minimum": 0.1,
+                                        "maximum": 180
+                                      },
+                                      "description": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "startSeconds",
+                                      "endSeconds",
+                                      "description"
+                                    ]
+                                  }
+                                ]
+                              },
+                              "default": []
+                            },
+                            "brands": {
+                              "type": "array",
+                              "maxItems": 12,
+                              "items": {
+                                "type": "string"
                               }
                             },
                             "musicUrl": {

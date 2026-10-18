@@ -26,6 +26,7 @@ from bullmq.types import (  # pyright: ignore[reportMissingTypeStubs]
 )
 from pydantic import TypeAdapter
 
+from app.contracts.ai_director_assets_job import AiDirectorAssetsJob
 from app.contracts.ai_director_job_name import AiDirectorJobName
 from app.contracts.ai_director_plan_job import AiDirectorPlanJob
 from app.contracts.ai_director_review_take_job import AiDirectorReviewTakeJob
@@ -69,6 +70,23 @@ class DirectorQueue:
             }
         )
         await self._add("plan", data.model_dump(mode="json", exclude_none=True), job_id)
+
+    async def add_assets(
+        self,
+        plan_id: UUID,
+        org_id: UUID,
+        *,
+        job_id: str,
+        request_id: str | None,
+        user_id: UUID | None,
+    ) -> None:
+        data = AiDirectorAssetsJob.model_validate(
+            {
+                "meta": _meta(org_id, request_id, user_id),
+                "payload": {"planId": plan_id, "orgId": org_id},
+            }
+        )
+        await self._add("assets", data.model_dump(mode="json", exclude_none=True), job_id)
 
     async def add_review(
         self,

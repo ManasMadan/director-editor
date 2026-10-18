@@ -15,17 +15,37 @@ why), so `repair_plan` is also where `MAX_SHOTS`, `MAX_SHOT_STEPS`, `MAX_SCRIPT_
 and `MAX_POSE_KEYPOINTS` are enforced, by trimming an answer that runs over. The result
 is validated against the real `ShotPlan` (which does carry those bounds, among everything
 else): a trim that still runs over fails loudly here, rather than being stored.
+
+The plan's assets and edits get the same treatment: an asset's id becomes one its
+default image's storage key can carry, timings are kept inside the Short and in order,
+and each edit (one flat shape in the draft, so Gemini's schema stays simple) becomes its
+own type's model, or is dropped when it lacks what its type needs (an overlay with
+nothing to show, a grade with no grade).
 """
 
 import math
+import re
+from collections.abc import Callable
 
+from pydantic import TypeAdapter
+
+from app.branding import unbranding
 from app.schemas import (
+    COLOR_PATTERN,
+    MAX_ASSET_ID,
+    MAX_ASSET_TEXT_LINES,
+    MAX_ASSETS,
+    MAX_EDITS,
     MAX_POSE_KEYPOINTS,
     MAX_SCRIPT_LINES,
     MAX_SHORT_SECONDS,
     MAX_SHOT_SECONDS,
     MAX_SHOT_STEPS,
     MAX_SHOTS,
+    AssetDraft,
+    Box,
+    EditDraft,
+    EditType,
     ScriptLine,
     ShotDraft,
     ShotPlan,
@@ -39,6 +59,7 @@ MIN_SHOT_SOURCE_SECONDS = 0.3
 # ScriptLine.endSeconds must be at least this (its own Field constraint); a clamped line
 # shorter than it said nothing worth keeping.
 MIN_SCRIPT_LINE_SECONDS = 0.1
+_BOX: TypeAdapter[Box | None] = TypeAdapter(Box | None)
 
 
 def repair_plan(plan: ShotPlanDraft, video_seconds: float | None) -> ShotPlan:
@@ -61,6 +82,8 @@ def repair_plan(plan: ShotPlanDraft, video_seconds: float | None) -> ShotPlan:
     `MAX_SHOT_STEPS`, a shot left with no steps gets one synthesized from its scene, and
     its pose's keypoints are trimmed to `MAX_POSE_KEYPOINTS`. The plan's own
     `durationSeconds` is then the sum of its shots', not whatever Gemini originally wrote.
+    Last, its assets and edits are repaired against where the Short ends
+    (`_repair_assets`, `_repair_edits`).
 
     Raises `ValueError` for a plan with no shots at all: there's nothing to repair that
     into, and the draft's `shots` carries no `minItems` to have refused it on the way in.
@@ -76,6 +99,9 @@ def repair_plan(plan: ShotPlanDraft, video_seconds: float | None) -> ShotPlan:
     repaired = [
         _repair_shot(shot, duration) for shot, duration in zip(shots, durations, strict=True)
     ]
+    end = _end_of_short([shot.sourceEndSeconds for shot in repaired], video_seconds)
+    brands = _lines(plan.brands, 80)
+    assets, renamed = _repair_assets(plan.assets, end, brands)
     # Validated against the real ShotPlan (its Field constraints, not the draft's looser
     # ones): a trim that still leaves too much of something raises here, loudly, rather
     # than writing an inconsistent plan.
@@ -84,8 +110,43 @@ def repair_plan(plan: ShotPlanDraft, video_seconds: float | None) -> ShotPlan:
             **plan.model_dump(mode="json"),
             "shots": [shot.model_dump(mode="json") for shot in repaired],
             "durationSeconds": sum(shot.durationSeconds for shot in repaired),
+            "assets": assets,
+            "edits": _repair_edits(plan.edits, renamed, end, unbranding(brands)),
+            "brands": brands,
         }
     )
+
+
+def with_assets_and_edits(plan: ShotPlan, source: ShotPlan) -> ShotPlan:
+    """`plan` with `source`'s assets and edits, repaired against `plan`'s own Short: how a
+    seed already filmed and drawn for gains the assets and edits a newer index of the same
+    Short found, without its shots (and the media made from them) changing
+    (scripts/seed_assets.py)."""
+    end = _end_of_short([shot.sourceEndSeconds for shot in plan.shots], None)
+    assets, renamed = _repair_assets(
+        [AssetDraft.model_validate(asset.model_dump()) for asset in source.assets],
+        end,
+        source.brands,
+    )
+    edits = [_draft_of(edit.model_dump(mode="json")) for edit in source.edits]
+    return ShotPlan.model_validate(
+        {
+            **plan.model_dump(mode="json"),
+            "assets": assets,
+            "edits": _repair_edits(edits, renamed, end, unbranding(source.brands)),
+            "brands": source.brands,
+        }
+    )
+
+
+def _draft_of(edit: dict[str, object]) -> EditDraft:
+    """A stored edit as the planner's flat draft: its fields, its box as four numbers, and
+    null for every field its type doesn't use."""
+    unused: dict[str, object] = {field: None for field in EditDraft.model_fields}
+    box = _BOX.validate_python(edit.pop("box", None))
+    if box is not None:
+        unused |= {"boxX": box.x, "boxY": box.y, "boxWidth": box.width, "boxHeight": box.height}
+    return EditDraft.model_validate({**unused, **edit})
 
 
 def _clamp_source(shot: ShotDraft, ceiling: float) -> ShotDraft:
@@ -231,6 +292,250 @@ def _synthesized_step(shot: ShotDraft) -> ShotStep:
     short's own language, unlike a hard-coded phrase), rather than fail the plan over a
     detail a beginner filmer would never notice was synthesized."""
     return ShotStep(atSeconds=0, instruction=shot.scene[:160], cameraMove="static")
+
+
+# ---------------------------------------------------------------------- assets and edits
+
+# Below this, an edit is a blink nobody would see, except a transition, which gets the
+# length of a quick one when Gemini gives it none (a cut is an instant).
+MIN_EDIT_SECONDS = 0.1
+TRANSITION_SECONDS = 0.3
+# Box.width and Box.height's own floor.
+MIN_BOX = 0.01
+_COLOR = re.compile(COLOR_PATTERN)
+_WORD = re.compile(r"[a-z0-9]+")
+# What a repaired asset or edit is before ShotPlan validates it.
+type Fields = dict[str, object]
+# The asset an edit names, by the id Gemini gave it: its repaired id, or None when the
+# plan has no such asset.
+type AssetOf = Callable[[str | None], str | None]
+
+
+def _end_of_short(shot_ends: list[float], video_seconds: float | None) -> float:
+    """Where the Short ends, for an asset's or an edit's timing (seconds of the original,
+    like a shot's source range): the video's own length when it's known, otherwise where
+    its last shot ends."""
+    end = video_seconds if video_seconds is not None else max(shot_ends)
+    return max(end, MIN_EDIT_SECONDS)
+
+
+def _text(value: str | None) -> str | None:
+    """`value` without the spaces around it; None when that leaves nothing."""
+    stripped = (value or "").strip()
+    return stripped or None
+
+
+def _color(value: str | None) -> str | None:
+    return value if value is not None and _COLOR.fullmatch(value) else None
+
+
+def _repair_assets(
+    drafts: list[AssetDraft], end: float, brands: list[str]
+) -> tuple[list[Fields], dict[str, str]]:
+    """The assets in the order they first show, at most `MAX_ASSETS`, each with an id the
+    storage key can carry (unique in the plan), its timing inside the Short and its text
+    trimmed, and the plan's `brands` among its own; and each kept one's new id by the id
+    Gemini gave it, for the edits."""
+    kept = sorted(drafts, key=lambda draft: draft.sourceStartSeconds)[:MAX_ASSETS]
+    used: set[str] = set()
+    renamed: dict[str, str] = {}
+    assets: list[Fields] = []
+    for position, draft in enumerate(kept, start=1):
+        asset_id = _unique(_slug(draft.id) or f"asset-{position}", position, used)
+        used.add(asset_id)
+        renamed.setdefault(draft.id, asset_id)
+        start, stop = _span(draft.sourceStartSeconds, draft.sourceEndSeconds, end)
+        reference = {
+            **draft.reference.model_dump(mode="json"),
+            "text": _lines(draft.reference.text, 200),
+            # The plan's own identity is on every asset too, for its default image.
+            "brands": _lines([*draft.reference.brands, *brands], 80),
+        }
+        assets.append(
+            {
+                **draft.model_dump(mode="json"),
+                "id": asset_id,
+                "reference": reference,
+                "sourceStartSeconds": start,
+                "sourceEndSeconds": stop,
+                "ask": _text(draft.ask),
+            }
+        )
+    return assets, renamed
+
+
+def _lines(lines: list[str], longest: int) -> list[str]:
+    """The non-blank `lines`, each cut to `longest` and each once, at most
+    `MAX_ASSET_TEXT_LINES`."""
+    kept = dict.fromkeys(line.strip()[:longest] for line in lines if line.strip())
+    return list(kept)[:MAX_ASSET_TEXT_LINES]
+
+
+def _slug(text: str) -> str:
+    """`text` as lowercase words joined by hyphens: never longer than it was."""
+    return "-".join(_WORD.findall(text.lower()))
+
+
+def _unique(asset_id: str, position: int, used: set[str]) -> str:
+    """`asset_id`, or one with a number after it when another asset has it already."""
+    candidate, number = asset_id, position
+    while candidate in used:
+        suffix = f"-{number}"
+        candidate = asset_id[: MAX_ASSET_ID - len(suffix)].rstrip("-") + suffix
+        number += 1
+    return candidate
+
+
+def _span(start: float, stop: float, end: float) -> tuple[float, float]:
+    """An asset's timing inside the Short; the whole Short when what's left isn't one."""
+    start, stop = _clamp(start, 0, end), _clamp(stop, 0, end)
+    return (start, stop) if stop - start >= MIN_EDIT_SECONDS else (0, end)
+
+
+def _repair_edits(
+    drafts: list[EditDraft],
+    renamed: dict[str, str],
+    end: float,
+    unbranded: Callable[[str], str],
+) -> list[Fields]:
+    """Each edit as its type's own model, inside the Short and in order of when it
+    starts (ties as they came), at most `MAX_EDITS`; one its type can't be made whole
+    from is dropped. An asset it names is the repaired one (`renamed`), or none, and its
+    words carry no branding of the original's (`unbranded`)."""
+
+    def asset_of(asset_id: str | None) -> str | None:
+        return renamed.get(asset_id) if asset_id is not None else None
+
+    edits: list[tuple[float, float, Fields]] = []
+    for draft in drafts:
+        timing = _edit_timing(draft, end)
+        words = _text(draft.text)
+        fields = _EDITS[draft.type](
+            draft.model_copy(update={"text": unbranded(words) if words else None}), asset_of
+        )
+        if timing is not None and fields is not None:
+            start, stop = timing
+            edit = {"type": draft.type, "startSeconds": start, "endSeconds": stop, **fields}
+            edits.append((start, stop, edit))
+    edits.sort(key=lambda each: each[:2])
+    return [edit for _, _, edit in edits[:MAX_EDITS]]
+
+
+def _edit_timing(draft: EditDraft, end: float) -> tuple[float, float] | None:
+    start, stop = _clamp(draft.startSeconds, 0, end), _clamp(draft.endSeconds, 0, end)
+    if stop - start >= MIN_EDIT_SECONDS:
+        return start, stop
+    if draft.type != "transition":
+        return None
+    start = max(0, min(start, end - TRANSITION_SECONDS))
+    return start, min(start + TRANSITION_SECONDS, end)
+
+
+def _box(draft: EditDraft) -> Fields | None:
+    """The edit's box (four numbers in the draft), held inside the frame; None when any
+    of them is missing."""
+    x, y, width, height = draft.boxX, draft.boxY, draft.boxWidth, draft.boxHeight
+    if x is None or y is None or width is None or height is None:
+        return None
+    left, top = _clamp(x, 0, 1), _clamp(y, 0, 1)
+    return {
+        "x": left,
+        "y": top,
+        "width": _clamp(width, MIN_BOX, 1),
+        "height": _clamp(height, MIN_BOX, 1),
+    }
+
+
+def _layout(draft: EditDraft, asset_of: AssetOf) -> Fields | None:
+    box = _box(draft)
+    if draft.layout is None or (draft.layout == "picture-in-picture" and box is None):
+        return None
+    split = draft.layout == "split"
+    inset = draft.layout == "picture-in-picture"
+    share = _clamp(draft.cameraShare or 0.5, 0.2, 0.8)
+    return {
+        "layout": draft.layout,
+        "assetId": asset_of(draft.assetId),
+        "cameraOn": (draft.cameraOn or "top") if split else None,
+        "cameraShare": share if split else None,
+        "box": box if inset else None,
+        "inset": (draft.inset or "camera") if inset else None,
+    }
+
+
+def _overlay(draft: EditDraft, asset_of: AssetOf) -> Fields | None:
+    asset_id = asset_of(draft.assetId)
+    box = _box(draft)
+    if box is None or (asset_id is None and draft.mark is None):
+        return None
+    return {
+        "assetId": asset_id,
+        "mark": draft.mark,
+        "color": _color(draft.color),
+        "box": box,
+        "entry": draft.entry or "cut",
+        "exit": draft.exit or "cut",
+    }
+
+
+def _grade(draft: EditDraft, _asset_of: AssetOf) -> Fields | None:
+    if draft.grade is None:
+        return None
+    return {"grade": draft.grade, "target": draft.target or "all"}
+
+
+def _words(draft: EditDraft, _asset_of: AssetOf) -> Fields | None:
+    captions = draft.style == "captions"
+    text = None if captions else _text(draft.text)
+    if draft.style is None or (not captions and text is None):
+        return None
+    return {
+        "style": draft.style,
+        "text": text,
+        "position": draft.position or "bottom",
+        "captionStyle": (draft.captionStyle or "word-by-word") if captions else None,
+        "color": _color(draft.color),
+        "highlightColor": _color(draft.highlightColor),
+    }
+
+
+def _transition(draft: EditDraft, _asset_of: AssetOf) -> Fields | None:
+    if draft.transition is None:
+        return None
+    return {"transition": draft.transition, "anchor": _text(draft.anchor)}
+
+
+def _speed(draft: EditDraft, _asset_of: AssetOf) -> Fields | None:
+    start = _clamp(draft.fromRate or 1, 0.1, 8)
+    stop = _clamp(draft.toRate or start, 0.1, 8)
+    if start == stop == 1:
+        return None
+    return {"fromRate": start, "toRate": stop, "easing": draft.easing or "linear"}
+
+
+def _end_card(draft: EditDraft, asset_of: AssetOf) -> Fields | None:
+    return {
+        "assetId": asset_of(draft.assetId),
+        "text": _text(draft.text),
+    }
+
+
+def _gap(draft: EditDraft, _asset_of: AssetOf) -> Fields | None:
+    description = _text(draft.description)
+    return None if description is None else {"description": description}
+
+
+# What each edit type keeps of the flat draft (None: it can't be made whole).
+_EDITS: dict[EditType, Callable[[EditDraft, AssetOf], Fields | None]] = {
+    "layout": _layout,
+    "overlay": _overlay,
+    "grade": _grade,
+    "text": _words,
+    "transition": _transition,
+    "speed": _speed,
+    "end-card": _end_card,
+    "gap": _gap,
+}
 
 
 def _clamp(value: float, low: float, high: float) -> float:

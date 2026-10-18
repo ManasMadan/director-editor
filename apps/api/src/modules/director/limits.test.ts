@@ -22,6 +22,7 @@ const node = z.looseObject({
   items: z.unknown().optional(),
   enum: z.array(z.unknown()).optional(),
   anyOf: z.array(z.unknown()).optional(),
+  oneOf: z.array(z.unknown()).optional(),
   maxLength: z.number().optional(),
   minLength: z.number().optional(),
   exclusiveMaximum: z.number().optional(),
@@ -34,7 +35,7 @@ function shape(schema: unknown, at = ""): Record<string, string> {
   if (!parsed.success) {
     return {};
   }
-  const { properties, items, anyOf } = parsed.data;
+  const { properties, items, anyOf, oneOf } = parsed.data;
   const found: Record<string, string> = parsed.data.enum
     ? { [at]: parsed.data.enum.join("|") }
     : {};
@@ -44,7 +45,7 @@ function shape(schema: unknown, at = ""): Record<string, string> {
   if (items) {
     Object.assign(found, shape(items, `${at}[]`));
   }
-  for (const option of anyOf ?? []) {
+  for (const option of [...(anyOf ?? []), ...(oneOf ?? [])]) {
     Object.assign(found, shape(option, at));
   }
   return found;
@@ -79,7 +80,13 @@ describe("Director's contract and the AI service", () => {
     const plan = shape(json(zShotPlan));
     // Every field down to the pose's joints, not a comparison of two empty walks.
     expect(Object.keys(plan)).toEqual(
-      expect.arrayContaining([".shots[].pose.keypoints[].name", ".shots[].steps[].cameraMove"]),
+      expect.arrayContaining([
+        ".shots[].pose.keypoints[].name",
+        ".shots[].steps[].cameraMove",
+        ".assets[].reference.aspectRatio",
+        ".edits[].transition",
+        ".edits[].box.width",
+      ]),
     );
     expect(shape(json(shotPlanSchema))).toEqual(plan);
     expect(node.parse(node.parse(json(zShotPlan)).properties?.shots).maxItems).toBe(

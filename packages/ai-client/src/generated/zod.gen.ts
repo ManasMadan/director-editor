@@ -2,6 +2,86 @@
 
 import * as z from 'zod';
 
+export const zAspectRatio = z.enum([
+    '9:16',
+    '3:4',
+    '4:5',
+    '1:1',
+    '9:8',
+    '5:4',
+    '4:3',
+    '16:9'
+]);
+
+/**
+ * AssetImageOut
+ *
+ * The default image made for one of a plan's assets (app/assets.py).
+ */
+export const zAssetImageOut = z.object({
+    assetId: z.string().min(1).max(40).regex(/^[a-z0-9]+(-[a-z0-9]+)*$/),
+    objectKey: z.string().max(200).nullable(),
+    status: z.enum([
+        'pending',
+        'generating',
+        'ready',
+        'failed'
+    ])
+});
+
+export const zAssetKind = z.enum([
+    'image',
+    'cutout',
+    'text-card',
+    'background',
+    'broll',
+    'music',
+    'sfx',
+    'end-card'
+]);
+
+/**
+ * AssetReference
+ *
+ * The original's piece, described precisely enough to recreate its look.
+ */
+export const zAssetReference = z.object({
+    aspectRatio: zAspectRatio,
+    blackAndWhite: z.boolean(),
+    brands: z.array(z.string().min(1).max(80)).max(12).optional(),
+    composition: z.string().min(1).max(300),
+    mood: z.string().min(1).max(160),
+    palette: z.string().min(1).max(200),
+    style: z.string().min(1).max(200),
+    subject: z.string().min(1).max(300),
+    text: z.array(z.string().min(1).max(200)).max(12)
+});
+
+export const zAssetSource = z.enum([
+    'create',
+    'stock',
+    'upload'
+]);
+
+/**
+ * Asset
+ */
+export const zAsset = z.object({
+    ask: z.string().max(160).nullable(),
+    defaultSource: zAssetSource,
+    description: z.string().min(1).max(600),
+    id: z.string().min(1).max(40).regex(/^[a-z0-9]+(-[a-z0-9]+)*$/),
+    kind: zAssetKind,
+    personalisable: z.boolean(),
+    prompt: z.string().min(1).max(1500),
+    reference: zAssetReference,
+    role: z.string().min(1).max(240),
+    secondScreen: z.boolean(),
+    sourceEndSeconds: z.number().gte(0.1).lte(180),
+    sourceStartSeconds: z.number().gte(0).lte(180),
+    title: z.string().min(1).max(80)
+});
+
 /**
  * Box
  */
@@ -159,6 +239,17 @@ export const zDirectorTakeOut = z.object({
 });
 
 /**
+ * EndCardEdit
+ */
+export const zEndCardEdit = z.object({
+    assetId: z.string().max(40).nullable(),
+    endSeconds: z.number().gte(0.1).lte(180),
+    startSeconds: z.number().gte(0).lte(180),
+    text: z.string().min(1).max(240).nullable(),
+    type: z.literal('end-card')
+});
+
+/**
  * ErrorCode
  */
 export const zErrorCode = z.enum([
@@ -272,6 +363,40 @@ export const zFraming = z.object({
 });
 
 /**
+ * GapEdit
+ *
+ * A moment to fill with B-roll or a cutaway: what it shows, for as long as it lasts.
+ */
+export const zGapEdit = z.object({
+    description: z.string().min(1).max(240),
+    endSeconds: z.number().gte(0.1).lte(180),
+    startSeconds: z.number().gte(0).lte(180),
+    type: z.literal('gap')
+});
+
+/**
+ * GradeEdit
+ */
+export const zGradeEdit = z.object({
+    endSeconds: z.number().gte(0.1).lte(180),
+    grade: z.enum([
+        'black-and-white',
+        'warm',
+        'cool',
+        'high-contrast',
+        'vintage',
+        'vivid'
+    ]),
+    startSeconds: z.number().gte(0).lte(180),
+    target: z.enum([
+        'all',
+        'camera',
+        'assets'
+    ]),
+    type: z.literal('grade')
+});
+
+/**
  * HealthResponse
  */
 export const zHealthResponse = z.object({
@@ -304,6 +429,29 @@ export const zKeypoint = z.object({
 });
 
 /**
+ * LayoutEdit
+ *
+ * How the frame is shared: the camera full frame (or an asset, for a voice-over), a
+ * split with the camera on top or at the bottom taking `cameraShare` of the height and
+ * the asset in the rest, or picture-in-picture with the `inset` in `box`.
+ */
+export const zLayoutEdit = z.object({
+    assetId: z.string().max(40).nullable(),
+    box: zBox.nullable(),
+    cameraOn: z.enum(['top', 'bottom']).nullable(),
+    cameraShare: z.number().gte(0.2).lte(0.8).nullable(),
+    endSeconds: z.number().gte(0.1).lte(180),
+    inset: z.enum(['camera', 'asset']).nullable(),
+    layout: z.enum([
+        'full',
+        'split',
+        'picture-in-picture'
+    ]),
+    startSeconds: z.number().gte(0).lte(180),
+    type: z.literal('layout')
+});
+
+/**
  * LocateRequest
  */
 export const zLocateRequest = z.object({
@@ -320,6 +468,43 @@ export const zLocated = z.object({
     box: zBox.nullable(),
     found: z.boolean(),
     label: z.string().min(1).max(40)
+});
+
+/**
+ * OverlayEdit
+ *
+ * Something drawn over the frame: an asset, or a mark (a circle, an underline).
+ */
+export const zOverlayEdit = z.object({
+    assetId: z.string().max(40).nullable(),
+    box: zBox,
+    color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable(),
+    endSeconds: z.number().gte(0.1).lte(180),
+    entry: z.enum([
+        'cut',
+        'fade',
+        'slide',
+        'pop',
+        'draw'
+    ]),
+    exit: z.enum([
+        'cut',
+        'fade',
+        'slide',
+        'pop',
+        'draw'
+    ]),
+    mark: z.enum([
+        'circle',
+        'underline',
+        'arrow',
+        'box',
+        'highlight',
+        'tick',
+        'cross'
+    ]).nullable(),
+    startSeconds: z.number().gte(0).lte(180),
+    type: z.literal('overlay')
 });
 
 /**
@@ -410,6 +595,14 @@ export const zScriptLine = z.object({
     text: z.string().min(1).max(240)
 });
 
+export const zShotKind = z.enum(['video', 'photo']);
+
+export const zShotMode = z.enum([
+    'on-camera',
+    'voice-over',
+    'asset'
+]);
+
 /**
  * ShotStep
  */
@@ -436,6 +629,23 @@ export const zSpeechRequest = z.object({
 });
 
 /**
+ * SpeedEdit
+ */
+export const zSpeedEdit = z.object({
+    easing: z.enum([
+        'linear',
+        'ease-in',
+        'ease-out',
+        'ease-in-out'
+    ]),
+    endSeconds: z.number().gte(0.1).lte(180),
+    fromRate: z.number().gte(0.1).lte(8),
+    startSeconds: z.number().gte(0).lte(180),
+    toRate: z.number().gte(0.1).lte(8),
+    type: z.literal('speed')
+});
+
+/**
  * TargetPose
  */
 export const zTargetPose = z.object({
@@ -450,7 +660,8 @@ export const zShot = z.object({
     camera: z.enum(['front', 'back']),
     durationSeconds: z.number().gte(0.5).lte(60),
     framing: zFraming,
-    kind: z.enum(['video', 'photo']),
+    kind: zShotKind,
+    mode: zShotMode.optional().default('on-camera'),
     phoneAngle: zPhoneAngle,
     pose: zTargetPose,
     purpose: z.string().min(1).max(240),
@@ -464,16 +675,83 @@ export const zShot = z.object({
 });
 
 /**
+ * TextEdit
+ *
+ * Words on screen. Captions carry no text of their own: they're the member's words.
+ */
+export const zTextEdit = z.object({
+    captionStyle: z.enum([
+        'word-by-word',
+        'line',
+        'boxed'
+    ]).nullable(),
+    color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable(),
+    endSeconds: z.number().gte(0.1).lte(180),
+    highlightColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable(),
+    position: z.enum([
+        'top',
+        'middle',
+        'bottom',
+        'between-halves'
+    ]),
+    startSeconds: z.number().gte(0).lte(180),
+    style: z.enum([
+        'title',
+        'lower-third',
+        'captions',
+        'label',
+        'callout'
+    ]),
+    text: z.string().min(1).max(240).nullable(),
+    type: z.literal('text')
+});
+
+/**
+ * TransitionEdit
+ *
+ * Into whatever starts at `startSeconds`, lasting until `endSeconds`.
+ */
+export const zTransitionEdit = z.object({
+    anchor: z.string().min(1).max(120).nullable(),
+    endSeconds: z.number().gte(0.1).lte(180),
+    startSeconds: z.number().gte(0).lte(180),
+    transition: z.enum([
+        'cut',
+        'match-cut',
+        'whip',
+        'fade',
+        'zoom',
+        'spin',
+        'glitch'
+    ]),
+    type: z.literal('transition')
+});
+
+export const zEdit = z.discriminatedUnion('type', [
+    zLayoutEdit,
+    zOverlayEdit,
+    zGradeEdit,
+    zTextEdit,
+    zTransitionEdit,
+    zSpeedEdit,
+    zEndCardEdit,
+    zGapEdit
+]);
+
+/**
  * ShotPlan
  */
 export const zShotPlan = z.object({
+    assets: z.array(zAsset).max(12).optional(),
     audio: z.enum([
         'speech',
         'music',
         'speech-and-music',
         'none'
     ]),
+    brands: z.array(z.string().min(1).max(80)).max(12).optional(),
     durationSeconds: z.number().gte(0.5).lte(180),
+    edits: z.array(zEdit).max(40).optional(),
     format: z.string().min(1).max(60),
     shots: z.array(zShot).min(1).max(12),
     summary: z.string().min(1).max(400),
@@ -484,6 +762,7 @@ export const zShotPlan = z.object({
  * DirectorPlanOut
  */
 export const zDirectorPlanOut = z.object({
+    assetImages: z.array(zAssetImageOut).max(12).optional(),
     audioKey: z.string().nullable(),
     audioStatus: z.enum([
         'ready',

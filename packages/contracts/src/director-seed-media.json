@@ -1,4 +1,4 @@
 {
-  "keyPattern": "^seed-media/[A-Za-z0-9_-]{11}/(shot-(\\d{1,2})\\.(png|jpg|mp4)|music\\.(mp3|wav))$",
+  "keyPattern": "^seed-media/[A-Za-z0-9_-]{11}/(shot-(\\d{1,2})\\.(png|jpg|mp4)|music\\.(mp3|wav)|asset-[a-z0-9]+(-[a-z0-9]+)*\\.(png|jpg))$",
   "keyMaxLength": 200
 }

@@ -21,6 +21,7 @@ from app.settings import Settings, get_settings
 from evals.index_shorts import (
     APP_ROOT,
     EvalShort,
+    Expectation,
     Indexed,
     ShortResult,
     describe,
@@ -46,6 +47,7 @@ FRAMING: dict[str, object] = {
 STEP: dict[str, object] = {"atSeconds": 0, "instruction": "Do it.", "cameraMove": "static"}
 SHOT: dict[str, object] = {
     "kind": "video",
+    "mode": "on-camera",
     "title": "A shot",
     "purpose": "Shows something.",
     "sourceStartSeconds": 0,
@@ -67,6 +69,9 @@ PLAN: dict[str, object] = {
     "audio": "none",
     "durationSeconds": 4,
     "shots": [SHOT],
+    "assets": [],
+    "edits": [],
+    "brands": [],
 }
 SCRIPT_LINE: dict[str, object] = {"startSeconds": 0, "endSeconds": 2, "text": "Hi."}
 KEYPOINT: dict[str, object] = {"name": "nose", "x": 0.5, "y": 0.2}
@@ -122,11 +127,11 @@ def result(**fields: object) -> ShortResult:
 # ---------------------------------------------------------------------------- shorts.json
 
 
-def test_shorts_json_has_the_6_seeds_and_6_hard_cases() -> None:
+def test_shorts_json_has_the_6_seeds_6_hard_cases_and_4_that_need_more() -> None:
     shorts = load_shorts()
     seeds = load_seeds()
 
-    assert len({short.videoId for short in shorts}) == 12
+    assert len({short.videoId for short in shorts}) == 16
     assert [short.videoId for short in shorts[:6]] == [seed.videoId for seed in seeds]
     assert [short.kind for short in shorts[6:]] == [
         "no-person",
@@ -135,7 +140,29 @@ def test_shorts_json_has_the_6_seeds_and_6_hard_cases() -> None:
         "fast-cuts",
         "photo-slideshow",
         "long",
+        "split-screen-chart",
+        "split-screen-card",
+        "voiceover-infographic",
+        "interview-broll",
     ]
+    # The owner's three, and the multi-angle one, each expect what makes them what they
+    # are; the rest expect only filmable shots.
+    expected = {short.videoId: short.expect for short in shorts[12:]}
+    assert expected["OvRozQobeuI"] == Expectation(
+        layout="split",
+        stills=1,
+        stillText=["archetype"],
+        captions=True,
+        captionsBetweenHalves=True,
+        endCard=True,
+    )
+    assert expected["kM_NHn_MT3Q"].captionStyle == "boxed"
+    assert (expected["IFBBmwsGpUw"].modes, expected["IFBBmwsGpUw"].voiceOnly) == (
+        ["voice-over"],
+        True,
+    )
+    assert expected["b5G8cbgh7K0"].lowerThirds
+    assert all(short.expect == Expectation() for short in shorts[:12])
 
 
 def test_load_shorts_refuses_a_malformed_video_id(tmp_path: Path) -> None:
@@ -171,6 +198,159 @@ def test_judge_names_each_shot_missing_a_scene_framing_or_step() -> None:
         "shot 2: no scene",
         "shot 2: no framing",
         "shot 2: no step",
+    ]
+
+
+ASSET: dict[str, object] = {
+    "id": "chart",
+    "kind": "image",
+    "title": "The chart",
+    "role": "Under the speaker",
+    "description": "A chart of twelve archetypes.",
+    "reference": {
+        "subject": "Twelve archetypes",
+        "composition": "Title on top, rows below",
+        "style": "Flat infographic",
+        "palette": "Black and white",
+        "blackAndWhite": True,
+        "aspectRatio": "9:8",
+        "text": [],
+        "mood": "Bold",
+    },
+    "prompt": "A flat black-and-white chart.",
+    "sourceStartSeconds": 0,
+    "sourceEndSeconds": 4,
+    "defaultSource": "create",
+    "personalisable": True,
+    "ask": None,
+    "secondScreen": False,
+}
+TIMED: dict[str, object] = {"startSeconds": 0, "endSeconds": 4}
+SPLIT: dict[str, object] = {
+    "type": "layout",
+    **TIMED,
+    "layout": "split",
+    "assetId": "chart",
+    "cameraOn": "top",
+    "cameraShare": 0.5,
+    "box": None,
+    "inset": None,
+}
+CAPTIONS: dict[str, object] = {
+    "type": "text",
+    **TIMED,
+    "style": "captions",
+    "text": None,
+    "position": "between-halves",
+    "captionStyle": "word-by-word",
+    "color": None,
+    "highlightColor": None,
+}
+EVERYTHING = Expectation(
+    layout="split",
+    halves=True,
+    stills=1,
+    stillText=["Archetypes"],
+    modes=["voice-over"],
+    voiceOnly=True,
+    captions=True,
+    captionStyle="word-by-word",
+    captionsBetweenHalves=True,
+    lowerThirds=True,
+    gaps=True,
+    endCard=True,
+)
+
+
+def test_judge_names_what_a_short_expects_that_its_plan_hasn_t() -> None:
+    assert judge(ShotPlan.model_validate(PLAN), EVERYTHING) == [
+        "no split layout",
+        "no split in halves",
+        "0 of 1 stills to make",
+        "no still describing Archetypes",
+        "no voice-over shot",
+        "a shot on camera",
+        "no captions",
+        "no word-by-word captions",
+        "no captions between the halves",
+        "no lower thirds",
+        "no B-roll gap",
+        "no end card",
+    ]
+
+
+def test_a_label_over_b_roll_counts_as_a_lower_third_and_one_elsewhere_doesn_t() -> None:
+    def label(start: float, end: float) -> dict[str, object]:
+        return {
+            "type": "text",
+            "startSeconds": start,
+            "endSeconds": end,
+            "style": "callout",
+            "text": "25L in Revenue",
+            "position": "middle",
+            "captionStyle": None,
+            "color": None,
+            "highlightColor": None,
+        }
+
+    gap = {"type": "gap", "startSeconds": 1, "endSeconds": 3, "description": "A market"}
+    expect = Expectation(lowerThirds=True)
+    over = ShotPlan.model_validate(plan_with(edits=[gap, label(1.5, 2.5)]))
+    elsewhere = ShotPlan.model_validate(plan_with(edits=[gap, label(3, 4)]))
+    assert judge(over, expect) == []
+    assert judge(elsewhere, expect) == ["no lower thirds"]
+
+
+def test_judge_names_a_split_that_isn_t_halves_and_captions_off_the_seam() -> None:
+    lopsided = {**SPLIT, "cameraShare": 0.7}
+    boxed = {**CAPTIONS, "captionStyle": "boxed", "position": "bottom"}
+    plan = plan_with(edits=[lopsided, boxed])
+    expect = Expectation(halves=True, captionStyle="word-by-word", captionsBetweenHalves=True)
+    assert judge(ShotPlan.model_validate(plan), expect) == [
+        "no split in halves",
+        "no word-by-word captions",
+        "no captions between the halves",
+    ]
+
+
+@pytest.mark.parametrize(("share", "halves"), [(0.42, True), (0.58, True), (0.35, False)])
+def test_a_split_within_eight_points_of_even_counts_as_halves(share: float, halves: bool) -> None:
+    """The editor snaps a measured split within 8% of 50/50 to halves."""
+    plan = ShotPlan.model_validate(plan_with(edits=[{**SPLIT, "cameraShare": share}]))
+    assert judge(plan, Expectation(halves=True)) == ([] if halves else ["no split in halves"])
+
+
+def test_judge_passes_a_plan_with_everything_its_short_expects() -> None:
+    plan = plan_with(
+        {"mode": "voice-over"},
+        assets=[ASSET],
+        edits=[
+            SPLIT,
+            CAPTIONS,
+            {
+                "type": "text",
+                **TIMED,
+                "style": "lower-third",
+                "text": "3 years of practice",
+                "position": "bottom",
+                "captionStyle": None,
+                "color": None,
+                "highlightColor": None,
+            },
+            {"type": "gap", **TIMED, "description": "B-roll of a hall"},
+            {"type": "end-card", **TIMED, "assetId": None, "text": "Apply now"},
+        ],
+    )
+    assert judge(ShotPlan.model_validate(plan), EVERYTHING) == []
+    # An end card can be an asset rather than an edit.
+    card = {**ASSET, "id": "card", "kind": "end-card"}
+    assert judge(ShotPlan.model_validate(plan_with(assets=[card])), Expectation(endCard=True)) == []
+
+
+def test_judge_names_an_asset_there_s_nothing_to_make_from() -> None:
+    blank = {**ASSET, "prompt": " "}
+    assert judge(ShotPlan.model_validate(plan_with(assets=[blank]))) == [
+        "asset chart: nothing to make it from"
     ]
 
 
@@ -299,7 +479,8 @@ def test_describe_a_passing_short() -> None:
     line = describe(result(plan=plan, repaired=["durationSeconds", "shots[].steps (count)"]))
 
     assert line == (
-        "PASS 22k0fZarxh8 talking-head shots=1 script=yes pose=yes model=gemini-4-argon "
+        "PASS 22k0fZarxh8 talking-head shots=1 assets=0 edits=0 script=yes pose=yes "
+        "model=gemini-4-argon "
         "12.3s repaired=durationSeconds, shots[].steps (count)"
     )
 
@@ -308,7 +489,8 @@ def test_describe_a_short_that_failed_the_judgement() -> None:
     line = describe(result(problems=["shot 1: no scene", "shot 2: no step"]))
 
     assert line == (
-        "FAIL 22k0fZarxh8 talking-head shots=1 script=no pose=no model=gemini-4-argon "
+        "FAIL 22k0fZarxh8 talking-head shots=1 assets=0 edits=0 script=no pose=no "
+        "model=gemini-4-argon "
         "12.3s repaired=none problems=shot 1: no scene; shot 2: no step"
     )
 
@@ -317,7 +499,7 @@ def test_describe_a_short_that_failed_to_index() -> None:
     line = describe(result(plan=None, model=None, error="ModelHTTPError: status_code: 500"))
 
     assert line == (
-        "FAIL 22k0fZarxh8 talking-head shots=0 script=no pose=no model=none 12.3s "
+        "FAIL 22k0fZarxh8 talking-head shots=0 assets=0 edits=0 script=no pose=no model=none 12.3s "
         "error=ModelHTTPError: status_code: 500"
     )
 
@@ -347,6 +529,19 @@ async def test_run_eval_exits_zero_only_when_every_short_passes() -> None:
     assert await run_eval([SHORT, OTHER], good, ticking(0, 1, 1, 2)) == 0
     assert await run_eval([SHORT, OTHER], bad, ticking(0, 1, 1, 2)) == 1
     assert await run_eval([], good, ticking()) == 1
+
+
+async def test_run_eval_saves_each_plan_it_got(tmp_path: Path) -> None:
+    async def some(video_id: str) -> Indexed:
+        if video_id == OTHER.videoId:
+            raise RuntimeError("no")
+        return indexed()
+
+    saved = tmp_path / "plans"
+    assert await run_eval([SHORT, OTHER], some, ticking(0, 1, 1, 2), saved) == 1
+    assert sorted(path.name for path in saved.iterdir()) == [f"{SHORT.videoId}.json"]
+    written = (saved / f"{SHORT.videoId}.json").read_text()
+    assert ShotPlan.model_validate_json(written) == indexed().plan
 
 
 # ---------------------------------------------------------------------- the command

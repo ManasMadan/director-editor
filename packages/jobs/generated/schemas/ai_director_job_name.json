@@ -4,6 +4,7 @@
   "type": "string",
   "enum": [
     "plan",
+    "assets",
     "review-take"
   ]
 }

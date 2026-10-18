@@ -63,6 +63,7 @@ const PERSONA_RULES = [
 
 const shot: Shot = {
   kind: "video",
+  mode: "on-camera",
   title: "The pour",
   purpose: "Open on the coffee.",
   sourceStartSeconds: 0,

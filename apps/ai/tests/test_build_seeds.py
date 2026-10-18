@@ -52,6 +52,7 @@ POSE: dict[str, object] = {"description": "Standing, arms relaxed.", "keypoints"
 
 PLAN_SHOT: dict[str, object] = {
     "kind": "video",
+    "mode": "on-camera",
     "title": "A shot",
     "purpose": "Shows something.",
     "sourceStartSeconds": 0,
@@ -73,6 +74,9 @@ PLAN: dict[str, object] = {
     "audio": "none",
     "durationSeconds": 4,
     "shots": [PLAN_SHOT],
+    "assets": [],
+    "edits": [],
+    "brands": [],
 }
 FALLBACK_MODEL = "gemini-fallback-test"
 FALLBACK_PATH = f"/v1beta/models/{FALLBACK_MODEL}:generateContent"
@@ -230,7 +234,15 @@ def test_a_plan_names_no_storage_path() -> None:
     (the take reviewer's dumps the whole shot)."""
     assert not {"storyboardKey", "previewKey"} & set(Shot.model_fields)
     assert "musicKey" not in ShotPlan.model_fields
-    assert shot_plan().model_dump(mode="json") == PLAN
+    # A plan read from before assets, edits and shot modes existed gains only their
+    # defaults: empty lists, and every shot on camera.
+    assert shot_plan().model_dump(mode="json") == {
+        **PLAN,
+        "shots": [{**PLAN_SHOT, "mode": "on-camera"}],
+        "assets": [],
+        "edits": [],
+        "brands": [],
+    }
 
 
 VIDEO = "22k0fZarxh8"

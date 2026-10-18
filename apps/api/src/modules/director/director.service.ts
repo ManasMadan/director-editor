@@ -4,8 +4,9 @@
  * is a short on YouTube (ShortsService), that a take's or a cut's file is the caller's,
  * checked and of the right kind (FilesService), whose presigned read it hands the AI
  * service for a take's review, and the short-lived links to a plan's stored audio and to
- * the lines Director speaks (kept in storage, so each is spoken once), and to a seeded
- * template's media (storyboard cards, preview clips, music).
+ * the lines Director speaks (kept in storage, so each is spoken once), and to a
+ * template's media (a seed's storyboard cards, preview clips and music, and any plan's
+ * asset images).
  */
 import { createHash } from "node:crypto";
 import { Injectable } from "@nestjs/common";
@@ -37,7 +38,8 @@ import { aiCaller, callAi } from "../ai";
 import { FilesService } from "../files";
 import { RecordingService } from "../recording";
 import { ShortsService } from "../shorts";
-import { seedMediaKeys, withMediaLinks } from "./seed-media";
+import { type AssetImageRow, planAssetImages, withAssetImages } from "./asset-images";
+import { seedAssetImages, seedMediaKeys, withMediaLinks, withSeedAssets } from "./seed-media";
 import { shotsOf } from "./shots";
 
 // Long enough for the review job's retries (three, minutes apart), no longer.
@@ -75,6 +77,16 @@ const wirePlan = directorPlanSchema.omit({ audio: true, plan: true }).extend({
   plan: shotPlanSchema.nullable(),
   audioStatus: directorPlanSchema.shape.audio.shape.status,
   audioKey: z.string().nullable(),
+  // An AI service from before asset images reports none.
+  assetImages: z
+    .array(
+      z.object({
+        assetId: z.string(),
+        status: z.enum(["pending", "generating", "ready", "failed"]),
+        objectKey: z.string().nullable(),
+      }),
+    )
+    .default([]),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -262,16 +274,43 @@ export class DirectorService {
    * `media` is asked for, to a seeded template's storyboard cards, previews and music.
    */
   private async toPlan(row: unknown, { media }: { media: boolean }): Promise<DirectorPlan> {
-    const { audioStatus, audioKey, plan: shotPlan, ...plan } = wirePlan.parse(row);
+    const { audioStatus, audioKey, assetImages, plan: stored, ...plan } = wirePlan.parse(row);
+    const shotPlan =
+      stored && plan.source === "seed" ? withSeedAssets(plan.videoId, stored) : stored;
     const [url, served] = await Promise.all([
       audioStatus === "ready" && audioKey
         ? this.files.objectUrl(audioKey, AUDIO_READ_EXPIRES_S)
         : null,
-      shotPlan && media && plan.source === "seed"
-        ? this.withSeedMedia(plan.videoId, shotPlan)
-        : shotPlan,
+      shotPlan && media ? this.withMedia(plan, shotPlan, assetImages) : shotPlan,
     ]);
     return { ...plan, plan: served, audio: { status: audioStatus, url } };
+  }
+
+  /**
+   * A plan with links to its media: a seed's storyboard cards, previews and music, and
+   * any plan's asset images (a seed's committed with it, a member's as the AI service
+   * reports them).
+   */
+  private async withMedia(
+    plan: { id: string; videoId: VideoId; source: DirectorPlan["source"] },
+    shotPlan: ShotPlan,
+    rows: readonly AssetImageRow[],
+  ): Promise<ServedShotPlan> {
+    const seed = plan.source === "seed";
+    const made = seed ? seedAssetImages(plan.videoId, shotPlan) : planAssetImages(plan.id, rows);
+    // Only the plan's own assets' images are served, so only theirs are signed.
+    const ids = new Set(shotPlan.assets.map((asset) => asset.id));
+    const images = made.filter((image) => ids.has(image.assetId));
+    const [served, signed] = await Promise.all([
+      seed ? this.withSeedMedia(plan.videoId, shotPlan) : shotPlan,
+      Promise.all(
+        images.map(async (image) => ({
+          image,
+          url: image.key ? await this.files.objectUrl(image.key, MEDIA_READ_EXPIRES_S) : null,
+        })),
+      ),
+    ]);
+    return { ...served, assets: withAssetImages(served.assets, signed) };
   }
 
   /**

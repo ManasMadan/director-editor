@@ -7,6 +7,9 @@ records it in packages/contracts/src/director-seeds.json:
   seed-media/<videoId>/shot-<n>.mp4
 - a music track per seed, by Lyria (`MUSIC_MODEL`), matched to its moods and pace:
   seed-media/<videoId>/music.<the format Lyria answers with>
+- the default image of each still among its plan's assets (a chart, a headline card, an
+  end card), by Nano Banana from the asset's own prompt and reference, as the plan job
+  makes a member's (app/assets.py): seed-media/<videoId>/asset-<assetId>.png
 
 <n> is the shot's index in the plan (from 0, the API's `shotIndex`). Each prompt is made
 only from the shot's own directions (where, the framing, who or what is in it, the
@@ -59,6 +62,7 @@ from google.genai.types import (
 from google.oauth2.credentials import Credentials as UserCredentials
 from pydantic import BaseModel, TypeAdapter
 
+from app.assets import default_assets, drawn_aspect_ratio, image_prompt
 from app.log import configure_logging, log
 from app.schemas import Shot, ShotPlan
 from app.settings import Settings, get_settings
@@ -121,7 +125,7 @@ _EXTENSIONS = {
     "audio/x-wav": "wav",
 }
 
-type MediaKind = Literal["storyboard", "preview", "music"]
+type MediaKind = Literal["storyboard", "preview", "music", "asset"]
 # A model's answer: the file's bytes and its media type.
 type Media = tuple[bytes, str]
 # Uploads bytes to a key in the bucket, with their media type.
@@ -132,6 +136,7 @@ class MediaModels(Protocol):
     async def storyboard(self, prompt: str) -> Media: ...
     async def preview(self, prompt: str, seconds: int) -> Media: ...
     async def music(self, prompt: str) -> Media: ...
+    async def asset(self, prompt: str, aspect_ratio: str) -> Media: ...
 
 
 type Connect = Callable[[Settings, str], Awaitable[tuple[MediaModels, Upload]]]
@@ -140,13 +145,16 @@ type Connect = Callable[[Settings, str], Awaitable[tuple[MediaModels, Upload]]]
 @dataclass(frozen=True)
 class Job:
     """One medium to make: for the `seed`-th template, its `shot`-th shot (None: the
-    seed's music), from `prompt`; a preview `seconds` long."""
+    seed's music, or an asset's image), from `prompt`; a preview `seconds` long; an
+    asset's image of `asset_id`, drawn `aspect_ratio`."""
 
     kind: MediaKind
     seed: int
     shot: int | None
     prompt: str
     seconds: int = 0
+    asset_id: str | None = None
+    aspect_ratio: str = "9:16"
 
 
 # --------------------------------------------------------------------------------- prompts
@@ -252,6 +260,18 @@ def media_jobs(
                 previews_left -= 1
         if media.music is None:
             jobs.append(Job("music", seed, None, music_prompt(template.plan)))
+        jobs += [
+            Job(
+                "asset",
+                seed,
+                None,
+                image_prompt(asset),
+                asset_id=asset.id,
+                aspect_ratio=drawn_aspect_ratio(asset),
+            )
+            for asset in default_assets(template.plan)
+            if asset.id not in media.assets
+        ]
     if held_back:
         log.warning("previews held back at the cap", held_back=held_back, cap=max_previews)
     return jobs
@@ -260,7 +280,8 @@ def media_jobs(
 def _price(job: Job) -> float:
     if job.kind == "preview":
         return job.seconds * PREVIEW_USD_PER_SECOND
-    return STORYBOARD_USD if job.kind == "storyboard" else MUSIC_USD
+    # An asset's image is a 1K Nano Banana image, like a storyboard card.
+    return MUSIC_USD if job.kind == "music" else STORYBOARD_USD
 
 
 def estimated_usd(jobs: list[Job]) -> float:
@@ -283,22 +304,32 @@ async def _make(
         data, media_type = await models.preview(job.prompt, job.seconds)
         # Paid for from here on, whatever becomes of it.
         billed(job)
+    elif job.kind == "asset":
+        data, media_type = await models.asset(job.prompt, job.aspect_ratio)
     else:
         data, media_type = await models.music(job.prompt)
     extension = _EXTENSIONS.get(media_type)
     if extension is None:
         raise ValueError(f"no file extension for a {job.kind} of type {media_type}")
-    name = "music" if job.shot is None else f"shot-{job.shot}"
-    key = f"seed-media/{template.videoId}/{name}.{extension}"
+    key = f"seed-media/{template.videoId}/{_name(job)}.{extension}"
     await upload(key, data, media_type)
     media = _media_of(template)
     template.media = media
-    if job.shot is None:
+    if job.asset_id is not None:
+        media.assets[job.asset_id] = key
+    elif job.shot is None:
         media.music = key
     elif job.kind == "storyboard":
         media.shots[job.shot].storyboard = key
     else:
         media.shots[job.shot].preview = key
+
+
+def _name(job: Job) -> str:
+    """The medium's file name in the seed's folder, without its extension."""
+    if job.asset_id is not None:
+        return f"asset-{job.asset_id}"
+    return "music" if job.shot is None else f"shot-{job.shot}"
 
 
 async def generate(
@@ -399,9 +430,12 @@ class VertexMediaModels:
                 attempt, wait = attempt + 1, wait * 2
 
     async def storyboard(self, prompt: str) -> Media:
+        return await self.asset(prompt, "9:16")
+
+    async def asset(self, prompt: str, aspect_ratio: str) -> Media:
         config = GenerateContentConfig(
             response_modalities=["IMAGE"],
-            image_config=ImageConfig(aspect_ratio="9:16", image_size="1K"),
+            image_config=ImageConfig(aspect_ratio=aspect_ratio, image_size="1K"),
         )
         response = await self._retried(
             lambda: self._content.generate_content(
@@ -615,6 +649,7 @@ async def main(
         previews=sum(1 for job in jobs if job.kind == "preview"),
         preview_seconds=sum(job.seconds for job in jobs),
         tracks=sum(1 for job in jobs if job.kind == "music"),
+        asset_images=sum(1 for job in jobs if job.kind == "asset"),
         estimated_usd=round(estimated_usd(jobs), 2),
     )
     if arguments.dry_run or arguments.bucket is None:

@@ -4,6 +4,150 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
+export type AspectRatio = '9:16' | '3:4' | '4:5' | '1:1' | '9:8' | '5:4' | '4:3' | '16:9';
+
+/**
+ * Asset
+ */
+export type Asset = {
+    /**
+     * Ask
+     *
+     * What to ask the member for when it is theirs: "a photo of your dog".
+     */
+    ask: string | null;
+    defaultSource: AssetSource;
+    /**
+     * Description
+     *
+     * The original's piece, in a sentence or two.
+     */
+    description: string;
+    /**
+     * Id
+     */
+    id: string;
+    kind: AssetKind;
+    /**
+     * Personalisable
+     *
+     * The member could make it about their own topic.
+     */
+    personalisable: boolean;
+    /**
+     * Prompt
+     *
+     * What to ask an image model for to make a fresh one in the original's style, in English, with any text on it in quotes.
+     */
+    prompt: string;
+    reference: AssetReference;
+    /**
+     * Role
+     *
+     * What it does in the Short, and where it sits.
+     */
+    role: string;
+    /**
+     * Secondscreen
+     *
+     * The original shows it on another screen in shot.
+     */
+    secondScreen: boolean;
+    /**
+     * Sourceendseconds
+     */
+    sourceEndSeconds: number;
+    /**
+     * Sourcestartseconds
+     *
+     * When it first shows in the original.
+     */
+    sourceStartSeconds: number;
+    /**
+     * Title
+     *
+     * A short name for it: "The archetypes chart".
+     */
+    title: string;
+};
+
+/**
+ * AssetImageOut
+ *
+ * The default image made for one of a plan's assets (app/assets.py).
+ */
+export type AssetImageOut = {
+    /**
+     * Assetid
+     */
+    assetId: string;
+    /**
+     * Objectkey
+     *
+     * Its key in MEDIA_BUCKET once it's ready; apps/api turns it into a short-lived link.
+     */
+    objectKey: string | null;
+    /**
+     * Status
+     */
+    status: 'pending' | 'generating' | 'ready' | 'failed';
+};
+
+export type AssetKind = 'image' | 'cutout' | 'text-card' | 'background' | 'broll' | 'music' | 'sfx' | 'end-card';
+
+/**
+ * AssetReference
+ *
+ * The original's piece, described precisely enough to recreate its look.
+ */
+export type AssetReference = {
+    aspectRatio: AspectRatio;
+    /**
+     * Blackandwhite
+     */
+    blackAndWhite: boolean;
+    /**
+     * Brands
+     */
+    brands?: Array<string>;
+    /**
+     * Composition
+     *
+     * Its layout and framing: what sits where.
+     */
+    composition: string;
+    /**
+     * Mood
+     */
+    mood: string;
+    /**
+     * Palette
+     *
+     * Its colours, or "black and white".
+     */
+    palette: string;
+    /**
+     * Style
+     *
+     * How it is made: "flat vector infographic", "photo", "hand-drawn".
+     */
+    style: string;
+    /**
+     * Subject
+     *
+     * What it shows.
+     */
+    subject: string;
+    /**
+     * Text
+     *
+     * Every line of text on it, word for word; empty when there is none.
+     */
+    text: Array<string>;
+};
+
+export type AssetSource = 'create' | 'stock' | 'upload';
+
 /**
  * Box
  */
@@ -237,6 +381,12 @@ export type DirectorPlanCreate = {
  */
 export type DirectorPlanOut = {
     /**
+     * Assetimages
+     *
+     * The default images made for the plan's assets, on a plan read on its own (getDirectorPlan); empty in the library and for a seeded template, whose are committed with it.
+     */
+    assetImages?: Array<AssetImageOut>;
+    /**
      * Audiokey
      *
      * The original audio's object key in storage, once captured; apps/api turns it into a short-lived link.
@@ -367,6 +517,50 @@ export type DirectorTakeOut = {
     status: 'pending' | 'reviewing' | 'ready' | 'failed';
 };
 
+export type Edit = ({
+    type: 'layout';
+} & LayoutEdit) | ({
+    type: 'overlay';
+} & OverlayEdit) | ({
+    type: 'grade';
+} & GradeEdit) | ({
+    type: 'text';
+} & TextEdit) | ({
+    type: 'transition';
+} & TransitionEdit) | ({
+    type: 'speed';
+} & SpeedEdit) | ({
+    type: 'end-card';
+} & EndCardEdit) | ({
+    type: 'gap';
+} & GapEdit);
+
+/**
+ * EndCardEdit
+ */
+export type EndCardEdit = {
+    /**
+     * Assetid
+     */
+    assetId: string | null;
+    /**
+     * Endseconds
+     */
+    endSeconds: number;
+    /**
+     * Startseconds
+     */
+    startSeconds: number;
+    /**
+     * Text
+     */
+    text: string | null;
+    /**
+     * Type
+     */
+    type: 'end-card';
+};
+
 /**
  * ErrorCode
  */
@@ -447,6 +641,56 @@ export type Framing = {
 };
 
 /**
+ * GapEdit
+ *
+ * A moment to fill with B-roll or a cutaway: what it shows, for as long as it lasts.
+ */
+export type GapEdit = {
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Endseconds
+     */
+    endSeconds: number;
+    /**
+     * Startseconds
+     */
+    startSeconds: number;
+    /**
+     * Type
+     */
+    type: 'gap';
+};
+
+/**
+ * GradeEdit
+ */
+export type GradeEdit = {
+    /**
+     * Endseconds
+     */
+    endSeconds: number;
+    /**
+     * Grade
+     */
+    grade: 'black-and-white' | 'warm' | 'cool' | 'high-contrast' | 'vintage' | 'vivid';
+    /**
+     * Startseconds
+     */
+    startSeconds: number;
+    /**
+     * Target
+     */
+    target: 'all' | 'camera' | 'assets';
+    /**
+     * Type
+     */
+    type: 'grade';
+};
+
+/**
  * HealthResponse
  */
 export type HealthResponse = {
@@ -472,6 +716,49 @@ export type Keypoint = {
 };
 
 export type KeypointName = 'nose' | 'left_shoulder' | 'right_shoulder' | 'left_elbow' | 'right_elbow' | 'left_wrist' | 'right_wrist' | 'left_hip' | 'right_hip' | 'left_knee' | 'right_knee' | 'left_ankle' | 'right_ankle';
+
+/**
+ * LayoutEdit
+ *
+ * How the frame is shared: the camera full frame (or an asset, for a voice-over), a
+ * split with the camera on top or at the bottom taking `cameraShare` of the height and
+ * the asset in the rest, or picture-in-picture with the `inset` in `box`.
+ */
+export type LayoutEdit = {
+    /**
+     * Assetid
+     */
+    assetId: string | null;
+    box: Box | null;
+    /**
+     * Cameraon
+     */
+    cameraOn: 'top' | 'bottom' | null;
+    /**
+     * Camerashare
+     */
+    cameraShare: number | null;
+    /**
+     * Endseconds
+     */
+    endSeconds: number;
+    /**
+     * Inset
+     */
+    inset: 'camera' | 'asset' | null;
+    /**
+     * Layout
+     */
+    layout: 'full' | 'split' | 'picture-in-picture';
+    /**
+     * Startseconds
+     */
+    startSeconds: number;
+    /**
+     * Type
+     */
+    type: 'layout';
+};
 
 /**
  * LocateRequest
@@ -509,6 +796,47 @@ export type Located = {
      * Label
      */
     label: string;
+};
+
+/**
+ * OverlayEdit
+ *
+ * Something drawn over the frame: an asset, or a mark (a circle, an underline).
+ */
+export type OverlayEdit = {
+    /**
+     * Assetid
+     */
+    assetId: string | null;
+    box: Box;
+    /**
+     * Color
+     */
+    color: string | null;
+    /**
+     * Endseconds
+     */
+    endSeconds: number;
+    /**
+     * Entry
+     */
+    entry: 'cut' | 'fade' | 'slide' | 'pop' | 'draw';
+    /**
+     * Exit
+     */
+    exit: 'cut' | 'fade' | 'slide' | 'pop' | 'draw';
+    /**
+     * Mark
+     */
+    mark: 'circle' | 'underline' | 'arrow' | 'box' | 'highlight' | 'tick' | 'cross' | null;
+    /**
+     * Startseconds
+     */
+    startSeconds: number;
+    /**
+     * Type
+     */
+    type: 'overlay';
 };
 
 /**
@@ -692,10 +1020,11 @@ export type Shot = {
      */
     durationSeconds: number;
     framing: Framing;
+    kind: ShotKind;
     /**
-     * Kind
+     * on-camera: the viewer films it; voice-over: only their voice is used; asset: nothing is filmed, an asset takes its place.
      */
-    kind: 'video' | 'photo';
+    mode?: ShotMode;
     phoneAngle: PhoneAngle;
     pose: TargetPose;
     /**
@@ -740,18 +1069,34 @@ export type Shot = {
     title: string;
 };
 
+export type ShotKind = 'video' | 'photo';
+
+export type ShotMode = 'on-camera' | 'voice-over' | 'asset';
+
 /**
  * ShotPlan
  */
 export type ShotPlan = {
     /**
+     * Assets
+     */
+    assets?: Array<Asset>;
+    /**
      * Audio
      */
     audio: 'speech' | 'music' | 'speech-and-music' | 'none';
     /**
+     * Brands
+     */
+    brands?: Array<string>;
+    /**
      * Durationseconds
      */
     durationSeconds: number;
+    /**
+     * Edits
+     */
+    edits?: Array<Edit>;
     /**
      * Format
      *
@@ -807,6 +1152,36 @@ export type SpeechRequest = {
 export type SpeechVoice = 'Puck' | 'Kore' | 'Aoede' | 'Charon' | 'Sulafat';
 
 /**
+ * SpeedEdit
+ */
+export type SpeedEdit = {
+    /**
+     * Easing
+     */
+    easing: 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out';
+    /**
+     * Endseconds
+     */
+    endSeconds: number;
+    /**
+     * Fromrate
+     */
+    fromRate: number;
+    /**
+     * Startseconds
+     */
+    startSeconds: number;
+    /**
+     * Torate
+     */
+    toRate: number;
+    /**
+     * Type
+     */
+    type: 'speed';
+};
+
+/**
  * TargetPose
  */
 export type TargetPose = {
@@ -820,6 +1195,80 @@ export type TargetPose = {
      * The person's joints at the shot's key moment; empty when no one is in it.
      */
     keypoints: Array<Keypoint>;
+};
+
+/**
+ * TextEdit
+ *
+ * Words on screen. Captions carry no text of their own: they're the member's words.
+ */
+export type TextEdit = {
+    /**
+     * Captionstyle
+     */
+    captionStyle: 'word-by-word' | 'line' | 'boxed' | null;
+    /**
+     * Color
+     */
+    color: string | null;
+    /**
+     * Endseconds
+     */
+    endSeconds: number;
+    /**
+     * Highlightcolor
+     */
+    highlightColor: string | null;
+    /**
+     * Position
+     */
+    position: 'top' | 'middle' | 'bottom' | 'between-halves';
+    /**
+     * Startseconds
+     */
+    startSeconds: number;
+    /**
+     * Style
+     */
+    style: 'title' | 'lower-third' | 'captions' | 'label' | 'callout';
+    /**
+     * Text
+     */
+    text: string | null;
+    /**
+     * Type
+     */
+    type: 'text';
+};
+
+/**
+ * TransitionEdit
+ *
+ * Into whatever starts at `startSeconds`, lasting until `endSeconds`.
+ */
+export type TransitionEdit = {
+    /**
+     * Anchor
+     *
+     * A match cut's anchor: what lines up.
+     */
+    anchor: string | null;
+    /**
+     * Endseconds
+     */
+    endSeconds: number;
+    /**
+     * Startseconds
+     */
+    startSeconds: number;
+    /**
+     * Transition
+     */
+    transition: 'cut' | 'match-cut' | 'whip' | 'fade' | 'zoom' | 'spin' | 'glitch';
+    /**
+     * Type
+     */
+    type: 'transition';
 };
 
 export type DependenciesData = {

@@ -151,6 +151,11 @@ export const queues = {
       /** Work out how to film the plan's video. */
       plan: z.object({ planId: directorPlanIdSchema, orgId: orgIdSchema }),
       /**
+       * Draw the default images for a ready plan's assets (queued once the plan is
+       * saved), so they're there by the time anyone shoots.
+       */
+      assets: z.object({ planId: directorPlanIdSchema, orgId: orgIdSchema }),
+      /**
        * Review a take. `sourceUrl` is a presigned read of the take's file (apps/api signs
        * it for 30 minutes): the AI service has no storage credentials of its own, and the
        * URL only ever sits in this queue, never in a table.

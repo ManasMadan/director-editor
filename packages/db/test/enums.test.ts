@@ -27,6 +27,10 @@ const expected: Record<string, readonly string[]> = {
     directorCutSchema.shape.publish.shape.visibility.unwrap().options,
   "ai.director_take.director_take_status_check": directorTakeSchema.shape.status.options,
   "ai.director_take.director_take_kind_check": directorTakeSchema.shape.kind.options,
+  // An asset image's stored status: the AI service's AssetImageStatus and the API's wire
+  // schema of it (director.service.ts); the contract serves them folded into
+  // making/ready/failed, so there's no contract enum of these four to read.
+  "ai.director_asset.director_asset_status_check": ["pending", "generating", "ready", "failed"],
   // The removed Shorts feed's likes and saves: no service reads the table any more, and
   // it goes in a later release's migration; until then its CHECK stays as it was.
   "app.short_reaction.short_reaction_kind_check": ["like", "save"],

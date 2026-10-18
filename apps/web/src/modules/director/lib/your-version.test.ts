@@ -4,6 +4,7 @@ import { adaptationList, adapted, NO_ADAPTATIONS, yourVersion } from "./your-ver
 
 const original: Shot = {
   kind: "video",
+  mode: "on-camera",
   title: "The nod",
   purpose: "The yes",
   sourceStartSeconds: 0,
