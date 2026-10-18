@@ -5,36 +5,6 @@ export type ClientOptions = {
 };
 
 /**
- * AssistantEvent
- *
- * One server-sent event of an answer.
- */
-export type AssistantEvent = {
-    /**
-     * Event
-     */
-    event: ({
-        type: 'text';
-    } & TextEvent) | ({
-        type: 'sources';
-    } & SourcesEvent) | ({
-        type: 'done';
-    } & DoneEvent) | ({
-        type: 'error';
-    } & ErrorEvent);
-};
-
-/**
- * AssistantRequest
- */
-export type AssistantRequest = {
-    /**
-     * Question
-     */
-    question: string;
-};
-
-/**
  * Box
  */
 export type Box = {
@@ -62,7 +32,119 @@ export type Box = {
 
 export type CameraMove = 'static' | 'up' | 'down' | 'left' | 'right' | 'forward' | 'back' | 'orbit' | 'tilt-up' | 'tilt-down';
 
+/**
+ * CutPick
+ *
+ * The take picked for one shot of a cut.
+ */
+export type CutPick = {
+    /**
+     * Shotindex
+     */
+    shotIndex: number;
+    /**
+     * Takeid
+     */
+    takeId: string;
+};
+
 export type Direction = 'none' | 'left' | 'right' | 'forward' | 'back' | 'turn-left' | 'turn-right';
+
+/**
+ * DirectorCutCreate
+ */
+export type DirectorCutCreate = {
+    /**
+     * Fileid
+     */
+    fileId: string;
+    /**
+     * Picks
+     */
+    picks: Array<CutPick>;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Videoid
+     */
+    videoId: string;
+};
+
+/**
+ * DirectorCutOut
+ */
+export type DirectorCutOut = {
+    /**
+     * Createdat
+     */
+    createdAt: string;
+    /**
+     * Durationms
+     */
+    durationMs: number;
+    /**
+     * Fileid
+     */
+    fileId: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Picks
+     */
+    picks: Array<CutPick>;
+    /**
+     * Planid
+     */
+    planId: string;
+    /**
+     * Publishstatus
+     */
+    publishStatus: 'none' | 'uploading' | 'published' | 'failed';
+    /**
+     * Templatetitle
+     *
+     * The plan's title.
+     */
+    templateTitle: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Videoid
+     */
+    videoId: string;
+    /**
+     * Visibility
+     */
+    visibility: 'private' | 'unlisted' | 'public' | null;
+    /**
+     * Youtubevideoid
+     */
+    youtubeVideoId: string | null;
+};
+
+/**
+ * DirectorLibraryOut
+ */
+export type DirectorLibraryOut = {
+    /**
+     * Indexused
+     *
+     * The caller has indexed their one short of their own.
+     */
+    indexUsed: boolean;
+    /**
+     * Templates
+     *
+     * The workspace's plans, newest first.
+     */
+    templates: Array<DirectorPlanOut>;
+};
 
 /**
  * DirectorPlanCreate
@@ -78,6 +160,16 @@ export type DirectorPlanCreate = {
  * DirectorPlanOut
  */
 export type DirectorPlanOut = {
+    /**
+     * Audiokey
+     *
+     * The original audio's object key in storage, once captured; apps/api turns it into a short-lived link.
+     */
+    audioKey: string | null;
+    /**
+     * Audiostatus
+     */
+    audioStatus: 'ready' | 'failed' | 'none';
     /**
      * Createdat
      */
@@ -95,6 +187,14 @@ export type DirectorPlanOut = {
      */
     model: string | null;
     plan: ShotPlan | null;
+    /**
+     * Source
+     */
+    source: 'seed' | 'user';
+    /**
+     * Stage
+     */
+    stage: 'queued' | 'watching' | 'writing' | 'ready' | 'failed';
     /**
      * Status
      */
@@ -192,74 +292,9 @@ export type DirectorTakeOut = {
 };
 
 /**
- * DocumentCreate
- */
-export type DocumentCreate = {
-    /**
-     * Content
-     *
-     * Plain text.
-     */
-    content: string;
-    /**
-     * Title
-     */
-    title: string;
-};
-
-/**
- * DocumentOut
- */
-export type DocumentOut = {
-    /**
-     * Chunkcount
-     */
-    chunkCount: number;
-    /**
-     * Createdat
-     */
-    createdAt: string;
-    /**
-     * Createdby
-     */
-    createdBy: string | null;
-    /**
-     * Error
-     */
-    error: string | null;
-    /**
-     * Id
-     */
-    id: string;
-    /**
-     * Status
-     */
-    status: 'pending' | 'indexing' | 'ready' | 'failed';
-    /**
-     * Summary
-     */
-    summary: string | null;
-    /**
-     * Title
-     */
-    title: string;
-};
-
-/**
- * DoneEvent
- */
-export type DoneEvent = {
-    /**
-     * Type
-     */
-    type?: 'done';
-    usage: Usage;
-};
-
-/**
  * ErrorCode
  */
-export type ErrorCode = 'BAD_REQUEST' | 'VALIDATION_FAILED' | 'UNAUTHENTICATED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT' | 'RATE_LIMITED' | 'INTERNAL' | 'SERVICE_UNAVAILABLE' | 'METHOD_NOT_SUPPORTED' | 'TIMEOUT' | 'PAYLOAD_TOO_LARGE' | 'UNSUPPORTED_MEDIA_TYPE' | 'IDEMPOTENCY_IN_PROGRESS' | 'FEATURE_DISABLED' | 'CLIENT_OUTDATED' | 'FRESH_SESSION_REQUIRED' | 'DESTINATION_NOT_ALLOWED' | 'RESPONSE_TOO_LARGE' | 'TOO_MANY_REDIRECTS' | 'UPSTREAM_UNAVAILABLE' | 'NO_ACTIVE_ORGANIZATION' | 'PHONE_CODE_INVALID' | 'PHONE_NUMBER_TAKEN' | 'ENTITLEMENT_REQUIRED' | 'ALREADY_SUBSCRIBED' | 'NO_SUBSCRIPTION' | 'FILE_NOT_FOUND' | 'FILE_TYPE_NOT_ALLOWED' | 'FILE_TOO_LARGE' | 'FILE_SIZE_MISMATCH' | 'FILE_INFECTED' | 'FILE_UNREADABLE' | 'FILE_NOT_UPLOADED' | 'FILE_NOT_READY' | 'UNSUBSCRIBE_LINK_INVALID' | 'INVALID_SIGNATURE' | 'WEBHOOK_ENDPOINT_NOT_FOUND' | 'WEBHOOK_DELIVERY_NOT_FOUND' | 'WEBHOOK_URL_NOT_ALLOWED' | 'WEBHOOK_ENDPOINT_LIMIT' | 'APP_NOT_FOUND' | 'API_KEY_NOT_FOUND' | 'API_KEY_LIMIT_REACHED' | 'API_KEY_SCOPE_MISSING' | 'DOCUMENT_NOT_FOUND' | 'DOCUMENT_INDEXING_FAILED' | 'AI_BUDGET_EXCEEDED' | 'AI_RUN_LIMIT' | 'SHORT_NOT_FOUND' | 'SHORT_TOO_LONG' | 'DIRECTOR_PLAN_NOT_FOUND' | 'DIRECTOR_PLAN_NOT_READY' | 'DIRECTOR_SHOT_NOT_FOUND' | 'DIRECTOR_TAKE_KIND_MISMATCH' | 'DIRECTOR_VIDEO_UNREADABLE' | 'DIRECTOR_ANALYSIS_FAILED' | 'DIRECTOR_REVIEW_FAILED' | 'TODO_NOT_FOUND' | 'TODO_VERSION_CONFLICT';
+export type ErrorCode = 'BAD_REQUEST' | 'VALIDATION_FAILED' | 'UNAUTHENTICATED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT' | 'RATE_LIMITED' | 'INTERNAL' | 'SERVICE_UNAVAILABLE' | 'METHOD_NOT_SUPPORTED' | 'TIMEOUT' | 'PAYLOAD_TOO_LARGE' | 'UNSUPPORTED_MEDIA_TYPE' | 'IDEMPOTENCY_IN_PROGRESS' | 'FEATURE_DISABLED' | 'CLIENT_OUTDATED' | 'DESTINATION_NOT_ALLOWED' | 'RESPONSE_TOO_LARGE' | 'TOO_MANY_REDIRECTS' | 'UPSTREAM_UNAVAILABLE' | 'NO_ACTIVE_ORGANIZATION' | 'DEMO_ACCOUNT_LOCKED' | 'FILE_NOT_FOUND' | 'FILE_TYPE_NOT_ALLOWED' | 'FILE_TOO_LARGE' | 'FILE_SIZE_MISMATCH' | 'FILE_INFECTED' | 'FILE_UNREADABLE' | 'FILE_NOT_UPLOADED' | 'FILE_NOT_READY' | 'INVALID_SIGNATURE' | 'AI_BUDGET_EXCEEDED' | 'DIRECTOR_INDEX_LIMIT' | 'DIRECTOR_VIDEO_UNAVAILABLE' | 'DIRECTOR_TOO_LONG' | 'DIRECTOR_PLAN_NOT_FOUND' | 'DIRECTOR_PLAN_NOT_READY' | 'DIRECTOR_SHOT_NOT_FOUND' | 'DIRECTOR_TAKE_NOT_FOUND' | 'DIRECTOR_TAKE_KIND_MISMATCH' | 'DIRECTOR_CALL_TOO_FAST' | 'DIRECTOR_CUT_NOT_FOUND' | 'PUBLISH_DEMO_DISABLED' | 'PUBLISH_NEEDS_YOUTUBE' | 'PUBLISH_CUT_NOT_READY' | 'PUBLISH_NO_CHANNEL' | 'PUBLISH_QUOTA_EXHAUSTED' | 'DIRECTOR_VIDEO_UNREADABLE' | 'DIRECTOR_ANALYSIS_FAILED' | 'DIRECTOR_REVIEW_FAILED';
 
 /**
  * ErrorData
@@ -279,20 +314,6 @@ export type ErrorData = {
      * Requestid
      */
     requestId?: string | null;
-};
-
-/**
- * ErrorEvent
- */
-export type ErrorEvent = {
-    /**
-     * Code
-     */
-    code: 'AI_RUN_LIMIT' | 'UPSTREAM_UNAVAILABLE';
-    /**
-     * Type
-     */
-    type?: 'error';
 };
 
 /**
@@ -405,6 +426,60 @@ export type PhoneAngle = {
 };
 
 /**
+ * PublishCopy
+ */
+export type PublishCopy = {
+    /**
+     * Credits
+     */
+    credits: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Hashtags
+     *
+     * Single words, without the #.
+     */
+    hashtags: Array<string>;
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
+ * PublishCopyRequest
+ */
+export type PublishCopyRequest = {
+    /**
+     * Cutid
+     */
+    cutId: string;
+    /**
+     * The original Short, when YouTube still shows it.
+     */
+    original: PublishOriginal | null;
+};
+
+/**
+ * PublishOriginal
+ *
+ * The original Short as YouTube shows it, for the credits.
+ */
+export type PublishOriginal = {
+    /**
+     * Channel
+     */
+    channel: string;
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
  * SceneCheck
  */
 export type SceneCheck = {
@@ -489,40 +564,6 @@ export type ScriptLine = {
 };
 
 /**
- * SentimentRequest
- */
-export type SentimentRequest = {
-    /**
-     * Text
-     *
-     * Text to classify.
-     */
-    text: string;
-};
-
-/**
- * SentimentResponse
- */
-export type SentimentResponse = {
-    /**
-     * Label
-     */
-    label: 'positive' | 'negative' | 'neutral';
-    /**
-     * Model
-     *
-     * Identifier of the model that produced the prediction.
-     */
-    model: string;
-    /**
-     * Score
-     *
-     * Confidence of the predicted label.
-     */
-    score: number;
-};
-
-/**
  * Shot
  */
 export type Shot = {
@@ -546,7 +587,7 @@ export type Shot = {
     /**
      * Purpose
      *
-     * What it shows, and why.
+     * The scene's role in the story (hook, setup, reveal or payoff) and the feeling it's going for.
      */
     purpose: string;
     /**
@@ -637,32 +678,19 @@ export type ShotStep = {
 };
 
 /**
- * Source
+ * SpeechRequest
  */
-export type Source = {
+export type SpeechRequest = {
     /**
-     * Documentid
+     * Text
+     *
+     * The line to say.
      */
-    documentId: string;
-    /**
-     * Title
-     */
-    title: string;
+    text: string;
+    voice: SpeechVoice;
 };
 
-/**
- * SourcesEvent
- */
-export type SourcesEvent = {
-    /**
-     * Sources
-     */
-    sources: Array<Source>;
-    /**
-     * Type
-     */
-    type?: 'sources';
-};
+export type SpeechVoice = 'Puck' | 'Kore' | 'Aoede' | 'Charon' | 'Sulafat';
 
 /**
  * TargetPose
@@ -678,34 +706,6 @@ export type TargetPose = {
      * The person's joints at the shot's key moment; empty when no one is in it.
      */
     keypoints: Array<Keypoint>;
-};
-
-/**
- * TextEvent
- */
-export type TextEvent = {
-    /**
-     * Text
-     */
-    text: string;
-    /**
-     * Type
-     */
-    type?: 'text';
-};
-
-/**
- * Usage
- */
-export type Usage = {
-    /**
-     * Inputtokens
-     */
-    inputTokens: number;
-    /**
-     * Outputtokens
-     */
-    outputTokens: number;
 };
 
 export type DependenciesData = {
@@ -783,8 +783,8 @@ export type ReadyResponses = {
 
 export type ReadyResponse = ReadyResponses[keyof ReadyResponses];
 
-export type AnswerData = {
-    body: AssistantRequest;
+export type ListDirectorMediaData = {
+    body?: never;
     headers?: {
         /**
          * Authorization
@@ -797,28 +797,140 @@ export type AnswerData = {
     };
     path?: never;
     query?: never;
-    url: '/v1/assistant/answers';
+    url: '/v1/director/cuts';
 };
 
-export type AnswerErrors = {
+export type ListDirectorMediaErrors = {
     /**
      * An error.
      */
     default: ErrorResponse;
 };
 
-export type AnswerError = AnswerErrors[keyof AnswerErrors];
+export type ListDirectorMediaError = ListDirectorMediaErrors[keyof ListDirectorMediaErrors];
 
-export type AnswerResponses = {
+export type ListDirectorMediaResponses = {
     /**
-     * Server-sent events, each `data:` line one AssistantEvent.
+     * Response Listdirectormedia
+     *
+     * Successful Response
      */
-    200: AssistantEvent;
+    200: Array<DirectorCutOut>;
 };
 
-export type AnswerResponse = AnswerResponses[keyof AnswerResponses];
+export type ListDirectorMediaResponse = ListDirectorMediaResponses[keyof ListDirectorMediaResponses];
 
-export type RequestDirectorPlanData = {
+export type CreateDirectorCutData = {
+    body: DirectorCutCreate;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/director/cuts';
+};
+
+export type CreateDirectorCutErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type CreateDirectorCutError = CreateDirectorCutErrors[keyof CreateDirectorCutErrors];
+
+export type CreateDirectorCutResponses = {
+    /**
+     * Successful Response
+     */
+    201: DirectorCutOut;
+};
+
+export type CreateDirectorCutResponse = CreateDirectorCutResponses[keyof CreateDirectorCutResponses];
+
+export type GetDirectorCutData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path: {
+        /**
+         * Cut Id
+         */
+        cut_id: string;
+    };
+    query?: never;
+    url: '/v1/director/cuts/{cut_id}';
+};
+
+export type GetDirectorCutErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type GetDirectorCutError = GetDirectorCutErrors[keyof GetDirectorCutErrors];
+
+export type GetDirectorCutResponses = {
+    /**
+     * Successful Response
+     */
+    200: DirectorCutOut;
+};
+
+export type GetDirectorCutResponse = GetDirectorCutResponses[keyof GetDirectorCutResponses];
+
+export type GetDirectorLibraryData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/director/library';
+};
+
+export type GetDirectorLibraryErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type GetDirectorLibraryError = GetDirectorLibraryErrors[keyof GetDirectorLibraryErrors];
+
+export type GetDirectorLibraryResponses = {
+    /**
+     * Successful Response
+     */
+    200: DirectorLibraryOut;
+};
+
+export type GetDirectorLibraryResponse = GetDirectorLibraryResponses[keyof GetDirectorLibraryResponses];
+
+export type IndexDirectorPlanData = {
     body: DirectorPlanCreate;
     headers?: {
         /**
@@ -835,23 +947,23 @@ export type RequestDirectorPlanData = {
     url: '/v1/director/plans';
 };
 
-export type RequestDirectorPlanErrors = {
+export type IndexDirectorPlanErrors = {
     /**
      * An error.
      */
     default: ErrorResponse;
 };
 
-export type RequestDirectorPlanError = RequestDirectorPlanErrors[keyof RequestDirectorPlanErrors];
+export type IndexDirectorPlanError = IndexDirectorPlanErrors[keyof IndexDirectorPlanErrors];
 
-export type RequestDirectorPlanResponses = {
+export type IndexDirectorPlanResponses = {
     /**
      * Successful Response
      */
     200: DirectorPlanOut;
 };
 
-export type RequestDirectorPlanResponse = RequestDirectorPlanResponses[keyof RequestDirectorPlanResponses];
+export type IndexDirectorPlanResponse = IndexDirectorPlanResponses[keyof IndexDirectorPlanResponses];
 
 export type GetDirectorPlanData = {
     body?: never;
@@ -892,6 +1004,48 @@ export type GetDirectorPlanResponses = {
 };
 
 export type GetDirectorPlanResponse = GetDirectorPlanResponses[keyof GetDirectorPlanResponses];
+
+export type ListDirectorCutsData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path: {
+        /**
+         * Video Id
+         */
+        video_id: string;
+    };
+    query?: never;
+    url: '/v1/director/plans/{video_id}/cuts';
+};
+
+export type ListDirectorCutsErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type ListDirectorCutsError = ListDirectorCutsErrors[keyof ListDirectorCutsErrors];
+
+export type ListDirectorCutsResponses = {
+    /**
+     * Response Listdirectorcuts
+     *
+     * Successful Response
+     */
+    200: Array<DirectorCutOut>;
+};
+
+export type ListDirectorCutsResponse = ListDirectorCutsResponses[keyof ListDirectorCutsResponses];
 
 export type ListDirectorTakesData = {
     body?: never;
@@ -935,6 +1089,41 @@ export type ListDirectorTakesResponses = {
 
 export type ListDirectorTakesResponse = ListDirectorTakesResponses[keyof ListDirectorTakesResponses];
 
+export type WriteDirectorPublishCopyData = {
+    body: PublishCopyRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/director/publish-copy';
+};
+
+export type WriteDirectorPublishCopyErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type WriteDirectorPublishCopyError = WriteDirectorPublishCopyErrors[keyof WriteDirectorPublishCopyErrors];
+
+export type WriteDirectorPublishCopyResponses = {
+    /**
+     * Successful Response
+     */
+    200: PublishCopy;
+};
+
+export type WriteDirectorPublishCopyResponse = WriteDirectorPublishCopyResponses[keyof WriteDirectorPublishCopyResponses];
+
 export type CheckDirectorSceneData = {
     body: SceneCheckRequest;
     headers?: {
@@ -970,6 +1159,41 @@ export type CheckDirectorSceneResponses = {
 
 export type CheckDirectorSceneResponse = CheckDirectorSceneResponses[keyof CheckDirectorSceneResponses];
 
+export type SpeakDirectorLineData = {
+    body: SpeechRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/director/speak';
+};
+
+export type SpeakDirectorLineErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type SpeakDirectorLineError = SpeakDirectorLineErrors[keyof SpeakDirectorLineErrors];
+
+export type SpeakDirectorLineResponses = {
+    /**
+     * The line, spoken, as a WAV file.
+     */
+    200: Blob | File;
+};
+
+export type SpeakDirectorLineResponse = SpeakDirectorLineResponses[keyof SpeakDirectorLineResponses];
+
 export type CreateDirectorTakeData = {
     body: DirectorTakeCreate;
     headers?: {
@@ -1004,150 +1228,3 @@ export type CreateDirectorTakeResponses = {
 };
 
 export type CreateDirectorTakeResponse = CreateDirectorTakeResponses[keyof CreateDirectorTakeResponses];
-
-export type ListDocumentsData = {
-    body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-        /**
-         * X-Request-Id
-         */
-        'x-request-id'?: string | null;
-    };
-    path?: never;
-    query?: never;
-    url: '/v1/documents';
-};
-
-export type ListDocumentsErrors = {
-    /**
-     * An error.
-     */
-    default: ErrorResponse;
-};
-
-export type ListDocumentsError = ListDocumentsErrors[keyof ListDocumentsErrors];
-
-export type ListDocumentsResponses = {
-    /**
-     * Response Listdocuments
-     *
-     * Successful Response
-     */
-    200: Array<DocumentOut>;
-};
-
-export type ListDocumentsResponse = ListDocumentsResponses[keyof ListDocumentsResponses];
-
-export type CreateDocumentData = {
-    body: DocumentCreate;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-        /**
-         * X-Request-Id
-         */
-        'x-request-id'?: string | null;
-    };
-    path?: never;
-    query?: never;
-    url: '/v1/documents';
-};
-
-export type CreateDocumentErrors = {
-    /**
-     * An error.
-     */
-    default: ErrorResponse;
-};
-
-export type CreateDocumentError = CreateDocumentErrors[keyof CreateDocumentErrors];
-
-export type CreateDocumentResponses = {
-    /**
-     * Successful Response
-     */
-    201: DocumentOut;
-};
-
-export type CreateDocumentResponse = CreateDocumentResponses[keyof CreateDocumentResponses];
-
-export type DeleteDocumentData = {
-    body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-        /**
-         * X-Request-Id
-         */
-        'x-request-id'?: string | null;
-    };
-    path: {
-        /**
-         * Document Id
-         */
-        document_id: string;
-    };
-    query?: never;
-    url: '/v1/documents/{document_id}';
-};
-
-export type DeleteDocumentErrors = {
-    /**
-     * An error.
-     */
-    default: ErrorResponse;
-};
-
-export type DeleteDocumentError = DeleteDocumentErrors[keyof DeleteDocumentErrors];
-
-export type DeleteDocumentResponses = {
-    /**
-     * Successful Response
-     */
-    204: void;
-};
-
-export type DeleteDocumentResponse = DeleteDocumentResponses[keyof DeleteDocumentResponses];
-
-export type SentimentData = {
-    body: SentimentRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-        /**
-         * X-Request-Id
-         */
-        'x-request-id'?: string | null;
-    };
-    path?: never;
-    query?: never;
-    url: '/v1/sentiment';
-};
-
-export type SentimentErrors = {
-    /**
-     * An error.
-     */
-    default: ErrorResponse;
-};
-
-export type SentimentError = SentimentErrors[keyof SentimentErrors];
-
-export type SentimentResponses = {
-    /**
-     * Successful Response
-     */
-    200: SentimentResponse;
-};
-
-export type SentimentResponse2 = SentimentResponses[keyof SentimentResponses];

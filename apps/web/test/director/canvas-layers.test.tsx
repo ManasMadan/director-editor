@@ -216,5 +216,8 @@ describe("the Director's Cut", () => {
     await expect.element(page.getByText("Nothing to fix. Perfect!")).toBeInTheDocument();
     await expect.element(page.getByRole("alert")).toHaveTextContent("Couldn't send it.");
     await expect.element(page.getByRole("button", { name: /Keep it/ })).toBeDisabled();
+    await expect
+      .element(page.getByRole("status", { name: "Sending your take to Director…" }))
+      .toBeInTheDocument();
   });
 });

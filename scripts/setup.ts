@@ -61,7 +61,7 @@ export function syncEnv(envPath = ENV_PATH, examplePath = ENV_EXAMPLE_PATH) {
       writeEnvValue(envPath, key, value);
     }
   }
-  // Placeholders become fresh secrets in each variable's format (the VAPID pair together).
+  // Placeholders become fresh secrets.
   const current = Object.fromEntries(readEnv(envPath));
   for (const [key, value] of Object.entries(fillPlaceholders(current))) {
     if (value !== current[key]) {

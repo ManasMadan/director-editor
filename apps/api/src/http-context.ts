@@ -4,6 +4,8 @@
  * `runWithContext(contextFor(request), ...)`; the user and organization are added once
  * the session is resolved.
  */
+
+import type { IncomingHttpHeaders } from "node:http";
 import { type Locale, negotiateLocale } from "@repo/i18n";
 import type { RequestContext } from "@repo/nest-common";
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -20,8 +22,11 @@ export function contextFor(request: FastifyRequest): RequestContext & { locale: 
   };
 }
 
-/** Fastify's parsed headers as a Web Headers object (for better-auth and oRPC). */
-export function toHeaders(request: FastifyRequest) {
+/**
+ * A request's headers as a Web Headers object (for better-auth and oRPC): Fastify's, or a
+ * raw Node request's (a WebSocket upgrade never reaches Fastify's routing).
+ */
+export function toHeaders(request: { headers: IncomingHttpHeaders }) {
   const headers = new Headers();
   for (const [key, value] of Object.entries(request.headers)) {
     if (value !== undefined) {
@@ -33,7 +38,7 @@ export function toHeaders(request: FastifyRequest) {
 
 /**
  * The Fastify request as a Web Request, for handlers written against the Fetch API
- * (better-auth, the MCP transport). The body is the raw one `rawBodies` keeps.
+ * (better-auth). The body is the raw one `rawBodies` keeps.
  */
 export function toWebRequest(request: FastifyRequest, url: URL, headers = toHeaders(request)) {
   const body = Buffer.isBuffer(request.body) ? new Uint8Array(request.body) : undefined;

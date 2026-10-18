@@ -7,8 +7,8 @@ import sitemap from "./sitemap";
 const SITE = process.env.WEB_URL;
 
 describe("metadata routes", () => {
-  it("installs as an app that opens on the dashboard", () => {
-    expect(manifest()).toMatchObject({ start_url: "/dashboard", display: "standalone" });
+  it("installs as an app that opens on the library", () => {
+    expect(manifest()).toMatchObject({ start_url: "/library", display: "standalone" });
   });
 
   it("keeps crawlers out of signed-in pages and auth flows, and points them at the sitemap", () => {
@@ -16,7 +16,7 @@ describe("metadata routes", () => {
     expect(rules.sitemap).toBe(`${SITE}/sitemap.xml`);
     expect(rules.rules).toMatchObject({
       allow: "/",
-      disallow: expect.arrayContaining(["/dashboard", "/sign-"]),
+      disallow: expect.arrayContaining(["/library", "/sign-"]),
     });
   });
 

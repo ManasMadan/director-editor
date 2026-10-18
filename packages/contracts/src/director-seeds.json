@@ -1,0 +1,2431 @@
+[
+  {
+    "videoId": "22k0fZarxh8",
+    "plan": {
+      "title": "4 Variations of the Indian Head Nod",
+      "format": "Travel Observation / Cultural Vlog",
+      "summary": "A lighthearted travel reel demonstrating four distinct variations of the Indian head nod from a bustling street, intercut with real-life clips of locals doing each gesture.",
+      "audio": "speech-and-music",
+      "durationSeconds": 36.2,
+      "shots": [
+        {
+          "kind": "video",
+          "title": "Intro in the Market",
+          "purpose": "hook: introduce the cultural observation in a lively setting, curious and friendly",
+          "sourceStartSeconds": 0.0,
+          "sourceEndSeconds": 5.3,
+          "durationSeconds": 5.3,
+          "camera": "back",
+          "scene": "Stand in a busy outdoor market street.",
+          "sceneLandmark": "street",
+          "framing": {
+            "shotSize": "medium",
+            "subject": {
+              "x": 0.12,
+              "y": 0.15,
+              "width": 0.75,
+              "height": 0.85
+            },
+            "note": "Center yourself from the waist up with a busy street behind you."
+          },
+          "phoneAngle": {
+            "pitch": 0.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "eye"
+          },
+          "pose": {
+            "description": "Standing upright facing the camera, then turning slightly to the side while gesturing.",
+            "keypoints": [
+              {
+                "name": "nose",
+                "x": 0.48,
+                "y": 0.32
+              },
+              {
+                "name": "left_shoulder",
+                "x": 0.65,
+                "y": 0.53
+              },
+              {
+                "name": "right_shoulder",
+                "x": 0.26,
+                "y": 0.53
+              },
+              {
+                "name": "left_elbow",
+                "x": 0.74,
+                "y": 0.82
+              },
+              {
+                "name": "right_elbow",
+                "x": 0.2,
+                "y": 0.82
+              }
+            ]
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Stand facing the camera in a busy street and introduce your topic.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 3.4,
+              "instruction": "Turn slightly to your side and gesture casually with your hand as you finish the sentence.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.0,
+              "endSeconds": 5.3,
+              "text": "While traveling around India, I've noticed four variations of the head nod, and it is a gesture of agreeance."
+            }
+          ]
+        },
+        {
+          "kind": "video",
+          "title": "Demonstrating Variation 1",
+          "purpose": "setup: demonstrate the first variation, playful and clear",
+          "sourceStartSeconds": 5.3,
+          "sourceEndSeconds": 8.9,
+          "durationSeconds": 3.6,
+          "camera": "back",
+          "scene": "Stand in the same busy outdoor street.",
+          "sceneLandmark": "street",
+          "framing": {
+            "shotSize": "medium",
+            "subject": {
+              "x": 0.12,
+              "y": 0.15,
+              "width": 0.75,
+              "height": 0.85
+            },
+            "note": "Keep yourself centered from the waist up so your head movement is clear."
+          },
+          "phoneAngle": {
+            "pitch": 0.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "eye"
+          },
+          "pose": {
+            "description": "Facing forward, tilting head side to side with a warm smile.",
+            "keypoints": [
+              {
+                "name": "nose",
+                "x": 0.48,
+                "y": 0.32
+              },
+              {
+                "name": "left_shoulder",
+                "x": 0.65,
+                "y": 0.53
+              },
+              {
+                "name": "right_shoulder",
+                "x": 0.25,
+                "y": 0.53
+              }
+            ]
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Look straight into the lens and announce the first variation.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 2.2,
+              "instruction": "Smile and gently tilt your head from side to side.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.0,
+              "endSeconds": 2.4,
+              "text": "So the first one is like this."
+            }
+          ]
+        },
+        {
+          "kind": "video",
+          "title": "Real Examples of Variation 1",
+          "purpose": "reveal: real-life examples of the first head nod, warm and authentic",
+          "sourceStartSeconds": 8.9,
+          "sourceEndSeconds": 13.3,
+          "durationSeconds": 4.4,
+          "camera": "back",
+          "scene": "At street stalls and walkways with locals.",
+          "sceneLandmark": "stall",
+          "framing": {
+            "shotSize": "medium",
+            "subject": {
+              "x": 0.18,
+              "y": 0.2,
+              "width": 0.65,
+              "height": 0.75
+            },
+            "note": "Frame the people you interact with from the waist up."
+          },
+          "phoneAngle": {
+            "pitch": -5.0,
+            "roll": 0.0,
+            "tolerance": 15.0,
+            "height": "eye"
+          },
+          "pose": {
+            "description": "People sitting or standing in shops and streets tilting their heads in agreement.",
+            "keypoints": [
+              {
+                "name": "nose",
+                "x": 0.4,
+                "y": 0.38
+              },
+              {
+                "name": "left_shoulder",
+                "x": 0.5,
+                "y": 0.5
+              },
+              {
+                "name": "right_shoulder",
+                "x": 0.28,
+                "y": 0.51
+              }
+            ]
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Film four quick clips of people smiling and giving a slow side-to-side head tilt as you chat or hand them something.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": []
+        },
+        {
+          "kind": "video",
+          "title": "Demonstrating Variation 2",
+          "purpose": "setup: introduce and demonstrate the second variation, upbeat",
+          "sourceStartSeconds": 13.3,
+          "sourceEndSeconds": 15.3,
+          "durationSeconds": 2.0,
+          "camera": "back",
+          "scene": "Stand in the busy outdoor street.",
+          "sceneLandmark": "street",
+          "framing": {
+            "shotSize": "medium",
+            "subject": {
+              "x": 0.12,
+              "y": 0.15,
+              "width": 0.75,
+              "height": 0.85
+            },
+            "note": "Frame yourself from the waist up, centered."
+          },
+          "phoneAngle": {
+            "pitch": 0.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "eye"
+          },
+          "pose": {
+            "description": "Standing straight and giving a quick single side tilt of the head.",
+            "keypoints": [
+              {
+                "name": "nose",
+                "x": 0.49,
+                "y": 0.32
+              },
+              {
+                "name": "left_shoulder",
+                "x": 0.65,
+                "y": 0.54
+              },
+              {
+                "name": "right_shoulder",
+                "x": 0.25,
+                "y": 0.54
+              }
+            ]
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Say your line, then immediately do one fast side-to-side head waggle.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.0,
+              "endSeconds": 1.2,
+              "text": "Then there's the really quick"
+            }
+          ]
+        },
+        {
+          "kind": "video",
+          "title": "Real Examples of Variation 2",
+          "purpose": "reveal: real-life clips of the quick nod, lively and candid",
+          "sourceStartSeconds": 15.3,
+          "sourceEndSeconds": 19.0,
+          "durationSeconds": 3.7,
+          "camera": "back",
+          "scene": "Along the street and inside local shops.",
+          "sceneLandmark": "counter",
+          "framing": {
+            "shotSize": "medium",
+            "subject": {
+              "x": 0.2,
+              "y": 0.2,
+              "width": 0.6,
+              "height": 0.75
+            },
+            "note": "Keep each person centered from the chest or waist up."
+          },
+          "phoneAngle": {
+            "pitch": 0.0,
+            "roll": 0.0,
+            "tolerance": 15.0,
+            "height": "eye"
+          },
+          "pose": {
+            "description": "People on the street and behind shop counters giving a quick head tilt.",
+            "keypoints": [
+              {
+                "name": "nose",
+                "x": 0.48,
+                "y": 0.54
+              },
+              {
+                "name": "left_shoulder",
+                "x": 0.62,
+                "y": 0.68
+              },
+              {
+                "name": "right_shoulder",
+                "x": 0.35,
+                "y": 0.68
+              }
+            ]
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Film three quick clips of people passing by or behind shop counters giving a fast, friendly head tilt.",
+              "cameraMove": "right"
+            }
+          ],
+          "script": []
+        },
+        {
+          "kind": "video",
+          "title": "Demonstrating Variation 3",
+          "purpose": "setup: show the third variation, energetic",
+          "sourceStartSeconds": 19.0,
+          "sourceEndSeconds": 21.3,
+          "durationSeconds": 2.3,
+          "camera": "back",
+          "scene": "Stand in the busy market street.",
+          "sceneLandmark": "street",
+          "framing": {
+            "shotSize": "medium",
+            "subject": {
+              "x": 0.12,
+              "y": 0.15,
+              "width": 0.75,
+              "height": 0.85
+            },
+            "note": "Center yourself from the waist up."
+          },
+          "phoneAngle": {
+            "pitch": 0.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "eye"
+          },
+          "pose": {
+            "description": "Facing camera and shaking head rapidly side to side with a slight tilt.",
+            "keypoints": [
+              {
+                "name": "nose",
+                "x": 0.48,
+                "y": 0.32
+              },
+              {
+                "name": "left_shoulder",
+                "x": 0.65,
+                "y": 0.53
+              },
+              {
+                "name": "right_shoulder",
+                "x": 0.25,
+                "y": 0.53
+              }
+            ]
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Introduce the third nod, then wiggle your head quickly from side to side.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.0,
+              "endSeconds": 1.0,
+              "text": "Then there's this one."
+            }
+          ]
+        },
+        {
+          "kind": "video",
+          "title": "Real Examples of Variation 3",
+          "purpose": "reveal: show locals doing the rapid head waggle, cheerful",
+          "sourceStartSeconds": 21.3,
+          "sourceEndSeconds": 24.6,
+          "durationSeconds": 3.3,
+          "camera": "back",
+          "scene": "Inside a clothing shop and a lobby.",
+          "sceneLandmark": "shop",
+          "framing": {
+            "shotSize": "medium",
+            "subject": {
+              "x": 0.18,
+              "y": 0.12,
+              "width": 0.65,
+              "height": 0.85
+            },
+            "note": "Frame the subject from the waist up."
+          },
+          "phoneAngle": {
+            "pitch": 0.0,
+            "roll": 0.0,
+            "tolerance": 15.0,
+            "height": "eye"
+          },
+          "pose": {
+            "description": "Standing indoors, smiling and waggling head rapidly in agreement.",
+            "keypoints": [
+              {
+                "name": "nose",
+                "x": 0.53,
+                "y": 0.28
+              },
+              {
+                "name": "left_shoulder",
+                "x": 0.68,
+                "y": 0.46
+              },
+              {
+                "name": "right_shoulder",
+                "x": 0.3,
+                "y": 0.46
+              }
+            ]
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Record two short clips of people indoors smiling and giving a continuous, rapid head waggle.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": []
+        },
+        {
+          "kind": "video",
+          "title": "Explanation & Variation 4 Demo",
+          "purpose": "setup: explain the confusion and demonstrate the fourth variation, relatable and expressive",
+          "sourceStartSeconds": 24.6,
+          "sourceEndSeconds": 32.0,
+          "durationSeconds": 7.4,
+          "camera": "back",
+          "scene": "Stand in the busy outdoor street.",
+          "sceneLandmark": "street",
+          "framing": {
+            "shotSize": "medium",
+            "subject": {
+              "x": 0.1,
+              "y": 0.15,
+              "width": 0.8,
+              "height": 0.85
+            },
+            "note": "Center yourself from the waist up with room for hand gestures."
+          },
+          "phoneAngle": {
+            "pitch": 0.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "eye"
+          },
+          "pose": {
+            "description": "Speaking with open hands, then tilting head down and to the side.",
+            "keypoints": [
+              {
+                "name": "nose",
+                "x": 0.48,
+                "y": 0.32
+              },
+              {
+                "name": "left_shoulder",
+                "x": 0.65,
+                "y": 0.53
+              },
+              {
+                "name": "right_shoulder",
+                "x": 0.25,
+                "y": 0.53
+              },
+              {
+                "name": "left_wrist",
+                "x": 0.82,
+                "y": 0.78
+              },
+              {
+                "name": "right_wrist",
+                "x": 0.12,
+                "y": 0.78
+              }
+            ]
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Explain how the gesture used to confuse you while gesturing with both hands open.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 5.4,
+              "instruction": "Introduce the last variation, then dip your head down and to the side with a smile.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.0,
+              "endSeconds": 5.3,
+              "text": "And I used to get very confused cause it almost looks like they're saying no, but they're actually just agreeing with you."
+            },
+            {
+              "startSeconds": 5.4,
+              "endSeconds": 6.8,
+              "text": "And then there's this one."
+            }
+          ]
+        },
+        {
+          "kind": "video",
+          "title": "Real Example of Variation 4",
+          "purpose": "reveal: show a real example of the fourth nod, charming",
+          "sourceStartSeconds": 32.0,
+          "sourceEndSeconds": 33.4,
+          "durationSeconds": 1.4,
+          "camera": "back",
+          "scene": "Inside a bright shop with a friend holding a mini mic.",
+          "sceneLandmark": "counter",
+          "framing": {
+            "shotSize": "medium",
+            "subject": {
+              "x": 0.15,
+              "y": 0.12,
+              "width": 0.7,
+              "height": 0.85
+            },
+            "note": "Frame the person from the waist up."
+          },
+          "phoneAngle": {
+            "pitch": 0.0,
+            "roll": 0.0,
+            "tolerance": 15.0,
+            "height": "eye"
+          },
+          "pose": {
+            "description": "Man in a shop dipping his head to the side while smiling.",
+            "keypoints": [
+              {
+                "name": "nose",
+                "x": 0.52,
+                "y": 0.28
+              },
+              {
+                "name": "left_shoulder",
+                "x": 0.68,
+                "y": 0.46
+              },
+              {
+                "name": "right_shoulder",
+                "x": 0.32,
+                "y": 0.44
+              },
+              {
+                "name": "right_wrist",
+                "x": 0.42,
+                "y": 0.58
+              }
+            ]
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Film a clip of someone smiling and dipping their head to the side in agreement during an interview.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": []
+        },
+        {
+          "kind": "video",
+          "title": "Outro in the Market",
+          "purpose": "payoff: wrap up with a sweet personal takeaway while doing the nod yourself, endearing",
+          "sourceStartSeconds": 33.4,
+          "sourceEndSeconds": 36.2,
+          "durationSeconds": 2.8,
+          "camera": "back",
+          "scene": "Stand in the busy outdoor street.",
+          "sceneLandmark": "street",
+          "framing": {
+            "shotSize": "medium",
+            "subject": {
+              "x": 0.12,
+              "y": 0.15,
+              "width": 0.75,
+              "height": 0.85
+            },
+            "note": "Center yourself from the waist up."
+          },
+          "phoneAngle": {
+            "pitch": 0.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "eye"
+          },
+          "pose": {
+            "description": "Smiling warmly at the camera with hands clasped in front while doing the head nod.",
+            "keypoints": [
+              {
+                "name": "nose",
+                "x": 0.48,
+                "y": 0.32
+              },
+              {
+                "name": "left_shoulder",
+                "x": 0.65,
+                "y": 0.53
+              },
+              {
+                "name": "right_shoulder",
+                "x": 0.25,
+                "y": 0.53
+              },
+              {
+                "name": "left_wrist",
+                "x": 0.52,
+                "y": 0.85
+              },
+              {
+                "name": "right_wrist",
+                "x": 0.4,
+                "y": 0.85
+              }
+            ]
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Smile warmly, bring your hands together in front of you, and do the side-to-side head nod as you say your final line.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.0,
+              "endSeconds": 2.8,
+              "text": "And I find it so cute, I have even started to do it."
+            }
+          ]
+        }
+      ]
+    },
+    "model": "gemini-4-argon",
+    "audioKey": "seed-audio/22k0fZarxh8.m4a",
+    "media": {
+      "music": "seed-media/22k0fZarxh8/music.mp3",
+      "shots": [
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-0.png",
+          "preview": "seed-media/22k0fZarxh8/shot-0.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-1.png",
+          "preview": "seed-media/22k0fZarxh8/shot-1.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-2.png",
+          "preview": "seed-media/22k0fZarxh8/shot-2.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-3.png",
+          "preview": "seed-media/22k0fZarxh8/shot-3.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-4.png",
+          "preview": "seed-media/22k0fZarxh8/shot-4.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-5.png",
+          "preview": "seed-media/22k0fZarxh8/shot-5.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-6.png",
+          "preview": "seed-media/22k0fZarxh8/shot-6.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-7.png",
+          "preview": "seed-media/22k0fZarxh8/shot-7.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-8.png",
+          "preview": "seed-media/22k0fZarxh8/shot-8.mp4"
+        },
+        {
+          "storyboard": "seed-media/22k0fZarxh8/shot-9.png",
+          "preview": "seed-media/22k0fZarxh8/shot-9.mp4"
+        }
+      ]
+    }
+  },
+  {
+    "videoId": "152Jy2c3XSM",
+    "plan": {
+      "title": "Unboxing a New Eilik Robot Companion",
+      "format": "Unboxing & Toy Reaction",
+      "summary": "Unbox a new desktop robot toy alongside your first one, power it on, and pet its head to turn a grumpy face into a happy dance.",
+      "audio": "music",
+      "durationSeconds": 31.0,
+      "shots": [
+        {
+          "kind": "video",
+          "title": "The New Arrival",
+          "purpose": "hook: introduce the new arrival and spark curiosity",
+          "sourceStartSeconds": 0.0,
+          "sourceEndSeconds": 2.7,
+          "durationSeconds": 2.7,
+          "camera": "back",
+          "scene": "On the floor against a wall with your first robot toy.",
+          "sceneLandmark": "wall",
+          "framing": {
+            "shotSize": "medium",
+            "subject": {
+              "x": 0.05,
+              "y": 0.2,
+              "width": 0.9,
+              "height": 0.65
+            },
+            "note": "Keep the first toy on the right, then pan left as the new box lands."
+          },
+          "phoneAngle": {
+            "pitch": -10.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "floor"
+          },
+          "pose": {
+            "description": "No person in frame; just a hand placing the box down.",
+            "keypoints": []
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Start on your first robot toy with the caption 'A new Eilik is here!' on screen.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 0.7,
+              "instruction": "Pan left and set the new box down next to it.",
+              "cameraMove": "left"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.0,
+              "endSeconds": 2.7,
+              "text": "A new Eilik is here!"
+            }
+          ]
+        },
+        {
+          "kind": "video",
+          "title": "Surprised Reaction",
+          "purpose": "setup: show the first toy's surprised reaction",
+          "sourceStartSeconds": 2.7,
+          "sourceEndSeconds": 3.9,
+          "durationSeconds": 1.2,
+          "camera": "back",
+          "scene": "Close to the floor right in front of the robot and box.",
+          "sceneLandmark": null,
+          "framing": {
+            "shotSize": "close-up",
+            "subject": {
+              "x": 0.02,
+              "y": 0.15,
+              "width": 0.95,
+              "height": 0.8
+            },
+            "note": "Frame the robot on the right looking at the box on the left."
+          },
+          "phoneAngle": {
+            "pitch": -5.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "floor"
+          },
+          "pose": {
+            "description": "No person in frame.",
+            "keypoints": []
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Film your robot looking at the box and place a surprised emoji above its head.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.0,
+              "endSeconds": 1.2,
+              "text": "\ud83d\ude32"
+            }
+          ]
+        },
+        {
+          "kind": "video",
+          "title": "Knocking on the Box",
+          "purpose": "setup: build anticipation with a cute interaction",
+          "sourceStartSeconds": 3.9,
+          "sourceEndSeconds": 5.2,
+          "durationSeconds": 1.3,
+          "camera": "back",
+          "scene": "On the floor angled toward the front of the box.",
+          "sceneLandmark": null,
+          "framing": {
+            "shotSize": "close-up",
+            "subject": {
+              "x": 0.02,
+              "y": 0.1,
+              "width": 0.95,
+              "height": 0.85
+            },
+            "note": "Angle from the side so the robot's arm touches the box."
+          },
+          "phoneAngle": {
+            "pitch": -5.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "floor"
+          },
+          "pose": {
+            "description": "No person in frame.",
+            "keypoints": []
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Capture the robot tapping its arm against the box with the text '*knocks*' on screen.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.0,
+              "endSeconds": 1.3,
+              "text": "*knocks*"
+            }
+          ]
+        },
+        {
+          "kind": "video",
+          "title": "Heart Eyes",
+          "purpose": "setup: show excitement for the new friend inside",
+          "sourceStartSeconds": 5.2,
+          "sourceEndSeconds": 6.7,
+          "durationSeconds": 1.5,
+          "camera": "back",
+          "scene": "On the floor facing the robot.",
+          "sceneLandmark": null,
+          "framing": {
+            "shotSize": "close-up",
+            "subject": {
+              "x": 0.1,
+              "y": 0.15,
+              "width": 0.85,
+              "height": 0.8
+            },
+            "note": "Center on the robot's face showing heart eyes."
+          },
+          "phoneAngle": {
+            "pitch": -5.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "floor"
+          },
+          "pose": {
+            "description": "No person in frame.",
+            "keypoints": []
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Slowly push in on the robot's heart-eyes screen with a heart-eyes emoji above it.",
+              "cameraMove": "forward"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.0,
+              "endSeconds": 1.5,
+              "text": "\ud83d\ude0d"
+            }
+          ]
+        },
+        {
+          "kind": "video",
+          "title": "Sliding Off the Sleeve",
+          "purpose": "setup: begin the unboxing",
+          "sourceStartSeconds": 6.7,
+          "sourceEndSeconds": 9.3,
+          "durationSeconds": 2.6,
+          "camera": "back",
+          "scene": "On the floor in front of the packaged box.",
+          "sceneLandmark": null,
+          "framing": {
+            "shotSize": "medium",
+            "subject": {
+              "x": 0.08,
+              "y": 0.1,
+              "width": 0.85,
+              "height": 0.75
+            },
+            "note": "Center the box in frame with room above to slide the sleeve off."
+          },
+          "phoneAngle": {
+            "pitch": -10.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "floor"
+          },
+          "pose": {
+            "description": "Two hands at the top of the frame lifting the box sleeve.",
+            "keypoints": []
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Show the caption 'Let's unbox her!' and slide the outer sleeve straight up off the box.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.0,
+              "endSeconds": 2.6,
+              "text": "Let's unbox her!"
+            }
+          ]
+        },
+        {
+          "kind": "video",
+          "title": "Opening the Cardboard Box",
+          "purpose": "setup: continue the unboxing build-up",
+          "sourceStartSeconds": 9.3,
+          "sourceEndSeconds": 11.5,
+          "durationSeconds": 2.2,
+          "camera": "back",
+          "scene": "On the floor beside the inner cardboard box.",
+          "sceneLandmark": null,
+          "framing": {
+            "shotSize": "medium",
+            "subject": {
+              "x": 0.05,
+              "y": 0.15,
+              "width": 0.85,
+              "height": 0.7
+            },
+            "note": "Angle slightly from the side to show the box lid opening."
+          },
+          "phoneAngle": {
+            "pitch": -10.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "floor"
+          },
+          "pose": {
+            "description": "A hand lifting the cardboard flap.",
+            "keypoints": []
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Keep the caption up and lift the cardboard lid open with one hand.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.0,
+              "endSeconds": 2.2,
+              "text": "Let's unbox her!"
+            }
+          ]
+        },
+        {
+          "kind": "video",
+          "title": "First Peek Inside",
+          "purpose": "reveal: first peek at the new toy inside the box",
+          "sourceStartSeconds": 11.5,
+          "sourceEndSeconds": 12.6,
+          "durationSeconds": 1.1,
+          "camera": "back",
+          "scene": "Above the open box on the floor.",
+          "sceneLandmark": null,
+          "framing": {
+            "shotSize": "medium",
+            "subject": {
+              "x": 0.05,
+              "y": 0.1,
+              "width": 0.9,
+              "height": 0.8
+            },
+            "note": "Look down into the open box to show the toy inside."
+          },
+          "phoneAngle": {
+            "pitch": -35.0,
+            "roll": -10.0,
+            "tolerance": 15.0,
+            "height": "waist"
+          },
+          "pose": {
+            "description": "No person in frame.",
+            "keypoints": []
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Point the camera down into the open box and add the caption 'Wow! \ud83d\ude06'.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.0,
+              "endSeconds": 1.1,
+              "text": "Wow! \ud83d\ude06"
+            }
+          ]
+        },
+        {
+          "kind": "video",
+          "title": "Removing the Plastic Shell",
+          "purpose": "reveal: free the toy from its packaging",
+          "sourceStartSeconds": 12.6,
+          "sourceEndSeconds": 15.5,
+          "durationSeconds": 2.9,
+          "camera": "back",
+          "scene": "On the floor in front of the plastic casing.",
+          "sceneLandmark": null,
+          "framing": {
+            "shotSize": "close-up",
+            "subject": {
+              "x": 0.1,
+              "y": 0.15,
+              "width": 0.8,
+              "height": 0.75
+            },
+            "note": "Center the plastic shell on the floor."
+          },
+          "phoneAngle": {
+            "pitch": -15.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "floor"
+          },
+          "pose": {
+            "description": "Hands pulling the two halves of the plastic shell apart.",
+            "keypoints": []
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Set the plastic case on the floor and pull the top cover apart with both hands.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.0,
+              "endSeconds": 2.9,
+              "text": "Wow! \ud83d\ude06"
+            }
+          ]
+        },
+        {
+          "kind": "video",
+          "title": "Powering On",
+          "purpose": "reveal: bring the new toy to life and show its expressions",
+          "sourceStartSeconds": 15.5,
+          "sourceEndSeconds": 24.2,
+          "durationSeconds": 8.7,
+          "camera": "back",
+          "scene": "On the floor facing the new robot.",
+          "sceneLandmark": null,
+          "framing": {
+            "shotSize": "close-up",
+            "subject": {
+              "x": 0.12,
+              "y": 0.18,
+              "width": 0.75,
+              "height": 0.75
+            },
+            "note": "Center the new robot upright on its stand."
+          },
+          "phoneAngle": {
+            "pitch": -10.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "floor"
+          },
+          "pose": {
+            "description": "A thumb pressing the button on the robot's chest.",
+            "keypoints": []
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Show the caption 'Let's power her on!' and press and hold the button on the toy's chest.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 2.0,
+              "instruction": "Move your hand away and let the camera capture its startup animations.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.0,
+              "endSeconds": 8.7,
+              "text": "Let's power her on!"
+            }
+          ]
+        },
+        {
+          "kind": "video",
+          "title": "Grumpy Face Close-Up",
+          "purpose": "setup: highlight a funny grumpy expression",
+          "sourceStartSeconds": 24.2,
+          "sourceEndSeconds": 25.5,
+          "durationSeconds": 1.3,
+          "camera": "back",
+          "scene": "Right in front of the robot's face.",
+          "sceneLandmark": null,
+          "framing": {
+            "shotSize": "close-up",
+            "subject": {
+              "x": 0.1,
+              "y": 0.15,
+              "width": 0.8,
+              "height": 0.8
+            },
+            "note": "Tight close-up on the robot's face and grumpy eyes."
+          },
+          "phoneAngle": {
+            "pitch": -5.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "floor"
+          },
+          "pose": {
+            "description": "No person in frame.",
+            "keypoints": []
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Zoom in close on the angry eyes and add the text 'Why is she so angry?'.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.0,
+              "endSeconds": 1.3,
+              "text": "Why is she so angry?"
+            }
+          ]
+        },
+        {
+          "kind": "video",
+          "title": "Making Her Happy",
+          "purpose": "payoff: cheer the robot up for a sweet, happy ending",
+          "sourceStartSeconds": 25.5,
+          "sourceEndSeconds": 31.0,
+          "durationSeconds": 5.5,
+          "camera": "back",
+          "scene": "On the floor facing the robot.",
+          "sceneLandmark": null,
+          "framing": {
+            "shotSize": "close-up",
+            "subject": {
+              "x": 0.12,
+              "y": 0.18,
+              "width": 0.75,
+              "height": 0.75
+            },
+            "note": "Center the robot with room above for your hand to pet its head."
+          },
+          "phoneAngle": {
+            "pitch": -10.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "floor"
+          },
+          "pose": {
+            "description": "A hand gently patting the top of the robot's head.",
+            "keypoints": []
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Show the text 'Let's make her happy!' and gently pet the top of the robot's head.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 1.8,
+              "instruction": "Switch the text to a smiley emoji as the robot starts smiling and dancing.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 3.6,
+              "instruction": "Take your hand away and finish with the caption 'Thanks for watching!'.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.0,
+              "endSeconds": 1.8,
+              "text": "Let's make her happy!"
+            },
+            {
+              "startSeconds": 1.8,
+              "endSeconds": 3.6,
+              "text": "\ud83d\ude03"
+            },
+            {
+              "startSeconds": 3.6,
+              "endSeconds": 5.5,
+              "text": "Thanks for watching!"
+            }
+          ]
+        }
+      ]
+    },
+    "model": "gemini-4-argon",
+    "audioKey": "seed-audio/152Jy2c3XSM.m4a",
+    "media": {
+      "music": "seed-media/152Jy2c3XSM/music.mp3",
+      "shots": [
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-0.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-0.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-1.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-1.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-2.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-2.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-3.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-3.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-4.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-4.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-5.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-5.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-6.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-6.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-7.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-7.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-8.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-8.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-9.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-9.mp4"
+        },
+        {
+          "storyboard": "seed-media/152Jy2c3XSM/shot-10.png",
+          "preview": "seed-media/152Jy2c3XSM/shot-10.mp4"
+        }
+      ]
+    }
+  },
+  {
+    "videoId": "_HonL1arbaA",
+    "plan": {
+      "title": "3-Ingredient No-Oven Oreo Cake",
+      "format": "3-Ingredient Recipe Tutorial",
+      "summary": "A fast-paced, no-oven recipe tutorial showing how to make a 3-ingredient Oreo cake in the microwave, starting with a mouthwatering fork-bite hook and ending with a glossy chocolate ganache pour.",
+      "audio": "speech",
+      "durationSeconds": 24.3,
+      "shots": [
+        {
+          "kind": "video",
+          "title": "The Fork Bite Hook",
+          "purpose": "hook: mouthwatering close-up of the finished cake being cut to grab attention immediately",
+          "sourceStartSeconds": 0.0,
+          "sourceEndSeconds": 4.0,
+          "durationSeconds": 4.0,
+          "camera": "back",
+          "scene": "At a kitchen counter or table with the finished cake on parchment paper.",
+          "sceneLandmark": "cake",
+          "framing": {
+            "shotSize": "close-up",
+            "subject": {
+              "x": 0.05,
+              "y": 0.2,
+              "width": 0.9,
+              "height": 0.65
+            },
+            "note": "Close-up of the slice of cake in the foreground with the rest of the cake and cookie packages behind it."
+          },
+          "phoneAngle": {
+            "pitch": -15.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "waist"
+          },
+          "pose": {
+            "description": "No full person in frame; just a hand entering from the top with a fork.",
+            "keypoints": []
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Press record with the camera pointing down at the slice of cake, and press a fork down through the tip of the slice.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 2.3,
+              "instruction": "Lift the bite of cake on the fork up toward the lens so the texture shows clearly.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.0,
+              "endSeconds": 2.3,
+              "text": "I am so shocked at how good this cake is."
+            },
+            {
+              "startSeconds": 2.3,
+              "endSeconds": 4.0,
+              "text": "It's only three ingredients and you don't even need an oven."
+            }
+          ]
+        },
+        {
+          "kind": "video",
+          "title": "Separate and Crush Cookies",
+          "purpose": "setup: fast-paced preparation of the main cookie ingredient",
+          "sourceStartSeconds": 4.0,
+          "sourceEndSeconds": 8.6,
+          "durationSeconds": 4.6,
+          "camera": "back",
+          "scene": "Overhead view of your kitchen counter with two bowls and a zip-top bag.",
+          "sceneLandmark": "bowl",
+          "framing": {
+            "shotSize": "close-up",
+            "subject": {
+              "x": 0.05,
+              "y": 0.25,
+              "width": 0.9,
+              "height": 0.6
+            },
+            "note": "Overhead view of a large glass bowl and a small white bowl on a wooden counter."
+          },
+          "phoneAngle": {
+            "pitch": -90.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "overhead"
+          },
+          "pose": {
+            "description": "Hands working over the bowls from the bottom of the frame.",
+            "keypoints": []
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Hold two packs of sandwich cookies over the bowls, then drop them in.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 0.6,
+              "instruction": "Scrape the white cream filling off a cookie with a knife into the small bowl and drop the cookie half into the large bowl.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 2.6,
+              "instruction": "Put the cookies in a zip-top bag and roll a rolling pin over them to crush them.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 3.8,
+              "instruction": "Pour the crushed cookie crumbs from the bag into the large glass bowl.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.6,
+              "endSeconds": 3.1,
+              "text": "All you need to do is separate the Oreo biscuit and filling,"
+            },
+            {
+              "startSeconds": 3.1,
+              "endSeconds": 4.2,
+              "text": "then crush up the biscuits."
+            }
+          ]
+        },
+        {
+          "kind": "video",
+          "title": "Mix the Batter",
+          "purpose": "setup: showing how quickly the batter comes together in one bowl",
+          "sourceStartSeconds": 8.6,
+          "sourceEndSeconds": 13.6,
+          "durationSeconds": 5.0,
+          "camera": "back",
+          "scene": "Directly above the glass mixing bowl on the counter.",
+          "sceneLandmark": "bowl",
+          "framing": {
+            "shotSize": "close-up",
+            "subject": {
+              "x": 0.07,
+              "y": 0.22,
+              "width": 0.85,
+              "height": 0.55
+            },
+            "note": "Centered overhead shot of the glass mixing bowl filling most of the middle of the frame."
+          },
+          "phoneAngle": {
+            "pitch": -90.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "overhead"
+          },
+          "pose": {
+            "description": "Hands pouring ingredients and whisking in the bowl.",
+            "keypoints": []
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Tip a teaspoon of baking powder into the bowl of cookie crumbs and whisk them together.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 1.6,
+              "instruction": "Pour a jug of milk into the center of the crumbs.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 2.7,
+              "instruction": "Scrape the reserved cookie filling from the small bowl into the mix.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 3.8,
+              "instruction": "Whisk the batter until it looks dark and smooth.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.0,
+              "endSeconds": 1.8,
+              "text": "Add baking powder and mix these together,"
+            },
+            {
+              "startSeconds": 1.8,
+              "endSeconds": 3.6,
+              "text": "then pour in milk and add the Oreo filling"
+            },
+            {
+              "startSeconds": 3.6,
+              "endSeconds": 5.0,
+              "text": "and stir everything together until smooth."
+            }
+          ]
+        },
+        {
+          "kind": "video",
+          "title": "Prep Mould and Microwave",
+          "purpose": "setup: prepping the pan and cooking the cake without an oven",
+          "sourceStartSeconds": 13.6,
+          "sourceEndSeconds": 18.2,
+          "durationSeconds": 4.6,
+          "camera": "back",
+          "scene": "At the counter with a microwave-safe round cake mould.",
+          "sceneLandmark": "bowl",
+          "framing": {
+            "shotSize": "close-up",
+            "subject": {
+              "x": 0.05,
+              "y": 0.28,
+              "width": 0.9,
+              "height": 0.45
+            },
+            "note": "Angled close-up of the round cake mould centered on the counter."
+          },
+          "phoneAngle": {
+            "pitch": -45.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "chest"
+          },
+          "pose": {
+            "description": "Hands prepping the mould and pouring batter.",
+            "keypoints": []
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Brush the inside of your microwave-safe cake mould with oil.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 1.0,
+              "instruction": "Press a circle of parchment paper flat into the bottom of the mould.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 2.2,
+              "instruction": "Pour the smooth cookie batter into the mould.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 3.5,
+              "instruction": "Pick up the filled mould with both hands and lift it out of the frame, leaving the empty counter to add your cooking time text.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.2,
+              "endSeconds": 2.6,
+              "text": "Now grease and line a microwaveable cake mould or something similar,"
+            },
+            {
+              "startSeconds": 2.6,
+              "endSeconds": 4.6,
+              "text": "and microwave for about six minutes."
+            }
+          ]
+        },
+        {
+          "kind": "video",
+          "title": "Unmould the Cake",
+          "purpose": "reveal: unmoulding the cooked cake cleanly",
+          "sourceStartSeconds": 18.2,
+          "sourceEndSeconds": 20.1,
+          "durationSeconds": 1.9,
+          "camera": "back",
+          "scene": "At the counter with a wire cooling rack over parchment paper.",
+          "sceneLandmark": "cake",
+          "framing": {
+            "shotSize": "close-up",
+            "subject": {
+              "x": 0.05,
+              "y": 0.25,
+              "width": 0.9,
+              "height": 0.45
+            },
+            "note": "Close-up of the cake on a wire cooling rack placed over parchment paper."
+          },
+          "phoneAngle": {
+            "pitch": -35.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "chest"
+          },
+          "pose": {
+            "description": "Hands lifting the mould and peeling paper off the cake.",
+            "keypoints": []
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Lift the cake mould straight up off the cooling rack to reveal the cooked cake.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 1.0,
+              "instruction": "Peel the circle of parchment paper gently off the top of the cake.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.3,
+              "endSeconds": 1.9,
+              "text": "Let it cool fully, then turn it upside down."
+            }
+          ]
+        },
+        {
+          "kind": "video",
+          "title": "Pour Ganache and Garnish",
+          "purpose": "payoff: glossy chocolate pour and garnish for a bakery-style finish",
+          "sourceStartSeconds": 20.1,
+          "sourceEndSeconds": 24.3,
+          "durationSeconds": 4.2,
+          "camera": "back",
+          "scene": "At the counter with the cooled cake on the wire rack.",
+          "sceneLandmark": "cake",
+          "framing": {
+            "shotSize": "close-up",
+            "subject": {
+              "x": 0.05,
+              "y": 0.25,
+              "width": 0.9,
+              "height": 0.5
+            },
+            "note": "Close-up of the round cake on the wire rack, filling the center of the frame."
+          },
+          "phoneAngle": {
+            "pitch": -35.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "chest"
+          },
+          "pose": {
+            "description": "Hand pouring chocolate ganache, spreading it with a spoon, and sprinkling crumbs.",
+            "keypoints": []
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Pour glossy melted chocolate ganache right into the center of the cake.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 1.7,
+              "instruction": "Swirl the back of a spoon in circles over the top to spread the chocolate to the edges.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 3.4,
+              "instruction": "Sprinkle a pinch of reserved cookie crumbs around the outer edge of the cake to finish.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.0,
+              "endSeconds": 4.1,
+              "text": "You can eat it like this or add a topping to make it look and taste even better."
+            }
+          ]
+        }
+      ]
+    },
+    "model": "gemini-4-argon",
+    "audioKey": "seed-audio/_HonL1arbaA.m4a",
+    "media": {
+      "music": "seed-media/_HonL1arbaA/music.mp3",
+      "shots": [
+        {
+          "storyboard": "seed-media/_HonL1arbaA/shot-0.png",
+          "preview": "seed-media/_HonL1arbaA/shot-0.mp4"
+        },
+        {
+          "storyboard": "seed-media/_HonL1arbaA/shot-1.png",
+          "preview": "seed-media/_HonL1arbaA/shot-1.mp4"
+        },
+        {
+          "storyboard": "seed-media/_HonL1arbaA/shot-2.png",
+          "preview": "seed-media/_HonL1arbaA/shot-2.mp4"
+        },
+        {
+          "storyboard": "seed-media/_HonL1arbaA/shot-3.png",
+          "preview": "seed-media/_HonL1arbaA/shot-3.mp4"
+        },
+        {
+          "storyboard": "seed-media/_HonL1arbaA/shot-4.png",
+          "preview": "seed-media/_HonL1arbaA/shot-4.mp4"
+        },
+        {
+          "storyboard": "seed-media/_HonL1arbaA/shot-5.png",
+          "preview": "seed-media/_HonL1arbaA/shot-5.mp4"
+        }
+      ]
+    }
+  },
+  {
+    "videoId": "WvGUjw7OwZo",
+    "plan": {
+      "title": "3 Creative Phone Camera Transitions: BTS vs Result",
+      "format": "Behind-the-scenes vs. Final Shot transition",
+      "summary": "A behind-the-scenes vs. final result short showing three creative camera moves filmed on a phone\u2014a bus window push-in, a roadside car whip-pan, and a cycling tilt-down\u2014followed by the seamlessly edited results.",
+      "audio": "music",
+      "durationSeconds": 26.3,
+      "shots": [
+        {
+          "kind": "video",
+          "title": "BTS Bus Window",
+          "purpose": "hook: behind-the-scenes setup, curious",
+          "sourceStartSeconds": 0.0,
+          "sourceEndSeconds": 4.3,
+          "durationSeconds": 4.3,
+          "camera": "back",
+          "scene": "Sit in a bus or train seat next to a window with a decal.",
+          "sceneLandmark": "window",
+          "framing": {
+            "shotSize": "medium",
+            "subject": {
+              "x": 0.0,
+              "y": 0.2,
+              "width": 0.9,
+              "height": 0.65
+            },
+            "note": "Medium shot from a high angle showing the person sitting by a window."
+          },
+          "phoneAngle": {
+            "pitch": -30.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "overhead"
+          },
+          "pose": {
+            "description": "Sitting in a seat, holding a phone toward the window.",
+            "keypoints": [
+              {
+                "name": "nose",
+                "x": 0.32,
+                "y": 0.32
+              },
+              {
+                "name": "left_shoulder",
+                "x": 0.15,
+                "y": 0.42
+              },
+              {
+                "name": "right_shoulder",
+                "x": 0.25,
+                "y": 0.45
+              },
+              {
+                "name": "right_elbow",
+                "x": 0.42,
+                "y": 0.48
+              },
+              {
+                "name": "right_wrist",
+                "x": 0.48,
+                "y": 0.38
+              },
+              {
+                "name": "right_hip",
+                "x": 0.35,
+                "y": 0.68
+              },
+              {
+                "name": "right_knee",
+                "x": 0.75,
+                "y": 0.7
+              },
+              {
+                "name": "left_knee",
+                "x": 0.68,
+                "y": 0.5
+              }
+            ]
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Have a friend film you from above as you push your phone slowly toward the window.",
+              "cameraMove": "forward"
+            }
+          ],
+          "script": []
+        },
+        {
+          "kind": "video",
+          "title": "BTS Roadside Car Pass",
+          "purpose": "setup: behind-the-scenes action, energetic",
+          "sourceStartSeconds": 4.3,
+          "sourceEndSeconds": 10.0,
+          "durationSeconds": 5.7,
+          "camera": "back",
+          "scene": "Stand safely on the edge of a tree-lined road.",
+          "sceneLandmark": "road",
+          "framing": {
+            "shotSize": "wide",
+            "subject": {
+              "x": 0.3,
+              "y": 0.35,
+              "width": 0.35,
+              "height": 0.5
+            },
+            "note": "Wide shot showing two people on the roadside as a car passes."
+          },
+          "phoneAngle": {
+            "pitch": 0.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "eye"
+          },
+          "pose": {
+            "description": "Crouching by the road, swinging phone to follow a passing car.",
+            "keypoints": [
+              {
+                "name": "nose",
+                "x": 0.57,
+                "y": 0.5
+              },
+              {
+                "name": "left_shoulder",
+                "x": 0.5,
+                "y": 0.55
+              },
+              {
+                "name": "right_shoulder",
+                "x": 0.55,
+                "y": 0.55
+              },
+              {
+                "name": "right_elbow",
+                "x": 0.62,
+                "y": 0.58
+              },
+              {
+                "name": "right_wrist",
+                "x": 0.7,
+                "y": 0.58
+              },
+              {
+                "name": "left_hip",
+                "x": 0.45,
+                "y": 0.65
+              },
+              {
+                "name": "right_hip",
+                "x": 0.5,
+                "y": 0.65
+              },
+              {
+                "name": "left_knee",
+                "x": 0.48,
+                "y": 0.78
+              },
+              {
+                "name": "right_knee",
+                "x": 0.56,
+                "y": 0.72
+              },
+              {
+                "name": "left_ankle",
+                "x": 0.5,
+                "y": 0.88
+              },
+              {
+                "name": "right_ankle",
+                "x": 0.58,
+                "y": 0.82
+              }
+            ]
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Hold your phone out toward the road as a car approaches.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 3.0,
+              "instruction": "Swing your arm quickly to follow the car as it drives past, finishing by pointing up at the trees.",
+              "cameraMove": "static"
+            }
+          ],
+          "script": []
+        },
+        {
+          "kind": "video",
+          "title": "BTS Cycling",
+          "purpose": "setup: behind-the-scenes action, dynamic",
+          "sourceStartSeconds": 10.0,
+          "sourceEndSeconds": 12.7,
+          "durationSeconds": 2.7,
+          "camera": "back",
+          "scene": "Ride a bicycle along a tree-lined path with friends.",
+          "sceneLandmark": "bicycle",
+          "framing": {
+            "shotSize": "wide",
+            "subject": {
+              "x": 0.55,
+              "y": 0.35,
+              "width": 0.35,
+              "height": 0.45
+            },
+            "note": "Wide shot from behind cyclists riding on a path."
+          },
+          "phoneAngle": {
+            "pitch": 0.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "chest"
+          },
+          "pose": {
+            "description": "Riding a bicycle while holding a phone up in one hand.",
+            "keypoints": [
+              {
+                "name": "left_shoulder",
+                "x": 0.65,
+                "y": 0.42
+              },
+              {
+                "name": "right_shoulder",
+                "x": 0.75,
+                "y": 0.42
+              },
+              {
+                "name": "right_elbow",
+                "x": 0.8,
+                "y": 0.35
+              },
+              {
+                "name": "right_wrist",
+                "x": 0.82,
+                "y": 0.28
+              },
+              {
+                "name": "left_hip",
+                "x": 0.68,
+                "y": 0.55
+              },
+              {
+                "name": "right_hip",
+                "x": 0.75,
+                "y": 0.55
+              },
+              {
+                "name": "left_knee",
+                "x": 0.65,
+                "y": 0.62
+              },
+              {
+                "name": "left_ankle",
+                "x": 0.68,
+                "y": 0.7
+              }
+            ]
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Ride your bike while holding your phone high up, then lower it down in front of you.",
+              "cameraMove": "forward"
+            }
+          ],
+          "script": []
+        },
+        {
+          "kind": "video",
+          "title": "Result: Window Reveal",
+          "purpose": "reveal: the resulting cinematic shot from the bus, smooth",
+          "sourceStartSeconds": 12.7,
+          "sourceEndSeconds": 16.3,
+          "durationSeconds": 3.6,
+          "camera": "back",
+          "scene": "Inside a moving vehicle looking out a window with a hole in the decal over a bridge.",
+          "sceneLandmark": "bridge",
+          "framing": {
+            "shotSize": "wide",
+            "subject": {
+              "x": 0.05,
+              "y": 0.05,
+              "width": 0.9,
+              "height": 0.9
+            },
+            "note": "Wide view looking out the window at a bridge and water."
+          },
+          "phoneAngle": {
+            "pitch": 0.0,
+            "roll": 0.0,
+            "tolerance": 5.0,
+            "height": "chest"
+          },
+          "pose": {
+            "description": "No person in shot; camera moves through window frame.",
+            "keypoints": []
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Push the phone smoothly forward through the clear circle on the window to reveal the view outside.",
+              "cameraMove": "forward"
+            }
+          ],
+          "script": []
+        },
+        {
+          "kind": "video",
+          "title": "Result: Car Whip Pan",
+          "purpose": "payoff: the resulting dynamic car transition, exciting",
+          "sourceStartSeconds": 16.3,
+          "sourceEndSeconds": 21.6,
+          "durationSeconds": 5.3,
+          "camera": "back",
+          "scene": "On the side of a tree-lined road as a car drives by.",
+          "sceneLandmark": "car",
+          "framing": {
+            "shotSize": "wide",
+            "subject": {
+              "x": 0.4,
+              "y": 0.5,
+              "width": 0.45,
+              "height": 0.35
+            },
+            "note": "Wide shot of a car driving past on a road under trees."
+          },
+          "phoneAngle": {
+            "pitch": 10.0,
+            "roll": 0.0,
+            "tolerance": 15.0,
+            "height": "waist"
+          },
+          "pose": {
+            "description": "No person in shot; tracking a passing car.",
+            "keypoints": []
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Tilt down from the trees to frame the approaching car.",
+              "cameraMove": "down"
+            },
+            {
+              "atSeconds": 2.5,
+              "instruction": "Pan fast right across the side of the car as it passes closely, then tilt straight up into the trees.",
+              "cameraMove": "right"
+            }
+          ],
+          "script": []
+        },
+        {
+          "kind": "video",
+          "title": "Result: Cycling Reveal",
+          "purpose": "payoff: final seamless transition to the cycling shot, carefree",
+          "sourceStartSeconds": 21.6,
+          "sourceEndSeconds": 26.3,
+          "durationSeconds": 4.7,
+          "camera": "back",
+          "scene": "Riding on a path behind friends on bicycles.",
+          "sceneLandmark": "bicycle",
+          "framing": {
+            "shotSize": "wide",
+            "subject": {
+              "x": 0.25,
+              "y": 0.5,
+              "width": 0.45,
+              "height": 0.3
+            },
+            "note": "Wide shot following cyclists riding away on a path."
+          },
+          "phoneAngle": {
+            "pitch": 5.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "chest"
+          },
+          "pose": {
+            "description": "Cyclists riding away from the camera.",
+            "keypoints": [
+              {
+                "name": "left_shoulder",
+                "x": 0.31,
+                "y": 0.56
+              },
+              {
+                "name": "right_shoulder",
+                "x": 0.36,
+                "y": 0.56
+              },
+              {
+                "name": "left_hip",
+                "x": 0.32,
+                "y": 0.65
+              },
+              {
+                "name": "right_hip",
+                "x": 0.35,
+                "y": 0.65
+              }
+            ]
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Tilt down from the sky and trees to reveal your friends riding their bikes ahead of you.",
+              "cameraMove": "tilt-down"
+            }
+          ],
+          "script": []
+        }
+      ]
+    },
+    "model": "gemini-4-argon",
+    "audioKey": "seed-audio/WvGUjw7OwZo.m4a",
+    "media": {
+      "music": "seed-media/WvGUjw7OwZo/music.mp3",
+      "shots": [
+        {
+          "storyboard": "seed-media/WvGUjw7OwZo/shot-0.png",
+          "preview": "seed-media/WvGUjw7OwZo/shot-0.mp4"
+        },
+        {
+          "storyboard": "seed-media/WvGUjw7OwZo/shot-1.png",
+          "preview": "seed-media/WvGUjw7OwZo/shot-1.mp4"
+        },
+        {
+          "storyboard": "seed-media/WvGUjw7OwZo/shot-2.png",
+          "preview": "seed-media/WvGUjw7OwZo/shot-2.mp4"
+        },
+        {
+          "storyboard": "seed-media/WvGUjw7OwZo/shot-3.png",
+          "preview": "seed-media/WvGUjw7OwZo/shot-3.mp4"
+        },
+        {
+          "storyboard": "seed-media/WvGUjw7OwZo/shot-4.png",
+          "preview": "seed-media/WvGUjw7OwZo/shot-4.mp4"
+        },
+        {
+          "storyboard": "seed-media/WvGUjw7OwZo/shot-5.png",
+          "preview": "seed-media/WvGUjw7OwZo/shot-5.mp4"
+        }
+      ]
+    }
+  },
+  {
+    "videoId": "8OLAi6Eba98",
+    "plan": {
+      "title": "Two Choices Motivational Walk",
+      "format": "Motivational quote aesthetic video",
+      "summary": "A moody, slow-motion motivational video following someone walking down a misty path through tall grass while a four-part quote about choices appears on screen to dramatic music.",
+      "audio": "music",
+      "durationSeconds": 9.0,
+      "shots": [
+        {
+          "kind": "video",
+          "title": "Misty Path Walk with Quote",
+          "purpose": "hook and payoff: moody, reflective setup that builds to a determined motivational message",
+          "sourceStartSeconds": 0.0,
+          "sourceEndSeconds": 9.0,
+          "durationSeconds": 9.0,
+          "camera": "back",
+          "scene": "On a narrow path through tall grass near trees on a misty day",
+          "sceneLandmark": "grass",
+          "framing": {
+            "shotSize": "wide",
+            "subject": {
+              "x": 0.5,
+              "y": 0.51,
+              "width": 0.16,
+              "height": 0.25
+            },
+            "note": "Wide shot with the person centered in the lower middle of the frame, surrounded by tall grass and trees in the background."
+          },
+          "phoneAngle": {
+            "pitch": 0.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "chest"
+          },
+          "pose": {
+            "description": "Walking slowly away from the camera with back turned, hands relaxed at sides.",
+            "keypoints": [
+              {
+                "name": "left_shoulder",
+                "x": 0.53,
+                "y": 0.57
+              },
+              {
+                "name": "right_shoulder",
+                "x": 0.61,
+                "y": 0.57
+              },
+              {
+                "name": "left_elbow",
+                "x": 0.52,
+                "y": 0.62
+              },
+              {
+                "name": "right_elbow",
+                "x": 0.63,
+                "y": 0.62
+              },
+              {
+                "name": "left_hip",
+                "x": 0.55,
+                "y": 0.66
+              },
+              {
+                "name": "right_hip",
+                "x": 0.6,
+                "y": 0.66
+              }
+            ]
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Walk slowly behind your subject down the path while showing the first line of your quote on screen.",
+              "cameraMove": "forward"
+            },
+            {
+              "atSeconds": 2.0,
+              "instruction": "Keep moving forward smoothly at the same pace and update the text to the second line.",
+              "cameraMove": "forward"
+            },
+            {
+              "atSeconds": 4.0,
+              "instruction": "Continue walking forward through the grass and display the third line of text.",
+              "cameraMove": "forward"
+            },
+            {
+              "atSeconds": 6.0,
+              "instruction": "Keep following steadily behind your subject and show the final line of your quote until the end.",
+              "cameraMove": "forward"
+            }
+          ],
+          "script": [
+            {
+              "startSeconds": 0.0,
+              "endSeconds": 1.7,
+              "text": "YOU HAVE ONLY"
+            },
+            {
+              "startSeconds": 2.0,
+              "endSeconds": 3.7,
+              "text": "TWO CHOICES"
+            },
+            {
+              "startSeconds": 4.0,
+              "endSeconds": 5.7,
+              "text": "ACCEPT THE SITUATION"
+            },
+            {
+              "startSeconds": 6.0,
+              "endSeconds": 9.0,
+              "text": "CHANGE THE SITUATION."
+            }
+          ]
+        }
+      ]
+    },
+    "model": "gemini-4-argon",
+    "audioKey": "seed-audio/8OLAi6Eba98.m4a",
+    "media": {
+      "music": "seed-media/8OLAi6Eba98/music.mp3",
+      "shots": [
+        {
+          "storyboard": "seed-media/8OLAi6Eba98/shot-0.png",
+          "preview": "seed-media/8OLAi6Eba98/shot-0.mp4"
+        }
+      ]
+    }
+  },
+  {
+    "videoId": "vUZWe5kAsSM",
+    "plan": {
+      "title": "Upbeat Partner Dance Routine",
+      "format": "Partner Dance Choreography",
+      "summary": "A single-take, full-body partner dance routine set to an upbeat Indian song in a studio.",
+      "audio": "music",
+      "durationSeconds": 38.0,
+      "shots": [
+        {
+          "kind": "video",
+          "title": "Full Partner Dance Routine",
+          "purpose": "hook and payoff: playful, energetic partner dance routine from start to finish.",
+          "sourceStartSeconds": 0.0,
+          "sourceEndSeconds": 38.0,
+          "durationSeconds": 38.0,
+          "camera": "back",
+          "scene": "In a dance studio or open room with a wooden floor and plain wall.",
+          "sceneLandmark": "floor",
+          "framing": {
+            "shotSize": "full-body",
+            "subject": {
+              "x": 0.05,
+              "y": 0.17,
+              "width": 0.85,
+              "height": 0.65
+            },
+            "note": "Full-body shot of two people standing side by side with room to move."
+          },
+          "phoneAngle": {
+            "pitch": 0.0,
+            "roll": 0.0,
+            "tolerance": 10.0,
+            "height": "waist"
+          },
+          "pose": {
+            "description": "Standing side-by-side, one partner resting an arm on the other's shoulder while the other crosses their arms.",
+            "keypoints": [
+              {
+                "name": "nose",
+                "x": 0.65,
+                "y": 0.23
+              },
+              {
+                "name": "left_shoulder",
+                "x": 0.71,
+                "y": 0.3
+              },
+              {
+                "name": "right_shoulder",
+                "x": 0.55,
+                "y": 0.31
+              },
+              {
+                "name": "left_elbow",
+                "x": 0.75,
+                "y": 0.39
+              },
+              {
+                "name": "right_elbow",
+                "x": 0.6,
+                "y": 0.4
+              },
+              {
+                "name": "left_wrist",
+                "x": 0.62,
+                "y": 0.39
+              },
+              {
+                "name": "right_wrist",
+                "x": 0.74,
+                "y": 0.42
+              },
+              {
+                "name": "left_hip",
+                "x": 0.69,
+                "y": 0.49
+              },
+              {
+                "name": "right_hip",
+                "x": 0.58,
+                "y": 0.49
+              },
+              {
+                "name": "left_knee",
+                "x": 0.69,
+                "y": 0.64
+              },
+              {
+                "name": "right_knee",
+                "x": 0.6,
+                "y": 0.64
+              },
+              {
+                "name": "left_ankle",
+                "x": 0.69,
+                "y": 0.77
+              },
+              {
+                "name": "right_ankle",
+                "x": 0.6,
+                "y": 0.77
+              }
+            ]
+          },
+          "steps": [
+            {
+              "atSeconds": 0.0,
+              "instruction": "Stand side-by-side; have one partner rest an arm on the other's shoulder while looking at each other playfully.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 4.5,
+              "instruction": "Step apart slightly and sway forward and back with light hand gestures to the vocal melody.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 10.5,
+              "instruction": "Groove in place, tapping your feet and swaying your hips to the rhythm.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 15.0,
+              "instruction": "Break into the main upbeat chorus choreography, raising your hands near your head and stepping side to side.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 20.0,
+              "instruction": "Turn toward each other and perform playful, synchronized hand waves and footwork.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 25.0,
+              "instruction": "Repeat the energetic chorus steps, sweeping your arms and bouncing to the beat.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 30.0,
+              "instruction": "Face each other again with expressive hand gestures around the face and quick steps.",
+              "cameraMove": "static"
+            },
+            {
+              "atSeconds": 34.5,
+              "instruction": "Slide sideways together across the floor while grooving and smiling to finish the routine.",
+              "cameraMove": "right"
+            }
+          ],
+          "script": []
+        }
+      ]
+    },
+    "model": "gemini-4-argon",
+    "audioKey": "seed-audio/vUZWe5kAsSM.m4a",
+    "media": {
+      "music": "seed-media/vUZWe5kAsSM/music.mp3",
+      "shots": [
+        {
+          "storyboard": "seed-media/vUZWe5kAsSM/shot-0.png",
+          "preview": "seed-media/vUZWe5kAsSM/shot-0.mp4"
+        }
+      ]
+    }
+  }
+]

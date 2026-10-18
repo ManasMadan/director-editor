@@ -23,5 +23,5 @@ generator client {
 // The connection URL lives in prisma.config.ts (Prisma 7).
 datasource db {
   provider = "postgresql"
-  schemas  = ["auth", "app", "audit", "webhooks", "notifications", "files", "billing", "ai"]
+  schemas  = ["auth", "app", "audit", "webhooks", "notifications", "files", "ai"]
 }

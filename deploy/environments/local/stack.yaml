@@ -1,6 +1,5 @@
 # kind (`bun run k8s:up`): images built and loaded locally, one replica each, no
-# autoscalers, plain HTTP on http://localhost (the api's MCP server allows plain HTTP only
-# for localhost itself, not *.localhost).
+# autoscalers, plain HTTP on http://localhost.
 image:
   registry: director-editor
   tag: dev
@@ -50,11 +49,9 @@ services:
     # cluster's own authority; SMTP_URL is in the Secret `bun run k8s:up` creates.
     caBundle: local-ca
     env:
-      EMAIL_FROM: Director-editor <no-reply@director-editor.localhost>
-  webhooks:
-    keda: { enabled: false }
-  # kind has no model provider, so the AI service runs its development stand-ins
-  # (extractive answers, hashing embeddings), which it refuses under NODE_ENV=production.
+      EMAIL_FROM: Director <no-reply@director-editor.localhost>
+  # kind has no Gemini, so the AI service runs as in the tests (it may then point at the
+  # local mock Google over plain HTTP, which it refuses under NODE_ENV=production).
   ai:
     env:
       NODE_ENV: test

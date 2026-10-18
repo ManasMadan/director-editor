@@ -14,7 +14,7 @@
 import { type DynamicModule, Global, Inject, Module } from "@nestjs/common";
 import { bundledMessages, createI18n, type I18n, type MessageSource } from "@repo/i18n";
 
-export const I18N = Symbol("I18N");
+const I18N = Symbol("I18N");
 export const InjectI18n = () => Inject(I18N);
 export type { I18n };
 

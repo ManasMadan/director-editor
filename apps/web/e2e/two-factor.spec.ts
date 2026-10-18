@@ -14,7 +14,7 @@ test("turn on two-step verification, then sign in with an authenticator code", a
   expect((await laptop.page.request.get("/api/v1/me")).status()).toBe(401);
   await laptop.page.getByLabel("Verification code").fill(totp(secret));
   await laptop.page.getByRole("button", { name: "Continue" }).click();
-  await expect(laptop.page).toHaveURL(/\/dashboard/);
+  await expect(laptop.page).toHaveURL(/\/library/);
   await laptop.context.close();
 });
 
@@ -53,7 +53,7 @@ test("a backup code works once", async ({ page, browser }) => {
   await switchToBackupCode(first.page);
   await first.page.getByLabel("Backup code").fill(code);
   await first.page.getByRole("button", { name: "Continue" }).click();
-  await expect(first.page).toHaveURL(/\/dashboard/);
+  await expect(first.page).toHaveURL(/\/library/);
 
   const second = await newDevice(browser);
   await signIn(second.page, user, { expectUrl: /\/two-factor/ });
@@ -74,7 +74,7 @@ test("a trusted device isn't asked again", async ({ page, browser }) => {
   await laptop.page.getByLabel("Verification code").fill(totp(secret));
   await laptop.page.getByRole("checkbox", { name: "Trust this device for 30 days" }).check();
   await laptop.page.getByRole("button", { name: "Continue" }).click();
-  await expect(laptop.page).toHaveURL(/\/dashboard/);
+  await expect(laptop.page).toHaveURL(/\/library/);
   await signOut(laptop.page, user);
   await signIn(laptop.page, user);
   await laptop.context.close();

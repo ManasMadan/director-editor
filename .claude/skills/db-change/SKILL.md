@@ -9,7 +9,7 @@ description: Change the database schema safely (new table or column, index, RLS 
    data; `docs/database.md` lists the owners). Follow `base.prisma`: `uuidv7()` ids,
    `timestamptz(3)`, `@map`/`@@map` to snake_case, `@@schema` on every model. A tenant
    table has `orgId` with an `organization` relation `onDelete: Cascade` and an index on
-   `[orgId, id(sort: Desc)]`, like `Todo` in `app.prisma`.
+   `[orgId, id(sort: Desc)]`, like `ShortReaction` in `app.prisma`.
 2. `bun run db:migrate`. Prisma asks for a name, writes
    `packages/db/prisma/migrations/<timestamp>_<name>/migration.sql` and applies it.
 3. Prisma can't express policies, grants or functions: append them to that
@@ -24,7 +24,7 @@ description: Change the database schema safely (new table or column, index, RLS 
    Tables in `app` and `auth` get `app_api`'s grants automatically (default privileges
    in the init migration); any other role or schema needs an explicit `GRANT`, as
    narrow as the service needs (see the `files` and `webhooks` migrations). Per-user tables use
-   `user_id` and `app.user_id` (`withUser`/`userTx`).
+   `user_id` and `app.user_id` (`withUser`).
    Editing a migration Prisma already applied makes the next `bun run db:migrate` ask to
    reset the local database, which deletes local data: ask the user first.
 4. `bun run db:lint` (Squawk). Fix what it flags; a statement that is safe in context

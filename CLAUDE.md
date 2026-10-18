@@ -10,13 +10,13 @@ driven by `bun` scripts, and every common task has a skill in `.claude/skills/`.
 | First-time setup (idempotent) | `bun run setup` |
 | Health check (tools, .env drift, services) | `bun run doctor` |
 | Develop (core profile: web, api, notifications, worker, webhooks) | `bun dev` |
-| Develop with every service (AI and its worker, RustFS, ClamAV, Stalwart, Jaeger, Expo, email previews) | `bun dev:full` |
+| Develop with every service (AI and its worker, RustFS, ClamAV, Stalwart, Jaeger, email previews) | `bun dev:full` |
 | Lint, formatting, architecture boundaries | `bun run lint` (`bun run format` to fix) |
 | Types | `bun run check-types`; no `any` and no casts in the source: `bun run type-coverage [<workspace>]` |
 | Unit tests (fast, cached) | `bun run test` |
 | Integration tests (real Postgres/Valkey/Mailpit) | `bun run test:integration` |
 | Coverage: every suite merged, every file at 100% (needs the full profile) | `bun run test:coverage` |
-| Tests of `scripts/`, the Claude Code hooks and the rest of the tooling (build scripts, generators, load test) | `bun test ./scripts/ ./.claude/hooks/` |
+| Tests of `scripts/`, the Claude Code hooks and the rest of the tooling (build scripts, generators) | `bun test ./scripts/ ./.claude/hooks/` |
 | Every check that applies to a change | the `verify` skill |
 | Look at the running app in a browser (Playwright CLI) | `playwright-cli -s=<task> open --browser=chromium <url>` (Playwright's `playwright-cli` skill) |
 | Regenerate code (Prisma client, API/AI clients) | `bun run gen` |
@@ -31,13 +31,12 @@ Local services (Docker, host ports): Postgres 55432, Valkey 56379, Mailpit 58025
 51025); with `full`, RustFS 59000 (console 59001), ClamAV 53310 and Jaeger (OTLP 54318,
 UI 56686); the Stalwart mail server (`bun run db:up:mail`, and in `full`): submission
 51465, management 58080. Web is on 3000, api 3001, worker 3002, notifications 3003,
-webhooks 3004, ai 8000; with `bun dev:full`, the email previews 3030 and Expo's bundler
-8081. On demand: fake Stripe 12111 (`bun run stripe:fake`), the mobile web build 3005
-(`serve:web`, used by e2e), Storybook 6006. Those are the defaults: each is a `*_PORT` in
+webhooks 3004, ai 8000; with `bun dev:full`, the email previews 3030. On demand:
+Storybook 6006; the mock Google 12112, a test fixture only (`bun run google:fake`
+starts it, tests start it themselves). Those are the defaults: each is a `*_PORT` in
 `.env` (`WEB_PORT`, `API_PORT`, ...), and nothing else may fix a local port
-(`scripts/ports.test.ts`). Uploads stay off until `S3_BUCKET` is set,
-and billing until the Stripe variables are (docs/files-and-billing.md), even with
-`dev:full`.
+(`scripts/ports.test.ts`). Uploads stay off until `S3_BUCKET` is set
+(docs/files.md), even with `dev:full`.
 
 ## Principles (non-negotiable)
 
@@ -54,23 +53,22 @@ and billing until the Stripe variables are (docs/files-and-billing.md), even wit
    swap it; the full list is in README "Scaling path".
 5. **Services never import each other.** They share `packages/*` and talk through the
    API contract, queues and events. `bun run lint:boundaries` enforces this.
-6. **Every user-facing string goes through `packages/i18n`** (UI, emails, push, SMS).
+6. **Every user-facing string goes through `packages/i18n`** (UI and emails).
 7. Comments explain *why*, in plain prose. No decision IDs, no "as discussed".
 
 ## Layout
 
 - `apps/web` Next.js, render-only (no route handlers or server actions; enforced)
 - `apps/api` NestJS on Fastify: auth (better-auth) and the oRPC API
-- `apps/notifications` NestJS worker: every notification channel
+- `apps/notifications` NestJS worker: email (sign-in codes, security alerts)
 - `apps/worker` NestJS: outbox relay, audit log, scheduled jobs
-- `apps/webhooks` NestJS: inbound provider webhooks and outbound delivery
-- `apps/ai` Python (FastAPI, Pydantic AI, LangGraph, BullMQ worker)
-- `apps/mobile` Expo
+- `apps/webhooks` NestJS: inbound provider webhooks (the mail server's bounces)
+- `apps/ai` Python (FastAPI, Pydantic AI, BullMQ worker): Director, on Gemini
 - `packages/contracts` API contract, input schemas, limits, error codes
-- `packages/client` data hooks for web and mobile (the only way apps call the API)
+- `packages/client` data hooks for the web app (the only way it calls the API)
 - `packages/db` Prisma schema, migrations, client factory
 - `packages/nest-common` shared Nest plumbing (env fragments, db, redis, logging, health,
-  outbox, `safeFetch`, rate limits, encryption, storage)
+  outbox, `safeFetch`, rate limits, storage)
 - `packages/jobs` queue contracts and producer
 - `packages/i18n` every translation; `packages/email` email templates; `packages/ui` components
 
@@ -95,14 +93,14 @@ and billing until the Stripe variables are (docs/files-and-billing.md), even wit
   `test:integration`, `test:coverage`, `test:e2e`, `charts:check` and
   `bun scripts/generators.ts` take longer than the tool's two-minute default. Wait for
   them to finish before reporting a result.
-- Commits: Conventional Commits with a workspace scope, e.g. `feat(api): add todo sharing`.
+- Commits: Conventional Commits with a workspace scope, e.g. `feat(api): add take sharing`.
 - New environment variables go in the service's `src/env.ts`, `.env.example`, and
   docs/environment.md, in the same change.
 
 ## Claude Code setup
 
 - `.claude/rules/`: per-area rules that load when you open matching files (api,
-  contracts, client, web, ui, mobile, db, jobs and events, notifications, python, infra,
+  contracts, client, web, ui, db, jobs and events, notifications, python, infra,
   ci, scripts, generators, tests, i18n, security, docs, the Claude setup itself, and
   coding standards for every TypeScript and Python file). Each app and `packages/db`
   also has its own `CLAUDE.md`.

@@ -7,10 +7,10 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field, TypeAdapter
 
-from app.contracts.ai_ingest_ingest_job import AiIngestIngestJob
-from app.contracts.ai_ingest_job_name import AiIngestJobName
+from app.contracts.ai_director_job_name import AiDirectorJobName
+from app.contracts.ai_director_plan_job import AiDirectorPlanJob
 from app.contracts.shared_queue_name import SharedQueueName
-from app.queues import INGEST, SETTINGS, job_options
+from app.queues import DIRECTOR, SETTINGS, job_options
 
 
 class _Choices(BaseModel):
@@ -26,31 +26,35 @@ def literal_values(alias: TypeAliasType) -> set[str]:
     return {*choices.enum, *([choices.const] if choices.const else [])}
 
 
+def _class_name(job: str) -> str:
+    return "AiDirector" + "".join(part.title() for part in job.split("-")) + "Job"
+
+
 def test_every_queue_python_uses_is_exported_with_its_settings_and_jobs() -> None:
-    assert INGEST in literal_values(SharedQueueName)
+    assert DIRECTOR in literal_values(SharedQueueName)
     assert literal_values(SharedQueueName) == set(SETTINGS)
-    for job in literal_values(AiIngestJobName):
-        module = importlib.import_module(f"app.contracts.ai_ingest_{job}_job")
-        assert hasattr(module, f"AiIngest{job.title()}Job"), job
+    for job in literal_values(AiDirectorJobName):
+        module = importlib.import_module(f"app.contracts.ai_director_{job.replace('-', '_')}_job")
+        assert hasattr(module, _class_name(job)), job
 
 
 def test_an_older_worker_accepts_fields_a_newer_producer_added() -> None:
-    document, org = uuid4(), uuid4()
-    job = AiIngestIngestJob.model_validate(
+    plan, org = uuid4(), uuid4()
+    job = AiDirectorPlanJob.model_validate(
         {
             "meta": {"requestId": "r-1", "traceParent": "00-abc"},
-            "payload": {"documentId": str(document), "orgId": str(org), "priority": "high"},
+            "payload": {"planId": str(plan), "orgId": str(org), "priority": "high"},
         }
     )
-    assert (job.payload.documentId, job.payload.orgId, job.meta.requestId) == (document, org, "r-1")
+    assert (job.payload.planId, job.payload.orgId, job.meta.requestId) == (plan, org, "r-1")
 
 
 def test_jobs_get_the_typescript_queue_options() -> None:
-    options = job_options(INGEST, "doc-1")
+    options = job_options(DIRECTOR, "plan-1")
     assert options == {
-        "attempts": 5,
-        "backoff": {"type": "exponential", "delay": 2000},
+        "attempts": 3,
+        "backoff": {"type": "exponential", "delay": 5000},
         "removeOnComplete": {"age": 86400},
         "removeOnFail": {"age": 604800},
-        "jobId": "doc-1",
+        "jobId": "plan-1",
     }

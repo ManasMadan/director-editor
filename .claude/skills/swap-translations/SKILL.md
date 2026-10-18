@@ -25,8 +25,6 @@ disable-model-invocation: true
      `i18n.invalidate(locale)` on every replica when copy changes (a Redis pub/sub
      message).
    - apps/web: `bundledMessages.load` in `apps/web/src/i18n/request.ts`.
-   - apps/mobile: `bundledMessages.load` in `apps/mobile/src/lib/i18n.tsx` (keep the
-     bundle as the offline fallback).
 3. New variables (the store's URL, cache TTL) in each service's `src/env.ts`,
    `.env.example` and `docs/environment.md`.
 

@@ -6,27 +6,6 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class TodosChanged(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    type: Literal["todos.changed"]
-
-
-class NotificationsChanged(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    type: Literal["notifications.changed"]
-
-
-class DocumentsChanged(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    type: Literal["documents.changed"]
-
-
 class FilesChanged(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -42,6 +21,5 @@ class DirectorChanged(BaseModel):
 
 
 type RealtimeMessage = Annotated[
-    TodosChanged | NotificationsChanged | DocumentsChanged | FilesChanged | DirectorChanged,
-    Field(..., title="RealtimeMessage"),
+    FilesChanged | DirectorChanged, Field(..., title="RealtimeMessage")
 ]

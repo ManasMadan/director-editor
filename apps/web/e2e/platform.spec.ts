@@ -1,12 +1,6 @@
-import {
-  createWorkspace,
-  expect,
-  expectAccessible,
-  settled,
-  signOut,
-  signUp,
-  test,
-} from "./support";
+import { directorSeeds } from "@repo/contracts/director-seeds";
+import { required } from "@repo/contracts/objects";
+import { asWorkspace, expect, expectAccessible, settled, signOut, signUp, test } from "./support";
 
 test("unknown pages show a translated 404", async ({ page }) => {
   const response = await page.goto("/does-not-exist");
@@ -35,29 +29,11 @@ test("no page logs errors or violates the CSP", async ({ page }) => {
   const problems: string[] = [];
   page.on("console", (message) => message.type() === "error" && problems.push(message.text()));
   page.on("pageerror", (error) => problems.push(error.message));
-  for (const path of [
-    "/",
-    "/sign-in",
-    "/sign-up",
-    "/forgot-password",
-    "/terms",
-    "/privacy",
-    "/unsubscribe",
-  ]) {
+  for (const path of ["/", "/sign-in", "/sign-up", "/forgot-password", "/terms", "/privacy"]) {
     await page.goto(path);
   }
   await signUp(page);
-  for (const path of [
-    "/dashboard",
-    "/settings",
-    "/settings/security",
-    "/settings/notifications",
-    "/settings/workspace",
-    "/settings/members",
-    "/settings/webhooks",
-    "/settings/audit",
-    "/notifications",
-  ]) {
+  for (const path of ["/library", "/settings", "/settings/security"]) {
     await page.goto(path);
     await settled(page);
   }
@@ -67,14 +43,110 @@ test("no page logs errors or violates the CSP", async ({ page }) => {
 test("health, robots, sitemap and manifest", async ({ request }) => {
   expect(await (await request.get("/healthz")).json()).toEqual({ status: "ok" });
   const robots = await (await request.get("/robots.txt")).text();
-  expect(robots).toContain("Disallow: /dashboard");
+  expect(robots).toContain("Disallow: /library");
   expect(await (await request.get("/sitemap.xml")).text()).toContain("/terms");
-  expect((await (await request.get("/manifest.webmanifest")).json()).start_url).toBe("/dashboard");
+  const manifest = await (await request.get("/manifest.webmanifest")).json();
+  expect(manifest).toMatchObject({ name: "Director", start_url: "/library" });
 });
 
 test("the API docs are reachable on the same origin", async ({ request }) => {
   const spec = await (await request.get("/api/v1/openapi.json")).json();
-  expect(spec.paths["/todos"]).toBeDefined();
+  expect(spec.info.title).toBe("Director API");
+  expect(spec.paths["/me"]).toBeDefined();
+});
+
+test("the app is called Director everywhere a visitor or member looks", async ({ page }) => {
+  // The template's name must not show anywhere: not in a title, not on the page.
+  const namedDirector = async () => {
+    await expect(page).toHaveTitle(/Director/);
+    expect(await page.title()).not.toContain("Director-editor");
+    await expect(page.locator("body")).not.toContainText("Director-editor");
+  };
+  for (const path of ["/", "/sign-in"]) {
+    await page.goto(path);
+    await namedDirector();
+  }
+  await signUp(page);
+  await settled(page);
+  await namedDirector();
+});
+
+test("the landing page shows Director and sends visitors to the demo", async ({ page }) => {
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Watch any Short. Shoot your own." }),
+  ).toBeVisible();
+  // The x-ray's real plan, the 6 seed templates and the Google Cloud services.
+  await expect(
+    page.getByRole("list", { name: "The plan's shots" }).getByRole("listitem"),
+  ).toHaveCount(10);
+  await expect(page.getByRole("heading", { name: "Six Shorts, ready to shoot" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Built on Google Cloud" })).toBeVisible();
+  await expect(page.locator("body")).not.toContainText("Director-editor");
+  await page.getByRole("link", { name: "Try the demo" }).first().click();
+  await expect(page).toHaveURL(/\/sign-in\?demo=1$/);
+});
+
+test("the landing page stays public, signed in or not", async ({ page }) => {
+  await signUp(page);
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("link", { name: "Try the demo" })).toHaveCount(0);
+  await page.getByRole("link", { name: "Open Director" }).first().click();
+  await expect(page).toHaveURL(/\/library/);
+});
+
+test("a member's template card on the landing opens its ready plan", async ({ page }) => {
+  // Every new workspace starts with the 6 seed templates, already indexed: the card opens
+  // the member's own copy, ready to film.
+  await signUp(page);
+  await page.goto("/");
+  const seed = required(directorSeeds[0], "the first seed template");
+  await page.getByRole("link", { name: seed.plan.title }).click();
+  await expect(page).toHaveURL(new RegExp(`/director/${seed.videoId}$`));
+  // The plan that page shows, read as the AI service reads it. Not through the API: a
+  // stack without Director's optional services (CI's) has the AI service answer
+  // FEATURE_DISABLED, but the copy is in the workspace either way.
+  const session = await (await page.request.get("/api/auth/get-session")).json();
+  const orgId: string = session.session.activeOrganizationId;
+  const plan = await asWorkspace(orgId, async (client) => {
+    const { rows } = await client.query<{
+      source: string;
+      status: string;
+      stage: string;
+      plan: { title: string; shots: unknown[] };
+    }>("SELECT source, status, stage, plan FROM ai.director_plan WHERE video_id = $1", [
+      seed.videoId,
+    ]);
+    return rows;
+  });
+  expect(plan).toEqual([
+    {
+      source: "seed",
+      status: "ready",
+      stage: "ready",
+      plan: expect.objectContaining({ title: seed.plan.title }),
+    },
+  ]);
+  expect(plan[0]?.plan.shots).toHaveLength(seed.plan.shots.length);
+});
+
+test("workspace pages are gone", async ({ page }) => {
+  await signUp(page);
+  for (const path of [
+    "/settings/workspace",
+    "/settings/members",
+    "/settings/billing",
+    "/settings/api-keys",
+    "/settings/webhooks",
+    "/settings/audit",
+    "/settings/notifications",
+    "/notifications",
+    "/dashboard",
+  ]) {
+    const response = await page.goto(path);
+    expect({ path, status: response?.status() }).toEqual({ path, status: 404 });
+  }
 });
 
 test.describe("accessibility (WCAG 2.2 AA)", () => {
@@ -96,30 +168,26 @@ test.describe("accessibility (WCAG 2.2 AA)", () => {
 
   test("signed-in pages", async ({ page }) => {
     await signUp(page);
-    await createWorkspace(page, "Accessible");
-    for (const path of [
-      "/dashboard",
-      "/settings",
-      "/settings/security",
-      "/settings/workspace",
-      "/settings/members",
-      "/settings/webhooks",
-      "/settings/audit",
-      "/settings/notifications",
-      "/notifications",
-    ]) {
+    for (const path of ["/library", "/settings", "/settings/security"]) {
       await page.goto(path);
       await settled(page);
+      if (path === "/settings") {
+        // The email card's button waits for the captcha's answer, like a form's submit,
+        // and fades in once enabled: axe would catch it halfway and read low contrast.
+        await expect(page.getByRole("button", { name: "Change email" })).toBeEnabled();
+      }
       await expectAccessible(page);
     }
   });
 
   test("dark mode", async ({ page }) => {
     await page.emulateMedia({ colorScheme: "dark" });
-    await page.goto("/sign-in");
-    await expectAccessible(page);
+    for (const path of ["/", "/sign-in"]) {
+      await page.goto(path);
+      await expectAccessible(page);
+    }
     await signUp(page);
-    for (const path of ["/dashboard", "/settings/security"]) {
+    for (const path of ["/library", "/settings/security"]) {
       await page.goto(path);
       await settled(page);
       await expectAccessible(page);
@@ -175,5 +243,5 @@ test("keyboard users can sign in without a mouse", async ({ page }) => {
   await page.keyboard.press("Tab");
   await page.keyboard.type(user.password);
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page).toHaveURL(/\/library/);
 });

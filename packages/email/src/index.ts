@@ -31,24 +31,7 @@ export {
   authOtpSubject,
   default as AuthOtpEmail,
 } from "./templates/auth-otp";
-export { default as DigestEmail, digestSubject } from "./templates/digest";
-export {
-  default as OrgInvitationEmail,
-  orgInvitationSubject,
-} from "./templates/org-invitation";
-export {
-  default as PaymentFailedEmail,
-  paymentFailedSubject,
-} from "./templates/payment-failed";
 export {
   default as SecurityAlertEmail,
   securityAlertSubject,
 } from "./templates/security-alert";
-export {
-  default as TodoReminderEmail,
-  todoReminderSubject,
-} from "./templates/todo-reminder";
-export {
-  default as WebhookDisabledEmail,
-  webhookDisabledSubject,
-} from "./templates/webhook-disabled";

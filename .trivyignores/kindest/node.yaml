@@ -223,3 +223,7 @@ vulnerabilities:
     statement: >-
       github.com/containerd/containerd/v2 v2.2.0 (fixed in 2.2.7, 2.3.4), kind's local node only: no upstream rebuild with the fixed package as of 2026-10-17
     expired_at: 2026-11-16
+  - id: CVE-2026-56851
+    statement: >-
+      golang.org/x/text v0.28.0 to v0.39.0 in kubelet, kubeadm, kubectl and containerd (fixed in 0.41.0): no upstream rebuild with the fixed package as of 2026-10-18 (the newest node images are kind v0.33.0's, of 2026-08-26)
+    expired_at: 2026-11-17

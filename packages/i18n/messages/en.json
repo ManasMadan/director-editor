@@ -1,10 +1,11 @@
 {
   "common": {
-    "appName": "Director-editor",
+    "appName": "Director",
     "signIn": "Sign in",
     "signUp": "Create account",
     "signOut": "Sign out",
-    "dashboard": "Dashboard",
+    "library": "Library",
+    "media": "My media",
     "settings": "Settings",
     "email": "Email",
     "password": "Password",
@@ -24,20 +25,111 @@
       "dark": "Dark",
       "system": "System"
     },
-    "language": "Language",
     "captchaFailed": "The security check couldn't load. Check your connection, allow challenges.cloudflare.com if you use a blocker, and reload.",
-    "assistant": "Assistant",
-    "director": "Director"
+    "nav": "Main"
   },
   "meta": {
-    "title": "Director-editor",
-    "description": "Ship your idea this weekend, on a foundation that scales."
+    "title": "Director",
+    "description": "Pick a Short you love, and Director walks you through shooting your own take on it."
   },
   "home": {
-    "title": "Ship your idea this weekend.",
-    "subtitle": "Auth, database, typed API, jobs, AI and deploys are already wired. Start building the part that matters.",
-    "cta": "Get started",
-    "ctaSignedIn": "Open dashboard"
+    "title": "<line>Watch any Short.</line> <line>Shoot your own.</line>",
+    "subtitle": "Pick a Short you love. Gemini breaks it into shots, then directs you through filming each one on your phone, live. Cut your takes together and post your version to YouTube.",
+    "cta": "Try the demo",
+    "ctaSignedIn": "Open Director",
+    "how": "See how it works",
+    "xray": {
+      "caption": "The plan Gemini 4 Argon wrote for “{title}”: {shots, plural, one {# shot} other {# shots}}, each with its framing, pose, camera move and lines.",
+      "original": "Original",
+      "file": "plan.json",
+      "shots": "The plan's shots",
+      "shot": "Shot {index, number}: {title}",
+      "static": "Hold still"
+    },
+    "steps": {
+      "title": "From watching to posting, in three steps",
+      "index": {
+        "title": "Index",
+        "body": "Paste a Short's link. Gemini 4 Argon watches it and writes the plan: every shot's framing, pose, camera move and lines."
+      },
+      "shoot": {
+        "title": "Shoot with Gemini",
+        "body": "Film each shot on a live call with Gemini. It sees your camera and tells you where to stand, how to hold the phone and what to say."
+      },
+      "publish": {
+        "title": "Publish",
+        "body": "Line your takes up on the timeline, add captions and post your version to YouTube Shorts."
+      }
+    },
+    "proof": {
+      "title": "Every shot, timed to the original",
+      "body": "This Short, and the shots Gemini found in it. Play it and follow along.",
+      "play": "Play “{title}”",
+      "player": "“{title}” on YouTube",
+      "range": "{start, number, ::0.0}–{end, number, ::0.0} s",
+      "silent": "No lines"
+    },
+    "cloud": {
+      "title": "Built on Google Cloud",
+      "argon": {
+        "name": "Gemini 4 Argon on Vertex AI",
+        "use": "Watches each Short and writes its shot-by-shot plan."
+      },
+      "flash": {
+        "name": "Gemini 3.8 Flash on Vertex AI",
+        "use": "Checks your scene and reviews every take."
+      },
+      "live": {
+        "name": "Gemini Live API",
+        "use": "Directs you by voice and sees your camera while you film."
+      },
+      "tts": {
+        "name": "Gemini text-to-speech",
+        "use": "Gives Director its voice while you film."
+      },
+      "nanoBanana": {
+        "name": "Nano Banana on Vertex AI",
+        "use": "Drew the storyboard card of every shot in the templates."
+      },
+      "veo": {
+        "name": "Veo on Vertex AI",
+        "use": "Made the preview clip of every shot in the templates."
+      },
+      "lyria": {
+        "name": "Lyria on Vertex AI",
+        "use": "Wrote each template's soundtrack."
+      },
+      "storage": {
+        "name": "Cloud Storage",
+        "use": "Keeps your takes and finished videos."
+      },
+      "cloudRun": {
+        "name": "Cloud Run",
+        "use": "Runs the indexer, where Gemini watches each Short."
+      },
+      "bigquery": {
+        "name": "BigQuery",
+        "use": "Logs each Short Director indexes, each live call it starts and every take review's score."
+      },
+      "youtube": {
+        "name": "YouTube Data API",
+        "use": "Brings in the Shorts you pick."
+      },
+      "signIn": {
+        "name": "Sign in with Google",
+        "use": "Signs you in with your Google account."
+      }
+    },
+    "templates": {
+      "title": "Six Shorts, ready to shoot",
+      "body": "Every account starts with these templates, already broken into shots by Gemini 4 Argon.",
+      "meta": "{shots, plural, one {# shot} other {# shots}}, {seconds, number, ::0.0} s",
+      "credit": "The Shorts shown belong to their creators and play from YouTube."
+    },
+    "platforms": {
+      "title": "For platforms",
+      "body": "Everyone who watches a Short is one tap from making their own. Director's planning, live direction and take reviews run behind one API, so a video app could put “Shoot your own” under every Short."
+    }
   },
   "auth": {
     "signInTitle": "Welcome back",
@@ -68,7 +160,13 @@
     "useBackupCode": "Use a backup code instead",
     "backupCode": "Backup code",
     "useAuthenticator": "Use your authenticator app",
-    "trustDevice": "Trust this device for 30 days"
+    "trustDevice": "Trust this device for 30 days",
+    "demo": {
+      "title": "Try Director with the demo account",
+      "description": "Everyone trying Director shares it, so publishing and account changes are off.",
+      "use": "Use demo account",
+      "loading": "Getting the demo account…"
+    }
   },
   "validation": {
     "email": "Enter a valid email address",
@@ -77,8 +175,7 @@
     "nameMin": "Enter your name",
     "code": "Enter the 6-digit code",
     "required": "Required",
-    "tooLong": "Too long (max {max})",
-    "phone": "Enter the number with its country code, like +14155550123"
+    "tooLong": "Too long (max {max})"
   },
   "authErrors": {
     "INVALID_EMAIL_OR_PASSWORD": "That email and password don't match.",
@@ -101,39 +198,8 @@
     "PASSKEY_CANCELLED": "The passkey prompt was closed before finishing. Try again, or use your password.",
     "ORGANIZATION_NEEDS_OWNER": "You own a shared workspace. Make someone else its owner before deleting your account.",
     "generic": "Something went wrong. Please try again.",
-    "ENTITLEMENT_REQUIRED": "Your plan's member limit is reached. Upgrade in billing settings to invite more people.",
-    "OAUTH_REQUEST_EXPIRED": "The app's request expired. Go back to the app and connect again.",
-    "SIGN_IN_INCOMPLETE": "The sign-in didn't finish. Please try again."
-  },
-  "nav": {
-    "dashboard": "Dashboard",
-    "settings": "Settings",
-    "security": "Security"
-  },
-  "dashboard": {
-    "greeting": "Hi {name}",
-    "todos": {
-      "title": "Todos",
-      "description": "Stored in Postgres, served through the typed API, isolated per workspace.",
-      "placeholder": "What needs doing?",
-      "add": "Add",
-      "empty": "Nothing to do. Add your first todo above.",
-      "delete": "Delete {title}",
-      "loadMore": "Load more"
-    },
-    "ai": {
-      "title": "Sentiment (Python)",
-      "description": "Runs in the Python service. Its Pydantic types flow all the way to this page.",
-      "placeholder": "Type something to classify…",
-      "analyze": "Analyze",
-      "labels": {
-        "positive": "Positive",
-        "negative": "Negative",
-        "neutral": "Neutral"
-      },
-      "result": "{score, number}% confidence · model {model}",
-      "disabled": "The AI service isn't configured."
-    }
+    "SIGN_IN_INCOMPLETE": "The sign-in didn't finish. Please try again.",
+    "DEMO_ACCOUNT_LOCKED": "Everyone shares the demo account, so its settings can't be changed. Create your own account for that."
   },
   "settings": {
     "title": "Settings",
@@ -223,51 +289,17 @@
         "title": "Confirm it's you",
         "body": "For your security, sign in again to see or change this.",
         "action": "Sign in again"
-      },
-      "phone": {
-        "title": "Phone number",
-        "description": "Get sign-in security alerts by text as well as by email.",
-        "none": "No phone number yet.",
-        "add": "Add a phone number",
-        "change": "Change number",
-        "remove": "Remove",
-        "removed": "Phone number removed",
-        "number": "Phone number",
-        "sendCode": "Text me a code",
-        "codeSent": "We texted a code to {phoneNumber}.",
-        "code": "Code from the text",
-        "verify": "Verify",
-        "verified": "Phone number saved",
-        "resend": "Send a new code",
-        "cancel": "Cancel"
-      },
-      "apps": {
-        "title": "Connected apps",
-        "description": "Apps you allowed to use your account, such as AI assistants, and the workspace each may work in.",
-        "empty": "No apps are connected.",
-        "unnamed": "Unnamed app",
-        "details": "{workspace} · connected {connected}",
-        "lastUsed": "last active {when}",
-        "disconnect": "Disconnect",
-        "disconnected": "{name} was disconnected"
       }
     },
     "personalTitle": "Your account"
-  },
-  "invitations": {
-    "title": "You're invited",
-    "description": "Join {organizationName} to start collaborating.",
-    "accept": "Accept invitation",
-    "decline": "Decline",
-    "accepted": "You joined {organizationName}",
-    "invalid": "This invitation is invalid or has expired."
   },
   "legal": {
     "terms": "Terms of service",
     "privacy": "Privacy policy",
     "termsBody": "These terms govern your use of this service. Replace this text with your own terms before launch.",
     "privacyBody": "This policy explains what data we collect and why. Replace this text with your own policy before launch.",
-    "lastUpdated": "Last updated {date}"
+    "lastUpdated": "Last updated {date}",
+    "nav": "Legal"
   },
   "errorPage": {
     "notFoundTitle": "Page not found",
@@ -275,10 +307,6 @@
     "errorTitle": "Something went wrong",
     "errorDescription": "An unexpected error occurred. Try again, and contact support with the reference below if it keeps happening.",
     "home": "Go home"
-  },
-  "updateRequired": {
-    "title": "Update required",
-    "description": "A newer version of the app is available. Please update to continue."
   },
   "email": {
     "footer": "You received this email because of activity on your {appName} account.",
@@ -304,19 +332,6 @@
         "heading": "Confirm your new email address",
         "body": "Enter this code to confirm the change."
       }
-    },
-    "todoReminder": {
-      "subject": "Reminder: {title}",
-      "greeting": "Hi {name},",
-      "greetingNoName": "Hi,",
-      "body": "This is your reminder for “{title}”."
-    },
-    "orgInvitation": {
-      "subject": "You're invited to a workspace on Director-editor",
-      "heading": "Join “{organizationName}”",
-      "body": "“{inviterName}” invited you to collaborate in the workspace “{organizationName}”.",
-      "cta": "Accept invitation",
-      "expires": "This invitation expires in {days, plural, one {# day} other {# days}}."
     },
     "securityAlert": {
       "email-changed": {
@@ -344,65 +359,7 @@
         "body": "A new passkey was added to your account. It can be used to sign in without a password."
       },
       "notYou": "If this wasn't you, reset your password now and sign out of devices you don't recognise.",
-      "cta": "Review security settings",
-      "phone-added": {
-        "subject": "A phone number was added",
-        "body": "A phone number was added to your account. Security alerts and codes will also be texted to it."
-      },
-      "phone-removed": {
-        "subject": "Your phone number was removed",
-        "body": "The phone number on your account was removed or changed. Texts no longer go to the previous number."
-      },
-      "app-connected": {
-        "subject": "An app was connected to your account",
-        "body": "An app can now use your account's data in one of your workspaces, until you disconnect it in your security settings."
-      },
-      "api-key-created": {
-        "subject": "An API key was created in your workspace",
-        "body": "An admin created the API key “{label}”. It can act in the workspace without signing in until it expires or is revoked."
-      },
-      "webhook-endpoint-created": {
-        "subject": "A webhook endpoint was added to your workspace",
-        "body": "An admin added a webhook endpoint at {label}. The workspace's events are now sent there."
-      }
-    },
-    "webhookDisabled": {
-      "subject": "Webhook endpoint turned off: {url}",
-      "heading": "We stopped sending to a webhook endpoint",
-      "body": "{url} failed every delivery for several days, so it has been turned off. Events that happen while it's off aren't sent.",
-      "cta": "Open webhook settings"
-    },
-    "digest": {
-      "subject": "Your daily summary",
-      "heading": "Here's what happened",
-      "intro": "{count, plural, one {# update} other {# updates}} since your last summary."
-    },
-    "unsubscribe": "Don't want these emails? Unsubscribe",
-    "paymentFailed": {
-      "subject": "Payment failed for {organizationName}",
-      "heading": "We couldn't take your payment",
-      "body": "The renewal payment of {amount} for {organizationName} didn't go through. We'll try again over the next few days; update the payment method to keep your plan.",
-      "cta": "Update payment method"
-    }
-  },
-  "notification": {
-    "webhooks": {
-      "endpoint-disabled": {
-        "title": "A webhook endpoint was turned off",
-        "body": "{url} kept failing, so we stopped sending to it. Fix it and turn it back on in webhook settings."
-      }
-    },
-    "todo": {
-      "reminder": {
-        "title": "Reminder",
-        "body": "{title}"
-      }
-    },
-    "billing": {
-      "payment-failed": {
-        "title": "A payment failed",
-        "body": "The renewal payment of {amount} didn't go through. Update the payment method to keep your plan."
-      }
+      "cta": "Review security settings"
     }
   },
   "errors": {
@@ -418,21 +375,12 @@
     "IDEMPOTENCY_IN_PROGRESS": "That's already being processed.",
     "FEATURE_DISABLED": "This feature isn't available.",
     "CLIENT_OUTDATED": "A new version is available. Please update to continue.",
-    "FRESH_SESSION_REQUIRED": "For your security, sign in again to do that.",
     "DESTINATION_NOT_ALLOWED": "That address isn't allowed.",
     "RESPONSE_TOO_LARGE": "The response was too large.",
     "TOO_MANY_REDIRECTS": "The address redirected too many times.",
     "UPSTREAM_UNAVAILABLE": "A service we depend on is unavailable. Please try again.",
     "NO_ACTIVE_ORGANIZATION": "Choose a workspace first.",
-    "TODO_NOT_FOUND": "That todo no longer exists.",
-    "TODO_VERSION_CONFLICT": "Someone else changed this todo. We've loaded the latest version.",
-    "WEBHOOK_ENDPOINT_NOT_FOUND": "That webhook endpoint doesn't exist.",
-    "WEBHOOK_DELIVERY_NOT_FOUND": "That delivery doesn't exist.",
-    "WEBHOOK_URL_NOT_ALLOWED": "Use a public https:// URL. Private and internal addresses can't receive webhooks.",
-    "WEBHOOK_ENDPOINT_LIMIT": "This workspace already has {max} webhook endpoints. Delete one to add another.",
-    "UNSUBSCRIBE_LINK_INVALID": "This unsubscribe link isn't valid. Change what you receive in notification settings instead.",
-    "PHONE_CODE_INVALID": "That code isn't right, or it expired. Check the text or send a new code.",
-    "PHONE_NUMBER_TAKEN": "That number is already on an account.",
+    "DEMO_ACCOUNT_LOCKED": "The demo account can't do that. Create your own account to publish and change settings.",
     "FILE_NOT_FOUND": "That file doesn't exist, or it isn't yours.",
     "FILE_TYPE_NOT_ALLOWED": "That kind of file isn't allowed here. Use one of: {types}.",
     "FILE_TOO_LARGE": "That file is too big. The limit is {maxBytes, number, ::unit/byte unit-width-narrow compact-short}.",
@@ -440,26 +388,25 @@
     "FILE_UNREADABLE": "That file couldn't be read. It may be damaged; try another.",
     "FILE_NOT_UPLOADED": "The file didn't finish uploading. Try again.",
     "FILE_NOT_READY": "That file is still being checked. Try again in a moment.",
-    "ENTITLEMENT_REQUIRED": "Your plan doesn't include this. Upgrade in billing settings to use it.",
-    "ALREADY_SUBSCRIBED": "This workspace already has a paid plan. Manage it from billing settings.",
-    "NO_SUBSCRIPTION": "This workspace doesn't have a paid plan yet.",
-    "DOCUMENT_NOT_FOUND": "That document doesn't exist in this workspace.",
-    "DOCUMENT_INDEXING_FAILED": "This document couldn't be prepared for the assistant. Try adding it again.",
-    "AI_BUDGET_EXCEEDED": "This workspace has used this month's assistant allowance. It resets on the 1st.",
-    "AI_RUN_LIMIT": "That question needed more work than one answer allows. Try a narrower question.",
-    "SHORT_NOT_FOUND": "That short isn't on YouTube, or it's private.",
-    "SHORT_TOO_LONG": "Director works with shorts up to {maxSeconds, number} seconds long. Pick a shorter video.",
-    "DIRECTOR_PLAN_NOT_FOUND": "Director hasn't looked at this short yet. Open it from the Shorts feed.",
+    "AI_BUDGET_EXCEEDED": "You've used this month's AI allowance. It resets on the 1st.",
+    "DIRECTOR_INDEX_LIMIT": "You've already added your own Short. Film it, or pick one of the templates.",
+    "DIRECTOR_VIDEO_UNAVAILABLE": "That video isn't on YouTube, or it's private. Check the link and try again.",
+    "DIRECTOR_TOO_LONG": "Director works with Shorts up to {maxSeconds, number} seconds long. Pick a shorter video.",
+    "DIRECTOR_PLAN_NOT_FOUND": "This Short isn't in your library yet.",
     "DIRECTOR_PLAN_NOT_READY": "Director is still working out this short. Try again in a moment.",
     "DIRECTOR_SHOT_NOT_FOUND": "That shot isn't part of this plan.",
+    "DIRECTOR_TAKE_NOT_FOUND": "That take isn't one of yours for this shot. Pick another.",
     "DIRECTOR_TAKE_KIND_MISMATCH": "This shot needs a different kind of take: a video for a video shot, a photo for a photo shot.",
+    "DIRECTOR_CALL_TOO_FAST": "The call was sending more than Director can take in, so it ended. Call again.",
+    "DIRECTOR_CUT_NOT_FOUND": "That video isn't in My media.",
+    "PUBLISH_DEMO_DISABLED": "The demo account can't publish to YouTube. Sign in with your own Google account to publish your video.",
+    "PUBLISH_NEEDS_YOUTUBE": "Director needs your permission to upload to your YouTube channel.",
+    "PUBLISH_CUT_NOT_READY": "This video isn't ready to publish yet. Save it again from the editor.",
+    "PUBLISH_NO_CHANNEL": "Your Google account doesn't have a YouTube channel yet. Create one on YouTube, then publish again.",
+    "PUBLISH_QUOTA_EXHAUSTED": "Director has published as many videos to YouTube as it can today. Your video is saved: publish it again tomorrow.",
     "DIRECTOR_VIDEO_UNREADABLE": "Director couldn't watch this short. It may be private, age-restricted or removed.",
     "DIRECTOR_ANALYSIS_FAILED": "Director couldn't work out how to film this short. Try again.",
     "DIRECTOR_REVIEW_FAILED": "Director couldn't review this take. Record it again.",
-    "APP_NOT_FOUND": "That app isn't connected to your account.",
-    "API_KEY_NOT_FOUND": "That API key doesn't exist in this workspace.",
-    "API_KEY_LIMIT_REACHED": "This workspace has as many API keys as it can have. Revoke one you no longer use.",
-    "API_KEY_SCOPE_MISSING": "This API key doesn't have the {scope} scope.",
     "METHOD_NOT_SUPPORTED": "That isn't supported here.",
     "TIMEOUT": "That took too long. Try again.",
     "PAYLOAD_TOO_LARGE": "That's too much data to send at once.",
@@ -468,79 +415,7 @@
     "FILE_SIZE_MISMATCH": "The uploaded file isn't the size that was announced. Try uploading it again."
   },
   "workspace": {
-    "switcher": {
-      "label": "Workspace",
-      "create": "New workspace",
-      "personal": "Personal"
-    },
-    "create": {
-      "title": "New workspace",
-      "description": "A shared space for a team: its own todos, members and settings.",
-      "name": "Workspace name",
-      "submit": "Create workspace",
-      "created": "Workspace created"
-    },
-    "nav": {
-      "general": "General",
-      "members": "Members",
-      "webhooks": "Webhooks",
-      "apiKeys": "API keys",
-      "audit": "Audit log"
-    },
-    "general": {
-      "title": "Workspace",
-      "description": "Settings for everyone in {name}.",
-      "name": "Name",
-      "saved": "Workspace saved",
-      "personalNote": "This is your personal workspace. It can't be shared or deleted.",
-      "delete": {
-        "title": "Delete workspace",
-        "description": "Deletes the workspace and everything in it for all members. This can't be undone.",
-        "confirm": "Type the workspace name to confirm",
-        "action": "Delete workspace",
-        "deleted": "Workspace deleted"
-      }
-    },
-    "members": {
-      "title": "Members",
-      "description": "People who can work in {name}.",
-      "you": "You",
-      "role": {
-        "owner": "Owner",
-        "admin": "Admin",
-        "member": "Member",
-        "unknown": "No access (unknown role)"
-      },
-      "roleLabel": "Role for {name}",
-      "remove": "Remove",
-      "removed": "Member removed",
-      "roleChanged": "Role updated",
-      "leave": "Leave workspace",
-      "left": "You left the workspace",
-      "invite": {
-        "title": "Invite someone",
-        "email": "Email",
-        "role": "Role",
-        "submit": "Send invitation",
-        "sent": "Invitation sent to {email}"
-      },
-      "pending": {
-        "title": "Pending invitations",
-        "empty": "No pending invitations.",
-        "cancel": "Cancel",
-        "cancelled": "Invitation cancelled",
-        "invited": "Invited as {role}"
-      }
-    },
     "audit": {
-      "title": "Audit log",
-      "description": "Everything that changed in this workspace, and who changed it.",
-      "empty": "Nothing has happened here yet.",
-      "system": "System",
-      "loadMore": "Load more",
-      "when": "When",
-      "who": "Who",
-      "what": "What",
       "events": {
         "todo": {
           "created": {
@@ -645,396 +520,7 @@
           }
         }
       }
-    },
-    "webhooks": {
-      "title": "Webhooks",
-      "description": "Send this workspace's events to your own systems. Every request is signed (Standard Webhooks).",
-      "empty": "No endpoints yet.",
-      "add": "Add endpoint",
-      "url": "Endpoint URL",
-      "urlHint": "A public https:// address that accepts POST requests.",
-      "descriptionLabel": "Description",
-      "events": "Events",
-      "allEvents": "All events",
-      "create": "Add endpoint",
-      "created": "Endpoint added",
-      "secret": {
-        "title": "Signing secret",
-        "once": "Copy it now: it won't be shown again. Use it to verify each request's webhook-signature header.",
-        "copy": "Copy",
-        "copied": "Copied",
-        "done": "I've saved it",
-        "rotate": "Rotate secret",
-        "rotated": "New secret created. The old one keeps signing deliveries next to it for {hours, number} hours: switch your receiver to the new secret before then."
-      },
-      "status": {
-        "enabled": "Active",
-        "manual": "Turned off",
-        "failing": "Turned off: kept failing"
-      },
-      "enable": "Turn on",
-      "disable": "Turn off",
-      "test": "Send test event",
-      "testSent": "Test event sent",
-      "delete": "Delete",
-      "deleted": "Endpoint deleted",
-      "back": "All endpoints",
-      "deliveries": {
-        "title": "Recent deliveries",
-        "empty": "Nothing sent yet.",
-        "event": "Event",
-        "result": "Result",
-        "attempts": "{count, plural, one {# attempt} other {# attempts}}",
-        "pending": "Sending…",
-        "succeeded": "Delivered",
-        "failed": "Failed",
-        "redeliver": "Send again",
-        "redelivered": "Queued to send again",
-        "loadMore": "Load more",
-        "error": {
-          "timeout": "timed out",
-          "connection_failed": "couldn't connect",
-          "destination_not_allowed": "address not allowed",
-          "response_too_large": "response too large",
-          "endpoint_disabled": "endpoint turned off"
-        }
-      },
-      "eventLabels": {
-        "todo": {
-          "created": {
-            "v1": "A todo is created"
-          },
-          "completed": {
-            "v1": "A todo is completed"
-          },
-          "deleted": {
-            "v1": "A todo is deleted"
-          }
-        },
-        "org": {
-          "member_added": {
-            "v1": "Someone joins the workspace"
-          },
-          "member_removed": {
-            "v1": "Someone leaves or is removed"
-          }
-        }
-      }
-    },
-    "apiKeys": {
-      "title": "API keys",
-      "description": "Let scripts and other services use this workspace through the REST API. A key acts as the person who created it, only in this workspace and only within its scopes.",
-      "empty": "No API keys yet.",
-      "reference": "API reference",
-      "add": "Create an API key",
-      "name": "Name",
-      "nameHint": "Where it's used, like “CI” or “Zapier”, so you know what breaks if you revoke it.",
-      "scopesLabel": "Scopes",
-      "scopesHint": "Give each key only what it needs.",
-      "scopesRequired": "Choose at least one scope.",
-      "scopes": {
-        "todos:read": "Read todos",
-        "todos:write": "Create, change and delete todos",
-        "documents:read": "Read the assistant's documents",
-        "documents:write": "Add and remove the assistant's documents",
-        "audit:read": "Read the audit log"
-      },
-      "expiry": "Expires",
-      "expiryDays": "In {days, number} days",
-      "create": "Create key",
-      "created": "API key created",
-      "key": {
-        "title": "Your new API key",
-        "once": "Copy it now: it won't be shown again. Send it in the x-api-key header.",
-        "copy": "Copy",
-        "copied": "Copied",
-        "done": "I've saved it"
-      },
-      "createdBy": "Created by {name} on {date}",
-      "createdByGone": "Created on {date} by an account that no longer exists",
-      "lastUsed": "last used {when}",
-      "neverUsed": "never used",
-      "expires": "expires {date}",
-      "noExpiry": "never expires",
-      "revoke": "Revoke",
-      "revokeTitle": "Revoke “{name}”?",
-      "revokeDescription": "Anything using this key stops working immediately. This can't be undone.",
-      "revoked": "“{name}” was revoked"
-    },
-    "noOrganization": "You're no longer in that workspace; switched to {name}."
-  },
-  "notificationCenter": {
-    "open": "Notifications",
-    "unread": "{count, plural, one {# unread notification} other {# unread notifications}}",
-    "title": "Notifications",
-    "empty": "You're all caught up.",
-    "markAllRead": "Mark all as read",
-    "viewAll": "See all notifications",
-    "loadMore": "Load more"
-  },
-  "notificationSettings": {
-    "title": "Notifications",
-    "description": "Choose what reaches you, and where. Sign-in codes and security alerts are always sent.",
-    "channels": {
-      "in_app": "In the app",
-      "email": "Email",
-      "push": "Push",
-      "sms": "Text message"
-    },
-    "categories": {
-      "workspace": {
-        "title": "Workspace",
-        "description": "Things that need an admin, like a webhook that keeps failing."
-      },
-      "activity": {
-        "title": "Activity",
-        "description": "Reminders and updates about your work."
-      },
-      "security": {
-        "title": "Security",
-        "description": "Sign-in codes and alerts about changes to your account."
-      },
-      "invitations": {
-        "title": "Invitations",
-        "description": "Invitations to join a workspace."
-      },
-      "billing": {
-        "title": "Billing",
-        "description": "Failed payments and changes to your plan."
-      }
-    },
-    "digest": {
-      "title": "Daily digest",
-      "description": "Get one email a day with everything non-urgent, instead of one email each."
-    },
-    "quietHours": {
-      "title": "Quiet hours",
-      "description": "Push notifications and texts wait until quiet hours end (in your time zone).",
-      "enable": "Pause push and texts at night",
-      "start": "From",
-      "end": "Until"
-    },
-    "saved": "Notification settings saved",
-    "browserPush": {
-      "title": "Push on this browser",
-      "description": "Get notifications from this site even when it isn't open. Each browser is turned on separately.",
-      "enable": "Send push notifications to this browser",
-      "enabled": "Push notifications are on for this browser",
-      "disabled": "Push notifications are off for this browser",
-      "blocked": "Notifications are blocked for this site. Allow them in your browser's site settings, then come back here.",
-      "unsupported": "This browser doesn't support push notifications."
     }
-  },
-  "unsubscribe": {
-    "title": "Unsubscribe",
-    "confirm": "Stop “{category}” emails",
-    "description": "You'll stop getting {category} emails. Sign-in codes and security alerts still arrive.",
-    "done": "Done. You won't get {category} emails anymore.",
-    "manage": "Manage all notification settings",
-    "missing": "This page needs the link from one of our emails."
-  },
-  "captcha": {
-    "title": "Security check",
-    "description": "Complete the check to continue in the app.",
-    "invalidReturn": "This page works only when the app opens it.",
-    "backToApp": "Back to the app"
-  },
-  "sms": {
-    "phoneCode": "{code} is your Director-editor verification code. It expires in {expiresInMinutes, number} minutes. Don't share it with anyone.",
-    "securityAlert": {
-      "email-changed": "Director-editor: the email address on your account was changed. Not you? Reset your password now.",
-      "password-changed": "Director-editor: your password was changed. Not you? Reset your password now.",
-      "password-reset": "Director-editor: your password was reset. Not you? Contact support now.",
-      "two-factor-enabled": "Director-editor: two-step verification was turned on for your account.",
-      "two-factor-disabled": "Director-editor: two-step verification was turned off. Not you? Reset your password now.",
-      "passkey-added": "Director-editor: a passkey was added to your account. Not you? Reset your password now.",
-      "phone-added": "Director-editor: this number was added to your account for security texts.",
-      "phone-removed": "Director-editor: this number was removed from your account. Not you? Reset your password now.",
-      "app-connected": "Director-editor: an app was connected to your account. Not you? Disconnect it in your security settings."
-    }
-  },
-  "billing": {
-    "title": "Billing",
-    "description": "The plan for {name}. Everyone in the workspace gets what it includes.",
-    "disabled": "Billing is off on this deployment: everything is included.",
-    "plans": {
-      "free": "Free",
-      "pro": "Pro"
-    },
-    "current": "Current plan",
-    "membersLimit": "{used, number} of {limit, number} members",
-    "membersUnlimited": "{used, plural, one {# member} other {# members}}, no limit",
-    "webhooks": "Webhooks",
-    "included": "Included",
-    "notIncluded": "Not included",
-    "upgrade": {
-      "title": "Upgrade to Pro",
-      "description": "Unlimited members and webhooks, billed per member.",
-      "monthly": "Upgrade, billed monthly",
-      "yearly": "Upgrade, billed yearly"
-    },
-    "manage": "Manage billing",
-    "status": {
-      "trialing": "Free trial until {date}",
-      "active": "Renews on {date}",
-      "past_due": "The last payment failed. Update the payment method to keep Pro.",
-      "canceling": "Cancelled: Pro stays until {date}",
-      "unpaid": "Payments failed, so the plan has lapsed.",
-      "canceled": "Cancelled"
-    },
-    "seats": "{seats, plural, one {# seat} other {# seats}}",
-    "invoices": {
-      "title": "Invoices",
-      "empty": "No invoices yet.",
-      "view": "View",
-      "status": {
-        "paid": "Paid",
-        "open": "Due",
-        "void": "Void",
-        "draft": "Draft",
-        "uncollectible": "Uncollectible"
-      }
-    },
-    "checkoutDone": "Thanks! Your plan will update in a moment.",
-    "limitReached": "Your plan allows {limit, number} members. Upgrade in billing settings to invite more.",
-    "upgradeForWebhooks": "Webhooks are part of Pro. Upgrade in billing settings to send events to your endpoints."
-  },
-  "assistant": {
-    "title": "Assistant",
-    "description": "Ask questions and get answers from this workspace's documents.",
-    "ask": "Ask",
-    "question": "Your question",
-    "placeholder": "How long do refunds take?",
-    "thinking": "Looking through your documents…",
-    "sources": "From",
-    "empty": "Add a document below, then ask about it.",
-    "documents": {
-      "title": "Documents",
-      "description": "What the assistant can answer from. Everyone in the workspace can use them.",
-      "add": "Add document",
-      "docTitle": "Title",
-      "content": "Text",
-      "added": "Document added. It will be ready in a moment.",
-      "remove": "Remove",
-      "removed": "Document removed",
-      "none": "No documents yet.",
-      "status": {
-        "pending": "Waiting",
-        "indexing": "Preparing",
-        "ready": "Ready",
-        "failed": "Failed"
-      },
-      "passages": "{count, plural, one {# passage} other {# passages}}"
-    }
-  },
-  "oauth": {
-    "title": "Connect an app",
-    "heading": "Connect {appName}",
-    "description": "{appName} wants to use your account. Choose the workspace it may work in.",
-    "missing": "This page opens when an app asks to connect to your account. Start from the app.",
-    "unnamed": "An app",
-    "personal": "Personal",
-    "workspace": "Workspace",
-    "canDo": "{appName} will be able to:",
-    "returnTo": "You'll be sent back to {host}.",
-    "trust": "Only connect apps you trust. You can disconnect it any time in your security settings.",
-    "allow": "Allow",
-    "deny": "Deny",
-    "scopes": {
-      "openid": "Know who you are",
-      "profile": "See your name and profile picture",
-      "email": "See your email address",
-      "offline_access": "Stay connected until you disconnect it",
-      "todos:read": "See the workspace's todos",
-      "todos:write": "Add, complete and delete the workspace's todos",
-      "documents:read": "Search the workspace's documents"
-    }
-  },
-  "mobile": {
-    "tabs": {
-      "todos": "Todos",
-      "settings": "Settings"
-    },
-    "settings": {
-      "account": "Account",
-      "signedInAs": "Signed in as {email}",
-      "workspace": "Workspace",
-      "language": "Language",
-      "notifications": "Notifications",
-      "enablePush": "Get notifications on this device",
-      "pushEnabled": "Notifications are on for this device.",
-      "pushDenied": "Notifications are turned off for this app in your device's settings.",
-      "pushUnavailable": "Notifications need a real device, not a simulator or the web.",
-      "version": "Version {version}"
-    },
-    "languages": {
-      "en": "English",
-      "es": "Español"
-    },
-    "captchaCancelled": "The security check wasn't finished. Try again."
-  },
-  "shorts": {
-    "title": "Shorts",
-    "homeTitle": "Home",
-    "savedTitle": "You",
-    "brand": "Director",
-    "off": "Director isn't set up in this workspace yet.",
-    "nav": {
-      "label": "Main",
-      "home": "Home",
-      "shorts": "Shorts",
-      "saved": "You"
-    },
-    "topicsLabel": "Topics",
-    "topics": {
-      "all": "All",
-      "grwm": "GRWM",
-      "outfits": "Outfits",
-      "sneakers": "Sneakers",
-      "dance": "Dance",
-      "cooking": "Cooking",
-      "travel": "Travel",
-      "comedy": "Comedy",
-      "fitness": "Fitness",
-      "pets": "Pets"
-    },
-    "paste": {
-      "label": "Paste a Shorts link",
-      "placeholder": "youtube.com/shorts/…",
-      "submit": "Open"
-    },
-    "views": "{count, number, ::compact-short} views",
-    "count": "{count, number, ::compact-short}",
-    "loadMore": "Show more",
-    "empty": "No shorts here yet.",
-    "embedTitle": "{title} on YouTube",
-    "player": {
-      "like": "Like",
-      "comments": "Comments",
-      "share": "Share",
-      "save": "Save",
-      "director": "Director",
-      "copied": "Link copied",
-      "next": "Next short",
-      "previous": "Previous short",
-      "by": "@{channel}",
-      "mute": "Mute",
-      "unmute": "Unmute"
-    },
-    "comments": {
-      "title": "Comments",
-      "disabled": "Comments are turned off for this short.",
-      "empty": "No comments yet.",
-      "onYouTube": "Comment on YouTube",
-      "close": "Close"
-    },
-    "saved": {
-      "liked": "Liked",
-      "saved": "Saved",
-      "empty": "Nothing here yet. Like or save a short from the feed."
-    },
-    "account": "Your account",
-    "leave": "Back to the dashboard"
   },
   "director": {
     "title": "Director",
@@ -1148,63 +634,90 @@
       }
     },
     "review": {
-      "title": "Your takes",
       "reviewing": "Director is reviewing this take…",
       "score": "{score, number}/100",
-      "keeps": "Keeps {start, number, ::.#} s to {end, number, ::.#} s",
       "missing": "Not filmed yet",
       "film": "Film it",
       "retake": "Retake",
       "left": "{count, plural, one {# shot} other {# shots}} still to film.",
-      "rendering": "Putting your short together… {done, number, ::percent}",
-      "ready": "Your short is ready",
       "download": "Download",
-      "silent": "It's silent on purpose: add the original sound when you post it on YouTube (Use this sound).",
-      "renderFailed": "Your short couldn't be put together in this browser. Try Chrome or Safari."
+      "silent": "It's silent on purpose: add the original sound when you post it on YouTube (Use this sound)."
     },
     "template": {
-      "use": "Use template",
+      "use": "Start shooting",
       "storyboard": "Storyboard",
       "watchShot": "Watch shot {index, number}: {title}",
       "shots": "{count, plural, one {# shot} other {# shots}}",
       "playing": "Playing shot {index, number}: {title}",
-      "watchAll": "Watch the whole short"
+      "watchAll": "Watch the whole short",
+      "continue": "Continue shooting",
+      "mute": "Mute",
+      "unmute": "Unmute",
+      "backToLibrary": "Back to the library",
+      "toLibrary": "Go to the library",
+      "audioFailed": "The original audio couldn't be fetched, so your mic will be used.",
+      "failedHelp": "A Short that couldn't be indexed doesn't use up your own. Try another link from the library.",
+      "scene": "Where",
+      "framing": "Framing",
+      "angle": "Phone",
+      "script": "Lines",
+      "frame": "{size}: where you stand in the picture",
+      "level": "Held level",
+      "tiltUp": "Tilted up {degrees, number}°",
+      "tiltDown": "Tilted down {degrees, number}°",
+      "filmed": "Filmed",
+      "scored": "Filmed, {score, number}/100",
+      "needsRetake": "Needs a retake ({score, number}/100)",
+      "reviewing": "Director is reviewing your take",
+      "storyboardAlt": "Storyboard for {title}: {scene}",
+      "storyboardBy": "Storyboard by Nano Banana",
+      "previewBy": "Preview made with Veo",
+      "playPreview": "Play the Veo preview of shot {index, number}",
+      "pausePreview": "Pause the preview of shot {index, number}",
+      "soundtrack": "Soundtrack, made with Lyria",
+      "playSoundtrack": "Play the soundtrack"
     },
     "editor": {
-      "quality": "{height, number}p",
-      "next": "Next",
+      "title": "Edit your video",
+      "loadingTakes": "Loading your takes…",
+      "save": "Save video",
       "play": "Play",
       "pause": "Pause",
       "undo": "Undo",
       "redo": "Redo",
-      "second": "{seconds, number}s",
       "clip": "Shot {index, number} · {title}",
       "notFilmed": "Shot {index, number} isn't filmed yet",
       "loadFailed": "This take couldn't be loaded. Try a retake.",
-      "timeline": "Timeline",
       "backToEdit": "Back to editing",
-      "textHint": "Tap a caption on the timeline to change its words.",
-      "textLabel": "Caption text",
-      "done": "Done",
       "soundOn": "Keep your voice in the short",
-      "sound": {
-        "voice": "Your voice",
-        "muted": "Sound off",
-        "original": "Original sound · add it on YouTube"
-      },
       "tools": {
-        "label": "Editing tools",
         "captions": "Captions",
-        "text": "Text",
-        "sound": "Sound",
-        "retake": "Retake"
+        "sound": "Sound"
       },
       "style": {
         "label": "Caption style",
         "pop": "Pop",
         "classic": "Classic",
         "off": "Off"
-      }
+      },
+      "loading": "Loading this take…",
+      "board": "Shots",
+      "playFrom": "Play from shot {index, number}: {title}",
+      "seconds": "{seconds, number, ::.#} s",
+      "takesOf": "Takes of shot {index, number}",
+      "take": "Take {number, number}",
+      "takeOf": "Take {number, number} of {count, number}",
+      "previousTake": "Previous take",
+      "nextTake": "Next take",
+      "directorsPick": "Director's pick",
+      "needsRetake": "Needs a retake",
+      "rendering": "Putting your video together… {done, number, ::percent}",
+      "uploading": "Saving to My media…",
+      "renderFailed": "Your video couldn't be put together in this browser. Try Chrome or Safari.",
+      "tooLong": "This video is too long to save: videos can be up to {minutes, number} minutes. Pick shorter takes, or film shorter shots.",
+      "tooBig": "This video came out bigger than {megabytes, number} MB, too big to save. Try shorter takes.",
+      "saved": "Saved to My media",
+      "openMedia": "Open My media"
     },
     "live": {
       "live": "Live",
@@ -1355,6 +868,127 @@
         "title": "That's a wrap!",
         "body": "I cut your takes together, best moments first. Make any last changes, then tap Next."
       }
+    },
+    "call": {
+      "start": "Call Director",
+      "connecting": "Calling Director…",
+      "live": "On a call",
+      "controls": "Call controls",
+      "mute": "Mute your microphone",
+      "unmute": "Unmute your microphone",
+      "end": "End the call",
+      "you": "You said",
+      "director": "Director says",
+      "failed": {
+        "microphone": "Director can't hear you. Allow the microphone in your browser's settings, then call again.",
+        "dropped": "The call dropped.",
+        "RATE_LIMITED": "You've made all the calls you can for this hour.",
+        "CONFLICT": "You're already on a call with Director in another tab.",
+        "FEATURE_DISABLED": "Calls with Director aren't available here.",
+        "UPSTREAM_UNAVAILABLE": "Gemini can't take the call right now.",
+        "DIRECTOR_PLAN_NOT_FOUND": "Director hasn't finished planning this short yet.",
+        "DIRECTOR_SHOT_NOT_FOUND": "That shot isn't part of this plan.",
+        "UNAUTHENTICATED": "Sign in again to call Director."
+      },
+      "fallback": "Director Live is guiding you on this shot, and your takes are safe.",
+      "timeUp": "Calls last up to ten minutes. Call Director again to keep going."
+    },
+    "off": "Director isn't set up yet.",
+    "leave": "Go to settings",
+    "starting": "Getting Director ready…",
+    "media": {
+      "title": "My media",
+      "loading": "Loading your videos…",
+      "empty": "Nothing saved yet",
+      "emptyHint": "Pick a Short, film your takes and save the video: it lands here, ready to publish.",
+      "pick": "Pick a Short",
+      "count": "{count, plural, one {# video} other {# videos}}",
+      "play": "Play {title}",
+      "opening": "Opening the video…",
+      "playFailed": "This video couldn't be opened. Try again.",
+      "publish": {
+        "none": "Not published",
+        "uploading": "Publishing…",
+        "published": "{visibility, select, public {Public on YouTube} unlisted {Unlisted on YouTube} private {Private on YouTube} other {On YouTube}}",
+        "failed": "Couldn't publish"
+      }
+    },
+    "publish": {
+      "open": "Publish",
+      "watch": "Watch on YouTube",
+      "title": "Publish to YouTube Shorts",
+      "description": "Director wrote a post for your video. Change anything you like, then send it to your channel.",
+      "preview": "Your video: {title}",
+      "writing": "Director is writing your post…",
+      "copyFailed": "Director couldn't write a post this time. Write your own below.",
+      "fields": {
+        "title": "Title",
+        "titleHint": "YouTube shows it as “{title}”.",
+        "description": "Description",
+        "hashtags": "Hashtags",
+        "hashtagsHint": "Single words, separated by spaces. They go at the end of the description, with the credits and a link to the original Short.",
+        "credits": "Credits"
+      },
+      "visibility": {
+        "label": "Who can watch it",
+        "unlisted": "Unlisted",
+        "private": "Private",
+        "public": "Public",
+        "audit": "YouTube keeps videos from apps it hasn't reviewed yet private, whatever you pick. You can change that yourself in YouTube Studio."
+      },
+      "invalid": "YouTube won't take this as it is. Check the title, description, hashtags and credits: no < or >, and hashtags are single words.",
+      "submit": "Publish to YouTube",
+      "uploading": "Sending your video to YouTube…",
+      "published": "It's on YouTube, {visibility, select, private {private: only you can watch it} unlisted {unlisted: anyone with the link can watch it} public {public: anyone can find it} other {}}.",
+      "kept": "You asked for {asked, select, private {private} unlisted {unlisted} public {public} other {}}, but YouTube keeps videos from apps it hasn't reviewed yet private. You can change it in YouTube Studio.",
+      "underWay": "This video is already on its way to YouTube. It shows up in My media once it's there."
+    }
+  },
+  "library": {
+    "heading": "Pick a Short. Shoot your own.",
+    "intro": "Gemini has broken each of these Shorts into shots. Pick one and it directs you through every shot, right from your phone.",
+    "loading": "Loading your library…",
+    "templates": "Templates",
+    "count": "{count, plural, one {# Short} other {# Shorts}}",
+    "empty": "Nothing here yet. Paste a Shorts link above and Gemini will turn it into a template.",
+    "card": {
+      "seed": "Starter",
+      "user": "Yours",
+      "shots": "{count, plural, one {# shot} other {# shots}}",
+      "pending": "New Short",
+      "failed": "Couldn't index"
+    },
+    "index": {
+      "title": "Bring your own Short",
+      "body": "Paste a YouTube Shorts link and Gemini works out every shot for you. Each account can add one Short of its own.",
+      "used": "You've added your own Short. A link to one already in the library still opens it.",
+      "label": "YouTube Shorts link",
+      "placeholder": "youtube.com/shorts/…",
+      "submit": "Index it",
+      "checking": "Checking the link…",
+      "open": "See the shots",
+      "another": "Try another link"
+    },
+    "stage": {
+      "label": "Indexing progress",
+      "queued": "Waiting for Gemini",
+      "watching": "Gemini is watching the Short",
+      "writing": "Writing the shot list",
+      "ready": "Ready to shoot",
+      "failed": "This Short couldn't be indexed",
+      "hint": "This takes about a minute. You can leave this page, it keeps going.",
+      "steps": {
+        "queued": "Queued",
+        "watching": "Watching",
+        "writing": "Writing shots",
+        "ready": "Ready"
+      }
+    },
+    "credit": {
+      "title": "You've used your AI credit",
+      "body": "Each account can index one Short of its own, and yours is already in your library.",
+      "seeds": "These starter templates are ready to shoot right now:",
+      "close": "Got it"
     }
   }
 }

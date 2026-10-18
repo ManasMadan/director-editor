@@ -25,7 +25,7 @@ import * as z from "zod";
 import { jobMeta, queuePrefix, queues } from "../src/queues";
 
 /** The queues Python uses. */
-const shared = ["ai-ingest", "ai-director"] as const;
+const shared = ["ai-director"] as const;
 
 /**
  * What Python needs of a queue's options. Strict, so an option added to one of these
@@ -94,7 +94,7 @@ const titles = new Map<z.core.$ZodType, string>([
   [errorCode, "ErrorCode"],
   [errorData, "ErrorData"],
   [errorIssue, "ErrorIssue"],
-  // Each realtime message by what it says: "documents.changed" → DocumentsChanged.
+  // Each realtime message by what it says: "director.changed" → DirectorChanged.
   ...realtimeMessage.options.map((option): [z.core.$ZodType, string] => [
     option,
     pascal(option.shape.type.value.replace(".", "-")),

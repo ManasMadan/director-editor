@@ -6,16 +6,18 @@
 import { NAME_MAX_LENGTH } from "@repo/contracts/auth";
 import type { AuthErrorCode } from "@repo/contracts/errors";
 import { type OrgId, orgIdSchema, type UserId, userIdSchema } from "@repo/contracts/ids";
-import { fieldOf, required } from "@repo/contracts/objects";
+import { required } from "@repo/contracts/objects";
 import { parseOrgRole } from "@repo/contracts/roles";
 import { transaction } from "@repo/db";
 import { isLocale, isTimeZone, negotiateLocale } from "@repo/i18n";
 import type { BetterAuthOptions } from "better-auth";
 import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from "better-auth/api";
+import { copySeedTemplates } from "../modules/director/seeds.repository";
 import { requestNotification } from "../notifications";
 import { emitAnyEvent, emitEvent } from "../outbox";
 import type { AuthContext } from "./auth-context";
 import { auditEventForAlert, sessionEndReason, sessionMethod } from "./auth-events";
+import { DEMO_LOCKED_PATHS, ownSessionOnly, refuseDemoProfileChange, refuseForDemo } from "./demo";
 import { orgIdOf, removedMemberSchema, userIdOf } from "./ids";
 import { type SecurityAlert, securityAlertFor } from "./security-alerts";
 
@@ -50,28 +52,8 @@ export function newUserFields<
   };
 }
 
-/** Where the mobile sign-in redirect (/expo-authorization-proxy) may send people. */
-const PROVIDER_ORIGINS = new Set(["https://accounts.google.com"]);
-
-/** A hook's request body and query: better-auth types them `any`; read them as unknown. */
-const requestOf = (ctx: { body?: unknown; query?: unknown }) => ({
-  body: ctx.body,
-  query: ctx.query,
-});
-
-/**
- * The mobile app's sign-in goes through this redirect; left alone it sends anyone
- * anywhere over https from our own domain (phishing, planted OAuth state).
- */
-function checkAuthorizationProxy(query: unknown) {
-  const target = String(fieldOf(query, "authorizationURL") ?? "");
-  if (!URL.canParse(target) || !PROVIDER_ORIGINS.has(new URL(target).origin)) {
-    throw new APIError("BAD_REQUEST", {
-      message: "Not a sign-in provider's address.",
-      code: "INVALID_REDIRECT",
-    });
-  }
-}
+/** A hook's request body: better-auth types it `any`; read it as unknown. */
+const requestOf = (ctx: { body?: unknown }) => ({ body: ctx.body });
 
 /**
  * The audit entry and the alert in one transaction: both or neither, and the alert leaves
@@ -80,7 +62,7 @@ function checkAuthorizationProxy(query: unknown) {
 async function sendSecurityAlert(
   { db, env, localeFor }: AuthContext,
   alert: SecurityAlert,
-  account: { id: string; phoneNumber: string | null },
+  account: { id: string },
   headers: Headers | undefined,
 ) {
   const userId = userIdOf(account);
@@ -95,11 +77,7 @@ async function sendSecurityAlert(
       userId,
       {
         template: "auth.security-alert",
-        to: {
-          email: alert.email,
-          locale,
-          ...(account.phoneNumber && { phone: account.phoneNumber }),
-        },
+        to: { email: alert.email, locale },
         data: {
           event: alert.event,
           ...("newEmail" in alert && alert.newEmail && { newEmail: alert.newEmail }),
@@ -117,20 +95,12 @@ async function sendSecurityAlert(
  * succeeded, and never fails the request: the email is queued with retries.
  */
 export function requestHooks(context: AuthContext) {
-  const { db, emailLimits, accountLimits, memberRemoved } = context;
+  const { db, accountLimits, memberRemoved } = context;
   return {
     before: createAuthMiddleware(async (ctx) => {
-      if (ctx.path === "/expo-authorization-proxy") {
-        checkAuthorizationProxy(requestOf(ctx).query);
-      }
-      // Invitation emails go out in the background, too late to refuse; so the limit is
-      // taken here, for new invitations and resends alike.
-      if (ctx.path === "/organization/invite-member") {
-        const session = await getSessionFromCtx(ctx);
-        const email = fieldOf(requestOf(ctx).body, "email");
-        if (session && typeof email === "string") {
-          await emailLimits.invitation(session.user.id, email);
-        }
+      // Everyone trying Director shares the demo account: nobody may change or lock it.
+      if (DEMO_LOCKED_PATHS.has(ctx.path)) {
+        refuseForDemo((await getSessionFromCtx(ctx))?.user);
       }
       // Per account, on top of the per-address limits above (account-limits.ts).
       await accountLimits({
@@ -139,19 +109,25 @@ export function requestHooks(context: AuthContext) {
         secondFactor: ctx.getCookie(ctx.context.createAuthCookie("two_factor").name) ?? undefined,
       });
     }),
+    // Each way out returns: the device list's answer may be replaced, nothing else's.
     after: createAuthMiddleware(async (ctx) => {
       if (isAPIError(ctx.context.returned)) {
-        return;
+        return undefined;
+      }
+      // The demo account's devices are other people's: it sees only its own.
+      if (ctx.path === "/list-sessions") {
+        const own = ownSessionOnly(ctx.context.returned, ctx.context.session);
+        return own ? ctx.json(own) : undefined;
       }
       // Hooks get no session; the member who left is the one returned.
       if (ctx.path === "/organization/leave") {
         const member = removedMemberSchema.parse(ctx.context.returned);
         await memberRemoved(member, member.userId);
-        return;
+        return undefined;
       }
       const alert = securityAlertFor(ctx);
       if (!alert) {
-        return;
+        return undefined;
       }
       // better-auth has committed the change by now: whatever fails here is logged, and
       // never turns a change that happened into an error for the user.
@@ -159,12 +135,13 @@ export function requestHooks(context: AuthContext) {
         // The change succeeded, so its account exists.
         const account = await db.user.findUniqueOrThrow({
           where: ctx.context.session ? { id: ctx.context.session.user.id } : { email: alert.email },
-          select: { id: true, phoneNumber: true },
+          select: { id: true },
         });
         await sendSecurityAlert(context, alert, account, ctx.headers);
       } catch (error) {
         ctx.context.logger.error("security alert not recorded", error);
       }
+      return undefined;
     }),
   };
 }
@@ -177,7 +154,8 @@ function userHooks({ db, record }: AuthContext): DatabaseHooks["user"] {
     create: {
       before: async (user, ctx) => ({ data: newUserFields(user, ctx) }),
       // Every user gets a personal workspace, so tenant-scoped features work from the
-      // first sign-in, for solo users and teams alike.
+      // first sign-in, for solo users and teams alike. Its library starts with Director's
+      // seeded templates, in the same transaction: no workspace exists without them.
       after: async (user) => {
         const userId = userIdOf(user);
         await transaction(db, async (tx) => {
@@ -190,6 +168,7 @@ function userHooks({ db, record }: AuthContext): DatabaseHooks["user"] {
             },
           });
           const orgId = orgIdOf(org);
+          await copySeedTemplates(tx, orgId);
           const origin = { actorId: userId, orgId };
           await emitEvent(tx, "auth.signed_up.v1", userId, { userId }, origin);
           await emitEvent(
@@ -221,6 +200,10 @@ function userHooks({ db, record }: AuthContext): DatabaseHooks["user"] {
         // client picks.
         if (ctx?.path === "/update-user" && user.image !== undefined) {
           throw new APIError("BAD_REQUEST", { code: "VALIDATION_FAILED" });
+        }
+        // Everyone shares the demo account: its name stays the one the command gives it.
+        if (ctx?.path === "/update-user") {
+          refuseDemoProfileChange(user, ctx.context.session?.user);
         }
         if (
           (user.locale !== undefined && !isLocale(user.locale)) ||
@@ -323,7 +306,7 @@ type DeleteUser = NonNullable<NonNullable<BetterAuthOptions["user"]>["deleteUser
  * without an owner, so that blocks deletion until ownership is handed over.
  */
 export function accountDeletion(context: AuthContext): DeleteUser {
-  const { db, billing, leavingWithAccount, memberRemoved } = context;
+  const { db, leavingWithAccount, memberRemoved } = context;
   return {
     enabled: true,
     beforeDelete: async (user) => {
@@ -334,10 +317,6 @@ export function accountDeletion(context: AuthContext): DeleteUser {
         select: { id: true, userId: true, role: true, organizationId: true },
       });
       leavingWithAccount.set(userId, removedMemberSchema.array().parse(shared));
-      // Nothing may keep charging for a workspace that's going away.
-      for (const organizationId of soleMember) {
-        await billing.cancelFor(organizationId);
-      }
       await transaction(db, async (tx) => {
         await tx.organization.deleteMany({ where: { id: { in: soleMember } } });
         for (const organizationId of soleMember) {

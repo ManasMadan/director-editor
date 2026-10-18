@@ -22,5 +22,5 @@ test("sign in with Google", async ({ page }) => {
   await page.getByRole("button", { name: /next/i }).click();
   await page.getByLabel(/enter your password/i).fill(process.env.E2E_GOOGLE_PASSWORD as string);
   await page.getByRole("button", { name: /next/i }).click();
-  await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
+  await expect(page).toHaveURL(/\/library/, { timeout: 30_000 });
 });

@@ -3,7 +3,7 @@
  * components (a language menu, a preference check) need, at no bundle cost. The
  * package's index re-exports all of it.
  */
-export const locales = ["en", "es"] as const;
+export const locales = ["en"] as const;
 export type Locale = (typeof locales)[number];
 const defaultLocale: Locale = "en";
 
@@ -37,7 +37,7 @@ export const timeZoneOrUtc = (value: unknown): string => (isTimeZone(value) ? va
 
 /**
  * Picks the best supported locale from an `Accept-Language` header or a list of
- * preferences (`["es-MX", "en"]`), falling back to the default.
+ * preferences (`["en-GB", "fr"]`), falling back to the default.
  */
 export function negotiateLocale(
   preferences: string | readonly string[] | null | undefined,

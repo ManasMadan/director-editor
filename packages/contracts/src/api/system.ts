@@ -2,7 +2,7 @@ import * as z from "zod";
 import { base } from "./base";
 
 /** Optional subsystems. A feature is on when its configuration is present (see apps/api/src/features.ts). */
-const FEATURES = ["ai", "billing", "captcha", "director", "files", "google"] as const;
+const FEATURES = ["ai", "captcha", "director", "files", "google"] as const;
 export type Feature = (typeof FEATURES)[number];
 
 export const systemContract = {
@@ -21,8 +21,12 @@ export const systemContract = {
         minimumClientVersion: z.string(),
         /** Public Turnstile site key when captcha is on; clients render the widget with it. */
         captchaSiteKey: z.string().nullable(),
-        /** VAPID public key when browser push is on; browsers subscribe with it. */
-        webPushPublicKey: z.string().nullable(),
+        /**
+         * Director's shared demo account, for the sign-in page to show and fill in, when
+         * this environment has one (DEMO_PASSWORD set); null otherwise. Public on purpose:
+         * anyone may try Director with it, and it can't publish or change its own account.
+         */
+        demo: z.object({ email: z.email(), password: z.string() }).nullable(),
       }),
     ),
   alerting: base

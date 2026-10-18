@@ -29,7 +29,11 @@ import { useVision } from "./use-vision";
 type Studio = ReturnType<typeof useStudio>;
 
 /** Everything Director perceives on set, on the device and from Gemini, while it's watching. */
-function usePerceiving(props: StudioShot, studio: Studio, paused: boolean) {
+function usePerceiving(
+  props: StudioShot,
+  studio: Studio,
+  { paused, calling }: { paused: boolean; calling: boolean },
+) {
   const { shot, videoId, index } = props;
   const { camera, phase } = studio;
   const live = camera.state === "live";
@@ -44,7 +48,8 @@ function usePerceiving(props: StudioShot, studio: Studio, paused: boolean) {
   const scene = useSceneGuide(camera.video, {
     videoId,
     shotIndex: index,
-    active: setup && watching && !sharing,
+    // On a call Gemini sees the camera itself; a scene check would only spend allowance.
+    active: setup && watching && !sharing && !calling,
     moved: vision.moved,
   });
   const guides = useBodyGuides(shot, camera.video, {
@@ -422,31 +427,29 @@ function voiceActions({
  * One shot's session with Director: the studio (camera, countdown, recorder, sending),
  * what Director perceives, what it says and draws, what it hears, what it remembers, and
  * the Director's Cut of each take.
+ *
+ * While the member is on a call with Director (`calling`), Gemini does the talking and
+ * the listening: the on-device voice and ears stay quiet, and everything else (the
+ * guides, the recorder, the review) carries on as before.
  */
-export function useSession(props: StudioShot) {
+export function useSession(props: StudioShot, calling: boolean) {
   const t = useTranslations("director.live");
   const { shot, videoId, index } = props;
   const { before, memory, record: remember } = useMemory();
   const countdownFrom = countdownOf(memory);
   const studio = useStudio(props, countdownFrom);
   const [paused, setPaused] = useState(false);
-  const seen = usePerceiving(props, studio, paused);
+  const seen = usePerceiving(props, studio, { paused, calling });
   const { stickers, add } = useStickers();
   const perception = perceptionOf(shot, studio, seen, { paused, countdownFrom });
-  const director = useLiveDirector({
-    perception,
-    speak: memory.speak,
-    memory: before,
-    shot,
-    index,
-  });
+  const speak = memory.speak && !calling;
+  const director = useLiveDirector({ perception, speak, memory: before, shot, index });
   const [attempts, setAttempts] = useState(0);
   const take = useTakeNumber(videoId, index, attempts);
   const { cut, inFrame } = useTakeReview(shot, studio, seen);
   useSetCalls({ studio, seen, cut, take, announce: director.announce, add });
   useEffect(() => remember({ type: "opened" }), [remember]);
   useWakeLock();
-
   const actions = sessionActions({
     studio,
     seen,
@@ -459,9 +462,10 @@ export function useSession(props: StudioShot) {
   });
   // The take on screen, ready to keep or redo (not while it's being sent).
   const reviewing = studio.phase === "preview" ? cut : null;
+  const requests = voiceActions({ studio, actions, director, reviewing });
   const voice = useVoice(
-    { studio, listen: memory.listen, paused },
-    voiceActions({ studio, actions, director, reviewing }),
+    { studio, listen: memory.listen && !calling, paused },
+    requests,
     director.interrupt,
   );
   const scene = useDoodleScene(shot, studio, seen, { stickers, paused });
@@ -479,5 +483,7 @@ export function useSession(props: StudioShot) {
     scene,
     idle,
     actions,
+    /** What a spoken request (or, on a call, Director's own) does now. */
+    requests,
   };
 }

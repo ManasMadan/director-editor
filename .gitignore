@@ -40,10 +40,12 @@ __pycache__
 # Claude Code: personal settings and hook state stay local
 .claude/.state/
 .claude/settings.local.json
+# Subagents' worktrees: whole checkouts, each with its own biome.jsonc and node_modules.
+.claude/worktrees/
 CLAUDE.local.md
 
-# Session cookies of the load-test users (apps/api/src/load-users.ts).
-load/.sessions.json
+# Session cookies of the fuzzing's users (apps/api/src/load-users.ts).
+.fuzz/sessions.json
 # Schemathesis's record of the failures it found (scripts/fuzz.ts), for `st replay`.
 .schemathesis/
 

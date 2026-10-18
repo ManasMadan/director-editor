@@ -16,7 +16,9 @@ const validation = new ORPCError("VALIDATION_FAILED", {
 describe("errorCode", () => {
   it("is the API's code, unreachable for a network failure, internal otherwise", () => {
     expect(errorCode(validation)).toBe("VALIDATION_FAILED");
-    expect(errorMessageKey(new ORPCError("TODO_NOT_FOUND"))).toBe("errors.TODO_NOT_FOUND");
+    expect(errorMessageKey(new ORPCError("DIRECTOR_PLAN_NOT_FOUND"))).toBe(
+      "errors.DIRECTOR_PLAN_NOT_FOUND",
+    );
     expect(errorCode(new TypeError("Failed to fetch"))).toBe("SERVICE_UNAVAILABLE");
     // A code the contract doesn't know (a newer API) is shown as a generic failure.
     expect(errorCode(new ORPCError("SOMETHING_NEW"))).toBe("INTERNAL");
@@ -24,7 +26,7 @@ describe("errorCode", () => {
   });
 
   it("reads a code the API reported inside a response, as { code }", () => {
-    expect(errorMessageKey({ code: "AI_RUN_LIMIT" })).toBe("errors.AI_RUN_LIMIT");
+    expect(errorMessageKey({ code: "AI_BUDGET_EXCEEDED" })).toBe("errors.AI_BUDGET_EXCEEDED");
     expect(errorCode({ code: "SOMETHING_NEW" })).toBe("INTERNAL");
     expect(errorCode(null)).toBe("INTERNAL");
   });

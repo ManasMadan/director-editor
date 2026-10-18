@@ -37,17 +37,16 @@ paths:
   generated `ErrorCode` Literal (from `packages/contracts/src/errors.ts`) and the status
   comes from the catalog, never from the call. Anything else becomes `INTERNAL`.
 - Settings come from `app/settings.py` (`get_settings()`); new variables go there and
-  in `.env.example`. Production refuses the local stand-ins (`local:*` models,
-  `hashing` embeddings); keep it that way.
+  in `.env.example`. Production refuses the local stand-ins (the mock Google, a
+  non-HTTPS Gemini endpoint); keep it that way.
 - Database: Prisma in `packages/db` owns the DDL. SQLAlchemy models in `app/db/models.py`
   mirror it and `tests/test_models_match_db.py` fails when they drift. Tenant data only
   through `tenant(org_id)` in `app/db/session.py`, which sets `app.org_id` for RLS.
 - Every route except health needs the caller JWT (`CallerDep` in `app/auth.py`).
 - Tests are `tests/test_*.py`. Anything needing Postgres, Redis or a local HTTP server is
   marked `pytest.mark.integration` (excluded by default; `bun run test:integration` runs
-  them). Coverage is 100% of lines and branches of `app/` and `evals/`, unit and
-  integration together, with nothing omitted: a line no test reaches gets a test or goes. Providers are exercised
-  through the local fakes in `tests/fakes.py` (OpenAI's API, an OTLP collector), which
-  speak the real protocol.
-  Model behaviour is tested with the local stand-ins and the evals (`bun run --cwd
-  apps/ai evals`), not by mocking the provider.
+  them). Coverage is 100% of lines and branches of `app/`, `scripts/` and `evals/`, unit
+  and integration together, with nothing omitted: a line no test reaches gets a test or goes. Providers are exercised
+  through the local fakes in `tests/fakes.py` (a provider's HTTP API, an OTLP
+  collector), which speak the real protocol. Model behaviour is tested through them,
+  not by mocking the provider.

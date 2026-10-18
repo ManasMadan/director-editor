@@ -1,8 +1,7 @@
 /** What the app does when any API call says the session, the app or the workspace is gone. */
 import { describe, expect, it } from "vitest";
 import { commands } from "vitest/browser";
-import { AssistantPage } from "@/modules/assistant";
-import { DashboardPage } from "@/modules/dashboard";
+import { DirectorPage, LibraryPage } from "@/modules/director";
 import { currentUrl, renderPage } from "../render";
 import { auth, currentSession, signOut, signUp } from "../users";
 
@@ -10,14 +9,14 @@ describe("the app's providers", () => {
   it("send a signed-out user to sign in, and back to this page afterwards", async () => {
     await signUp();
     await signOut();
-    await renderPage(<DashboardPage />, { url: "/dashboard?tab=1" });
-    await expect.poll(currentUrl).toBe("/sign-in?next=%2Fdashboard%3Ftab%3D1");
+    await renderPage(<LibraryPage />, { url: "/library?tab=1" });
+    await expect.poll(currentUrl).toBe("/sign-in?next=%2Flibrary%3Ftab%3D1");
   });
 
   it("stay on an auth page when the session ends there", async () => {
     await signUp();
     await signOut();
-    await renderPage(<DashboardPage />, { url: "/sign-in" });
+    await renderPage(<LibraryPage />, { url: "/sign-in" });
     // The failed calls signed out what was left of the session; nothing moved.
     // The test signed out once itself; the rest are the app (once per failed call).
     await expect.poll(() => commands.answeredRequests("/api/auth/sign-out")).toBeGreaterThan(1);
@@ -36,11 +35,11 @@ describe("the app's providers", () => {
   it("reload the page when the API asks for a newer app", async () => {
     await signUp();
     await commands.requestHeaders({ "x-app-version": "0.0.1" });
-    await renderPage(<DashboardPage />, { url: "/dashboard" });
+    await renderPage(<LibraryPage />, { url: "/library" });
     // Each call that was refused reloads; the first is what the user sees.
     await expect
       .poll(async () => new Set(await commands.hardNavigations()))
-      .toEqual(new Set([`${window.location.origin}/dashboard`]));
+      .toEqual(new Set([`${window.location.origin}/library`]));
   });
 
   it("move to another workspace when the active one is gone", async () => {
@@ -49,12 +48,12 @@ describe("the app's providers", () => {
     // Two calls fail together; the app switches once.
     await renderPage(
       <>
-        <DashboardPage />
-        <AssistantPage />
+        <LibraryPage />
+        <DirectorPage videoId="kJQP7kiw5Fk" />
       </>,
       { url: "/settings" },
     );
-    await expect.poll(commands.hardNavigations).toEqual([`${window.location.origin}/dashboard`]);
+    await expect.poll(commands.hardNavigations).toEqual([`${window.location.origin}/library`]);
     const session = await currentSession();
     expect(session.session.activeOrganizationId).toEqual(expect.any(String));
   });

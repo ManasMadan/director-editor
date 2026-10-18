@@ -95,10 +95,9 @@ describe("the edit", () => {
         [2, take(2)],
       ]),
     );
-    const lines = editLines(clips, { "1:1": "Hello" });
-    expect(lines).toEqual([
-      { key: "1:1", clip: 1, text: "Hello", startSeconds: 2.5, endSeconds: 4 },
-      { key: "1:2", clip: 1, text: "Past the end", startSeconds: 4.2, endSeconds: 4.5 },
+    expect(editLines(clips)).toEqual([
+      { text: "Hi", startSeconds: 2.5, endSeconds: 4 },
+      { text: "Past the end", startSeconds: 4.2, endSeconds: 4.5 },
     ]);
     // Not filmed yet: the script runs from the shot's start.
     expect(editLines(clipsOf(shots, new Map()))[0]).toMatchObject({ text: "Cut", startSeconds: 0 });

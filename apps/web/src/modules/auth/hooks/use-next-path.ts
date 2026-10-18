@@ -3,6 +3,7 @@
 import type { Route } from "next";
 import { useSearchParams } from "next/navigation";
 import * as z from "zod";
+import { HOME_PATH } from "@/lib/routes";
 
 /** Where to go after signing in: the page that sent the user here, if it is ours. */
 export function useNextPath(): Route {
@@ -17,16 +18,15 @@ const BASE = "https://same.site";
  */
 export function safeNextPath(next: string | null): Route {
   if (!next?.startsWith("/")) {
-    return "/dashboard";
+    return HOME_PATH;
   }
   const url = new URL(next, BASE);
-  return (url.origin === BASE ? url.pathname + url.search + url.hash : "/dashboard") as Route;
+  return (url.origin === BASE ? url.pathname + url.search + url.hash : HOME_PATH) as Route;
 }
 
 /**
- * A link to another auth step that keeps the query: `?next=`, and the signed OAuth
- * request when an app sent the user here (see use-finish-sign-in), so the step that
- * finally signs the user in still continues it. Optionally sets the email.
+ * A link to another auth step that keeps the query (`?next=`), so the step that finally
+ * signs the user in still continues to it. Optionally sets the email.
  */
 export function useAuthStepHref() {
   const current = useSearchParams().toString();

@@ -17,30 +17,27 @@ own variables, from the stack chart's values and its `<release>-<service>` Secre
   `apps/ai/app/settings.py` on first use. A missing or malformed value stops the process
   with a readable message. Empty strings count as unset.
 - **Features switch on when their block is present.** Google sign-in, captcha, files,
-  billing and AI are on exactly when their variables are set (`apps/api/src/features.ts`);
-  push platforms likewise (`apps/notifications/src/env.ts`), and the mobile app's links
-  and passkeys (`apps/web/src/lib/app-links.ts`). A half-configured feature
-  (a Google client id without its secret, two of three FCM values) fails at boot.
+  AI and Director are on exactly when their variables are set
+  (`apps/api/src/features.ts`). A half-configured feature (a Google client id without
+  its secret) fails at boot.
   Disabled features answer `FEATURE_DISABLED`, and clients read the same map from
   `system.info` to hide their UI.
 - **Production refuses dev stand-ins.** With `NODE_ENV=production` the services refuse
-  to start with `STRIPE_API_URL`, `WEBHOOK_ALLOWED_PRIVATE_ADDRESSES`, `FILE_SCANNER=none`
-  (with files on), `SMS_PROVIDER=email`, the push and Twilio test hooks,
-  `AI_EMBEDDINGS=hashing` or a `local:` model. Variables wrapped in `requiredInProduction`
-  have a localhost default in development and are mandatory in production.
+  to start with `FILE_SCANNER=none` (with files on), the mock Google, or a plain-text
+  `SMTP_URL`. Variables wrapped in `requiredInProduction` have a localhost default in
+  development and are mandatory in production.
 
 ## Setting values
 
 `bun run setup` copies `.env.example` to `.env`, adds variables that are missing from an
 existing `.env`, and replaces every `change-me` / `replace-me` placeholder with a fresh
-secret (`ENCRYPTION_KEYS` as `<yyyy-mm>:<base64>`, a P-256 pair for the VAPID keys, 32
-random bytes for the rest). Re-running it keeps existing values.
+secret (32 random bytes). Re-running it keeps existing values.
 
 To set one value without opening `.env`:
 
 ```sh
-bun run env:set STRIPE_SECRET_KEY=sk_test_...
-echo "sk_test_..." | bun run env:set STRIPE_SECRET_KEY   # value from stdin, not argv
+bun run env:set GOOGLE_API_KEY=AIza...
+echo "AIza..." | bun run env:set GOOGLE_API_KEY   # value from stdin, not argv
 bun run env:unset OLD_VARIABLE
 ```
 
@@ -120,8 +117,8 @@ A second checkout on the same machine (a worktree) shares these services unless 
 (`<name>-stack<n>`, its own containers and volumes; not in `.env.example`, which leaves
 the name to `docker-compose.yml`), moves every port below and every app port in the next
 table by 100 × n, points the local URLs that name them at the new ones (`WEB_URL`,
-`BETTER_AUTH_URL`, `API_URL`, `AI_URL`, `APP_ORIGINS`, `EXPO_PUBLIC_API_URL`, the
-database, Valkey and Mailpit URLs, and `STRIPE_API_URL` when you set it), and writes the
+`BETTER_AUTH_URL`, `API_URL`, `AI_URL`, `GOOGLE_BASE_URL`, `YOUTUBE_API_URL`, the
+database, Valkey and Mailpit URLs), and writes the
 same values for its tests to `.env.stack`. Two checkouts on different stacks then run
 `bun dev` (or `dev:full`) and `bun run test:e2e` at the same time. Each stack takes its
 own share of Docker's memory, which `bun run db:up` checks before starting it. A Google
@@ -152,13 +149,10 @@ written anywhere else, so a new app gets its variable here.
 |---|---|---|
 | `WEB_PORT` | 3000 | apps/web `dev` (`next dev --port`) and `start` (`PORT` for Next's server) |
 | `API_PORT`, `WORKER_PORT`, `NOTIFICATIONS_PORT`, `WEBHOOKS_PORT` | 3001, 3002, 3003, 3004 | each Nest service's `src/env.ts` when `PORT` is unset (`withServicePort`, packages/nest-common); `API_PORT` also the k6 smoke (`load/api.ts`), `WEBHOOKS_PORT` the fake Stripe's and the local Stalwart's webhook URLs |
-| `MOBILE_WEB_PORT` | 3005 | apps/mobile `serve:web`, the mobile Playwright suite. Not 3100, which is stack 1's web port. |
 | `AI_PORT` | 8000 | apps/ai `dev` and `start` (`fastapi --port`) |
 | `EMAIL_PREVIEW_PORT` | 3030 | packages/email `dev` |
-| `EXPO_PORT` | 8081 | apps/mobile `dev` (Expo's bundler) |
 | `STORYBOOK_PORT` | 6006 | packages/ui `storybook` |
-| `STRIPE_FAKE_PORT` | 12111 | the fake Stripe (`bun run stripe:fake`, the e2e run) |
-| `GOOGLE_FAKE_PORT` | 12112 | the mock Google: Gemini and YouTube for Director (`bun run google:fake`, `bun dev:full`) |
+| `GOOGLE_FAKE_PORT` | 12112 | the mock Google: Gemini and YouTube for Director, a test fixture only (`bun run google:fake`; integration and e2e suites start it themselves) |
 
 ## Auth and the API (apps/api)
 
@@ -166,89 +160,48 @@ written anywhere else, so a new app gets its variable here.
 |---|---|---|---|
 | `BETTER_AUTH_SECRET` | api (req.) | generated | At least 32 characters. Signs sessions and encrypts what better-auth stores (OAuth tokens, 2FA secrets and backup codes, JWT signing keys). |
 | `BETTER_AUTH_SECRETS` | api | unset | Rotating the one above: `2:<secret>,1:<secret>`, newest first (each at least 32 characters). The newest signs and encrypts; the rest, and `BETTER_AUTH_SECRET`, still decrypt. Then `bun run secrets:reencrypt`. See the rotate-secrets runbook (`.claude/skills/rotate-secrets/SKILL.md`). |
-| `BETTER_AUTH_URL` | api (req.), ai | `http://localhost:3000` | The site's public origin. The API is served on it (`/rpc`, `/api`), so cookies are first-party; OAuth callbacks, the OAuth issuer and MCP resource URLs are built from it. The AI service needs it (with `API_URL`) for its MCP server. |
-| `WEB_URL` | api (req.), web (req.), notifications, `apps/mobile/scripts/serve-web.ts` | `http://localhost:3000` | The web app's origin: the API's CORS and trusted origin, links in messages, canonical URLs. Notifications: required in production. The mobile web build's server forwards the captcha page to it. |
-| `APP_ORIGINS` | api | `http://localhost:3005` | Other origins allowed to sign users in, comma-separated (the mobile app's web build), passkeys included. Native apps need nothing here. |
-| `ANDROID_CERT_FINGERPRINTS` | api, web | unset | SHA-256 fingerprints of the Android app's signing certificates, comma-separated. The API accepts passkeys from the app signed with each (Android reports the app, not the site, as their origin); the web app names them in `assetlinks.json`. |
-| `MINIMUM_CLIENT_VERSION` | api | `0.0.0` | major.minor.patch. The mobile app sends its version as `x-app-version`; one below this (a pre-release comes before its release) or one that isn't a version at all gets `CLIENT_OUTDATED`, and the app shows its update screen. The web app sends none. |
+| `BETTER_AUTH_URL` | api (req.) | `http://localhost:3000` | The site's public origin. The API is served on it (`/rpc`, `/api`), so cookies are first-party; OAuth callbacks are built from it. |
+| `WEB_URL` | api (req.), web (req.) | `http://localhost:3000` | The web app's origin: the API's CORS and trusted origin, links in emails, canonical URLs. |
+| `MINIMUM_CLIENT_VERSION` | api | `0.0.0` | major.minor.patch. A client that sends an older `x-app-version` (a pre-release comes before its release), or one that isn't a version at all, gets `CLIENT_OUTDATED` and reloads. The web app sends none. |
 | `ALERTMANAGER_URL` | api | unset | The cluster's Alertmanager. `system.alerting` (`/api/v1/system/alerting`) asks it whether Prometheus's always-firing Watchdog alert is still arriving and answers `ok` or `stale`, or `off` when this is unset; the uptime check outside the cluster fails on `stale` (deploy/README.md, "Observability"). The stack chart sets it when observability is on. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | api | empty | Both set: "Sign in with Google" (`google` feature). Redirect URI: `${BETTER_AUTH_URL}/api/auth/callback/google`. |
 | `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | api | empty | Both set: Cloudflare Turnstile on sign-up, emailed codes and password reset (`captcha` feature). The site key reaches browsers through `system.info`. Cloudflare's always-pass test keys are in `.env.example`. |
+| `DEMO_PASSWORD` | api | empty | Director's shared demo account (`demo@director.mmadan.in`): the password `bun run --filter @repo/api director:demo-account` gives it (deployed: `node dist/director-demo-account.mjs` in the api image; locally add `--force`). Set, `system.info` hands the email and password to the sign-in page, which shows them for anyone to use; empty, no demo account is offered. 8 to 128 characters; a secret like any other (production's is in `api.sops.yaml`), only public by design once the account exists. See [director.md](director.md#the-demo-account). |
 | `PASSWORD_BREACH_CHECK` | api | `on` in production, `off` otherwise | `on`: sign-ups and password changes refuse a password found in public breaches (Have I Been Pwned; only the first five characters of its SHA-1 hash are sent). Fails closed: while HIBP is unreachable they fail with a server error rather than let a password through unchecked. |
-| `ENCRYPTION_KEYS` | api (req.), webhooks (req.) | generated | `id:base64key[,id:base64key…]`, 32-byte keys. The first encrypts, any listed key decrypts; prepend a new one to rotate. Encrypts webhook signing secrets at rest. |
-| `UNSUBSCRIBE_SECRET` | api (req.), notifications (req.) | generated | At least 32 characters. Notifications signs one-click unsubscribe links, the API checks them. |
 
 ## Email (apps/notifications)
 
 | Variable | Default / example | What it does |
 |---|---|---|
 | `SMTP_URL` | `smtp://localhost:51025` (Mailpit) | Where email is submitted. Required in production, and there it must authenticate and use TLS with the certificate checked: `smtps://no-reply%40example.com:<password>@mail.example.com:465`, or `smtp://…:587?requireTLS=true` for STARTTLS; `tls.servername=<public name>` when connecting by an internal name. Refused in production: no credentials, no TLS, `ignoreTLS=true`, `tls.rejectUnauthorized=false`. |
-| `EMAIL_FROM` | `Director-editor <no-reply@example.com>` | Sender. Required in production. Stalwart only accepts an address of the account `SMTP_URL` signs in as. |
-| `DIGEST_HOUR` | 8 | Local hour (each user's time zone) from which their daily digest goes out. |
+| `EMAIL_FROM` | `Director <no-reply@example.com>` | Sender. Required in production. Stalwart only accepts an address of the account `SMTP_URL` signs in as. |
 | `NOTIFICATIONS_CRITICAL_CONCURRENCY` | 20 | Jobs per process on `notifications-critical`. |
-| `NOTIFICATIONS_BULK_CONCURRENCY` | 5 | Jobs per process on `notifications-bulk`. |
-| `MAILPIT_URL` | `http://localhost:58025` | Not read by any service: the tests (web, mobile, Maestro, notifications) read caught emails from it. |
-
-## Texts (apps/notifications)
-
-| Variable | Default / example | What it does |
-|---|---|---|
-| `SMS_PROVIDER` | `email` outside production, unset in production | `twilio`, or `email` (delivers texts to Mailpit as mail to `<digits>@sms.test`; refused in production). Unset: nothing is texted. |
-| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` | empty | All three required for `twilio`. `TWILIO_FROM` is an E.164 number or a Messaging Service SID (`MG…`). |
-| `TWILIO_API_URL` | unset | Test hook: where Twilio's API lives. Refused in production. |
-
-## Push (apps/notifications; apps/api hands out the VAPID public key)
-
-Each platform is on when all of its variables are set.
-
-| Variable | Default / example | What it does |
-|---|---|---|
-| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | generated by setup | Web Push key pair. The API also reads the public key and returns it from `system.info`. By hand: `bunx web-push generate-vapid-keys`. |
-| `VAPID_SUBJECT` | `mailto:dev@example.com` | `mailto:` or `https:` contact for push services. |
-| `FCM_PROJECT_ID`, `FCM_CLIENT_EMAIL`, `FCM_PRIVATE_KEY` | empty | Android: a Firebase service account. |
-| `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_PRIVATE_KEY`, `APNS_BUNDLE_ID` | empty | iOS: an APNs auth key (`.p8`). |
-| `APNS_URL` | `https://api.push.apple.com` | `https://api.sandbox.push.apple.com` for development builds. |
-| `FCM_TOKEN_URL`, `FCM_API_URL`, `WEB_PUSH_TEST_ORIGIN` | unset | Test hooks (fake push servers). Refused in production. |
+| `MAILPIT_URL` | `http://localhost:58025` | Not read by any service: the tests (web, notifications) read caught emails from it. |
 
 ## Files (apps/api signs uploads, apps/worker checks them)
 
-On when `S3_BUCKET` is set (`files` feature). Read by api and worker (`storageEnv`).
+On when the chosen provider's bucket is set (`files` feature). Read by api and worker
+(`storageEnv`).
 
 | Variable | Read by | Default / example | What it does |
 |---|---|---|---|
-| `S3_BUCKET` | api, worker | empty (`uploads` locally) | Turns uploads on. |
+| `STORAGE_PROVIDER` | api, worker | `s3` | `s3` (RustFS, or any other S3-compatible provider) or `gcs` (Google Cloud Storage, its own JSON API). `gcs` without `GCS_BUCKET`, or the other provider's bucket set, stops the service at boot. |
+| `S3_BUCKET` | api, worker | empty (`uploads` locally) | Turns uploads on for the `s3` provider. Refused with `gcs`. |
 | `S3_REGION` | api, worker | `us-east-1` | |
 | `S3_ENDPOINT` | api, worker | `http://localhost:59000` | The local RustFS; in a cluster, the data chart's (its `storage` Secret). Another S3-compatible provider: its S3 endpoint. |
 | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | api, worker | `rustfs`, `rustfs-secret` | In a cluster, generated by the data chart into the `storage` Secret. |
 | `S3_FORCE_PATH_STYLE` | api, worker | `false` (`.env.example`: `true`) | For RustFS/MinIO-style servers without virtual-hosted buckets. |
-| `STORAGE_ORIGIN` | web | `http://localhost:59000` | The storage origin browsers upload to and load from, allowed by the web app's CSP. |
+| `GCS_BUCKET` | api, worker | empty | Turns uploads on for the `gcs` provider (refused with `s3`): production's `director-media-…` bucket. Application Default Credentials only (no key file, no `S3_*`); the VM's service account needs `roles/storage.objectAdmin` on the bucket and `roles/iam.serviceAccountTokenCreator` on itself (signed URLs sign through the IAM Credentials API's `signBlob`, since ADC from the metadata server has no private key of its own). |
+| `STORAGE_ORIGIN` | web | `http://localhost:59000` | The storage origin browsers upload to and load from, allowed by the web app's CSP. With the `gcs` provider, `https://storage.googleapis.com` (production sets it): its `connect-src` already allows that origin for Director's pose model, but takes play from it too (`media-src`). |
 | `FILE_SCANNER` | worker | `clamav` | `none` skips virus scanning: development only (refused in production when files are on). |
 | `CLAMAV_URL` | worker | `tcp://localhost:53310` | clamd. |
 | `FILES_CONCURRENCY` | worker | 2 | Uploads checked at once per process. |
 
-## Billing (apps/api; apps/webhooks receives Stripe's events)
-
-On when `STRIPE_SECRET_KEY` and both prices are set (`billing` feature); any other
-combination fails at boot. See [files-and-billing.md](files-and-billing.md).
-
-| Variable | Read by | Default / example | What it does |
-|---|---|---|---|
-| `STRIPE_SECRET_KEY` | api, fake Stripe | empty | `sk_test_…`, `sk_live_…` or a restricted `rk_…` key. |
-| `STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_PRO_YEARLY` | api, fake Stripe | empty | Recurring price ids (`price_…`) for the Pro plan. |
-| `STRIPE_TRIAL_DAYS` | api | 14 | Trial on an organization's first subscription; 0 turns trials off. |
-| `STRIPE_API_URL` | api | empty | Points the Stripe client at the fake Stripe (`http://127.0.0.1:<STRIPE_FAKE_PORT>`). Refused in production. |
-| `STRIPE_WEBHOOK_SECRET` | webhooks, fake Stripe | empty | `whsec_…`. Without it `/webhooks/stripe` answers 404. |
-| `STRIPE_FAKE_WEBHOOK_URL` | fake Stripe | `http://localhost:<WEBHOOKS_PORT>/webhooks/stripe` | Where the fake sends its events. Its own port is `STRIPE_FAKE_PORT` ([Local app ports](#local-app-ports)). |
-
-## Webhooks (apps/webhooks, and apps/api for endpoint settings)
+## Webhooks (apps/webhooks)
 
 | Variable | Read by | Default | What it does |
 |---|---|---|---|
 | `STALWART_WEBHOOK_SECRET` | webhooks, local Stalwart (compose) | generated | The key our Stalwart mail server signs its webhook with (its WebHook `signatureKey`), at least 32 characters. On: hard bounces suppress the address. Comma-separated to accept a new and an old key while rotating (Stalwart signs with one). Without it `/webhooks/stalwart` answers 404. |
-| `WEBHOOK_ALLOWED_PRIVATE_ADDRESSES` | api, webhooks | empty (`127.0.0.1` in `.env.example`) | Exact private IPs customer endpoints may use, for local receivers and tests. Must be empty in production. |
-| `WEBHOOK_DELIVERY_CONCURRENCY` | webhooks | 20 | Deliveries in flight per process. |
-| `WEBHOOK_TIMEOUT_MS` | webhooks | 15000 | Per delivery attempt, at most 60000. |
-| `WEBHOOK_AUTO_DISABLE_HOURS` | webhooks | 120 | An endpoint failing this long without one success is disabled (and its admins notified). |
 
 ## Worker (apps/worker)
 
@@ -260,8 +213,8 @@ combination fails at boot. See [files-and-billing.md](files-and-billing.md).
 | `OUTBOX_RETENTION_DAYS` | 7 | Published outbox rows are kept this long: the replay window for new consumers. |
 | `PROCESSED_EVENT_RETENTION_DAYS` | 30 | `<schema>.processed_event` retention. |
 | `AUDIT_RETENTION_MONTHS` | 13 | Audit log partitions older than this are dropped. |
-| `WEBHOOK_HISTORY_DAYS` | 30 | Webhook delivery logs and received provider events. |
-| `NOTIFICATION_HISTORY_DAYS` | 90 | Notification delivery log, and in-app notifications read longer ago. |
+| `WEBHOOK_HISTORY_DAYS` | 30 | Received provider events (the mail server's). |
+| `NOTIFICATION_HISTORY_DAYS` | 90 | The email delivery log. |
 
 ## AI (apps/ai; apps/api and apps/web call it)
 
@@ -270,36 +223,45 @@ both `AI_URL` and `AI_SERVICE_SECRET` are set.
 
 | Variable | Read by | Default / example | What it does |
 |---|---|---|---|
-| `AI_URL` | api, web | `http://localhost:8000` | Where the API calls the AI service. The web app forwards `/ai/mcp` there in local development. |
+| `AI_URL` | api | `http://localhost:8000` | Where the API calls the AI service. |
 | `AI_SERVICE_SECRET` | ai (req.), api | generated | At least 32 characters. The API signs a 60-second token for every call with it; the service verifies it. |
-| `API_URL` | web, ai, `apps/mobile/scripts/serve-web.ts` | `http://localhost:3001` | Web: where `/rpc`, `/api` and `/docs` are forwarded in local development and e2e (the gateway does it when deployed). Read when the web app is built, not when it starts: the image keeps the default, which clusters never use. AI: where its MCP server fetches the API's JWKS. |
-| `AI_MODEL` | ai | unset (`local:extractive` in `.env.example`) | A Pydantic AI model name (`anthropic:claude-sonnet-5`, `openai:gpt-5`). Unset: the assistant is off. `local:extractive` quotes the best passage with no model (refused in production). |
-| `AI_FALLBACK_MODEL` | ai | unset | Used when the main model fails. |
-| `AI_EMBEDDINGS` | ai | `hashing` | An embedding model name (`openai:text-embedding-3-small`) giving 1536 dimensions, or `hashing` (lexical, refused in production). |
-| `AI_MIN_RELEVANCE` | ai | 0 | Cosine similarity below which a passage isn't used (provider embeddings; 0 lets the model judge). Calibrate with the evals. |
+| `API_URL` | web | `http://localhost:3001` | Where `/rpc`, `/api` and `/docs` are forwarded in local development and e2e (the gateway does it when deployed). Read when the web app is built, not when it starts: the image keeps the default, which clusters never use. |
 | `AI_MONTHLY_TOKENS_PER_ORG` | ai | 2000000 | Tokens a workspace may use per calendar month. |
-| `AI_TOKENS_PER_RUN` | ai | 20000 | Cap per answer (at least 1000). |
-| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | ai (the Pydantic AI providers, not `settings.py`) | unset | The provider key for the model names above. Not in `.env.example`: add with `bun run env:set`. |
 
 ## Director (apps/ai watches shorts; apps/api reads YouTube)
 
 The `director` feature in the API is on when `YOUTUBE_API_KEY` is set and the `ai` and
 `files` features are; the AI service answers `FEATURE_DISABLED` for Director until
-`DIRECTOR_MODEL` is set. Locally `.env.example` points both at the mock Google
-(`packages/fake-google`): real requests, mock answers, no real keys. See
-[director.md](director.md).
+`DIRECTOR_MODEL` is set. Both are real Google services, empty in `.env.example` until you
+set a real key: integration and e2e suites start the mock Google (`packages/fake-google`)
+themselves, never `bun dev` or `bun dev:full`. See [director.md](director.md).
 
 | Variable | Read by | Default / example | What it does |
 |---|---|---|---|
-| `DIRECTOR_MODEL` | ai | `gemini-mock` in `.env.example` | The Gemini model, by its Gemini API name (`gemini-3.5-flash`). Gemini because it watches a YouTube video from its URL. Unset: Director off. |
-| `GOOGLE_API_KEY` | ai (req. with `DIRECTOR_MODEL`), the mock Google | `mock-google-key` in `.env.example` | The Gemini API key (the mock's own locally). |
-| `GOOGLE_BASE_URL` | ai | `http://localhost:12112` in `.env.example` | Another Gemini API endpoint: the mock Google locally, a gateway, or unset for Google's. Must be HTTPS in production. |
-| `GOOGLE_VERTEX` | ai | false | `true`: Gemini through Vertex AI express mode, billed through Cloud Billing (so a project's Cloud credits pay), with `GOOGLE_API_KEY` a Vertex key bound to a service account. Embeddings follow `AI_EMBEDDINGS` (`google-cloud:gemini-embedding-001` for Vertex). |
-| `DIRECTOR_TOKENS_PER_PLAN` | ai | 200000 | Cap per plan: watching the whole short and thinking (at least 10000). |
+| `DIRECTOR_MODEL` | ai | empty in `.env.example` | The Gemini model, by its Gemini API name (`gemini-3.8-flash`). Gemini because it watches a YouTube video from its URL. Unset: Director off (and setting it without `GOOGLE_API_KEY` fails at boot). |
+| `GOOGLE_API_KEY` | ai (req. with `DIRECTOR_MODEL`) | empty in `.env.example` | The Gemini API key, or, with `GOOGLE_VERTEX`, a Vertex key bound to a service account. |
+| `GOOGLE_BASE_URL` | ai | empty in `.env.example` | Another Gemini API endpoint: a gateway, or unset for Google's. Must be HTTPS in production. |
+| `GOOGLE_VERTEX` | ai, indexer | `true` in `.env.example` | `true`: Gemini through Vertex AI, billed through Cloud Billing (so a project's Cloud credits pay): express mode with `GOOGLE_API_KEY` a Vertex key bound to a service account, or, with no key (the Cloud Run indexer), Application Default Credentials, the service's own account. Needs `GOOGLE_CLOUD_PROJECT` once something calls Gemini (the service: once `GOOGLE_API_KEY` is also set; the indexer: always); `true` with neither key nor project is harmless for the service, so a key added later is billed through Vertex with no extra step. |
+| `VERTEX_LOCATION` | ai | `global` | The Vertex location every Gemini call addresses its model at. `global` by default: newer models (`gemini-4-argon`) are served only there, and an API key routes a bare model name to `us-central1` regardless of this setting. |
+| `DIRECTOR_TOKENS_PER_PLAN` | ai | 200000 | Cap per plan: watching the whole short and thinking (at least 10000, at most 2000000, what the Cloud Run indexer accepts). |
 | `DIRECTOR_TOKENS_PER_SCENE_CHECK` | ai | 12000 | Cap per scene check: one camera frame (at least 2000). |
 | `DIRECTOR_TOKENS_PER_REVIEW` | ai | 120000 | Cap per take review: watching one take (at least 10000). |
-| `YOUTUBE_API_KEY` | api, the mock Google | `mock-google-key` in `.env.example` | YouTube Data API v3 key: the Shorts feed, search, video details and comments. Unset: Director off. |
-| `YOUTUBE_API_URL` | api | `https://www.googleapis.com/youtube/v3` (`http://localhost:12112/youtube/v3` in `.env.example`) | Where the API reads YouTube: the mock Google locally. Must be HTTPS in production. |
+| `DIRECTOR_TOKENS_PER_PUBLISH_COPY` | ai | 20000 | Cap per YouTube post Director writes for a video: its plan's text, no video (at least 2000). |
+| `INDEX_MODEL` | ai | `gemini-4-argon` | The model a plan job indexes a short with, unattended, so it can be a different, more thorough model than `DIRECTOR_MODEL`'s live scene checks and reviews. |
+| `INDEX_FALLBACK_MODEL` | ai | `gemini-3.1-pro-preview` | Tried once after `INDEX_MODEL`'s own retries on a plan are spent (a transient failure, not a refusal). |
+| `MEDIA_BUCKET` | ai, indexer | empty in `.env.example` | The Cloud Storage bucket a short's original audio is captured into while it's indexed (`audio/<videoId>.m4a`, yt-dlp then an upload with Application Default Credentials): production's `director-media-…`, the same bucket as `GCS_BUCKET`, which apps/api signs links to. The account indexing (the VM's, or the indexer's on Cloud Run) needs `roles/storage.objectAdmin` on it. Unset: the audio isn't captured; plans are still written. |
+| `INDEXER_URL` | ai (worker), indexer (required) | unset | The Cloud Run indexer (`app/indexer.py`, [deploy.md](deploy.md#the-cloud-run-indexer)), its URL with no trailing slash. The worker sends each plan job's short there, with an ID token for this URL from the metadata server, so Gemini's long video calls and the audio download happen off the VM; unset, the worker indexes in-process, the same way. For the indexer, its own URL: the only audience its ID tokens may name. HTTPS in production. |
+| `INDEXER_INVOKER` | indexer (required) | unset | The one service account allowed to call the indexer (production: the VM's, `director-vm@…`). Cloud Run's IAM already lets only its invokers in; the indexer checks the ID token's email again itself. |
+| `GOOGLE_CERTS_URL` | indexer | `https://www.googleapis.com/oauth2/v1/certs` | Where Google publishes the keys its ID tokens are signed with. Only tests point it elsewhere; production refuses anything but HTTPS. |
+| `TTS_MODEL` | ai | `gemini-3.8-flash-tts` | Gemini's text-to-speech model: Director's voice on the shoot screen when the member isn't on a live call (`director.speak`). On with Director; the API keeps each spoken line in object storage, so it needs uploads on too. |
+| `DIRECTOR_TOKENS_PER_SPEECH` | ai | 3000 | What one spoken line may take (about 25 tokens a second of speech; at least 1000). A line waits for a budget that holds all of it: Vertex refuses a cap on the TTS model's output. |
+| `YOUTUBE_API_KEY` | api | empty in `.env.example` | YouTube Data API v3 key: whether a pasted link is a Short Director can film (its length), before it's indexed. Unset: Director off. |
+| `YOUTUBE_API_URL` | api | `https://www.googleapis.com/youtube/v3` | Where the API reads YouTube: real by default, a gateway otherwise (`.env.example` ships it commented out). Must be HTTPS in production. |
+| `GOOGLE_CLOUD_PROJECT` | api; ai (req. with `GOOGLE_VERTEX` once `GOOGLE_API_KEY` is set) | unset | The Google Cloud project Director's live video call (`/api/live`, Gemini Live on Vertex AI) runs in and bills to. Unset: the call answers `FEATURE_DISABLED`. apps/ai reads the same project to address Vertex AI models by their full resource name. |
+| `LIVE_LOCATION` | api | `us-central1` | The Vertex AI region of the live call's endpoint (`wss://<region>-aiplatform.googleapis.com/...`). |
+| `LIVE_MODEL` | api | `gemini-live-2.5-flash-native-audio` | The Live API model, by its Vertex AI name. |
+| `GOOGLE_ACCESS_TOKEN` | api | unset | Local development only: a Google access token (`gcloud auth print-access-token`, valid for an hour) used in place of the GCE metadata server's. Production refuses to start with it set. |
+| `BIGQUERY_DATASET` | api, ai | unset | The BigQuery dataset product events are streamed into, in its `events` table: `cut_saved`, `published` and `call_started` from the api (`AnalyticsService`, `src/modules/analytics`), `indexed` (with the model that wrote the plan) once a plan is ready and `take_reviewed` with its score once a review finishes, from apps/ai (`app/analytics.py`). Letters, digits and underscores. Needs `GOOGLE_CLOUD_PROJECT`, above (both services refuse to start without it). Unset: analytics is off, nothing is written. |
 
 ## Web (apps/web)
 
@@ -308,22 +270,9 @@ Server-only: nothing environment-specific is built into the browser bundle.
 | Variable | Default | What it does |
 |---|---|---|
 | `WEB_URL` | required | This site's origin (canonical URLs, sitemap). |
-| `API_URL`, `AI_URL`, `STORAGE_ORIGIN` | see above | |
-| `APPLE_TEAM_ID`, `IOS_BUNDLE_ID` | unset | The iOS app (`ABCDE12345`, `com.directoreditor.app`): `/.well-known/apple-app-site-association` names it for links and passkeys. |
-| `ANDROID_PACKAGE`, `ANDROID_CERT_FINGERPRINTS` | unset | The Android app and the SHA-256 fingerprints of its signing certificates, comma-separated (`AB:CD:…`): `/.well-known/assetlinks.json` names them. Optional, all four or none: with none set both files answer 404; with only some, the web app refuses to start and names the missing ones. The API and the mobile build read the fingerprints too ("Auth and the API", "Mobile"). |
+| `API_URL`, `STORAGE_ORIGIN` | see above | |
 | `RELEASE` | `dev` | Sent to the API as `x-app-version`. |
 | `SKIP_ENV_VALIDATION` | unset | `1` only for `next typegen` inside `check-types`. |
-
-## Mobile (apps/mobile)
-
-Read at build time (`app.config.ts`, `src/lib/config.ts`).
-
-| Variable | Default | What it does |
-|---|---|---|
-| `EXPO_PUBLIC_API_URL` | `http://localhost:3000` | The site's origin; on a phone use your machine's LAN address. EAS builds get it per EAS environment (`bunx eas-cli env:create --environment production --name EXPO_PUBLIC_API_URL --value …`). |
-| `EAS_PROJECT_ID` | empty | From `bunx eas-cli init`. Enables over-the-air updates; only EAS builds need it. |
-| `APP_VARIANT` | `development` | `development`, `preview` or `production`: app name and identifiers. Set by the profiles in `eas.json`. |
-| `APPLE_TEAM_ID`, `ANDROID_CERT_FINGERPRINTS` | unset | The same values the web app has (above). With one set and an https `EXPO_PUBLIC_API_URL`, the build claims the site's links and passkeys on that platform (`associatedDomains`, `intentFilters`); unset, it claims nothing. Set per EAS environment for store builds. |
 
 ## Tests and tooling
 
@@ -332,13 +281,9 @@ Not read by any service.
 | Variable | Read by | What it does |
 |---|---|---|
 | `E2E_BASE_URL` | web Playwright | Default `WEB_URL`. |
-| `E2E_MOBILE_URL` | mobile Playwright | Default `http://localhost:<MOBILE_WEB_PORT>`. |
 | `E2E_GOOGLE_EMAIL`, `E2E_GOOGLE_PASSWORD` | `apps/web/e2e/google.spec.ts` | A real Google account; the spec is skipped without them. |
-| `E2E_CIMD_CLIENT_ID`, `E2E_CIMD_REDIRECT_URI` | `apps/api/test/oauth.integration.test.ts` | A real Client ID Metadata Document; the test is skipped without them. |
 | `STALWART_URL` | `apps/webhooks/test/stalwart.integration.test.ts` | The local Stalwart's management API (`http://localhost:58080`, `bun run db:up:mail`); the test sends real mail through it and is skipped without it. |
 | `STALWART_SMTP_URL` | `apps/notifications/test/stalwart.integration.test.ts`, and the webhooks one | Submission to the local Stalwart, `smtps://no-reply:no-reply-password@localhost:51465?tls.rejectUnauthorized=false`; the notifications test is skipped without it. |
 | `STALWART_ADMIN_PASSWORD`, `STALWART_SMTP_PASSWORD` | `docker-compose.yml`, the webhooks test | The local Stalwart's admin and `no-reply@director-editor.test` passwords (default `stalwart-admin`, `no-reply-password`). |
-| `LOAD_USERS` | `apps/api/src/load-users.ts` | Signed-in users for k6 (default 50, at most 1000). |
-| `BASE_URL`, `PROFILE`, `TARGET_RPS`, `DURATION` | `load/api.ts` | k6 target (default `http://host.docker.internal:<API_PORT>`), `smoke` or `load`, rate (default 200), hold time (default `5m`). |
+| `LOAD_USERS` | `apps/api/src/load-users.ts` | Signed-in users for the fuzzing's sessions (default 50, at most 1000). |
 | `PG_CONTAINER` | `scripts/restore-drill.ts` | Run the drill against another Postgres container (CI). |
-| `EVAL_JUDGE_MODEL`, `EVAL_MIN_PASS_RATE` | `apps/ai/evals` | LLM-judged rubrics, and the pass rate below which the run fails (default 1.0). |

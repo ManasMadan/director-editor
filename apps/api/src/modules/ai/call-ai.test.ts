@@ -11,15 +11,15 @@ async function refusal(work: () => Promise<unknown>) {
 
 describe("a call to the AI service that fails", () => {
   it("lets this API's own error through as it is", async () => {
-    const own = new AppError("SHORT_NOT_FOUND");
+    const own = new AppError("DIRECTOR_PLAN_NOT_FOUND");
     await expect(refusal(() => Promise.reject(own))).resolves.toBe(own);
   });
 
   it("passes on a code clients understand, with its params", async () => {
     const error = await refusal(() =>
-      Promise.reject(new AiServiceError(404, "FEATURE_DISABLED", { feature: "assistant" })),
+      Promise.reject(new AiServiceError(404, "FEATURE_DISABLED", { feature: "director" })),
     );
-    expect(error).toMatchObject({ code: "FEATURE_DISABLED", params: { feature: "assistant" } });
+    expect(error).toMatchObject({ code: "FEATURE_DISABLED", params: { feature: "director" } });
   });
 
   it("hides anything else behind UPSTREAM_UNAVAILABLE, keeping the cause", async () => {

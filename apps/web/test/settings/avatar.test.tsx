@@ -102,7 +102,7 @@ describe("the profile picture", { tags: ["files"] }, () => {
 
   it("says so when storage refuses the upload", async () => {
     const { page } = await showCard();
-    await commands.refuseNextPut(":59000/", 503);
+    await commands.refuseNextPut(503);
     await userEvent.upload(fileInput(), picture());
     await expect
       .element(page.getByRole("alert"))

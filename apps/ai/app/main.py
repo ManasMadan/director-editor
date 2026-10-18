@@ -3,55 +3,52 @@
 Internal: only apps/api calls it, with a typed client generated from this app's OpenAPI
 schema (packages/ai-client) and a short-lived token naming the user and organization
 (app/auth.py). Browsers never reach it, so end-user auth, rate limits and input limits
-stay in the API. The one exception is the MCP server at /ai/mcp (app/mcp_server.py),
-which MCP clients reach through the gateway and which checks OAuth tokens itself.
+stay in the API.
 
-Long work (indexing documents; Director's plans and take reviews) runs in app/worker.py, from
-the `ai-ingest` and `ai-director` queues.
+Long work (Director's plans and take reviews) runs in app/worker.py, from the
+`ai-director` queue.
 """
 
-from collections.abc import AsyncGenerator, AsyncIterator
-from contextlib import AsyncExitStack, asynccontextmanager
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Annotated
 from uuid import UUID
 
 import httpx
 from fastapi import Depends, FastAPI, Path, Request, Response
-from fastapi.responses import StreamingResponse
+from pydantic import TypeAdapter
 from redis.asyncio import Redis
 from sqlalchemy import text
-from starlette.types import ASGIApp, Receive, Scope, Send
 
-from app import model
-from app.assistant import Assistant, AssistantEvent, AssistantRequest, create_agent, create_model
 from app.auth import CallerDep
 from app.contracts.error_response import ErrorResponse
-from app.db.models import DirectorPlan, DirectorTake, Document
+from app.db.models import DirectorCut, DirectorPlan, DirectorTake
 from app.db.session import close_engine, engine, open_engine
 from app.director import Director, create_director
-from app.documents import Documents, create_summaries
-from app.embeddings import create_embedder
 from app.errors import AppError, install_error_handlers
 from app.log import configure_logging
-from app.mcp_server import MCP_PATHS, create_mcp_server, mcp_app
-from app.queues import DirectorQueue, IngestQueue
+from app.queues import DirectorQueue
 from app.schemas import (
     VIDEO_ID_PATTERN,
+    CutPick,
+    DirectorCutCreate,
+    DirectorCutOut,
+    DirectorLibraryOut,
     DirectorPlanCreate,
     DirectorPlanOut,
     DirectorTakeCreate,
     DirectorTakeOut,
-    DocumentCreate,
-    DocumentOut,
     HealthResponse,
+    PublishCopy,
+    PublishCopyRequest,
     SceneCheck,
     SceneCheckRequest,
-    SentimentRequest,
-    SentimentResponse,
     ShotPlan,
+    SpeechRequest,
 )
 from app.settings import get_settings
+from app.speech import Speaker, create_speaker
 from app.telemetry import start_telemetry
 
 
@@ -61,10 +58,8 @@ class Services:
     app.state)."""
 
     redis: Redis
-    documents: Documents
-    assistant: Assistant | None
     director: Director | None
-    mcp: ASGIApp | None
+    speaker: Speaker | None
 
 
 _services: Services | None = None
@@ -83,49 +78,15 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     configure_logging(settings.log_level, json=settings.node_env == "production")
     open_engine(settings.database_url, settings.database_pool_max)
     redis = Redis.from_url(str(settings.redis_url))  # pyright: ignore[reportUnknownMemberType]  # untyped options
-    queue = IngestQueue(str(settings.redis_url))
     director_queue = DirectorQueue(str(settings.redis_url))
     http = httpx.AsyncClient()
-    documents = Documents(
-        create_embedder(settings.embeddings, settings.min_relevance),
-        queue,
-        redis,
-        create_summaries(settings),
-    )
-    exit_stack = AsyncExitStack()
-    mcp: ASGIApp | None = None
-    if settings.site_url and settings.api_url:
-        server = create_mcp_server(
-            site_url=str(settings.site_url),
-            api_url=str(settings.api_url),
-            release=settings.release,
-            documents=lambda: documents,
-            redis=lambda: redis,
-        )
-        mcp = mcp_app(server)
-        await exit_stack.enter_async_context(server.session_manager.run())
-    assistant = (
-        Assistant(
-            create_agent(create_model(settings.model, settings.fallback_model)),
-            documents,
-            model_name=settings.model,
-            monthly_tokens=settings.monthly_tokens_per_org,
-            tokens_per_run=settings.tokens_per_run,
-        )
-        if settings.model
-        else None
-    )
     _services = Services(
         redis=redis,
-        documents=documents,
-        assistant=assistant,
         director=create_director(settings, director_queue, redis, http),
-        mcp=mcp,
+        speaker=create_speaker(settings),
     )
     yield
     _services = None
-    await exit_stack.aclose()
-    await queue.close()
     await director_queue.close()
     await http.aclose()
     await redis.aclose()
@@ -144,27 +105,6 @@ install_error_handlers(app)
 start_telemetry("ai", app)
 
 
-async def _mcp(scope: Scope, receive: Receive, send: Send) -> None:
-    """Hands requests for /ai/mcp and its protected-resource metadata to the MCP server
-    built at startup. Anything else, and everything when the server is off, is an
-    unknown route."""
-    server = services().mcp
-    if server is None or scope.get("path") not in MCP_PATHS:
-        raise AppError("NOT_FOUND")
-    await server(scope, receive, send)
-
-
-def _documents() -> Documents:
-    return services().documents
-
-
-def _assistant() -> Assistant:
-    assistant = services().assistant
-    if not assistant:
-        raise AppError("FEATURE_DISABLED", {"feature": "assistant"})
-    return assistant
-
-
 def _director() -> Director:
     director = services().director
     if not director:
@@ -172,34 +112,55 @@ def _director() -> Director:
     return director
 
 
-DocumentsDep = Annotated[Documents, Depends(_documents)]
-AssistantDep = Annotated[Assistant, Depends(_assistant)]
 DirectorDep = Annotated[Director, Depends(_director)]
 
 
-def _out(document: Document) -> DocumentOut:
-    return DocumentOut(
-        id=document.id,
-        title=document.title,
-        status=document.status,
-        error=document.error,
-        chunkCount=document.chunk_count,
-        summary=document.summary,
-        createdBy=document.created_by,
-        createdAt=document.created_at,
-    )
+def _speaker() -> Speaker:
+    # Director's voice is part of Director: on and off with it.
+    speaker = services().speaker
+    if not speaker:
+        raise AppError("FEATURE_DISABLED", {"feature": "director"})
+    return speaker
+
+
+SpeakerDep = Annotated[Speaker, Depends(_speaker)]
 
 
 def _plan_out(plan: DirectorPlan) -> DirectorPlanOut:
     return DirectorPlanOut(
         id=plan.id,
         videoId=plan.video_id,
+        source=plan.source,
         status=plan.status,
+        stage=plan.stage,
         error=plan.error,
         plan=ShotPlan.model_validate(plan.plan) if plan.plan is not None else None,
         model=plan.model,
+        audioStatus=plan.audio_status,
+        audioKey=plan.audio_key,
         createdAt=plan.created_at,
         updatedAt=plan.updated_at,
+    )
+
+
+_PICKS = TypeAdapter(list[CutPick])
+
+
+def _cut_out(cut: DirectorCut, plan: DirectorPlan) -> DirectorCutOut:
+    return DirectorCutOut(
+        id=cut.id,
+        planId=plan.id,
+        videoId=plan.video_id,
+        # A cut is only ever made of a ready plan, and a ready plan stays ready.
+        templateTitle=ShotPlan.model_validate(plan.plan).title,
+        title=cut.title,
+        picks=_PICKS.validate_python(cut.picks),
+        fileId=cut.file_id,
+        durationMs=cut.duration_ms,
+        publishStatus=cut.publish_status,
+        youtubeVideoId=cut.youtube_video_id,
+        visibility=cut.visibility,
+        createdAt=cut.created_at,
     )
 
 
@@ -243,79 +204,23 @@ async def dependencies() -> HealthResponse:
 
 
 # `operation_id` becomes the operation name in the generated TypeScript client.
-# Plain `def`: inference is blocking work, so FastAPI runs it in a thread pool.
-@app.post("/v1/sentiment", operation_id="sentiment")
-def sentiment(body: SentimentRequest, _caller: CallerDep) -> SentimentResponse:
-    label, score = model.predict(body.text)
-    return SentimentResponse(label=label, score=score, model=model.MODEL_ID)
-
-
-@app.get("/v1/documents", operation_id="listDocuments")
-async def list_documents(caller: CallerDep, documents: DocumentsDep) -> list[DocumentOut]:
-    return [_out(d) for d in await documents.list(caller.org_id)]
-
-
-@app.post("/v1/documents", operation_id="createDocument", status_code=201)
-async def create_document(
-    body: DocumentCreate, caller: CallerDep, documents: DocumentsDep, request: Request
-) -> DocumentOut:
-    document = await documents.create(
-        caller.org_id,
-        caller.user_id,
-        body.title,
-        body.content,
-        request.headers.get("x-request-id"),
-    )
-    return _out(document)
-
-
-@app.delete("/v1/documents/{document_id}", operation_id="deleteDocument", status_code=204)
-async def delete_document(
-    document_id: UUID, caller: CallerDep, documents: DocumentsDep
-) -> Response:
-    await documents.delete(caller.org_id, document_id)
-    return Response(status_code=204)
-
-
-@app.post(
-    "/v1/assistant/answers",
-    operation_id="answer",
-    response_class=StreamingResponse,
-    responses={
-        200: {
-            "description": "Server-sent events, each `data:` line one AssistantEvent.",
-            "model": AssistantEvent,
-            "content": {"text/event-stream": {}},
-        }
-    },
-)
-async def answer(
-    body: AssistantRequest, caller: CallerDep, assistant: AssistantDep
-) -> StreamingResponse:
-    # Reserved before streaming starts, so an exhausted budget is a normal error response.
-    # A client that leaves before the stream starts leaves the reservation counted as spent.
-    reservation = await assistant.reserve(caller.org_id, caller.user_id)
-
-    async def events() -> AsyncIterator[str]:
-        async for event in assistant.answer(reservation, body.question):
-            yield f"data: {event.model_dump_json()}\n\n"
-
-    return StreamingResponse(
-        events(),
-        media_type="text/event-stream",
-        headers={"cache-control": "no-cache, no-transform", "x-accel-buffering": "no"},
-    )
-
-
-@app.post("/v1/director/plans", operation_id="requestDirectorPlan")
-async def request_director_plan(
+@app.post("/v1/director/plans", operation_id="indexDirectorPlan")
+async def index_director_plan(
     body: DirectorPlanCreate, caller: CallerDep, director: DirectorDep, request: Request
 ) -> DirectorPlanOut:
-    """The workspace's plan for a short; asking queues its analysis when there is none."""
-    plan = await director.request_plan(
+    """The workspace's plan for a short; asking queues its analysis when there is none,
+    as the caller's one short of their own (DIRECTOR_INDEX_LIMIT past it)."""
+    plan = await director.index(
         caller.org_id, caller.user_id, body.videoId, request.headers.get("x-request-id")
     )
     return _plan_out(plan)
+
+
+@app.get("/v1/director/library", operation_id="getDirectorLibrary")
+async def get_director_library(caller: CallerDep, director: DirectorDep) -> DirectorLibraryOut:
+    """The workspace's plans, and whether the caller has indexed their own short."""
+    plans, used = await director.library(caller.org_id, caller.user_id)
+    return DirectorLibraryOut(templates=[_plan_out(plan) for plan in plans], indexUsed=used)
 
 
 @app.get("/v1/director/plans/{video_id}", operation_id="getDirectorPlan")
@@ -358,5 +263,62 @@ async def list_director_takes(
     return [_take_out(t) for t in await director.takes(caller.org_id, caller.user_id, video_id)]
 
 
-# Registered last, so every route above takes precedence.
-app.mount("/", _mcp)
+@app.post("/v1/director/cuts", operation_id="createDirectorCut", status_code=201)
+async def create_director_cut(
+    body: DirectorCutCreate, caller: CallerDep, director: DirectorDep
+) -> DirectorCutOut:
+    """Records a cut of the caller's, from their takes picked one per shot."""
+    cut, plan = await director.save_cut(caller.org_id, caller.user_id, body)
+    return _cut_out(cut, plan)
+
+
+@app.get("/v1/director/plans/{video_id}/cuts", operation_id="listDirectorCuts")
+async def list_director_cuts(
+    video_id: Annotated[str, Path(pattern=VIDEO_ID_PATTERN)],
+    caller: CallerDep,
+    director: DirectorDep,
+) -> list[DirectorCutOut]:
+    """The caller's cuts of the short, newest first."""
+    return [_cut_out(*row) for row in await director.cuts(caller.org_id, caller.user_id, video_id)]
+
+
+@app.get("/v1/director/cuts", operation_id="listDirectorMedia")
+async def list_director_media(caller: CallerDep, director: DirectorDep) -> list[DirectorCutOut]:
+    """Every cut of the caller's, newest first."""
+    return [_cut_out(*row) for row in await director.cuts(caller.org_id, caller.user_id, None)]
+
+
+@app.post(
+    "/v1/director/speak",
+    operation_id="speakDirectorLine",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {"audio/wav": {"schema": {"type": "string", "format": "binary"}}},
+            "description": "The line, spoken, as a WAV file.",
+        }
+    },
+)
+async def speak_director_line(
+    body: SpeechRequest, caller: CallerDep, speaker: SpeakerDep
+) -> Response:
+    """A line in Director's voice (Gemini's text-to-speech), as a WAV file."""
+    audio = await speaker.speak(caller.org_id, caller.user_id, body.text, body.voice)
+    return Response(content=audio, media_type="audio/wav")
+
+
+@app.get("/v1/director/cuts/{cut_id}", operation_id="getDirectorCut")
+async def get_director_cut(
+    cut_id: UUID, caller: CallerDep, director: DirectorDep
+) -> DirectorCutOut:
+    """One of the caller's cuts (DIRECTOR_CUT_NOT_FOUND unless it's theirs)."""
+    return _cut_out(*await director.cut(caller.org_id, caller.user_id, cut_id))
+
+
+@app.post("/v1/director/publish-copy", operation_id="writeDirectorPublishCopy")
+async def write_director_publish_copy(
+    body: PublishCopyRequest, caller: CallerDep, director: DirectorDep
+) -> PublishCopy:
+    """Gemini's YouTube post for one of the caller's cuts: a title, a description and
+    hashtags in the Short's language, and the credits to the original."""
+    return await director.publish_copy(caller.org_id, caller.user_id, body)

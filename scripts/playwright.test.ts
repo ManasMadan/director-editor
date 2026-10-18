@@ -14,7 +14,7 @@ const manifest = (path: string) =>
     devDependencies: Record<string, string>;
   };
 
-const configs = ["apps/web/playwright.config.ts", "apps/mobile/playwright.config.ts"];
+const configs = ["apps/web/playwright.config.ts"];
 
 describe("the Playwright suites", () => {
   it.each(configs)("%s fails the run on a flaky test in CI", (file) => {
@@ -66,12 +66,7 @@ describe("the Playwright CLI", () => {
   });
 
   it("has its skills reinstalled by Renovate's Playwright updates", () => {
-    const packages = [
-      "package.json",
-      "apps/web/package.json",
-      "apps/mobile/package.json",
-      "packages/ui/package.json",
-    ]
+    const packages = ["package.json", "apps/web/package.json", "packages/ui/package.json"]
       .flatMap((path) => Object.keys(manifest(path).devDependencies))
       .filter((name) => /^(@playwright\/|playwright)/.test(name));
     // Plus the image packages/ui's visual tests run Playwright in (scripts/pins.test.ts).

@@ -1,26 +1,21 @@
 "use client";
 
 import { useFileDownloadUrl } from "@repo/client/api/files/download-url";
+import type { DirectorTakeId } from "@repo/contracts/ids";
+import { required } from "@repo/contracts/objects";
 import { useEffect, useRef, useState } from "react";
 import type { Clip } from "../lib/edit";
-import { type Frame, soundPeaks, videoFrames } from "../lib/thumbnails";
-import { PX_PER_SECOND } from "../lib/track";
+import { videoFrames } from "../lib/thumbnails";
 
-/** A filmed clip's take, in memory: to play, to show on the timeline and to stitch. */
+/** A take in memory: to play, to show on the board and to put into the video. */
 export interface TakeMedia {
   blob: Blob;
   url: string;
-  /** Frames along the kept part, each at its time in the take (a photo: itself). */
-  thumbnails: Frame[];
-  /** The waveform's bars, or null for a take with no sound. */
-  peaks: number[] | null;
+  /** A frame from the middle of the part kept (a photo: itself), for its card. */
+  poster: string;
 }
 
 export type MediaState = TakeMedia | "loading" | "failed";
-
-/** A thumbnail is 36 CSS pixels wide on a 64-pixel strip; a waveform bar is 4. */
-const THUMB_PX = 36;
-const BAR_PX = 4;
 
 /** A take's bytes, through a short-lived storage URL (a failed read is no take at all). */
 async function takeBytes(url: string): Promise<Blob> {
@@ -32,45 +27,44 @@ async function takeBytes(url: string): Promise<Blob> {
 }
 
 async function load(clip: Clip, blob: Blob, url: string): Promise<TakeMedia> {
-  const width = clip.seconds * PX_PER_SECOND;
   if (clip.shot.kind === "photo") {
-    return { blob, url, thumbnails: [{ seconds: 0, src: url }], peaks: null };
+    return { blob, url, poster: url };
   }
-  const count = Math.max(1, Math.ceil(width / THUMB_PX));
-  const step = (clip.to - clip.from) / count;
-  const times = Array.from({ length: count }, (_, at) => clip.from + step * (at + 0.5));
-  const [thumbnails, peaks] = await Promise.all([
-    videoFrames(url, times),
-    soundPeaks(blob, clip.from, clip.to, Math.max(1, Math.round(width / BAR_PX))),
-  ]);
-  return { blob, url, thumbnails, peaks };
+  const [frame] = await videoFrames(url, [(clip.from + clip.to) / 2]);
+  return { blob, url, poster: required(frame, "a frame of the take").src };
 }
 
-/** What makes a clip's media stale: another take, or another part of it kept. */
-const keyOf = (clip: Clip) => `${clip.take?.id}:${clip.from}:${clip.to}`;
-
 /**
- * Each filmed clip's take, downloaded once and kept as a blob: URL for the page's life,
- * with its timeline thumbnails and waveform. Keyed by clip index.
+ * Each take a clip plays, downloaded once (the first time it's picked) and kept as a
+ * blob: URL for the page's life, with its card's frame: picking it again is instant.
+ * Keyed by take id. Takes never picked aren't downloaded: a phone shouldn't fetch every
+ * attempt of every shot to show one video.
  */
-export function useTakeMedia(clips: readonly Clip[]): Map<number, MediaState> {
+export function useTakeMedia(clips: readonly Clip[]): Map<DirectorTakeId, MediaState> {
   const downloadUrl = useFileDownloadUrl();
-  const [media, setMedia] = useState(new Map<number, MediaState>());
-  const started = useRef(new Map<number, string>());
+  const [media, setMedia] = useState(new Map<DirectorTakeId, MediaState>());
+  const started = useRef(new Set<DirectorTakeId>());
+  const failed = useRef(new Set<DirectorTakeId>());
   const urls = useRef<string[]>([]);
 
   useEffect(() => {
+    // A take that couldn't be downloaded is tried again the next time it's picked (not
+    // on every render while it stays picked, which would retry in a loop).
+    const picked = new Set(clips.map((clip) => clip.take?.id));
+    for (const id of failed.current) {
+      if (!picked.has(id)) {
+        failed.current.delete(id);
+        started.current.delete(id);
+      }
+    }
     for (const clip of clips) {
       const take = clip.take;
-      if (clip.state !== "cut" || !take || started.current.get(clip.index) === keyOf(clip)) {
+      // A take still being reviewed waits: its review says which part to keep.
+      if (clip.state !== "cut" || !take || started.current.has(take.id)) {
         continue;
       }
-      const key = keyOf(clip);
-      started.current.set(clip.index, key);
-      const set = (state: MediaState) =>
-        setMedia((now) =>
-          started.current.get(clip.index) === key ? new Map(now).set(clip.index, state) : now,
-        );
+      started.current.add(take.id);
+      const set = (state: MediaState) => setMedia((now) => new Map(now).set(take.id, state));
       set("loading");
       downloadUrl(take.fileId)
         .then(({ url }) => takeBytes(url))
@@ -79,7 +73,10 @@ export function useTakeMedia(clips: readonly Clip[]): Map<number, MediaState> {
           urls.current.push(url);
           return load(clip, blob, url);
         })
-        .then(set, () => set("failed"));
+        .then(set, () => {
+          failed.current.add(take.id);
+          set("failed");
+        });
     }
   }, [clips, downloadUrl]);
 

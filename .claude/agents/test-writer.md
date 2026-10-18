@@ -16,7 +16,7 @@ change and why.
 2. Coverage for the affected package: `bun run --filter @repo/<name> coverage` (unit and
    integration together; needs the full Docker profile), or `bun run test:coverage` for
    everything. Both take minutes: run them with the Bash tool's `run_in_background`.
-   Python: `bun run --cwd apps/ai coverage`. Mobile: `bun run --filter @repo/mobile coverage`.
+   Python: `bun run --cwd apps/ai coverage`.
 3. Read the uncovered lines and branches in the output. Every branch counts: error
    paths, the `else`, the early return.
 
@@ -29,9 +29,8 @@ Follow `.claude/rules/tests.md` (it loads when you open a test file):
   package's `test/` folder, against the real service, connecting as the service's own
   role (`createTestDatabase().urlFor(role)`, data from `factories(db)` in
   `@repo/db/testing`). In apps/api, `test/harness.ts` (`startApi`, `createSession`).
-- Third parties: the local fakes (`packages/fake-stripe`, `apps/notifications/test/
-  fake-twilio.ts` and `fake-push.ts`, Mailpit), never `vi.mock` of a provider, Prisma,
-  Redis or BullMQ.
+- Third parties: the local fakes (`packages/fake-google`, `apps/ai/tests/fakes.py`,
+  Mailpit), never `vi.mock` of a provider, Prisma, Redis or BullMQ.
 - A tenancy path gets a test that another organization can't see or change the row.
 - A bug fix gets a test that fails without the fix: check it does, by reading the code
   path, before you finish.

@@ -16,7 +16,6 @@ import { HOUR_MS } from "../packages/contracts/src/time";
 import { fail, ok, ROOT, type Run, runMain, runSync } from "./lib";
 
 const TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-const MOBILE_CONFIG = "apps/mobile/app.config.ts";
 const PRODUCTION = "deploy/environments/production/release.yaml";
 const STAGING = "deploy/environments/staging/stack.yaml";
 /** How long release.yml waits for CI and deploy.yml to finish on the tagged commit. */
@@ -71,11 +70,6 @@ export function releaseNotes(commits: Commit[]): string {
     }
   }
   return parts.length ? `${parts.join("\n\n")}\n` : "Maintenance only: no user-facing changes.\n";
-}
-
-/** The app version in the mobile config, which store builds of a release carry. */
-export function mobileVersion(config: string): string | undefined {
-  return /^\s*version:\s*"([^"]+)"/m.exec(config)?.[1];
 }
 
 /**
@@ -209,8 +203,8 @@ function commitsSince({ run, root, git }: Helpers, tag: string): Commit[] {
 }
 
 /**
- * A release tag must be a version, on master, have images (a commit deploy.yml passed for,
- * or the staging bump right after one), and match the mobile app's version; the exit code.
+ * A release tag must be a version, on master, and have images (a commit deploy.yml passed
+ * for, or the staging bump right after one); the exit code.
  */
 async function check(tools: Helpers, sleep: Tools["sleep"], tag: string) {
   const { run, root, git, facts } = tools;
@@ -230,13 +224,6 @@ async function check(tools: Helpers, sleep: Tools["sleep"], tag: string) {
   const images = releaseImageTag(commit, facts);
   if (!images) {
     problems.push(noImages(tag, commit));
-  }
-  const version = mobileVersion(git(["show", `${tag}:${MOBILE_CONFIG}`]));
-  if (version !== tag.slice(1)) {
-    problems.push(
-      `${MOBILE_CONFIG} says version ${version ?? "(none)"}: set it to ${tag.slice(1)} on master ` +
-        "first (store builds of this release carry it), then tag that commit",
-    );
   }
   for (const problem of problems) {
     fail(problem);

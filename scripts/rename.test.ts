@@ -113,7 +113,7 @@ describe("renaming the project", () => {
     const { changed, left } = rename(dir, acme);
     expect(left).toEqual([]);
     expect(changed.length).toBeGreaterThan(50);
-    expect(readFileSync(join(dir, "apps/mobile/app.config.ts"), "utf8")).toContain("com.shop.app");
+    expect(readFileSync(join(dir, "docker-compose.yml"), "utf8")).toContain("shop");
     expect(readFileSync(join(dir, "binary.bin"))).toEqual(Buffer.from([0, 1, 2, 0x62, 0x6f]));
     // Renamed again later from what it's called now; captured requests keep their bytes.
     expect(readFileSync(join(dir, "scripts/rename.ts"), "utf8")).toContain(

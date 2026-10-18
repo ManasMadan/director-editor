@@ -8,7 +8,7 @@ import { keysOf } from "./objects";
  *
  * The wire shape is oRPC's error JSON, the same over /rpc and REST (/api/v1), with the
  * HTTP status from this catalog:
- *   { code: "TODO_NOT_FOUND", status: 404, message: "…", data: { requestId: "…", params: { … } } }
+ *   { code: "DIRECTOR_PLAN_NOT_FOUND", status: 404, message: "…", data: { requestId: "…", params: { … } } }
  * `message` is for logs only; clients translate `code`.
  *
  * Adding a code: add it here with its HTTP status, then add `errors.<CODE>` to every
@@ -37,21 +37,19 @@ export const ERROR_CODES = {
   FEATURE_DISABLED: 404,
   /** 400, not 426: that one requires an Upgrade header naming a protocol to switch to. */
   CLIENT_OUTDATED: 400,
-  FRESH_SESSION_REQUIRED: 403,
-  /** The same refusal as WEBHOOK_URL_NOT_ALLOWED, found later (at delivery), so the same status. */
+  /** safeFetch refused the address (private, internal, or not https). */
   DESTINATION_NOT_ALLOWED: 422,
   RESPONSE_TOO_LARGE: 502,
   TOO_MANY_REDIRECTS: 502,
   UPSTREAM_UNAVAILABLE: 502,
   // Tenancy
   NO_ACTIVE_ORGANIZATION: 403,
-  // Account
-  PHONE_CODE_INVALID: 400,
-  PHONE_NUMBER_TAKEN: 409,
-  // Billing
-  ENTITLEMENT_REQUIRED: 402,
-  ALREADY_SUBSCRIBED: 409,
-  NO_SUBSCRIPTION: 409,
+  /**
+   * The shared demo account can't do this: publish, or change the account itself (its
+   * password, two-step verification, sessions, deletion). Everyone trying Director signs
+   * in to the same one.
+   */
+  DEMO_ACCOUNT_LOCKED: 403,
   // Files
   FILE_NOT_FOUND: 404,
   FILE_TYPE_NOT_ALLOWED: 422,
@@ -62,47 +60,51 @@ export const ERROR_CODES = {
   FILE_UNREADABLE: 422,
   FILE_NOT_UPLOADED: 409,
   FILE_NOT_READY: 409,
-  // Notifications
-  UNSUBSCRIBE_LINK_INVALID: 400,
-  // Inbound webhooks (Stripe, the mail server): the signature doesn't match the body
+  // Inbound webhooks (the mail server): the signature doesn't match the body
   INVALID_SIGNATURE: 400,
-  // Webhooks
-  WEBHOOK_ENDPOINT_NOT_FOUND: 404,
-  WEBHOOK_DELIVERY_NOT_FOUND: 404,
-  WEBHOOK_URL_NOT_ALLOWED: 422,
-  WEBHOOK_ENDPOINT_LIMIT: 409,
-  // Connected apps (OAuth / MCP clients)
-  APP_NOT_FOUND: 404,
-  // API keys
-  API_KEY_NOT_FOUND: 404,
-  API_KEY_LIMIT_REACHED: 409,
-  /** The key is valid but lacks the scope this call needs (params: scope). */
-  API_KEY_SCOPE_MISSING: 403,
   // AI
-  DOCUMENT_NOT_FOUND: 404,
-  // DOCUMENT_INDEXING_FAILED (a document's error) and AI_RUN_LIMIT (an answer's) are never
-  // HTTP answers, only codes inside a response; their statuses are there for the catalog.
-  DOCUMENT_INDEXING_FAILED: 422,
   AI_BUDGET_EXCEEDED: 429,
-  AI_RUN_LIMIT: 422,
   // Shorts (YouTube) and Director
-  SHORT_NOT_FOUND: 404,
-  /** Director films shorts, not long videos (params: maxSeconds). */
-  SHORT_TOO_LONG: 422,
+  /** A member indexes one short of their own; the seeded templates don't count. */
+  DIRECTOR_INDEX_LIMIT: 409,
+  /** The link isn't a YouTube video, or YouTube won't show it (private, removed). */
+  DIRECTOR_VIDEO_UNAVAILABLE: 422,
+  /** Director films Shorts, not long videos (params: maxSeconds). */
+  DIRECTOR_TOO_LONG: 422,
   DIRECTOR_PLAN_NOT_FOUND: 404,
   /** The plan is still being worked out, or its analysis failed. */
   DIRECTOR_PLAN_NOT_READY: 409,
   DIRECTOR_SHOT_NOT_FOUND: 404,
+  /** A cut picks a take that isn't the member's take of that shot of the plan. */
+  DIRECTOR_TAKE_NOT_FOUND: 404,
   /** A photo for a video shot, or the other way round. */
   DIRECTOR_TAKE_KIND_MISMATCH: 422,
+  /** A live call sent more than a person could say or type (each second costs Gemini time). */
+  DIRECTOR_CALL_TOO_FAST: 429,
+  /** No cut of the member's has this id. */
+  DIRECTOR_CUT_NOT_FOUND: 404,
+  // Publishing a cut to YouTube Shorts
+  /** The shared demo account can't publish: everyone trying Director signs in to it. */
+  PUBLISH_DEMO_DISABLED: 403,
+  /**
+   * No Google account is linked, or it hasn't allowed uploads to YouTube (or that
+   * permission was taken back): the client asks for it (better-auth linkSocial) and retries.
+   */
+  PUBLISH_NEEDS_YOUTUBE: 403,
+  /** The cut's video isn't uploaded and checked yet, or is gone from storage. */
+  PUBLISH_CUT_NOT_READY: 409,
+  /** The Google account has no YouTube channel to publish to yet. */
+  PUBLISH_NO_CHANNEL: 409,
+  /**
+   * Director's YouTube uploads for today are used up: its own daily cap
+   * (PUBLISH_DAILY_LIMIT), or YouTube's quota for the project.
+   */
+  PUBLISH_QUOTA_EXHAUSTED: 429,
   // The next three are only ever a plan's or take's error, never an HTTP answer.
   /** Gemini couldn't watch the video (private, age-restricted, removed). */
   DIRECTOR_VIDEO_UNREADABLE: 422,
   DIRECTOR_ANALYSIS_FAILED: 422,
   DIRECTOR_REVIEW_FAILED: 422,
-  // Todos (example feature)
-  TODO_NOT_FOUND: 404,
-  TODO_VERSION_CONFLICT: 409,
 } as const satisfies Record<string, number>;
 
 export type ErrorCode = keyof typeof ERROR_CODES;
@@ -115,11 +117,9 @@ export type ErrorCode = keyof typeof ERROR_CODES;
  */
 export const ERROR_PARAMS = {
   RATE_LIMITED: z.object({ retryAfterSeconds: z.number().int().nonnegative() }),
-  WEBHOOK_ENDPOINT_LIMIT: z.object({ max: z.number().int() }),
   FILE_TYPE_NOT_ALLOWED: z.object({ types: z.string() }),
   FILE_TOO_LARGE: z.object({ maxBytes: z.number().int() }),
-  SHORT_TOO_LONG: z.object({ maxSeconds: z.number().int() }),
-  API_KEY_SCOPE_MISSING: z.object({ scope: z.string() }),
+  DIRECTOR_TOO_LONG: z.object({ maxSeconds: z.number().int() }),
 } as const satisfies Partial<Record<ErrorCode, z.ZodObject>>;
 
 type ParamsFree = Record<string, string | number>;
@@ -161,12 +161,11 @@ export const AUTH_ERROR_CODES = [
   "AUTHENTICATION_FAILED",
   "PASSKEY_CANCELLED",
   "ORGANIZATION_NEEDS_OWNER",
-  "OAUTH_REQUEST_EXPIRED",
   "SIGN_IN_INCOMPLETE",
   // From ERROR_CODES.
   "VALIDATION_FAILED",
   "RATE_LIMITED",
-  "ENTITLEMENT_REQUIRED",
+  "DEMO_ACCOUNT_LOCKED",
 ] as const satisfies readonly string[];
 export type AuthErrorCode = (typeof AUTH_ERROR_CODES)[number];
 
@@ -185,10 +184,6 @@ export const AUTH_ERROR_ALIASES: Readonly<Record<string, AuthErrorCode>> = {
   ERROR_CEREMONY_ABORTED: "PASSKEY_CANCELLED",
   ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY: "PASSKEY_CANCELLED",
   ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED: "PREVIOUSLY_REGISTERED",
-  ORGANIZATION_MEMBERSHIP_LIMIT_REACHED: "ENTITLEMENT_REQUIRED",
-  // OAuth errors (the `error` field): the signed request an app sent the user with has
-  // expired (it's valid for 10 minutes) or was altered.
-  invalid_signature: "OAUTH_REQUEST_EXPIRED",
 };
 
 export const isAuthErrorCode = (value: unknown): value is AuthErrorCode =>

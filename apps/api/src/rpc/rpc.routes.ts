@@ -19,7 +19,6 @@
 
 import { OpenAPIHandler } from "@orpc/openapi/fastify";
 import { RPCHandler } from "@orpc/server/fastify";
-import { API_KEY_HEADER } from "@repo/contracts/api";
 import { runWithContext, sendError } from "@repo/nest-common";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { contextFor, toHeaders } from "../http-context";
@@ -125,13 +124,6 @@ export async function mountRpc(fastify: FastifyInstance, router: AppRouter, opti
   // runs: anything else is refused (415), and an oversized body too (413). oRPC would
   // otherwise read the raw stream itself, with no limit, for any other content type.
   fastify.register((scope, _options, done) => {
-    // REST callers authenticate with an API key; a 401 says how, as HTTP expects.
-    scope.addHook("onSend", async (request, reply, payload) => {
-      if (reply.statusCode === 401 && request.url.startsWith("/api/v1/")) {
-        reply.header("www-authenticate", `ApiKey header="${API_KEY_HEADER}"`);
-      }
-      return payload;
-    });
     scope.removeAllContentTypeParsers();
     scope.addContentTypeParser(
       "application/json",

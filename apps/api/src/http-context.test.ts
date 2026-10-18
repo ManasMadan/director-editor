@@ -6,17 +6,19 @@ const request = (headers: FastifyRequest["headers"]) =>
   ({ id: "req-1", headers }) as FastifyRequest;
 
 describe("a request's context", () => {
-  it("takes the language from x-locale first, then Accept-Language", () => {
-    expect(contextFor(request({ "x-locale": "es", "accept-language": "en" }))).toEqual({
+  it("takes the language from x-locale, then Accept-Language, else English", () => {
+    expect(contextFor(request({ "x-locale": "en", "accept-language": "fr" }))).toEqual({
       requestId: "req-1",
-      locale: "es",
+      locale: "en",
       clientVersion: undefined,
     });
-    expect(contextFor(request({ "accept-language": "es-MX", "x-app-version": "2.0.0" }))).toEqual({
+    expect(contextFor(request({ "accept-language": "en-GB", "x-app-version": "2.0.0" }))).toEqual({
       requestId: "req-1",
-      locale: "es",
+      locale: "en",
       clientVersion: "2.0.0",
     });
+    // A language the app doesn't have.
+    expect(contextFor(request({ "x-locale": "es", "accept-language": "es-MX" })).locale).toBe("en");
   });
 });
 

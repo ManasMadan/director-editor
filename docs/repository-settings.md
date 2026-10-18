@@ -212,12 +212,7 @@ skipped until its values exist.
 | Name | Kind | For |
 |---|---|---|
 | `BOT_APP_CLIENT_ID`, `BOT_APP_PRIVATE_KEY` | variable, secret | the GitHub App above |
-| `EVAL_MODEL` | variable | nightly evals against a real model, e.g. `anthropic:claude-sonnet-5` |
-| `EVAL_EMBEDDINGS`, `EVAL_JUDGE_MODEL`, `EVAL_MIN_PASS_RATE`, `EVAL_MIN_RELEVANCE` | variables | the rest of the nightly evals' settings (`apps/ai/evals`) |
-| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | secrets | the providers those models use |
-| `EAS_PROJECT_ID`, `EXPO_TOKEN` | variable, secret | mobile builds and over-the-air updates on EAS (`mobile.yml`; the project id from `bunx eas-cli init`, a robot token from expo.dev) |
-| `LOAD_TARGET_RPS` | variable | the nightly load test's target (default 50 requests a second) |
-| `STRIPE_CONTRACT_SECRET_KEY` | secret | the weekly check of the fake Stripe against Stripe's test mode (`stripe.yml`): a test-mode key (`sk_test_…`) of an account whose test-mode billing portal settings have been saved once (Dashboard → Settings → Billing → Customer portal); each run makes a customer with a trial subscription, then deletes it |
+| `CLAUDE_REVIEW`, `ANTHROPIC_API_KEY` | variable, secret | the Claude review of pull requests (`claude-review.yml`): `true` turns it on |
 | `COSIGN_PRIVATE_KEY`, `COSIGN_PASSWORD` | secrets | signing images with a key pair instead of keyless, so production's admission doesn't depend on Sigstore's public services (docs/deploy.md) |
 | `TOFU_TARGETS` | variable | which environments get a plan on infrastructure pull requests and the nightly drift check, e.g. `["staging", "production"]` |
 

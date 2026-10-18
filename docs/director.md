@@ -1,14 +1,18 @@
 # Director
 
-Director teaches someone to film their own version of a YouTube short. They pick a short
-in a YouTube-style feed, Gemini watches it and writes the shot plan (how many shots,
+Director teaches someone to film their own version of a YouTube short. They pick a template
+from the library (the six seed Shorts every workspace starts with, or one Short of their
+own they paste a link to), Gemini watches it and writes the shot plan (how many shots,
 which are videos and which photos, in what order, where to stand, how to hold the phone,
 what to say), and the camera screen guides each take live. Gemini then reviews each take
 and picks its best part, and the browser stitches the takes into the finished short.
+This page covers the screens, Director Live's guides, the data and the demo account;
+[how-it-works.md](how-it-works.md) follows each step underneath (indexing, the live call,
+reviews, the editor, publishing).
 
 ```
-apps/web (Shorts UI, camera)  ──@repo/client──▶  apps/api  ──ai-client (JWT)──▶  apps/ai  ──▶  Gemini
-  │ getUserMedia, MediaRecorder,                 │ shorts: YouTube Data API v3      │ plan job: watches the short by URL
+apps/web (library, camera)    ──@repo/client──▶  apps/api  ──ai-client (JWT)──▶  apps/ai  ──▶  Gemini
+  │ getUserMedia, MediaRecorder,                 │ shorts: YouTube link check       │ plan job: watches the short by URL
   │ DeviceOrientation, MediaPipe pose,           │ director: checks, then proxies    │ scene check: one camera frame
   │ speech synthesis, canvas stitching           │ files: take uploads, signed reads │ review job: watches one take
   └── presigned PUT ──▶ storage ──▶ apps/worker (ClamAV, type check) ─────────────────┘
@@ -16,52 +20,65 @@ apps/web (Shorts UI, camera)  ──@repo/client──▶  apps/api  ──ai-cl
 
 ## Turning it on
 
-Locally Director runs against the **mock Google** (`packages/fake-google`): one server on
-`GOOGLE_FAKE_PORT` that speaks the Gemini API and YouTube Data API v3. Every request the
-app makes is real (the AI service's Gemini client, the API's YouTube client, uploads,
-ClamAV, the worker); only the answers are mock data. `.env.example` points at it with
-mock keys, so nothing needs a real key and nothing leaves the machine:
+Director calls the real Gemini and YouTube Data API v3, like the rest of the app; there
+is no local stand-in for either in `bun dev` or `bun dev:full` (the **mock Google**,
+`packages/fake-google`, speaks both protocols, but only integration, e2e and fuzz suites
+start it, never the running app). `.env.example` ships every Google variable empty, so
+Director stays off until you set real keys:
 
 ```sh
-bun run setup                       # once: .env from .env.example
-bun run env:set S3_BUCKET=uploads   # takes are uploads
-bun dev:full                        # the AI service, RustFS, ClamAV and the mock Google too
+bun run setup                              # once: .env from .env.example
+bun run env:set S3_BUCKET=uploads          # takes are uploads
+bun run env:set YOUTUBE_API_KEY=...        # a YouTube Data API v3 key
+bun run env:set GOOGLE_API_KEY=...         # a Vertex key, or a Gemini API key (below)
+bun run env:set GOOGLE_CLOUD_PROJECT=...   # the Vertex project; also turns on the live call
+bun run env:set DIRECTOR_MODEL=gemini-3.8-flash
+bun dev:full                               # the AI service, RustFS and ClamAV too
 ```
 
 Then sign in (`bun run db:seed` makes `demo@example.com`) and open
-http://localhost:3000/home. What the mock answers:
-
-- the feed: six real public YouTube videos (their pictures and the embedded player are
-  YouTube's own); the first, "GRWM for the office in summer time!", is the short the demo
-  recreates, the other five stand in for shorts; any pasted link opens too;
-- the plans: for the office GRWM, its own twelve cuts (ten videos, two product photos,
-  filmed on a propped-up phone, music and no script); then the PRD's examples, a GRWM in
-  six shots (four videos, two photos) with a script, the pen-drop shoe flaunt in one
-  back-camera video, and a "stand near a tree" talk;
-- scene checks: two directions toward the shot's landmark, then "in place";
-- take reviews: the shot's length from just after the take starts, a score and feedback.
+http://localhost:3000/library.
 
 Director is on when the API has `YOUTUBE_API_KEY` and the `ai` and `files` features, and
-the AI service has `DIRECTOR_MODEL` and `GOOGLE_API_KEY` ([environment.md](environment.md)).
-For the real APIs: empty `GOOGLE_BASE_URL`, set `YOUTUBE_API_URL` back to Google's, set
-real keys and a real `DIRECTOR_MODEL` (`gemini-3.5-flash`). Production refuses the mock
-(both URLs must be HTTPS there). Set `GOOGLE_VERTEX=true` to call Gemini through Vertex
-AI instead of the Gemini API: `GOOGLE_API_KEY` then needs to be a Vertex key bound to a
-service account, and usage bills through Cloud Billing rather than the Gemini API.
+the AI service has `DIRECTOR_MODEL` and `GOOGLE_API_KEY`
+([environment.md](environment.md)). `.env.example` defaults `GOOGLE_VERTEX` to `true`,
+so a `GOOGLE_API_KEY` you add is addressed through
+Vertex AI rather than the Gemini API, once `GOOGLE_CLOUD_PROJECT` is also set (below,
+under Director's live video call): `GOOGLE_API_KEY` then needs to be a Vertex key bound
+to a service account, and usage bills through Cloud Billing rather than the Gemini API.
+Unset `GOOGLE_VERTEX` to call the Gemini API directly instead. Production refuses a
+plain-HTTP `GOOGLE_BASE_URL` or `YOUTUBE_API_URL` (the mock Google's protocol, not a real
+endpoint). A plan job (watching a short unattended) indexes it with `INDEX_MODEL`, a
+separate, more thorough model from `DIRECTOR_MODEL`'s live scene checks and reviews;
+`INDEX_FALLBACK_MODEL` is tried once after `INDEX_MODEL`'s own retries on a transient
+failure are spent. The plan's `stage` says how far it got, stored and announced as each
+is reached: `queued` when it's asked for, `watching` while Gemini watches the short,
+`writing` once Gemini has answered (the original audio is captured into `MEDIA_BUCKET`
+and the plan saved), then `ready`, or `failed` with its reason:
+`DIRECTOR_VIDEO_UNAVAILABLE` when Gemini can't watch the video (private, removed,
+age-restricted), `DIRECTOR_ANALYSIS_FAILED` otherwise. A failed plan never counts as the
+member's one short of their own. With `INDEXER_URL` set, the indexing runs on the Cloud
+Run indexer instead of in the worker ([deploy.md](deploy.md#the-cloud-run-indexer)).
 
-If the Expo app's bundler won't start (`bun dev:full` stops with it), run the rest with
-`bunx turbo run dev --filter='!@repo/mobile'`.
+Integration, e2e and fuzz suites never need a real key: they start the mock Google
+themselves (`startFakeGoogle` from `packages/fake-google`, e.g.
+`apps/web/test/global-setup.ts`), which answers YouTube's video reads for six real public YouTube
+videos (their pictures and the embedded player are YouTube's own, the answers are mock
+data): the first, "GRWM for the office in summer time!", is the short the demo recreates
+(`packages/fake-google/src/catalog.ts`, `plans.ts`), the other five stand in for shorts,
+and any pasted link opens too. Its scene checks and take reviews are in
+`packages/fake-google/src/gemini.ts`.
 
 ## The screens (apps/web)
 
 | Route | What it is |
 |---|---|
-| `/home` | YouTube's home: topic chips, a grid of real shorts (YouTube search, cached), a box to paste any Shorts link |
-| `/shorts/[videoId]` | the vertical player: swipe for the next; like, comments, share, save and the Director button |
-| `/saved` | the member's liked and saved shorts |
-| `/director/[videoId]` | the plan: "You need 6 shots: 4 videos and 2 photos", the order, speak-or-original-audio, Record |
-| `/director/[videoId]/shoot?shot=n&audio=voice\|original` | the camera, one shot at a time |
-| `/director/[videoId]/review` | every shot's newest take and its review; "Make my short" stitches and downloads |
+| `/library` | the workspace's templates (starters and members' own, each with its shot rhythm and length, or its indexing stage), and "Bring your own Short": paste a link and Gemini indexes it, live; a second one of your own opens the "You've used your AI credit" dialog |
+| `/shorts/[videoId]` | an old link: redirects to `/director/[videoId]` |
+| `/director/[videoId]` | the template: the original, its storyboard, each shot's scene, framing, phone angle and lines, what you've filmed, the audio choice, Start shooting |
+| `/director/[videoId]/shoot?shot=n&audio=voice\|original` | the camera, one shot at a time; with `&back=edit` (a retake asked for in the editor) it goes back to the editor once the take is kept |
+| `/director/[videoId]/edit?audio=voice\|original` | the editor: a board of shots left to right (each as wide as it is long), each shot's takes top to bottom with Director's pick marked, a stepper to change the pick, Director's note and a Retake on a shot whose best take scored below 60; the preview plays the picks; "Save video" renders the cut in the browser (about 720×1280 at 4 Mbit/s, at most 100 MB), uploads it and saves it to My media, with Cancel while it does |
+| `/media` | My media: the member's saved videos, under the template each was made from, to play, with each one's YouTube publish status |
 
 The camera screen is **Director Live**: the camera in a floating capsule over a blurred,
 dark copy of itself, an aurora behind it that breathes while Director talks or listens, a
@@ -73,7 +90,12 @@ Controls fade after a few seconds untouched; any touch brings them back.
   the steps) offers a cue to `lib/cues.ts`, which picks the one that matters most, waits
   a breath between lines, never repeats a line inside its cooldown, and gives the member
   the floor when they talk. The line is shown as a caption and, with the voice on, said
-  aloud. It talks to someone filming for the first time, a grandparent or a child: warm,
+  aloud in Director's own voice: Gemini's text-to-speech (`TTS_MODEL`, through
+  `director.speak`), which the API keeps in storage per line and voice, so each line is
+  spoken once for everyone. When that voice is off (no uploads), fails or takes more than
+  two seconds, the browser's speech synthesis says the line instead (for a minute after a
+  failure, and for good once it's off); on a live call,
+  Gemini Live does all the talking. It talks to someone filming for the first time, a grandparent or a child: warm,
   short, one thing at a time, and patient (a breath of 4.5 seconds between lines, 25
   before a nudge comes back). A few calls punctuate it: "Get ready! Here we go in 3",
   "Action!", "Cut!", "Let's try that one more time", "That's a wrap".
@@ -130,13 +152,16 @@ The seams, each documented in its file:
 | Concern | Now | Later | Where |
 |---|---|---|---|
 | What Director remembers | this browser's storage | an API procedure, a row per member | `MemoryStore` in `apps/web/src/modules/director/lib/memory.ts` |
-| Director's voice | the browser's speech synthesis | a streamed voice (Gemini Live's native audio) | `say`, `hush`, `saying` in `lib/speech.ts` |
-| Hearing the member | the browser's speech recogniser | a streamed transcript from the same live session | `useListening` in `hooks/use-listening.ts` |
-| Looking at the scene | a Gemini call per frame (`checkScene`) | a live session streaming frames | `useSceneGuide` in `hooks/use-scene-guide.ts` |
+| Director's voice | Gemini's text-to-speech (`director.speak`), the browser's speech synthesis when it fails; on a call, Gemini Live | Gemini Live's voice off a call too | `say`, `hush`, `saying` in `lib/speech.ts` |
+| Hearing the member | the browser's speech recogniser; on a call, Gemini Live hears them itself | a streamed transcript from a live session off a call too | `useListening` in `hooks/use-listening.ts` |
+| Looking at the scene | a Gemini call per frame (`checkScene`); on a call, Gemini Live sees a frame a second | a live session streaming frames off a call too | `useSceneGuide` in `hooks/use-scene-guide.ts` |
 
 With "use the original audio", the take records no sound and the original plays while
-filming; the finished short is silent, for the original sound to be added when posting
-on YouTube ("Use this sound"). Director never downloads a YouTube video.
+filming, in YouTube's own embedded player; the finished short is silent, for the original
+sound to be added when posting on YouTube ("Use this sound"). Director never downloads a
+YouTube video's picture: indexing captures only its audio track
+([how-it-works.md](how-it-works.md#the-originals-audio)), which a plan links as
+`audio.url`.
 
 ## Phones
 
@@ -147,24 +172,89 @@ iOS asks before a page may read the tilt: the level shows a button for that.
 
 ## Where things are
 
-- Data: `ai.director_plan` (one per workspace and video, shared by its members),
-  `ai.director_take` (each member's own), `app.short_reaction` (likes and saves); all under
-  row-level security. Plans are a JSON column validated by `ShotPlan` on the way in and out.
+- Data: `ai.director_plan` (one per workspace and video, shared by its members: the
+  workspace's library of templates, the seeded ones and the one short each member may
+  index across all their workspaces, held by the partial unique index
+  `director_plan_one_user_index` and read through `ai.index_used`),
+  `ai.director_take` (each member's own; never replaced, the best-scored is picked),
+  `ai.director_cut` (a member's rendered video of a plan and how far publishing it got),
+  `app.short_reaction` (the removed feed's likes and saves: nothing reads it, and a
+  later migration drops it); all under row-level security. Plans are a JSON
+  column validated by `ShotPlan` on the way in and out.
 - AI service: `apps/ai/app/director.py` (the three Gemini calls, their token budgets and
   failures), queue `ai-director` (`plan`, `review-take`) in `packages/jobs`.
-- API: `apps/api/src/modules/shorts` (YouTube; `youtube.ts` is the only code that knows its
-  wire format), `apps/api/src/modules/director` (checks, then the AI service).
-- Contracts: `packages/contracts/src/api/{shorts,director}.ts`; the plan's shape is checked
+- Seed templates: `packages/contracts/src/director-seeds.json`, the 6 seed Shorts
+  (`apps/ai/app/seeds/seeds.json`) indexed for real on Vertex AI and committed. Rebuild it
+  with `bun run --filter @repo/ai seeds:build` whenever the plan schema changes (and check
+  indexing still works on Shorts beyond the seeds with `bun run --filter @repo/ai
+  evals:index`, `apps/ai/evals/`). It sits in
+  `packages/contracts` because the AI service writes it and the API reads it (services never
+  import each other); `src/director-seeds.ts` parses it against the plan's contract when the
+  API loads. Every workspace gets its own copy of the 6 the moment it's created
+  (`apps/api/src/modules/director/seeds.repository.ts`, in the same transaction as the
+  workspace): rows with `source = 'seed'`, ready, in nobody's name, so they never count as
+  anyone's one index. Workspaces made before that get theirs from
+  `bun run --filter @repo/api director:seed-workspaces` (deployed: `node
+  dist/director-seed-workspaces.mjs` in the api image), which adds only what's missing and
+  is safe to run again.
+- API: `apps/api/src/modules/shorts` (whether a pasted link is a Short Director can film:
+  `youtube.ts` is the only code that knows YouTube's wire format),
+  `apps/api/src/modules/director` (checks, then the AI service).
+- Contracts: `packages/contracts/src/api/director.ts`; the plan's shape is checked
   against the Python model by `apps/api/src/modules/director/limits.test.ts`.
-- Web: `apps/web/src/modules/shorts` and `apps/web/src/modules/director` (`lib/` holds the
+- Web: `apps/web/src/modules/director` (the library, the template, the camera and the
+  editor; `lib/` holds the
   pure parts: tilt, pose, framing, timeline, doodles, the edit, the stitcher).
+
+## The demo account
+
+Anyone can try Director without signing up: the sign-in page shows a shared account,
+`demo@director.mmadan.in`, with its password and a "Use demo account" button that fills
+the form (the landing page's "Try the demo" links to `/sign-in?demo=1`, which fills it at
+once). The page gets both from `system.info`, and only when the API has `DEMO_PASSWORD`
+set ([environment.md](environment.md)).
+
+The account itself is made by a command, once per environment and again whenever the
+password changes:
+
+```sh
+bun run --filter @repo/api director:demo-account --force   # locally
+node dist/director-demo-account.mjs                        # deployed, in the api image
+```
+
+Outside production it refuses without `--force`. It makes the account verified, with the
+password `DEMO_PASSWORD`, `demo` set on its user row (`auth.user.demo`) and the seeded
+templates in its personal workspace. Run again, it only sets the password and the flag back
+and copies any seed the library is missing: what judges did with the account (its own
+indexed Short, takes and cuts) stays. `--reset` starts over: it deletes the account and the
+workspaces only it belongs to, and everything made in them, then makes it again with only
+the seeds.
+
+Everyone shares the account, so (`apps/api/src/auth/demo.ts`):
+
+- it can't publish: publishing refuses a session whose `session.user.demo` is true with
+  `PUBLISH_DEMO_DISABLED` <!-- verify after publish merges -->;
+- it can't change, lock or empty the account or its workspace: changing the password,
+  deleting the account, turning on two-step verification, linking a Google account, ending
+  sessions, renaming itself or changing its picture, and making, renaming, leaving or
+  deleting a workspace answer `DEMO_ACCOUNT_LOCKED` (its email and a password reset need
+  codes sent to its address). It can still set its own language and time zone;
+- its device list shows only the device asking, never the others signed in to it;
+- while `DEMO_PASSWORD` is set, its sign-in has no per-account attempt limit, since its
+  password is public; the per-address limit still applies.
+
+Nobody can delete a personal workspace through the API, the demo's or anyone's: it goes
+with its account. Running the command again also puts back the account's and its
+workspace's names.
+
+It indexes a Short of its own like any account (one).
 
 ## Limits
 
 - A take is at most 60 seconds and 15 MB, so it stays under the 20 MB Gemini takes inline
   in one request once base64 has grown it; the recorder aims at 1.5 Mbit/s.
-- YouTube's free quota is 10,000 units a day and a search costs 100: feed pages are cached
-  for 30 minutes, videos for an hour, comments for ten minutes.
+- YouTube's free quota is 10,000 units a day; checking a link costs 1, and each video's
+  answer is cached for an hour.
 - Token caps per plan, scene check and review come out of the workspace's monthly AI
   allowance (`AI_MONTHLY_TOKENS_PER_ORG`).
 - Stitching happens in the browser and takes as long as the short plays.

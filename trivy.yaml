@@ -9,9 +9,10 @@ scan:
   # deploy/.rendered/isolated has passes of its own (scripts/misconfig.ts, ISOLATED_KINDS).
   # Every folder .gitignore lists is build or test output: other checks write and delete
   # files there while this one walks the tree (scripts/misconfig.test.ts keeps the two in
-  # step).
+  # step). Subagents' worktrees are other checkouts of this repository, each scanned on
+  # its own.
   skip-dirs:
-    - apps/mobile
+    - .claude/worktrees
     - deploy/.rendered/isolated
     - "**/node_modules"
     - "**/.venv"

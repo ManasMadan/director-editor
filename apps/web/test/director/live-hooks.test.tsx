@@ -4,6 +4,7 @@
  * what Director says, what it remembers, and the screen's own behaviour (the wake lock,
  * the buzz, the controls stepping back).
  */
+import { HOUR_MS } from "@repo/contracts/time";
 import { useLayoutEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
@@ -16,6 +17,7 @@ import { useVision } from "@/modules/director/hooks/use-vision";
 import type { Perception } from "@/modules/director/lib/cues";
 import { FRESH } from "@/modules/director/lib/memory";
 import { createThingDetector } from "@/modules/director/lib/object-detector";
+import { saying } from "@/modules/director/lib/speech";
 import { signUp } from "../users";
 import {
   cameraStream,
@@ -26,6 +28,8 @@ import {
   fakeRecognizer,
   renderHook,
   shot,
+  silentWav,
+  standIn,
   until,
 } from "./support";
 
@@ -252,18 +256,30 @@ const quiet: Perception = {
 };
 
 describe("useLiveDirector", () => {
+  /** The API with Director's own voice off: lines are said in the browser's. */
+  const voiceOff = () =>
+    standIn((os) => ({
+      director: {
+        speak: os.director.speak.handler(({ errors }) => {
+          throw errors.FEATURE_DISABLED({ data: { params: { feature: "files" } } });
+        }),
+      },
+    }));
+
   it("welcomes the member back with what it remembers: the light, then a favourite prop", async () => {
     const speak = vi.spyOn(window.speechSynthesis, "speak").mockImplementation(() => undefined);
     const said = () => speak.mock.calls.map(([utterance]) => utterance.text);
     const back = { ...FRESH, sessions: 3 };
-    const dark = await renderHook(() =>
-      useLiveDirector({
-        perception: { ...quiet, paused: false },
-        speak: true,
-        memory: { ...back, light: { "too-dark": 3 } },
-        shot: shot(),
-        index: 0,
-      }),
+    const dark = await renderHook(
+      () =>
+        useLiveDirector({
+          perception: { ...quiet, paused: false },
+          speak: true,
+          memory: { ...back, light: { "too-dark": 3 } },
+          shot: shot(),
+          index: 0,
+        }),
+      { api: voiceOff() },
     );
     await expect
       .poll(said)
@@ -271,14 +287,16 @@ describe("useLiveDirector", () => {
         "Welcome back! Last time it was a little dark, so let's find a spot with nice light. The walk-in.",
       );
     dark.unmount();
-    await renderHook(() =>
-      useLiveDirector({
-        perception: { ...quiet, paused: false },
-        speak: true,
-        memory: { ...back, things: { plant: 2 } },
-        shot: shot(),
-        index: 0,
-      }),
+    await renderHook(
+      () =>
+        useLiveDirector({
+          perception: { ...quiet, paused: false },
+          speak: true,
+          memory: { ...back, things: { plant: 2 } },
+          shot: shot(),
+          index: 0,
+        }),
+      { api: voiceOff() },
     );
     await expect
       .poll(said)
@@ -288,8 +306,9 @@ describe("useLiveDirector", () => {
   it("has nothing to repeat before it has said anything, and goes quiet when its voice is off", async () => {
     const cancel = vi.spyOn(window.speechSynthesis, "cancel").mockImplementation(() => undefined);
     let speak = true;
-    const hook = await renderHook(() =>
-      useLiveDirector({ perception: quiet, speak, memory: FRESH, shot: shot(), index: 0 }),
+    const hook = await renderHook(
+      () => useLiveDirector({ perception: quiet, speak, memory: FRESH, shot: shot(), index: 0 }),
+      { api: voiceOff() },
     );
     hook.current.repeat();
     expect(hook.current.line).toBeNull();
@@ -302,6 +321,110 @@ describe("useLiveDirector", () => {
     hook.rerender();
     expect(hook.current.line?.text).toBe("Cut!");
     expect(speakLine).not.toHaveBeenCalled();
+  });
+
+  /** Director on set, its voice on, with `director.speak` speaking each line or failing. */
+  async function onSet(speech: "spoken" | "failing") {
+    const browser = vi.spyOn(window.speechSynthesis, "speak").mockImplementation(() => undefined);
+    const asked: string[] = [];
+    const api = standIn((os) => ({
+      director: {
+        speak: os.director.speak.handler(({ input, errors }) => {
+          asked.push(input.text);
+          if (speech === "failing") {
+            throw errors.UPSTREAM_UNAVAILABLE({ data: { params: {} } });
+          }
+          return { url: silentWav(1), expiresAt: new Date(Date.now() + HOUR_MS) };
+        }),
+      },
+    }));
+    const hook = await renderHook(
+      () =>
+        // No steps to speak ahead: what the test sends is the only line asked for.
+        useLiveDirector({
+          perception: quiet,
+          speak: true,
+          memory: FRESH,
+          shot: shot({ steps: [] }),
+          index: 0,
+        }),
+      { api },
+    );
+    const saidByBrowser = () => browser.mock.calls.map(([utterance]) => utterance.text);
+    return { hook, asked, saidByBrowser };
+  }
+
+  it("has the opening shot's steps spoken ahead as the screen opens, but not on a call", async () => {
+    const asked: string[] = [];
+    const api = standIn((os) => ({
+      director: {
+        speak: os.director.speak.handler(({ input, errors }) => {
+          asked.push(input.text);
+          // One that can't be had now is left until it's said.
+          if (input.text === "Spin.") {
+            throw errors.UPSTREAM_UNAVAILABLE({ data: { params: {} } });
+          }
+          return { url: silentWav(1), expiresAt: new Date(Date.now() + HOUR_MS) };
+        }),
+      },
+    }));
+    const steps = (...instructions: string[]) =>
+      instructions.map((instruction, index) => ({
+        atSeconds: index,
+        instruction,
+        cameraMove: "static" as const,
+      }));
+    // On a call Gemini Live talks: nothing to speak ahead.
+    const calling = await renderHook(
+      () =>
+        useLiveDirector({
+          perception: quiet,
+          speak: false,
+          memory: FRESH,
+          shot: shot({ steps: steps("Wave hello.") }),
+          index: 0,
+        }),
+      { api },
+    );
+    calling.unmount();
+    let speak = true;
+    const opened = await renderHook(
+      () =>
+        useLiveDirector({
+          perception: quiet,
+          speak,
+          memory: FRESH,
+          shot: shot({ steps: steps("Walk in.", "Turn.", "Smile.", "Spin.", "Bow.") }),
+          index: 0,
+        }),
+      { api },
+    );
+    // The first few, once, before recording reaches any of them.
+    await expect
+      .poll(() => [...asked].sort())
+      .toEqual(["Action! Walk in.", "Smile.", "Spin.", "Turn."]);
+    speak = false;
+    opened.rerender();
+    speak = true;
+    opened.rerender();
+    expect(asked).toHaveLength(4);
+  });
+
+  it("says its lines in its own voice (Gemini's), not the browser's", async () => {
+    // The browser plays sound once the member has touched the page.
+    await userEvent.click(document.body);
+    const { hook, asked, saidByBrowser } = await onSet("spoken");
+    hook.current.announce("Cut!");
+    await expect.poll(saying).toBe("Cut!");
+    expect(asked).toContain("Cut!");
+    expect(saidByBrowser()).not.toContain("Cut!");
+  });
+
+  it("says its lines in the browser's voice when its own can't be had", async () => {
+    const { hook, asked, saidByBrowser } = await onSet("failing");
+    hook.current.announce("Cut!");
+    await expect.poll(saidByBrowser).toContain("Cut!");
+    expect(asked).toContain("Cut!");
   });
 });
 

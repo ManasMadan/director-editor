@@ -1,8 +1,7 @@
 # apps/notifications
 
-NestJS worker, port 3003 (health only). Consumes `notifications-critical`,
-`notifications-bulk` and `events-notifications`, and delivers every channel: email,
-SMS, push (iOS, Android, web) and in-app.
+NestJS worker, port 3003 (health only). Consumes `notifications-critical` and
+`events-notifications`, and sends email: sign-in codes and security alerts.
 
 ## Commands (from the repo root)
 
@@ -13,21 +12,17 @@ SMS, push (iOS, Android, web) and in-app.
 
 ## Where things are
 
-- `src/dispatch/templates.ts`: every notification and the steps to add one.
-- `src/dispatch/dispatcher.ts`: renders per channel and locale, claims each send in
-  `delivery-log.ts`, adds unsubscribe headers.
-- `src/dispatch/policy.ts`: preferences, quiet hours, suppression.
-- `src/channels/<channel>/`: the transport interface and its providers, chosen by env
-  in the channel's module.
-- `src/digest/`: the daily digest, scheduled hourly and sent at `DIGEST_HOUR` local time.
+- `src/dispatch/templates.ts`: every email and the steps to add one.
+- `src/dispatch/dispatcher.ts`: renders in the recipient's locale and claims each send
+  in `delivery-log.ts`, so a redelivered job sends nothing twice.
+- `src/dispatch/policy.ts`: the suppression list (hard bounces, complaints).
+- `src/channels/email/`: the transport interface and its SMTP provider.
+- `src/events/events.processor.ts`: notifications requested through the outbox, and
+  the mail server's feedback that feeds the suppression list.
 
 ## Gotchas
 
-- Locally, email goes to Mailpit (http://localhost:58025) and SMS goes there too, as
-  mail to `<digits>@sms.test` (`SMS_PROVIDER=email`). Production refuses that.
-- A push platform is on only when all of its env variables are set; a partial set fails
-  at boot.
-- Integration tests use local HTTP fakes for Twilio and push (`test/fake-*.ts`) through
-  the provider URL overrides in `src/env.ts`. Production refuses those overrides.
+- Locally, email goes to Mailpit (http://localhost:58025). Production refuses a
+  plain-text SMTP URL.
 - Copy comes from the injected translator (`@InjectI18n()`, `I18nModule` in
   `src/app.module.ts`), so a new `MessageSource` is wired in one place.

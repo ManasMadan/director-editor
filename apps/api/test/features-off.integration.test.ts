@@ -1,20 +1,16 @@
 /**
  * Optional features are off without their configuration: the procedures say so, and
  * clients read the same from system.info to hide them. (A separate file: it needs a
- * server started with storage, billing, AI and web push all unconfigured.)
+ * server started with storage and AI unconfigured.)
  */
-import { randomUUID } from "node:crypto";
 import { ORPCError } from "@orpc/client";
-import { createProducer } from "@repo/jobs";
-import { eventually } from "@repo/testing/eventually";
-import type { Job } from "bullmq";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createSession, type Harness, newEmail, newPassword, startApi, takeOtp } from "./harness";
 
 let harness: Harness;
 beforeAll(async () => {
   delete process.env.S3_BUCKET;
-  harness = await startApi(7, { S3_BUCKET: "", VAPID_PUBLIC_KEY: "" });
+  harness = await startApi(7, { S3_BUCKET: "" });
 });
 afterAll(() => harness?.close());
 
@@ -35,7 +31,7 @@ async function expectError(promise: Promise<unknown>, code: string) {
 }
 
 describe("features off", () => {
-  it("reports every optional feature off, with no keys for the browser", async () => {
+  it("reports every optional feature off, with no keys or demo account for the browser", async () => {
     const info = await createSession(harness).rpc.system.info();
     expect(info).toMatchObject({
       features: {
@@ -44,11 +40,23 @@ describe("features off", () => {
         captcha: false,
         director: false,
         files: false,
-        billing: false,
       },
       captchaSiteKey: null,
-      webPushPublicKey: null,
+      demo: null,
     });
+  });
+
+  it("limits sign-in attempts at the demo account's address like any other without a demo account", async () => {
+    const attempt = () =>
+      createSession(harness).auth("/sign-in/email", {
+        email: "demo@director.mmadan.in",
+        password: newPassword(),
+      });
+    // 10 attempts per account in 15 minutes (account-limits.ts), each from its own address.
+    for (let tries = 0; tries < 10; tries++) {
+      expect((await attempt()).status).toBe(401);
+    }
+    expect((await attempt()).status).toBe(429);
   });
 
   it("answers FEATURE_DISABLED for uploads", async () => {
@@ -64,64 +72,36 @@ describe("features off", () => {
     );
   });
 
-  it("answers FEATURE_DISABLED for the AI features", async () => {
+  it("answers FEATURE_DISABLED for Director's plans without the AI service", async () => {
     const session = await signedIn();
     const error = await expectError(
-      session.rpc.ai.sentiment({ text: "Great" }),
+      session.rpc.director.plan({ videoId: "dQw4w9WgXcQ" }),
       "FEATURE_DISABLED",
     );
     expect(error.data?.params).toEqual({ feature: "ai" });
   });
 
-  it("answers FEATURE_DISABLED for the Shorts feed without a YouTube key", async () => {
+  it("answers FEATURE_DISABLED for indexing a short without a YouTube key", async () => {
     const session = await signedIn();
-    const error = await expectError(session.rpc.shorts.feed({ topic: "all" }), "FEATURE_DISABLED");
+    const error = await expectError(
+      session.rpc.director.index({ url: "https://youtu.be/dQw4w9WgXcQ" }),
+      "FEATURE_DISABLED",
+    );
     expect(error.data?.params).toEqual({ feature: "director" });
   });
 
-  it("without billing, every workspace has everything and there's nothing to pay", async () => {
+  it("answers FEATURE_DISABLED for publishing without Google sign-in", async () => {
     const session = await signedIn();
-    expect(await session.rpc.billing.overview()).toMatchObject({
-      enabled: false,
-      plan: "pro",
-      entitlements: { members: null, webhooks: true },
-      subscription: null,
-    });
     const error = await expectError(
-      session.rpc.billing.checkout({ interval: "month" }),
+      session.rpc.publish.upload({
+        cutId: "0199f3a0-0000-7000-8000-000000000001",
+        title: "Mine",
+        description: "",
+        hashtags: [],
+        credits: "",
+      }),
       "FEATURE_DISABLED",
     );
-    expect(error.data?.params).toEqual({ feature: "billing" });
-  });
-
-  it("without billing, billing events are taken and ignored", async () => {
-    const events = createProducer("events-billing", harness.redis);
-    const id = randomUUID();
-    const job: Job = await events.add(
-      "event",
-      {
-        id,
-        name: "stripe.event_received.v1",
-        key: "evt_off",
-        payload: {
-          inboundEventId: randomUUID(),
-          stripeEventId: "evt_off",
-          type: "customer.subscription.updated",
-          object: { id: "sub_off" },
-        },
-        orgId: null,
-        actorId: null,
-        requestId: null,
-        occurredAt: new Date().toISOString(),
-        source: "webhooks",
-      },
-      { jobId: id },
-    );
-    const state = await eventually(
-      () => job.getState(),
-      (current) => current === "completed" || current === "failed",
-    );
-    await events.queue.close();
-    expect(state).toBe("completed");
+    expect(error.data?.params).toEqual({ feature: "google" });
   });
 });

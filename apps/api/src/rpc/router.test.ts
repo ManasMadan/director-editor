@@ -1,8 +1,8 @@
 /**
  * Rules every procedure of the router follows, checked over all of them:
  *
- *   - it checks who's calling (a session, or an API key where the contract allows one),
- *     unless it's one of the public endpoints listed here, each with its reason;
+ *   - it checks who's calling (a session), unless it's one of the public endpoints listed
+ *     here, each with its reason;
  *   - the error codes its contract declares are ones its code can throw (the other way
  *     round, an undeclared code, is refused at runtime outside production: strictErrors
  *     in rpc.routes.ts).
@@ -24,8 +24,6 @@ const PUBLIC: Record<string, string> = {
     "Clients read it before anyone signs in: the enabled features, the oldest supported app version, and the captcha and push keys.",
   "system.alerting":
     "The uptime check outside the cluster reads it, signed out: only ok, stale or off, from a verdict cached for 30 seconds.",
-  "notifications.unsubscribe":
-    "Opened from an email's unsubscribe link, often signed out: the signed token in the link is what authorizes it.",
 };
 
 type Procedure = Parameters<typeof call>[0] & { "~orpc": { meta: unknown } };
@@ -40,18 +38,12 @@ function proceduresOf(router: object, prefix = ""): [string, Procedure][] {
 // No session behind any call, and nothing past the checks is reached: no services, and
 // Redis only once a caller is known (their rate limit).
 const auth = { api: { getSession: async () => null } } as unknown as Auth;
-const router = createRouter(
-  createProcedures(
-    auth,
-    {} as Memberships,
-    () => Promise.reject(new Error("no API key is sent")),
-    {} as Redis,
-  ),
-  { get: () => ({}) } as unknown as INestApplication,
-);
+const router = createRouter(createProcedures(auth, {} as Memberships, {} as Redis), {
+  get: () => ({}),
+} as unknown as INestApplication);
 const procedures = proceduresOf(router);
 
-/** What a call without a session or key ends in: an error code, or "answered". */
+/** What a call without a session ends in: an error code, or "answered". */
 async function anonymousCall(procedure: Procedure) {
   try {
     await call(procedure, undefined, { context: { headers: new Headers() } });
@@ -108,8 +100,7 @@ describe("declared errors", () => {
 
   // Codes the builders throw (procedures.ts), and the routers that use such a builder.
   const BUILDER_CODES: Record<string, RegExp> = {
-    NO_ACTIVE_ORGANIZATION: /\b(inOrg|orgAdmin|freshAdmin)\./,
-    FRESH_SESSION_REQUIRED: /\b(fresh|freshAdmin)\.|requireFresh\(/,
+    NO_ACTIVE_ORGANIZATION: /\binOrg\./,
   };
   const common = new Set<string>(COMMON_ERRORS);
   const thrownIn = (source: string) =>
@@ -127,10 +118,6 @@ describe("declared errors", () => {
     const source = reachable(dir);
     const thrown = thrownIn(source);
     const all = Object.values(procedures);
-    // An API key without the procedure's scope (modules/api-keys).
-    if (all.some((procedure) => (procedure["~orpc"].meta as ProcedureMeta).apiKeyScope)) {
-      thrown.add("API_KEY_SCOPE_MISSING");
-    }
     for (const [code, builders] of Object.entries(BUILDER_CODES)) {
       if (builders.test(source)) {
         thrown.add(code);

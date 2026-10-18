@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { commands, userEvent } from "vitest/browser";
 import { SignInPage } from "@/modules/auth";
+import { DEMO } from "../demo";
 import { cleanup, currentUrl, renderPage, router } from "../render";
 import { auth, enableTwoFactor, newUser, signOut, signUp } from "../users";
 
@@ -39,11 +40,11 @@ describe("sign in", () => {
   it("sends an unverified account to verify its email, keeping the query", async () => {
     const user = newUser();
     await auth("/sign-up/email", user);
-    const page = await renderPage(<SignInPage />, { url: "/sign-in?next=/assistant" });
+    const page = await renderPage(<SignInPage />, { url: "/sign-in?next=/settings" });
     await fillIn(page, user.email, user.password);
     await expect
       .poll(currentUrl)
-      .toBe(`/verify-email?next=%2Fassistant&email=${encodeURIComponent(user.email)}`);
+      .toBe(`/verify-email?next=%2Fsettings&email=${encodeURIComponent(user.email)}`);
   });
 
   it("continues on the two-step page when the account has it on", async () => {
@@ -66,7 +67,7 @@ describe("sign in", () => {
     await signOut();
     const page = await renderPage(<SignInPage />, { url: "/sign-in" });
     await userEvent.click(page.getByRole("button", { name: "Sign in with a passkey" }));
-    await expect.poll(currentUrl).toBe("/dashboard");
+    await expect.poll(currentUrl).toBe("/library");
 
     // A fresh authenticator has no passkey for this site: the prompt ends without one.
     cleanup();
@@ -80,13 +81,40 @@ describe("sign in", () => {
   });
 
   it("offers Google when it's on, and goes there with ?next= as the way back", async () => {
-    const page = await renderPage(<SignInPage />, { url: "/sign-in?next=/assistant" });
+    const page = await renderPage(<SignInPage />, { url: "/sign-in?next=/settings" });
     await userEvent.click(page.getByRole("button", { name: "Continue with Google" }));
     await expect
       .poll(async () => (await commands.hardNavigations())[0])
       .toMatch(
         /^https:\/\/accounts\.google\.com\/.*client_id=web-tests\.apps\.googleusercontent\.com/,
       );
+  });
+
+  it("offers the demo account, showing its email and password, and fills the form with them", async () => {
+    const page = await renderPage(<SignInPage />, { url: "/sign-in" });
+    const card = page.getByRole("region", { name: "Try Director with the demo account" });
+    await expect.element(card.getByText(DEMO.email)).toBeVisible();
+    await expect.element(card.getByText(DEMO.password)).toBeVisible();
+    await expect.element(page.getByLabelText("Email")).toHaveValue("");
+
+    await userEvent.click(card.getByRole("button", { name: "Use demo account" }));
+    await expect.element(page.getByLabelText("Email")).toHaveValue(DEMO.email);
+    await expect.element(page.getByLabelText("Password")).toHaveValue(DEMO.password);
+  });
+
+  it("fills the form with the demo account from ?demo=1, the landing page's link", async () => {
+    const page = await renderPage(<SignInPage />, { url: "/sign-in?demo=1" });
+    await expect.element(page.getByLabelText("Email")).toHaveValue(DEMO.email);
+    await expect.element(page.getByLabelText("Password")).toHaveValue(DEMO.password);
+  });
+
+  it("says it's getting the demo account while ?demo=1 waits for it", async () => {
+    await commands.failRequests("/rpc/system/info", { status: 503 });
+    const page = await renderPage(<SignInPage />, { url: "/sign-in?demo=1" });
+    await expect
+      .element(page.getByRole("status", { name: "Getting the demo account…" }))
+      .toBeVisible();
+    await expect.element(page.getByLabelText("Email")).toHaveValue("");
   });
 
   it("links to the other auth steps, keeping the query", async () => {

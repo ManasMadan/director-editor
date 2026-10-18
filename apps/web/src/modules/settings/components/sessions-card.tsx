@@ -12,7 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@repo/ui/components/card";
-import { Skeleton } from "@repo/ui/components/skeleton";
+import { GeminiShimmer } from "@repo/ui/components/gemini-loader";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFormatter, useNow, useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -75,7 +75,7 @@ export function SessionsCard() {
         <CardDescription>{t("description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {sessions.isPending ? <Skeleton className="h-16" /> : null}
+        {sessions.isPending ? <GeminiShimmer className="h-16" /> : null}
         {sessions.isError && needsRecentSignIn(sessions.error) ? <ReauthPrompt /> : null}
         {sessions.isError && !needsRecentSignIn(sessions.error) ? (
           <p className="text-sm text-destructive">{errorMessage(sessions.error)}</p>

@@ -13,6 +13,7 @@ import * as z from "zod";
 import { TextField } from "@/components/form-fields";
 import { authClient } from "@/lib/auth-client";
 import { AuthCard } from "../components/auth-card";
+import { DemoAccountOffer } from "../components/demo-account";
 import { useAuthErrorMessage } from "../hooks/use-auth-error";
 import { useFinishSignIn } from "../hooks/use-finish-sign-in";
 import { useAuthStepHref, useNextPath } from "../hooks/use-next-path";
@@ -47,14 +48,14 @@ export function SignInPage() {
     }
     // With two-step verification on, the auth client continues on /two-factor instead.
     if (!(data && "twoFactorRedirect" in data && data.twoFactorRedirect)) {
-      done(data);
+      done();
     }
   }
 
   async function signInWithPasskey() {
     const result = await authClient.signIn.passkey();
     if (!result?.error) {
-      done(result?.data);
+      done();
     } else {
       toast.error(errorMessage(result.error));
     }
@@ -64,6 +65,7 @@ export function SignInPage() {
     <AuthCard title={t("auth.signInTitle")} description={t("auth.signInDescription")}>
       <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
         <FieldGroup>
+          <DemoAccountOffer onUse={(demo) => form.reset(demo)} />
           <TextField
             control={form.control}
             name="email"

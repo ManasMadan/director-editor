@@ -5,10 +5,10 @@
  * transaction-local setting `app.org_id`. These helpers set it for every query:
  *
  *   const db = withTenant(database.read, orgId);
- *   await db.todo.findMany();                          // only this org's rows
+ *   await db.shortReaction.findMany();                 // only this org's rows
  *
  *   await tenantTx(database.write, orgId, async (tx) => {
- *     await tx.todo.update(...);                        // state change ...
+ *     await tx.shortReaction.create(...);               // state change ...
  *     await tx.appOutboxEvent.create(...);              // ... and its event, atomically
  *   });
  *
@@ -65,8 +65,9 @@ export const withTenant = (db: Db, orgId: OrgId) =>
 
 /**
  * Like withTenant, for rows owned by one user rather than an organization (their
- * notifications, preferences, devices): row-level security on `app.user_id` scopes
- * every query to that user.
+ * uploads): row-level security on `app.user_id` scopes every query to that user. Each
+ * per-user write today is one statement; a unit of several needs a transaction that
+ * sets `app.user_id` first, the way tenantTx sets `app.org_id`.
  */
 export const withUser = (db: Db, userId: UserId) =>
   scoped(
@@ -74,16 +75,8 @@ export const withUser = (db: Db, userId: UserId) =>
     "user",
     "app.user_id",
     userId,
-    "Use userTx() for multi-statement units on per-user data.",
+    "A per-user client runs each query in its own transaction: a multi-statement unit needs one that scopes the user first, like tenantTx.",
   );
-
-/** Like tenantTx, for per-user data (see withUser). */
-export function userTx<T>(db: Db, userId: UserId, fn: (tx: Tx) => Promise<T>): Promise<T> {
-  return db.$transaction(async (tx) => {
-    await setScope(tx, "app.user_id", userId);
-    return fn(asTx(tx));
-  }, TX_OPTIONS);
-}
 
 declare const txBrand: unique symbol;
 
@@ -106,6 +99,17 @@ export function tenantTx<T>(db: Db, orgId: OrgId, fn: (tx: Tx) => Promise<T>): P
     await setScope(tx, "app.org_id", orgId);
     return fn(asTx(tx));
   }, TX_OPTIONS);
+}
+
+/**
+ * Scopes the rest of a transaction to a workspace, for a unit that starts on non-tenant
+ * data and goes on to tenant rows: creating a workspace (whose id only exists once it's
+ * inserted) and giving it its starting data in the same transaction. Only for a
+ * `transaction()` unit: a `tenantTx` is already one workspace's, and must never be moved
+ * to another.
+ */
+export async function enterTenant(tx: Tx, orgId: OrgId): Promise<void> {
+  await setScope(tx, "app.org_id", orgId);
 }
 
 /** A transaction on non-tenant data (same rules as tenantTx: database calls only inside). */

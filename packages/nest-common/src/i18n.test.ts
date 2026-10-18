@@ -16,13 +16,13 @@ async function translatorFrom(module: ReturnType<typeof I18nModule.forRoot>) {
   const app = await NestFactory.createApplicationContext(AppModule, { logger: false });
   const { i18n } = app.get(Mailer);
   await app.close();
-  return i18n.getTranslator("es");
+  return i18n.getTranslator("en");
 }
 
 describe("I18nModule", () => {
   it("translates from the bundled catalog by default", async () => {
     const t = await translatorFrom(I18nModule.forRoot());
-    expect(t("email.otp.expires", { minutes: 5 })).toBe("Este código caduca en 5 minutos.");
+    expect(t("email.otp.expires", { minutes: 5 })).toBe("This code expires in 5 minutes.");
   });
 
   it("translates from the source it's given", async () => {
@@ -37,7 +37,7 @@ describe("I18nModule", () => {
         },
       }),
     );
-    expect(t("email.otp.expires", { minutes: 1 })).toBe("Este código caduca en 1 minuto.");
-    expect(loaded).toEqual(["es"]);
+    expect(t("email.otp.expires", { minutes: 1 })).toBe("This code expires in 1 minute.");
+    expect(loaded).toEqual(["en"]);
   });
 });

@@ -1,7 +1,7 @@
 import { zSceneCheck, zShotPlan } from "@repo/ai-client/schemas";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as z from "zod";
-import { CATALOG, search, shortOf } from "./catalog";
+import { CATALOG, shortOf } from "./catalog";
 import { startFakeGoogle } from "./index";
 
 const KEY = "test-key";
@@ -237,26 +237,15 @@ describe("the mock Gemini", () => {
 });
 
 describe("the mock YouTube", () => {
-  it("searches the catalog by the topics a query names, or returns it all", async () => {
-    const grwm = await youtube("search?q=%23grwm%20get%20ready%20with%20me%20%23shorts");
-    expect(grwm.json.items?.map((item) => item.id)).toEqual(
-      search("grwm").map((short) => ({ videoId: short.videoId })),
-    );
-    expect((await youtube("search?q=%23shorts")).json.items).toHaveLength(CATALOG.length);
-    expect((await youtube("search")).json.items).toHaveLength(CATALOG.length);
-  });
-
-  it("describes any well-formed video, and lists its comments", async () => {
-    const videos = await youtube("videos?id=HasaZYkwYds,AbCdEfGhIjK,bad");
+  it("describes any well-formed video YouTube still shows", async () => {
+    const videos = await youtube("videos?id=HasaZYkwYds,AbCdEfGhIjK,bad,GoneVideo01");
     expect(videos.json.items?.map((item) => item.id)).toEqual(["HasaZYkwYds", "AbCdEfGhIjK"]);
     expect(shortOf("AbCdEfGhIjK").title).toBe("Your pasted short");
     expect((await youtube("videos")).json.items).toEqual([]);
-    expect((await youtube("commentThreads?videoId=HasaZYkwYds")).json.items).toHaveLength(4);
-    expect((await youtube("commentThreads")).json.items).toHaveLength(4);
   });
 
   it("refuses a wrong key and unknown reads, and anything else", async () => {
-    expect((await youtube("search", "wrong")).status).toBe(400);
+    expect((await youtube("videos", "wrong")).status).toBe(400);
     expect((await youtube("playlists")).status).toBe(404);
     expect((await fetch(`${fake.url}/elsewhere`)).status).toBe(404);
   });

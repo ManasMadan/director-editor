@@ -1,12 +1,8 @@
 /**
- * Serves better-auth under /api/auth/*, and the OAuth discovery documents it answers at
- * the site root (/.well-known/oauth-authorization-server/api/auth,
- * /.well-known/openid-configuration/api/auth and
- * /.well-known/oauth-protected-resource/api/mcp).
+ * Serves better-auth under /api/auth/*.
  *
- * The routes live in their own Fastify scope that keeps every request body as raw bytes:
- * better-auth reads JSON from the browser and form-encoded bodies from OAuth clients
- * (the token, revoke and introspect endpoints), so it gets the body exactly as sent.
+ * The routes live in their own Fastify scope that keeps every request body as raw bytes,
+ * so better-auth gets the body exactly as sent.
  * The request carries the verified client IP. Set-Cookie headers are copied one by one:
  * joining them with commas (what a plain header copy does) corrupts cookie attributes.
  */
@@ -18,8 +14,8 @@ import type { Auth } from "./auth";
 
 /**
  * better-auth's error, in the envelope every other error has (status, request id,
- * params), keeping its own code and message, which its clients read. OAuth errors
- * (`{ error, error_description }`, RFC 6749) stay as the spec has them.
+ * params), keeping its own code and message, which its clients read. OAuth-shaped errors
+ * (`{ error, error_description }`, RFC 6749, from social sign-in) stay as they are.
  */
 export function authErrorBody(body: Buffer, status: number, requestId: string) {
   let parsed: unknown;
@@ -43,13 +39,6 @@ export function authErrorBody(body: Buffer, status: number, requestId: string) {
     data: { params: {}, requestId },
   };
 }
-
-/** Authorization-server metadata sits under the issuer's path (RFC 8414 §3). */
-const DISCOVERY_PATHS = [
-  "/.well-known/oauth-authorization-server/api/auth",
-  "/.well-known/openid-configuration/api/auth",
-  "/.well-known/oauth-protected-resource/api/mcp",
-];
 
 export function mountAuth(fastify: FastifyInstance, auth: Auth, baseUrl: string) {
   const handle = (request: FastifyRequest, reply: FastifyReply) =>
@@ -84,9 +73,6 @@ export function mountAuth(fastify: FastifyInstance, auth: Auth, baseUrl: string)
   fastify.register((scope, _options, done) => {
     rawBodies(scope);
     scope.route({ method: ["GET", "POST"], url: "/api/auth/*", handler: handle });
-    for (const url of DISCOVERY_PATHS) {
-      scope.route({ method: ["GET", "HEAD"], url, handler: handle });
-    }
     done();
   });
 }

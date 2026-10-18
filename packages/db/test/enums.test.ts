@@ -5,25 +5,31 @@
  * database holds can't be read back.
  */
 import {
-  aiDocumentSchema,
+  directorCutSchema,
   directorPlanSchema,
   directorTakeSchema,
   fileSchema,
-  shortReactionKinds,
 } from "@repo/contracts/api";
-import { pushPlatforms } from "@repo/contracts/notifications";
 import pg from "pg";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { createTestDatabase, type TestDatabase } from "../src/testing";
 
 const expected: Record<string, readonly string[]> = {
-  "notifications.device.device_platform_check": pushPlatforms,
   "files.file.file_status_check": fileSchema.shape.status.options,
-  "ai.document.document_status_check": aiDocumentSchema.shape.status.options,
   "ai.director_plan.director_plan_status_check": directorPlanSchema.shape.status.options,
+  "ai.director_plan.director_plan_source_check": directorPlanSchema.shape.source.options,
+  "ai.director_plan.director_plan_stage_check": directorPlanSchema.shape.stage.options,
+  "ai.director_plan.director_plan_audio_status_check":
+    directorPlanSchema.shape.audio.shape.status.options,
+  "ai.director_cut.director_cut_publish_status_check":
+    directorCutSchema.shape.publish.shape.status.options,
+  "ai.director_cut.director_cut_visibility_check":
+    directorCutSchema.shape.publish.shape.visibility.unwrap().options,
   "ai.director_take.director_take_status_check": directorTakeSchema.shape.status.options,
   "ai.director_take.director_take_kind_check": directorTakeSchema.shape.kind.options,
-  "app.short_reaction.short_reaction_kind_check": shortReactionKinds,
+  // The removed Shorts feed's likes and saves: no service reads the table any more, and
+  // it goes in a later release's migration; until then its CHECK stays as it was.
+  "app.short_reaction.short_reaction_kind_check": ["like", "save"],
 };
 
 let testDb: TestDatabase;

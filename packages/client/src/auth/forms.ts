@@ -10,13 +10,12 @@ import {
   otpSchema,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
-  phoneNumberSchema,
 } from "@repo/contracts/auth";
 import * as z from "zod";
 
 /** The `validation.*` messages the schemas use. */
 export type ValidationTranslator = (
-  key: "email" | "passwordMin" | "passwordMax" | "required" | "nameMin" | "code" | "phone",
+  key: "email" | "passwordMin" | "passwordMax" | "required" | "nameMin" | "code",
   values?: Record<string, number>,
 ) => string;
 
@@ -34,7 +33,5 @@ export function authFormSchemas(t: ValidationTranslator) {
     password: z.string().min(1, t("required")),
     name: z.string().refine(matches(nameSchema), t("nameMin")),
     otp: z.string().refine(matches(otpSchema), t("code")),
-    /** E.164, typed with or without spaces and dashes. */
-    phone: z.string().refine(matches(phoneNumberSchema), t("phone")),
   };
 }

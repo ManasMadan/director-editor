@@ -1,8 +1,9 @@
 # apps/api
 
 NestJS on Fastify, port 3001. Serves better-auth (`src/auth/`), the oRPC API at `/rpc`
-(web and mobile), the same router as REST at `/api/v1` with `/api/v1/openapi.json`, the
-MCP server (`src/mcp/`), and `/docs` outside production.
+(the web app), the same router as REST at `/api/v1` with `/api/v1/openapi.json`,
+Director's live video call at `/api/live` (`src/modules/live/`), and `/docs` outside
+production.
 
 ## Commands (from the repo root)
 
@@ -13,10 +14,10 @@ MCP server (`src/mcp/`), and `/docs` outside production.
 
 ## Where things are
 
-- `src/rpc/procedures.ts`: the procedure builders (`base`, `authed`, `fresh`, `inOrg`,
-  `orgAdmin`), API-key auth and error mapping. `src/rpc/router.ts`: the router and the
+- `src/rpc/procedures.ts`: the procedure builders (`base`, `authed`, `inOrg`) and
+  error mapping. `src/rpc/router.ts`: the router and the
   steps to add a feature. `src/rpc/openapi.ts`: the REST document.
-- `src/modules/<feature>/`: one Nest module per feature; `modules/todo` is the example.
+- `src/modules/<feature>/`: one Nest module per feature; `modules/files` is the example.
 - `src/outbox.ts`: `emitEvent` for this service's events (`app.outbox_event`).
 - `src/notifications.ts`: the producer for time-critical notifications.
 - `src/features.ts`: which optional features are on (by env).
@@ -30,8 +31,8 @@ MCP server (`src/mcp/`), and `/docs` outside production.
 - better-auth tables are Prisma models; `bun run --filter @repo/api auth:schema` writes
   what better-auth expects to `node_modules/.cache/auth-schema.prisma`, to compare with
   `packages/db/prisma/schema/auth.prisma` after a plugin upgrade.
-- Routes outside oRPC (`files.routes.ts`, `unsubscribe.routes.ts`, `mcp.routes.ts`) are
-  plain Fastify handlers and do their own auth and validation.
+- Routes outside oRPC (`files.routes.ts`, the live call in `modules/live`) are plain
+  Fastify handlers and do their own auth and validation.
 - The procedure pipeline has no rate limiter: each service adds `createRateLimiter`
   where it is needed.
 - Import injected classes with a plain `import`, never `import type`: Nest resolves

@@ -28,7 +28,7 @@ export function TwoFactorPage() {
   const form = useForm({ resolver: zodResolver(schema), defaultValues: { code: "" } });
 
   async function onSubmit({ code }: z.infer<typeof schema>) {
-    const { data, error } = await (useBackup
+    const { error } = await (useBackup
       ? authClient.twoFactor.verifyBackupCode({ code, trustDevice })
       : authClient.twoFactor.verifyTotp({ code, trustDevice }));
     if (error) {
@@ -37,7 +37,7 @@ export function TwoFactorPage() {
       form.setError("code", { message: errorMessage(error) });
       return;
     }
-    done(data);
+    done();
   }
 
   return (

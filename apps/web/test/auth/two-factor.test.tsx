@@ -48,7 +48,7 @@ describe("the second sign-in step", () => {
       .toBeVisible();
     await userEvent.fill(page.getByLabelText("Backup code"), backupCodes[0] as string);
     await userEvent.click(page.getByRole("button", { name: "Continue" }));
-    await expect.poll(currentUrl).toBe("/dashboard");
+    await expect.poll(currentUrl).toBe("/library");
   });
 
   it("switches back to the authenticator", async () => {

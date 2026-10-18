@@ -22,7 +22,8 @@ imports its client from here; Python mirrors the tables in `apps/ai/app/db/model
   `app_shadow` as the shadow database.
 - `src/client.ts`: `createDb` / `createDatabase` (`read` and `write`, the read-replica
   seam; both the primary today), with statement and idle-in-transaction timeouts.
-- `src/tenancy.ts`: `withTenant`, `tenantTx`, `withUser`, `userTx`, `transaction`, `Tx`.
+- `src/tenancy.ts`: `withTenant`, `tenantTx`, `enterTenant`, `withUser`,
+  `transaction`, `Tx`.
 - `src/testing/`: `prepareTemplate`, `createTestDatabase` (`urlFor(role)`), `factories`.
 - `test/security.test.ts`: proves RLS and least privilege as the real roles.
 
@@ -36,4 +37,5 @@ imports its client from here; Python mirrors the tables in `apps/ai/app/db/model
   only.
 - Integration tests clone a migrated template database; it is rebuilt when a
   migration's checksum changes.
-- `drift` ignores only the pgvector HNSW index Prisma cannot express (`scripts/drift.ts`).
+- `drift` fails on any difference; something Prisma can't express needs a skip in
+  `scripts/drift.ts`, with the reason.

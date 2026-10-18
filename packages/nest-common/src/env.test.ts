@@ -59,10 +59,19 @@ describe("environment fragments", () => {
     expect(withServicePort("API", {}).PORT).toBeUndefined();
   });
 
-  it("reads the storage switches as booleans", () => {
+  it("reads the storage switches as booleans, defaulting to the S3 provider", () => {
     const storage = z.object(storageEnv);
-    expect(storage.parse({})).toMatchObject({ S3_REGION: "us-east-1", S3_FORCE_PATH_STYLE: false });
+    expect(storage.parse({})).toMatchObject({
+      STORAGE_PROVIDER: "s3",
+      S3_REGION: "us-east-1",
+      S3_FORCE_PATH_STYLE: false,
+    });
     expect(storage.parse({ S3_FORCE_PATH_STYLE: "true" }).S3_FORCE_PATH_STYLE).toBe(true);
+    expect(storage.parse({ STORAGE_PROVIDER: "gcs", GCS_BUCKET: "director-media" })).toMatchObject({
+      STORAGE_PROVIDER: "gcs",
+      GCS_BUCKET: "director-media",
+    });
+    expect(storage.safeParse({ STORAGE_PROVIDER: "azure" }).success).toBe(false);
   });
 
   it("names the direct connection after the service, and accepts only Postgres URLs", () => {

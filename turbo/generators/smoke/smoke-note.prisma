@@ -1,0 +1,15 @@
+// A throwaway tenant table for the generators check (scripts/generators.ts): copied into
+// packages/db/prisma/schema of the scratch copy only, never into the real schema. The
+// foreign key to auth.organization lives in its migration, so the real schema's models
+// need no relation field for it.
+
+model SmokeNote {
+  id        String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
+  title     String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([orgId, id(sort: Desc)])
+  @@map("smoke_note")
+  @@schema("app")
+}

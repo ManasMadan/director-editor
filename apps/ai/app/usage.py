@@ -23,7 +23,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import AiUsage
 from app.db.session import tenant
 
-type Feature = Literal["assistant", "summary", "director-plan", "director-scene", "director-review"]
+type Feature = Literal[
+    "director-plan", "director-scene", "director-review", "director-speech", "director-publish"
+]
 
 
 @dataclass(frozen=True)

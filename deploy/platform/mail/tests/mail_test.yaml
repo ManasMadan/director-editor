@@ -146,6 +146,16 @@ tests:
           content: { name: STALWART_RECOVERY_ADMIN, value: admin:$(ADMIN_PASSWORD) }
       - matchRegex: { path: "spec.template.spec.containers[0].args[0]", pattern: 'until \[ -e /run/provision/stopped \]' }
 
+  # A node reboot restarts the pod in place: its scratch volume, with the markers of the
+  # last provisioning, survives, so without the reset the recovery sidecar skips its work
+  # while its probe still waits for the recovery port, and the server never starts.
+  - it: provisions again from the start when the pod restarts in place
+    template: statefulset.yaml
+    asserts:
+      - matchRegex:
+          path: "spec.template.spec.initContainers[0].args[0]"
+          pattern: 'rm -f /run/provision/applied /run/provision/stopped'
+
   - it: runs locked down, with no capability at all, as our own user
     template: statefulset.yaml
     asserts:

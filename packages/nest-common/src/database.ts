@@ -2,9 +2,9 @@
  * The service's database connections as an injectable, lifecycle-managed provider.
  *
  *   @Injectable()
- *   class TodoRepository {
+ *   class ShortsRepository {
  *     constructor(@InjectDatabase() private readonly database: Database) {}
- *     list(orgId: OrgId) { return withTenant(this.database.read, orgId).todo.findMany(); }
+ *     saved(orgId: OrgId) { return withTenant(this.database.read, orgId).shortReaction.findMany(); }
  *   }
  *
  * One pool per process, created at boot from the service's validated env and closed on

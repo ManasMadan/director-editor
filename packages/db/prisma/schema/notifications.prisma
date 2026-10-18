@@ -1,27 +1,5 @@
-// Owner: apps/notifications (the inbox rows it creates, delivery log, digest queue,
-// suppressions). apps/api edits what users control: their preferences and settings,
-// their devices, and read state (column-level grant). Both read identity from auth.
-// Per-user rows are protected by row-level security on app.user_id, set by withUser.
-
-/// An in-app notification. Stored as template + data, not text: the client renders
-/// it in the reader's current language (packages/i18n `notification.<template>`).
-model Notification {
-  id        String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  userId    String    @map("user_id") @db.Uuid
-  orgId     String?   @map("org_id") @db.Uuid
-  template  String
-  data      Json
-  /// Where clicking it goes, a path on the web app (e.g. "/settings/webhooks/…").
-  link      String?
-  readAt    DateTime? @map("read_at") @db.Timestamptz(3)
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, id(sort: Desc)])
-  @@index([userId], map: "notification_unread_idx", where: raw("read_at IS NULL"))
-  @@map("notification")
-  @@schema("notifications")
-}
+// Owner: apps/notifications: the email delivery log and the addresses it must not send
+// to. It reads identity (name, email, locale) from auth.
 
 /// One message on one channel. The idempotency key (job id + channel + recipient) makes
 /// redelivered jobs send nothing twice, even over SMTP, which has no idempotency.
@@ -31,7 +9,7 @@ model NotificationDelivery {
   channel           String
   template          String
   userId            String?  @map("user_id") @db.Uuid
-  /// sending → sent | failed; or skipped (preference, quiet hours → digest) / suppressed.
+  /// sending → sent | failed, or suppressed.
   status            String
   providerMessageId String?  @map("provider_message_id")
   error             String?
@@ -43,79 +21,15 @@ model NotificationDelivery {
   @@schema("notifications")
 }
 
-/// Opt-outs per (category, channel). No row means the category's default.
-/// Transactional categories (security, sign-in codes, invitations) aren't mutable.
-model NotificationPreference {
-  userId   String  @map("user_id") @db.Uuid
-  category String
-  channel  String
-  enabled  Boolean
-  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@id([userId, category, channel])
-  @@map("preference")
-  @@schema("notifications")
-}
-
-/// Per-user delivery settings.
-model NotificationSettings {
-  userId      String  @id @map("user_id") @db.Uuid
-  /// Quiet hours in the user's time zone, minutes after midnight; push and SMS wait.
-  quietStart  Int?    @map("quiet_start") @db.SmallInt
-  quietEnd    Int?    @map("quiet_end") @db.SmallInt
-  /// Batch non-urgent email into one daily message.
-  dailyDigest Boolean @default(false) @map("daily_digest")
-  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("settings")
-  @@schema("notifications")
-}
-
-/// Emails waiting for the recipient's daily digest.
-model NotificationDigestItem {
-  id        String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  template  String
-  data      Json
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-  @@map("digest_item")
-  @@schema("notifications")
-}
-
-/// Addresses we must not send to: hard bounces, spam complaints, one-click unsubscribes.
+/// Addresses we must not send to: hard bounces and spam complaints.
 model NotificationSuppression {
   channel   String
   address   String
-  /// bounce | complaint | unsubscribe | invalid (a number that can't receive texts)
+  /// bounce | complaint
   reason    String
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@id([channel, address])
   @@map("suppression")
-  @@schema("notifications")
-}
-
-/// Where push notifications go: an app install or browser subscription.
-model NotificationDevice {
-  id         String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  userId     String   @map("user_id") @db.Uuid
-  /// ios (APNs) | android (FCM) | web (Web Push)
-  platform   String
-  /// APNs/FCM token, or the Web Push subscription JSON (endpoint + keys).
-  token      String   @unique
-  appVersion String?  @map("app_version")
-  /// The session that registered it: signing out (or a revoked session) stops its pushes.
-  sessionId  String   @map("session_id") @db.Uuid
-  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  lastSeenAt DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(3)
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([sessionId])
-  @@map("device")
   @@schema("notifications")
 }

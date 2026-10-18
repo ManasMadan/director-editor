@@ -46,7 +46,6 @@
     "@playwright/test": "1.63.0",
     "@repo/db": "workspace:*",
     "@repo/fake-google": "workspace:*",
-    "@repo/fake-stripe": "workspace:*",
     "@repo/jobs": "workspace:*",
     "@repo/testing": "workspace:*",
     "@repo/typescript-config": "workspace:*",
@@ -63,7 +62,6 @@
     "pg": "^8.23.0",
     "playwright": "1.63.0",
     "sharp": "^0.35.5",
-    "standardwebhooks": "^1.1.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

@@ -13,21 +13,15 @@
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@nestjs/bullmq": "catalog:",
     "@nestjs/common": "catalog:",
     "@nestjs/core": "catalog:",
     "@repo/contracts": "workspace:*",
     "@repo/db": "workspace:*",
-    "@repo/jobs": "workspace:*",
     "@repo/nest-common": "workspace:*",
     "@t3-oss/env-core": "catalog:",
-    "bullmq": "catalog:",
     "fastify": "catalog:",
-    "ioredis": "catalog:",
     "reflect-metadata": "catalog:",
     "rxjs": "catalog:",
-    "standardwebhooks": "^1.1.1",
-    "stripe": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

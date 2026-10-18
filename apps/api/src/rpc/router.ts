@@ -7,38 +7,22 @@
  * in app.module.ts and its router below.
  */
 import type { INestApplicationContext } from "@nestjs/common";
-import { AiService, aiRouter } from "../modules/ai";
-import { ApiKeysService, apiKeysRouter } from "../modules/api-keys";
-import { AppsService, appsRouter } from "../modules/apps";
-import { AuditService, auditRouter } from "../modules/audit";
-import { BillingService, billingRouter } from "../modules/billing";
 import { DirectorService, directorRouter } from "../modules/director";
 import { FilesService, filesRouter } from "../modules/files";
-import { NotificationsService, notificationsRouter } from "../modules/notifications";
+import { PublishService, publishRouter } from "../modules/publish";
 import { RealtimeService, realtimeRouter } from "../modules/realtime";
-import { ShortsService, shortsRouter } from "../modules/shorts";
 import { systemRouter } from "../modules/system";
-import { TodoService, todoRouter } from "../modules/todo";
-import { AvatarService, PhoneService, userRouter } from "../modules/user";
-import { WebhooksService, webhooksRouter } from "../modules/webhooks";
+import { AvatarService, userRouter } from "../modules/user";
 import type { Procedures } from "./procedures";
 
 export function createRouter(procedures: Procedures, app: INestApplicationContext) {
   return procedures.os.router({
     system: systemRouter(procedures),
-    user: userRouter(procedures, app.get(PhoneService), app.get(AvatarService)),
-    apps: appsRouter(procedures, app.get(AppsService)),
-    apiKeys: apiKeysRouter(procedures, app.get(ApiKeysService)),
-    todo: todoRouter(procedures, app.get(TodoService)),
-    ai: aiRouter(procedures, app.get(AiService)),
-    audit: auditRouter(procedures, app.get(AuditService)),
-    webhooks: webhooksRouter(procedures, app.get(WebhooksService)),
+    user: userRouter(procedures, app.get(AvatarService)),
     realtime: realtimeRouter(procedures, app.get(RealtimeService)),
-    notifications: notificationsRouter(procedures, app.get(NotificationsService)),
     files: filesRouter(procedures, app.get(FilesService)),
-    billing: billingRouter(procedures, app.get(BillingService)),
-    shorts: shortsRouter(procedures, app.get(ShortsService)),
     director: directorRouter(procedures, app.get(DirectorService)),
+    publish: publishRouter(procedures, app.get(PublishService)),
   });
 }
 

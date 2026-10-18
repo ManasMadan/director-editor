@@ -1,9 +1,9 @@
 # apps/ai
 
-Python 3.14 service: FastAPI (port 8000), Pydantic AI agents, a LangGraph summarizer,
-pgvector retrieval, a BullMQ worker (`app/worker.py`, queue `ai-ingest`) and an MCP
-server for documents. Internal only: callers sign a short-lived JWT with
-`AI_SERVICE_SECRET`; the TypeScript client is `packages/ai-client`.
+Python 3.14 service: Director on Gemini (FastAPI on port 8000, Pydantic AI) and a
+BullMQ worker (`app/worker.py`, queue `ai-director`) that plans shorts and reviews
+takes. Internal only: callers sign a short-lived JWT with `AI_SERVICE_SECRET`; the
+TypeScript client is `packages/ai-client`.
 
 ## Commands (from the repo root)
 
@@ -14,8 +14,22 @@ server for documents. Internal only: callers sign a short-lived JWT with
 - Unit tests: `bun run --filter @repo/ai test`
 - Integration tests (Postgres and Redis): `bun run db:up`, then
   `bun run --filter @repo/ai test:integration`
-- Evals with the local stand-ins: `bun run --cwd apps/ai evals`
 - After changing routes, models or `packages/jobs`: `bun run gen`
+- After changing the plan schema (`ShotPlan`): `bun run --filter @repo/ai seeds:build`
+  re-indexes the 6 seed Shorts on Vertex AI into `packages/contracts/src/director-seeds.json`
+  (commit it; the API copies it into every new workspace)
+- Then `bun run --filter @repo/ai seeds:media -- --bucket <bucket>` makes each seed's
+  storyboard cards, preview clips and music on Vertex AI (Nano Banana, Veo, Lyria) as
+  the signed-in gcloud account, uploads them and writes their keys into each seed's
+  `media` in the same file; it only makes what's missing, so run it again after a
+  failure, and commit the file and `scripts/seed-media-ledger.json` (every Veo clip
+  billed, which the 40-clip cap counts). `<bucket>` must be the bucket the API serves
+  files from (production's GCS bucket): locally the API reads RustFS, where those keys
+  404. `--dry-run` needs no bucket and lists every prompt and the cost
+  (`scripts/seed_media.py`)
+- After changing indexing (the planner prompt, `repair_plan`, `INDEX_MODEL`):
+  `bun run --filter @repo/ai evals:index` indexes the 12 Shorts in `evals/shorts.json`
+  on Vertex AI and fails unless every one gives a filmable plan
 
 ## Where things are
 
@@ -28,18 +42,23 @@ server for documents. Internal only: callers sign a short-lived JWT with
 - `app/errors.py`: `AppError("CODE", params)`; the status comes from the catalog.
 - What the app builds at startup is `services()` in `app/main.py` (typed; routes and
   tests use it instead of Starlette's untyped `app.state`).
-- `evals/`: pydantic-evals datasets over a fixed handbook.
+- `app/director.py`: plans, scene checks and take reviews; `app/plan_repair.py` fixes
+  inconsistent shot plans; `app/audio.py` captures a short's original audio;
+  `app/speech.py` speaks a guide line with Gemini's text-to-speech (`TTS_MODEL`).
+- `app/indexing.py`: indexing a short (`index_short`, `LocalIndexer`), or sending it to
+  the Cloud Run indexer (`RemoteIndexer`, when `INDEXER_URL` is set). `app/indexer.py`
+  is that indexer (`uvicorn app.indexer:app`, its own `IndexerSettings`, no database);
+  `app/google_auth.py` gets ID and access tokens from the metadata server and checks
+  the indexer's callers.
 
 ## Gotchas
 
-- Without a model provider, `AI_MODEL=local:extractive` and `AI_EMBEDDINGS=hashing`
-  give deterministic answers; tests and e2e rely on them. Production refuses both.
+- Director is off (`FEATURE_DISABLED`) until `DIRECTOR_MODEL` is set. Tests stand in
+  for Gemini and other third parties with local servers that speak their HTTP
+  protocol (`tests/fakes.py`), never with mocks.
 - The database schema is owned by Prisma migrations. Change it there, then update
   `app/db/models.py`; `tests/test_models_match_db.py` fails on drift.
 - The service connects as `app_ai` and cannot see rows without `app.org_id` set.
-- The documents' MCP server (`app/mcp_server.py`) is separate from the API's on
-  purpose: each language owns the tools over its own data (see "Why there are two MCP
-  servers" in docs/python-services.md). New document tools go here.
 - BullMQ is pinned in `pyproject.toml` and upgraded together with the Node package;
   `tests/test_bullmq_pair.py` fails when their Lua scripts differ.
 - Token budgets per org and per run are enforced in `app/usage.py`: `reserve` before a

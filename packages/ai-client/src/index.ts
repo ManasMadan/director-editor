@@ -11,31 +11,32 @@
  * Each call carries a token signed for that call (60 seconds, AI_SERVICE_SECRET) naming
  * the user and organization it's for: the service trusts nothing else.
  */
-import { EventSourceParserStream } from "eventsource-parser/stream";
 import { SignJWT } from "jose";
-import type * as z from "zod";
 import { createClient } from "./generated/client";
 import {
   checkDirectorScene,
+  createDirectorCut,
   createDirectorTake,
-  createDocument,
-  deleteDocument,
+  getDirectorCut,
+  getDirectorLibrary,
   getDirectorPlan,
+  indexDirectorPlan,
+  listDirectorCuts,
+  listDirectorMedia,
   listDirectorTakes,
-  listDocuments,
-  requestDirectorPlan,
-  sentiment,
+  speakDirectorLine,
+  writeDirectorPublishCopy,
 } from "./generated/sdk.gen";
 import type {
-  AnswerData,
+  DirectorCutCreate,
   DirectorTakeCreate,
   ErrorCode,
   ErrorIssue,
+  PublishCopyRequest,
   SceneCheckRequest,
+  SpeechRequest,
 } from "./generated/types.gen";
-import { zAssistantEvent, zErrorResponse } from "./generated/zod.gen";
-
-export type AssistantEvent = z.infer<typeof zAssistantEvent>["event"];
+import { zErrorResponse } from "./generated/zod.gen";
 
 export interface AiCaller {
   userId: string;
@@ -111,8 +112,11 @@ async function unwrap<T>(call: Promise<{ data?: T; error?: unknown; response?: R
 /** Director's calls (apps/ai/app/director.py), each on a client made for that call. */
 function directorCalls(forCall: (caller: AiCaller) => Promise<ReturnType<typeof createClient>>) {
   return {
-    async requestPlan(caller: AiCaller, videoId: string) {
-      return unwrap(requestDirectorPlan({ client: await forCall(caller), body: { videoId } }));
+    async index(caller: AiCaller, videoId: string) {
+      return unwrap(indexDirectorPlan({ client: await forCall(caller), body: { videoId } }));
+    },
+    async library(caller: AiCaller) {
+      return unwrap(getDirectorLibrary({ client: await forCall(caller) }));
     },
     async getPlan(caller: AiCaller, videoId: string) {
       return unwrap(
@@ -130,26 +134,47 @@ function directorCalls(forCall: (caller: AiCaller) => Promise<ReturnType<typeof 
         listDirectorTakes({ client: await forCall(caller), path: { video_id: videoId } }),
       );
     },
+    async createCut(caller: AiCaller, body: DirectorCutCreate) {
+      return unwrap(createDirectorCut({ client: await forCall(caller), body }));
+    },
+    async listCuts(caller: AiCaller, videoId: string) {
+      return unwrap(
+        listDirectorCuts({ client: await forCall(caller), path: { video_id: videoId } }),
+      );
+    },
+    async listMedia(caller: AiCaller) {
+      return unwrap(listDirectorMedia({ client: await forCall(caller) }));
+    },
+    /** A line in Director's voice: the bytes of the WAV file the service spoke. */
+    async speak(caller: AiCaller, body: SpeechRequest): Promise<Uint8Array> {
+      // Read as bytes rather than JSON (this client's default); there's no schema to check
+      // them against, so the content type is the contract.
+      const { data, response } = await settle(
+        speakDirectorLine({ client: await forCall(caller), body, parseAs: "blob" }),
+      );
+      if (!data || response?.headers.get("content-type") !== "audio/wav") {
+        throw new AiServiceError(502, "UPSTREAM_UNAVAILABLE");
+      }
+      return new Uint8Array(await data.arrayBuffer());
+    },
+    async getCut(caller: AiCaller, cutId: string) {
+      return unwrap(getDirectorCut({ client: await forCall(caller), path: { cut_id: cutId } }));
+    },
+    async writePublishCopy(caller: AiCaller, body: PublishCopyRequest) {
+      return unwrap(writeDirectorPublishCopy({ client: await forCall(caller), body }));
+    },
   };
 }
 
-export function createAiClient(options: {
-  baseUrl: string;
-  secret: string;
-  timeoutMs?: number;
-  /** The longest an answer may stream, start to finish (default two minutes). */
-  answerTimeoutMs?: number;
-}) {
+export function createAiClient(options: { baseUrl: string; secret: string; timeoutMs?: number }) {
   const key = new TextEncoder().encode(options.secret);
   const timeoutMs = options.timeoutMs ?? 30_000;
-
-  const headers = (caller: AiCaller) => callHeaders(key, caller);
 
   /** A client for one call: its token, and a timeout so a hung service can't hang us. */
   async function forCall(caller: AiCaller) {
     return createClient({
       baseUrl: options.baseUrl,
-      headers: await headers(caller),
+      headers: await callHeaders(key, caller),
       // Always JSON, so the validator sees every body: left to the content type, a body
       // without one would come back as a raw stream, unchecked.
       parseAs: "json",
@@ -158,71 +183,6 @@ export function createAiClient(options: {
     });
   }
 
-  const director = directorCalls(forCall);
-  return {
-    async sentiment(caller: AiCaller, text: string) {
-      return unwrap(sentiment({ client: await forCall(caller), body: { text } }));
-    },
-    async listDocuments(caller: AiCaller) {
-      return unwrap(listDocuments({ client: await forCall(caller) }));
-    },
-    async createDocument(caller: AiCaller, body: { title: string; content: string }) {
-      return unwrap(createDocument({ client: await forCall(caller), body }));
-    },
-    async deleteDocument(caller: AiCaller, documentId: string) {
-      await settle(
-        deleteDocument({ client: await forCall(caller), path: { document_id: documentId } }),
-      );
-    },
-
-    /** Director's calls, as `ai.director.requestPlan(...)`. */
-    director,
-
-    /**
-     * Starts an answer. Refusals (budget, feature off, validation) and an unreachable
-     * service throw here, before any event; the events that follow are validated against
-     * the service's AssistantEvent model.
-     */
-    async answer(
-      caller: AiCaller,
-      question: string,
-      signal?: AbortSignal,
-    ): Promise<AsyncGenerator<AssistantEvent, void, unknown>> {
-      // From the service's OpenAPI document: a changed route or body fails to compile. The
-      // generated SDK can't be used here: it reads the whole body, and this streams it.
-      const path: AnswerData["url"] = "/v1/assistant/answers";
-      const body: AnswerData["body"] = { question };
-      let response: Response;
-      try {
-        response = await fetch(new URL(path, options.baseUrl), {
-          method: "POST",
-          headers: { ...(await headers(caller)), "content-type": "application/json" },
-          body: JSON.stringify(body),
-          // The caller's signal (the client went away) or the answer's own limit.
-          signal: AbortSignal.any([
-            AbortSignal.timeout(options.answerTimeoutMs ?? 120_000),
-            ...(signal ? [signal] : []),
-          ]),
-        });
-      } catch (cause) {
-        throw Object.assign(new AiServiceError(503, "UPSTREAM_UNAVAILABLE"), { cause });
-      }
-      if (!response.ok || !response.body) {
-        throw toServiceError(response.status, await response.json().catch(() => undefined));
-      }
-      return events(response.body);
-    },
-  };
-}
-
-/** Server-Sent Events from a response body, each one's data one AssistantEvent. */
-async function* events(
-  body: ReadableStream<BufferSource>,
-): AsyncGenerator<AssistantEvent, void, unknown> {
-  const stream = body
-    .pipeThrough(new TextDecoderStream())
-    .pipeThrough(new EventSourceParserStream());
-  for await (const message of stream) {
-    yield zAssistantEvent.parse(JSON.parse(message.data)).event;
-  }
+  /** Director's calls, as `ai.director.index(...)`. */
+  return { director: directorCalls(forCall) };
 }

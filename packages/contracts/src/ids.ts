@@ -32,12 +32,13 @@ export type TodoId = z.infer<typeof todoIdSchema>;
 export const fileIdSchema = z.uuid().brand<"FileId">();
 export type FileId = z.infer<typeof fileIdSchema>;
 
-export const documentIdSchema = z.uuid().brand<"DocumentId">();
-export type DocumentId = z.infer<typeof documentIdSchema>;
-
 export const directorPlanIdSchema = z.uuid().brand<"DirectorPlanId">();
 
 export const directorTakeIdSchema = z.uuid().brand<"DirectorTakeId">();
+export type DirectorTakeId = z.infer<typeof directorTakeIdSchema>;
+
+export const directorCutIdSchema = z.uuid().brand<"DirectorCutId">();
+export type DirectorCutId = z.infer<typeof directorCutIdSchema>;
 
 /** A YouTube video id: 11 characters of URL-safe base64. */
 export const videoIdSchema = z
@@ -46,14 +47,8 @@ export const videoIdSchema = z
   .brand<"VideoId">();
 export type VideoId = z.infer<typeof videoIdSchema>;
 
-export const notificationIdSchema = z.uuid().brand<"NotificationId">();
-export type NotificationId = z.infer<typeof notificationIdSchema>;
-
+// The ids of features Director removed, kept for the events that still name them
+// (packages/contracts events.ts).
 export const apiKeyIdSchema = z.uuid().brand<"ApiKeyId">();
-export type ApiKeyId = z.infer<typeof apiKeyIdSchema>;
 
 export const webhookEndpointIdSchema = z.uuid().brand<"WebhookEndpointId">();
-export type WebhookEndpointId = z.infer<typeof webhookEndpointIdSchema>;
-
-export const webhookDeliveryIdSchema = z.uuid().brand<"WebhookDeliveryId">();
-export type WebhookDeliveryId = z.infer<typeof webhookDeliveryIdSchema>;

@@ -5,11 +5,13 @@ layout are in [deploy/README.md](../deploy/README.md), the clusters (k3s on your
 machines) and their DNS in [infra/tofu/README.md](../infra/tofu/README.md), and the
 GitHub settings the workflows need in [repository-settings.md](repository-settings.md).
 
-Nothing is a managed service: the application, its Postgres (CloudNativePG, with
-continuous backups), Valkey, object storage (RustFS), the mail server (Stalwart) and,
-where a cluster opts in, Jaeger and Prometheus all run in the cluster. Cloudflare stays
-in front, and third-party APIs (AI models, Twilio, push, Stripe, Google, Turnstile)
-stay external.
+The application, its Postgres (CloudNativePG, with continuous backups), Valkey, object
+storage (RustFS), the mail server (Stalwart) and, where a cluster opts in, Jaeger and
+Prometheus all run in the cluster. Cloudflare stays in front, and third-party APIs
+(Gemini and YouTube, Google sign-in, Turnstile) stay external. Production, on one
+Compute Engine VM, also uses Google Cloud's own services where they do the job better:
+media in Cloud Storage instead of RustFS, product events in BigQuery, and indexing on a
+private Cloud Run service ([below](#the-cloud-run-indexer)).
 
 ## Images
 
@@ -91,11 +93,9 @@ Tag a commit that deployed: the merge once deploy.yml has passed for it, or the 
 bump deploy.yml commits right after (usually master's head; it has no images of its own,
 so a release of it ships its parent's, which is the same code). The tag starts
 `.github/workflows/release.yml`, which checks it: a version, on master, with images
-(waiting while CI and deploy.yml still run on the commit), and the same as `version` in
-`apps/mobile/app.config.ts`, which store builds carry (bump that in a pull request
-first). It then publishes the GitHub release with notes grouped from the Conventional
-Commit titles since the previous tag (`scripts/release.ts`), and mobile.yml starts the
-store builds once it has passed. Choose the number from the notes
+(waiting while CI and deploy.yml still run on the commit). It then publishes the GitHub
+release with notes grouped from the Conventional Commit titles since the previous tag
+(`scripts/release.ts`). Choose the number from the notes
 (`bun scripts/release.ts notes HEAD` shows what's unreleased): a breaking change (`!`) is
 a new major version, a `feat` a minor one.
 
@@ -106,17 +106,6 @@ from your own GitHub login so CI runs on it: it writes
 images (the same rule as the check), the ones already running on staging. It refuses
 when there are none. Merging the promotion is the deploy; a chart change merged to
 master reaches production only this way (deploy/README.md, "GitOps").
-
-The mobile app follows the same events on EAS (`mobile.yml`, see
-[web-and-mobile.md](web-and-mobile.md#eas-builds-and-over-the-air-updates)): updates once
-CI has passed on master, store builds once a release has. The store builds' run waits
-for EAS to build and submit both apps, so a failed build or submission fails it. Before
-any of that, CI's lint job runs `expo-doctor` (the mobile app's `lint`), so duplicate or
-misconfigured native modules fail the pull request rather than the store build. It
-skips the check for newer Expo patches: nothing younger than three days can be
-installed (bunfig.toml), so it would fail every pull request after each Expo release.
-Renovate's Expo group moves them once they're old enough, and the mobile app's `doctor`
-script runs the full check.
 
 ## Rollback
 
@@ -133,6 +122,95 @@ roll back in git:
 
 The database isn't rolled back: the previous release already works with the current
 schema. If a migration itself is wrong, fix forward with a new one.
+
+## The Cloud Run indexer
+
+Production's ai worker can send each plan job's short to a private Cloud Run service,
+`director-indexer`, so Gemini's long video calls and the audio download (yt-dlp, then
+`gs://director-media-…/audio/<videoId>.m4a`) run off the VM. It's the same `ai` image
+with another entrypoint (`uvicorn app.indexer:app`, apps/ai/app/indexer.py) and the same
+code the worker runs without it (apps/ai/app/indexing.py). It has no database: it
+answers with the plan, the audio's key and what the run used, and the worker stores and
+counts them.
+
+Only the VM's account may call it: Cloud Run lets in only the service's invokers
+(`--no-allow-unauthenticated`), and the indexer checks the ID token again (audience
+`INDEXER_URL`, email `INDEXER_INVOKER`). It calls Vertex AI and Cloud Storage as its own
+account, `director-indexer@…`, through Application Default Credentials: no express key
+or key file. Until `INDEXER_URL` is set on the ai worker, plans are indexed in the worker
+itself, the same way.
+
+It isn't deployed by Argo CD; run these by hand (or from a release checklist) with
+`gcloud` signed in as a project owner. The variables, once per shell:
+
+```sh
+PROJECT=project-18e15b18-c92e-44bb-9bf
+REGION=us-central1
+BUCKET=director-media-1053522546520
+COMMIT=<the commit production runs>          # release.yaml's ai image is sha-<commit>
+SOURCE=ghcr.io/manasmadan/director-editor/ai:sha-$COMMIT
+IMAGE=$REGION-docker.pkg.dev/$PROJECT/director/ai:sha-$COMMIT
+INDEXER=director-indexer@$PROJECT.iam.gserviceaccount.com
+VM=director-vm@$PROJECT.iam.gserviceaccount.com
+# Cloud Run's deterministic URL: https://<service>-<project number>.<region>.run.app
+INDEXER_URL=https://director-indexer-1053522546520.$REGION.run.app
+```
+
+Once per project (skip what exists):
+
+```sh
+gcloud services enable run.googleapis.com artifactregistry.googleapis.com --project=$PROJECT
+gcloud artifacts repositories create director --repository-format=docker \
+  --location=$REGION --project=$PROJECT
+gcloud iam service-accounts create director-indexer --project=$PROJECT \
+  --display-name="Director indexer (Cloud Run)"
+# Gemini on Vertex AI, and the audio it captures into the media bucket.
+gcloud projects add-iam-policy-binding $PROJECT --member=serviceAccount:$INDEXER \
+  --role=roles/aiplatform.user
+gcloud storage buckets add-iam-policy-binding gs://$BUCKET \
+  --member=serviceAccount:$INDEXER --role=roles/storage.objectAdmin
+```
+
+Each release (Cloud Run pulls from Artifact Registry, not GHCR, so the image is copied
+first; `crane copy $SOURCE $IMAGE` does the same):
+
+```sh
+gcloud auth configure-docker $REGION-docker.pkg.dev
+docker buildx imagetools create --tag $IMAGE $SOURCE
+
+gcloud run deploy director-indexer --project=$PROJECT --region=$REGION \
+  --image=$IMAGE \
+  --command=uvicorn --args=app.indexer:app,--host,0.0.0.0,--port,8080 --port=8080 \
+  --service-account=$INDEXER --no-allow-unauthenticated \
+  --timeout=900 --memory=2Gi --cpu=1 \
+  --set-env-vars=NODE_ENV=production,LOG_LEVEL=info,RELEASE=sha-$COMMIT,INDEXER_URL=$INDEXER_URL,INDEXER_INVOKER=$VM,GOOGLE_VERTEX=true,GOOGLE_CLOUD_PROJECT=$PROJECT,VERTEX_LOCATION=global,INDEX_MODEL=gemini-4-argon,INDEX_FALLBACK_MODEL=gemini-3.1-pro-preview,MEDIA_BUCKET=$BUCKET
+
+# The VM's account (the ai worker) may call it.
+gcloud run services add-iam-policy-binding director-indexer --project=$PROJECT \
+  --region=$REGION --member=serviceAccount:$VM --role=roles/run.invoker
+```
+
+`--timeout=900` is the worker's own (`INDEX_REQUEST_SECONDS` in app/indexing.py): every
+retry and the fallback model of a slow short fit in it. `INDEX_MODEL` and
+`INDEX_FALLBACK_MODEL` should match the worker's (the worker records usage under its own
+`INDEX_MODEL`). Check the service's URLs include `$INDEXER_URL`:
+
+```sh
+gcloud run services describe director-indexer --project=$PROJECT --region=$REGION \
+  --format='value(metadata.annotations."run.googleapis.com/urls")'
+```
+
+Then check it from the VM, as its account:
+
+```sh
+TOKEN=$(curl -s -H 'Metadata-Flavor: Google' \
+  "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience=$INDEXER_URL&format=full")
+curl -s -H "Authorization: Bearer $TOKEN" $INDEXER_URL/health/live    # {"status":"ok"}
+```
+
+Finally point the worker at it: set `INDEXER_URL: <$INDEXER_URL>` in the ai worker's
+`env` in `deploy/environments/production/stack.yaml` (where its comment says), and
+promote. Unsetting it again is the rollback: the worker goes back to indexing itself.
 
 ## Previews
 
@@ -185,7 +263,7 @@ replacement on another host:
 
 | On GitHub | What it does here | Elsewhere |
 |---|---|---|
-| `workflow_run` | deploy.yml after CI passes, mobile.yml after a release | GitLab: one pipeline with stages; Forgejo: call the deploy steps at the end of CI's workflow on `push` to master |
+| `workflow_run` | deploy.yml after CI passes | GitLab: one pipeline with stages; Forgejo: call the deploy steps at the end of CI's workflow on `push` to master |
 | `merge_group` | CI on the merge queue | GitLab merge trains; Forgejo has none (merge after CI on the branch) |
 | environments with reviewers | infra.yml's plan and apply, staging's bump | GitLab protected environments; Forgejo: a manual job on a protected branch |
 | OIDC keyless signing (`id-token: write`) | cosign signatures production admits | a key pair (`COSIGN_PRIVATE_KEY`, `imagePolicy.publicKey`), which any CI can use |

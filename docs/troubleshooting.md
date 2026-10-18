@@ -74,9 +74,8 @@ service isn't running, or the job failed: `bun run jobs` shows every queue's cou
 that doesn't run in the organization's context, or runs in another one. That's a bug
 in the query, not missing data ([database.md](database.md)).
 
-**`FEATURE_DISABLED`.** The feature's variables aren't set: uploads need `S3_BUCKET`,
-billing the Stripe variables, the assistant the AI service
-([environment.md](environment.md)).
+**`FEATURE_DISABLED`.** The feature's variables aren't set: uploads need the chosen `STORAGE_PROVIDER`'s bucket (`S3_BUCKET` or `GCS_BUCKET`),
+Director the AI service, `YOUTUBE_API_KEY` and uploads ([environment.md](environment.md)).
 
 ## Tests
 

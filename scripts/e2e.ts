@@ -2,16 +2,13 @@
  * Runs the end-to-end suite against a stack it builds and starts itself, then stops it.
  * CI and local runs use this same script, so both test exactly what was just built.
  *
- *   bun run test:e2e                         every suite (web, mobile, the load smoke, the fuzzing)
- *   bun run test:e2e --app web e2e/assistant.spec.ts   one app; the rest goes to Playwright
- *   bun run test:e2e --app load              the k6 smoke run (load/api.ts) on its own
+ *   bun run test:e2e                         every suite (web, the fuzzing)
+ *   bun run test:e2e --app web e2e/auth.spec.ts   one app; the rest goes to Playwright
  *   bun run test:e2e --app fuzz              the API's and AI service's fuzzing (scripts/fuzz.ts)
  *   bun run test:e2e --shard=2/4             a quarter of the browser tests, as each CI runner does
  *
- * The mobile suite runs the app's screens rendered for the web (react-native-web),
- * served with the API on their own origin (apps/mobile/scripts/serve-web.ts). The load
- * smoke and the fuzzing run last, against the same stack, with the worker relaying what
- * the API writes.
+ * The fuzzing runs last, against the same stack, with the worker relaying what the API
+ * writes.
  *
  * Every service listens on this checkout's port for it (its .env's `*_PORT`, else
  * .env.example's), so a checkout with its own stack (`bun run setup --stack <n>`) runs
@@ -28,18 +25,17 @@ import { type ChildProcess, type SpawnOptions, spawn } from "node:child_process"
 import { mkdirSync, openSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { newSecret } from "../packages/testing/src/secrets";
 import { ENV_EXAMPLE_PATH, fail, listening, ok, ROOT, readEnv, runMain, runSync } from "./lib";
 
 /** The ports the run's services listen on, each one of .env.example's `*_PORT`. */
 const PORTS = [
-  "STRIPE_FAKE_PORT",
   "API_PORT",
   "WORKER_PORT",
   "NOTIFICATIONS_PORT",
   "WEBHOOKS_PORT",
   "AI_PORT",
   "WEB_PORT",
-  "MOBILE_WEB_PORT",
 ] as const;
 type Ports = Record<(typeof PORTS)[number], string>;
 
@@ -67,12 +63,6 @@ const health = (port: string) => local(port, "/health/dependencies");
 
 /** What the run starts, in order, and the URL that answers once each is ready. */
 const services = (ports: Ports): { name: string; cwd: string; run: string[]; ready?: string }[] => [
-  {
-    name: "fake-stripe",
-    cwd: "packages/fake-stripe",
-    run: ["start"],
-    ready: `http://127.0.0.1:${ports.STRIPE_FAKE_PORT}/__fake/state`,
-  },
   { name: "api", cwd: "apps/api", run: ["start"], ready: health(ports.API_PORT) },
   { name: "worker", cwd: "apps/worker", run: ["start"], ready: health(ports.WORKER_PORT) },
   {
@@ -85,12 +75,6 @@ const services = (ports: Ports): { name: string; cwd: string; run: string[]; rea
   { name: "ai", cwd: "apps/ai", run: ["start"], ready: health(ports.AI_PORT) },
   { name: "ai-worker", cwd: "apps/ai", run: ["worker"] },
   { name: "web", cwd: "apps/web", run: ["start"], ready: local(ports.WEB_PORT, "/healthz") },
-  {
-    name: "mobile-web",
-    cwd: "apps/mobile",
-    run: ["serve:web"],
-    ready: local(ports.MOBILE_WEB_PORT, "/healthz"),
-  },
 ];
 type Service = ReturnType<typeof services>[number];
 
@@ -165,15 +149,15 @@ async function busyServices(stack: Stack, all: Service[]) {
   return listeningNow.filter((s) => s !== undefined);
 }
 
-const SUITES = ["web", "mobile", "load", "fuzz"];
+const SUITES = ["web", "fuzz"];
 /**
- * Sharded (`--shard=2/4`, CI runs four), the browser suites split, and each of the others,
- * which aren't Playwright, runs on one shard only.
+ * Sharded (`--shard=2/4`, CI runs four), the browser suite splits, and the fuzzing, which
+ * isn't Playwright, runs on one shard only.
  */
-const SHARD_OF: Partial<Record<string, string>> = { load: "1", fuzz: "2" };
+const SHARD_OF: Partial<Record<string, string>> = { fuzz: "2" };
 
 /**
- * The suites `argv` asks for (`--app web|mobile|load|fuzz`, all of them by default) and
+ * The suites `argv` asks for (`--app web|fuzz`, both by default) and
  * the arguments for Playwright; undefined when `--app` names something else.
  */
 function suitesFor(argv: string[]) {
@@ -191,22 +175,14 @@ function suitesFor(argv: string[]) {
   return app && SUITES.includes(app) ? { apps: [app], playwrightArgs } : undefined;
 }
 
-/** The production builds the stack runs; the exit code of the first that fails, or 0. */
+/** The production builds the stack runs; the build's exit code. */
 function build(stack: Stack) {
-  for (const [command = "", ...rest] of [
-    ["bunx", "turbo", "run", "build", ...BUILT.map((p) => `--filter=${p}`)],
-    ["bun", "run", "--cwd", "apps/mobile", "build:web"],
-  ]) {
-    const built = stack.run(command, rest, {
-      cwd: ROOT,
-      stdio: "inherit",
-      env: { ...stack.env, NODE_ENV: "production" },
-    });
-    if (built.status !== 0) {
-      return built.status ?? 1;
-    }
-  }
-  return 0;
+  const built = stack.run("bunx", ["turbo", "run", "build", ...BUILT.map((p) => `--filter=${p}`)], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: { ...stack.env, NODE_ENV: "production" },
+  });
+  return built.status ?? 1;
 }
 
 /** Stops every service still running. */
@@ -230,14 +206,8 @@ async function startAll(stack: Stack, running: Running[], ports: Ports) {
     const log = openSync(join(stack.logs, `${service.name}.log`), "w");
     const child = stack.start("bun", ["run", ...service.run], {
       cwd: join(ROOT, service.cwd),
-      // Each listens on its port (the package scripts read them); the mobile web build
-      // signs users in from its own origin.
-      env: {
-        ...stack.env,
-        ...ports,
-        NODE_ENV: "test",
-        APP_ORIGINS: local(ports.MOBILE_WEB_PORT, ""),
-      },
+      // Each listens on its port (the package scripts read them).
+      env: { ...stack.env, ...ports, NODE_ENV: "test" },
       stdio: ["ignore", log, log],
       detached: true,
     });
@@ -259,14 +229,13 @@ async function startAll(stack: Stack, running: Running[], ports: Ports) {
 
 /** The suites that aren't Playwright: the package script each runs, and from where. */
 const OWN_COMMANDS: Partial<Record<string, { cwd: string; script: string }>> = {
-  load: { cwd: "load", script: "test:load" },
   fuzz: { cwd: ".", script: "test:fuzz" },
 };
 
 /** Runs each suite against the running stack; 0 when all pass, else a failing one's code. */
 function runSuites(stack: Stack, apps: string[], playwrightArgs: string[], ports: Ports) {
   let status = 0;
-  // The suites find the stack by its ports (the k6 smoke reaches the API on API_PORT).
+  // The suites find the stack by its ports (the fuzzing reaches the API on API_PORT).
   const env = { ...stack.env, ...ports };
   for (const app of apps) {
     const own = OWN_COMMANDS[app];
@@ -293,7 +262,13 @@ export async function e2e(
   argv = process.argv.slice(2),
   given: Partial<Stack> = {},
 ): Promise<number> {
-  const stack = { ...REAL, ...given };
+  const base = { ...REAL, ...given };
+  // The demo account's spec (apps/web/e2e/demo.spec.ts) needs the API to offer one: the
+  // checkout's own password if its .env sets one, else a throwaway one for this run.
+  const stack = {
+    ...base,
+    env: { ...base.env, DEMO_PASSWORD: base.env.DEMO_PASSWORD || newSecret() },
+  };
   const ports = stackPorts(stack.env);
 
   const busy = await busyServices(stack, services(ports));
@@ -309,7 +284,7 @@ export async function e2e(
 
   const suites = suitesFor(argv);
   if (!suites) {
-    fail("--app is web, mobile, load or fuzz");
+    fail("--app is web or fuzz");
     return 1;
   }
 

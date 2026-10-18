@@ -84,7 +84,11 @@ export function captureFrame(
 
 /** A blob's bytes as base64, without the `data:` prefix. */
 export async function base64Of(blob: Blob): Promise<string> {
-  const bytes = new Uint8Array(await blob.arrayBuffer());
+  return base64OfBytes(new Uint8Array(await blob.arrayBuffer()));
+}
+
+/** Bytes as base64. */
+export function base64OfBytes(bytes: Uint8Array): string {
   let binary = "";
   const chunk = 0x8000;
   for (let start = 0; start < bytes.length; start += chunk) {

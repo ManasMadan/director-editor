@@ -38,8 +38,16 @@ export class UploadFailedError extends Error {
   }
 }
 
-/** Uploads `file` for `purpose` and completes it: the worker checks it next. */
-export async function uploadFile(client: ApiClient, purpose: UploadPurpose, file: File) {
+/**
+ * Uploads `file` for `purpose` and completes it: the worker checks it next. `signal`
+ * cancels the bytes on their way to storage.
+ */
+export async function uploadFile(
+  client: ApiClient,
+  purpose: UploadPurpose,
+  file: File,
+  signal?: AbortSignal,
+) {
   const { file: created, upload } = await client.files.createUpload({
     purpose,
     filename: file.name,
@@ -50,7 +58,7 @@ export async function uploadFile(client: ApiClient, purpose: UploadPurpose, file
   const headers = Object.fromEntries(
     Object.entries(upload.headers).filter(([name]) => name.toLowerCase() !== "content-length"),
   );
-  const response = await fetch(upload.url, { method: "PUT", headers, body: file });
+  const response = await fetch(upload.url, { method: "PUT", headers, body: file, signal });
   if (!response.ok) {
     throw new UploadFailedError(response.status);
   }

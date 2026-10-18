@@ -120,6 +120,38 @@ export class FilesService {
     return { file, url };
   }
 
+  /**
+   * A short-lived read of an object the services stored themselves rather than an upload
+   * (a short's original audio, written by the AI service), or null while storage is off.
+   * The caller decides who may have it: no row says whose it is.
+   */
+  async objectUrl(key: string, expiresInSeconds: number): Promise<string | null> {
+    if (!this.optionalStorage) {
+      return null;
+    }
+    const { url } = await this.optionalStorage.presignDownload(key, { expiresInSeconds });
+    return url;
+  }
+
+  /**
+   * A short-lived read of an object the services store themselves, made by `make` and
+   * stored the first time it's asked for (a line Director spoke). The key must name its
+   * content, so that whoever asks first pays for it and everyone after reads the same
+   * bytes. FEATURE_DISABLED while storage is off, before anything is made.
+   */
+  async keptObjectUrl(
+    key: string,
+    contentType: string,
+    expiresInSeconds: number,
+    make: () => Promise<Uint8Array>,
+  ) {
+    const storage = this.storage;
+    if (!(await storage.head(key))) {
+      await storage.write(key, Buffer.from(await make()), contentType);
+    }
+    return storage.presignDownload(key, { expiresInSeconds });
+  }
+
   /** Deletes the row; the database queues its stored objects for removal. */
   async remove(userId: UserId, fileId: FileId) {
     await this.files.remove(userId, fileId);

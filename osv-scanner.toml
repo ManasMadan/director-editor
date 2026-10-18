@@ -2,28 +2,12 @@
 # expires, so it's looked at again.
 
 [[IgnoredVulns]]
-id = "GHSA-vcc3-ghjq-m6fr"
-ignoreUntil = 2027-03-31
-reason = """decode-uri-component 0.2.2 is patched with 0.5.0's linear-time decoder \
-(patches/decode-uri-component@0.2.2.patch): 0.5.0 is ESM-only and can't be required by \
-query-string 7, which Expo Router depends on. Remove with the patch once Expo Router \
-moves off query-string 7."""
-
-[[IgnoredVulns]]
 id = "GHSA-vfj7-8cjw-p6xm"
 ignoreUntil = 2027-01-05
 reason = """braces 3.0.3 (no fixed release yet) is reached only through micromatch in \
-build and test tools (Metro and the Expo CLI, Jest, fast-glob in type-coverage, ts-morph \
-and the shadcn CLI), which expand the repository's own glob patterns; no service passes \
-it input from a request. Upgrade when a release fixes it."""
-
-[[IgnoredVulns]]
-id = "GHSA-86w9-cpqp-85rv"
-ignoreUntil = 2027-01-05
-reason = """node-forge 1.4.0 (no fixed release yet) comes with the Expo CLI and \
-expo-updates' command-line tools (@expo/code-signing-certificates, for making and reading \
-code-signing certificates), which run on a developer's machine or in a build. The app's \
-bundle and the services never load it. Upgrade when a release fixes it."""
+fast-glob, which development tools use (type-coverage, ts-morph and the shadcn CLI) to \
+expand the repository's own glob patterns; no service passes it input from a request. \
+Upgrade when a release fixes it."""
 
 [[IgnoredVulns]]
 id = "GHSA-p6vx-979v-rg4c"

@@ -6,7 +6,15 @@ import { randomUUID } from "node:crypto";
 import { type OrgId, orgIdSchema, type UserId, userIdSchema } from "@repo/contracts/ids";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, expectTypeOf, it } from "vitest";
-import { createDb, type Db, tenantTx, type userTx, withTenant, withUser } from "../src";
+import {
+  createDb,
+  type Db,
+  enterTenant,
+  tenantTx,
+  transaction,
+  withTenant,
+  withUser,
+} from "../src";
 import { createTestDatabase, type TestDatabase } from "../src/testing";
 
 let testDb: TestDatabase;
@@ -34,10 +42,14 @@ beforeAll(async () => {
     await api.organization.create({ data: { id, name: id, slug: id } });
   }
   await tenantTx(api, orgA, (tx) =>
-    tx.todo.create({ data: { orgId: orgA, createdById: userId, title: "A1" } }),
+    tx.shortReaction.create({
+      data: { orgId: orgA, userId, videoId: "aaaaaaaaaaa", kind: "like" },
+    }),
   );
   await tenantTx(api, orgB, (tx) =>
-    tx.todo.create({ data: { orgId: orgB, createdById: userId, title: "B1" } }),
+    tx.shortReaction.create({
+      data: { orgId: orgB, userId, videoId: "bbbbbbbbbbb", kind: "like" },
+    }),
   );
 });
 
@@ -52,25 +64,33 @@ describe("row-level security", () => {
     expectTypeOf<Parameters<typeof withTenant>[1]>().toEqualTypeOf<OrgId>();
     expectTypeOf<Parameters<typeof tenantTx>[1]>().toEqualTypeOf<OrgId>();
     expectTypeOf<Parameters<typeof withUser>[1]>().toEqualTypeOf<UserId>();
-    expectTypeOf<Parameters<typeof userTx>[1]>().toEqualTypeOf<UserId>();
     expectTypeOf<UserId>().not.toExtend<Parameters<typeof withTenant>[1]>();
     expectTypeOf<OrgId>().not.toExtend<Parameters<typeof withUser>[1]>();
     expectTypeOf<string>().not.toExtend<Parameters<typeof tenantTx>[1]>();
   });
 
   it("shows a tenant only its own rows", async () => {
-    const rows = await withTenant(api, orgA).todo.findMany();
-    expect(rows.map((row) => row.title)).toEqual(["A1"]);
+    const rows = await withTenant(api, orgA).shortReaction.findMany();
+    expect(rows.map((row) => row.videoId)).toEqual(["aaaaaaaaaaa"]);
   });
 
   it("shows nothing when no tenant is set", async () => {
-    expect(await api.todo.count()).toBe(0);
+    expect(await api.shortReaction.count()).toBe(0);
+  });
+
+  it("scopes the rest of a transaction to the workspace it enters", async () => {
+    const counts = await transaction(api, async (tx) => {
+      const before = await tx.shortReaction.count();
+      await enterTenant(tx, orgA);
+      return [before, await tx.shortReaction.count()];
+    });
+    expect(counts).toEqual([0, 1]);
   });
 
   it("rejects writing a row into another tenant", async () => {
     await expect(
-      withTenant(api, orgA).todo.create({
-        data: { orgId: orgB, createdById: userId, title: "sneaky" },
+      withTenant(api, orgA).shortReaction.create({
+        data: { orgId: orgB, userId, videoId: "ccccccccccc", kind: "save" },
       }),
     ).rejects.toThrow();
   });
@@ -78,16 +98,17 @@ describe("row-level security", () => {
   it("cannot update or delete another tenant's rows", async () => {
     const tenant = withTenant(api, orgA);
     expect(
-      (await tenant.todo.updateMany({ where: { orgId: orgB }, data: { completed: true } })).count,
+      (await tenant.shortReaction.updateMany({ where: { orgId: orgB }, data: { kind: "save" } }))
+        .count,
     ).toBe(0);
-    expect((await tenant.todo.deleteMany({ where: { orgId: orgB } })).count).toBe(0);
+    expect((await tenant.shortReaction.deleteMany({ where: { orgId: orgB } })).count).toBe(0);
   });
 
   it("blocks nested transactions on a tenant client, which would not be atomic", () => {
     const tenant = withTenant(api, orgA);
     // The type allows no arguments (so real calls don't compile); the runtime also throws.
     expect(() => tenant.$transaction()).toThrow(/tenantTx/);
-    expect(() => withUser(api, userId).$transaction()).toThrow(/userTx/);
+    expect(() => withUser(api, userId).$transaction()).toThrow(/scopes the user first/);
   });
 
   it("never leaks across tenants under concurrent pooled requests", async () => {
@@ -95,7 +116,7 @@ describe("row-level security", () => {
       Array.from({ length: 100 }, (_, i) => {
         const org = i % 2 === 0 ? orgA : orgB;
         return withTenant(api, org)
-          .todo.findMany()
+          .shortReaction.findMany()
           .then((rows) => rows.every((row) => row.orgId === org));
       }),
     );
@@ -123,9 +144,10 @@ describe("row-level security", () => {
       return rows.filter((row) => !(row.table in UNSCOPED_USER_TABLES));
     });
     const names = tables.map((table) => table.table);
-    // The shapes this must keep covering: a partitioned table and per-user tables.
+    // The shapes this must keep covering: a partitioned table, a tenant table and a
+    // per-user one.
     expect(names).toEqual(
-      expect.arrayContaining(["audit.audit_log", "files.file", "notifications.device"]),
+      expect.arrayContaining(["audit.audit_log", "app.short_reaction", "files.file"]),
     );
     for (const table of tables) {
       expect(table, `${table.table} must FORCE row-level security with a policy`).toMatchObject({
@@ -139,10 +161,10 @@ describe("row-level security", () => {
     const policies = await asRole("migrator", async (client) => {
       const { rows } = await client.query<{ table: string; expr: string }>(`
         SELECT schemaname || '.' || tablename AS table, coalesce(qual, '') || coalesce(with_check, '') AS expr
-        FROM pg_policies WHERE schemaname IN ('files', 'notifications')`);
+        FROM pg_policies WHERE schemaname = 'files'`);
       return rows;
     });
-    for (const table of ["files.file", "notifications.device", "notifications.notification"]) {
+    for (const table of ["files.file"]) {
       const rows = policies.filter((policy) => policy.table === table);
       expect(rows.length, `${table} needs a policy`).toBeGreaterThan(0);
       expect(rows.some((policy) => policy.expr.includes("app.user_id"))).toBe(true);
@@ -160,7 +182,9 @@ describe("least privilege", () => {
         /permission denied/,
       );
       await expect(client.query("SELECT * FROM auth.account")).rejects.toThrow(/permission denied/);
-      await expect(client.query("SELECT * FROM app.todo")).rejects.toThrow(/permission denied/);
+      await expect(client.query("SELECT * FROM app.short_reaction")).rejects.toThrow(
+        /permission denied/,
+      );
     });
   });
 
@@ -175,7 +199,149 @@ describe("least privilege", () => {
       await expect(client.query("DELETE FROM app.outbox_event WHERE false")).rejects.toThrow(
         /permission denied/,
       );
-      await expect(client.query("SELECT * FROM app.todo")).rejects.toThrow(/permission denied/);
+      await expect(client.query("SELECT * FROM app.short_reaction")).rejects.toThrow(
+        /permission denied/,
+      );
+    });
+  });
+
+  it("lets the AI service into its own schemas only", async () => {
+    await asRole("app_ai", async (client) => {
+      await expect(client.query(`SELECT id FROM auth."user"`)).rejects.toThrow(/permission denied/);
+    });
+  });
+
+  it("lets only the AI service ask whether a member has used their index", async () => {
+    const asked = "SELECT ai.index_used($1) AS used";
+    await asRole("app_ai", async (client) => {
+      await expect(client.query(asked, [userId])).resolves.toMatchObject({
+        rows: [{ used: false }],
+      });
+    });
+    await asRole("app_api", async (client) => {
+      await expect(client.query(asked, [userId])).rejects.toThrow(/permission denied/);
+    });
+  });
+
+  it("lets the API read Director's cuts and record their publishing, and nothing else", async () => {
+    const cutId = await asRole("migrator", async (client) => {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+      const {
+        rows: [plan],
+      } = await client.query<{ id: string }>(
+        `INSERT INTO ai.director_plan (org_id, video_id, source, status, stage, plan, updated_at)
+         VALUES ($1, 'Publish_Cut', 'seed', 'ready', 'ready', '{}', now()) RETURNING id`,
+        [orgA],
+      );
+      await client.query("SELECT set_config('app.user_id', $1, true)", [userId]);
+      const {
+        rows: [file],
+      } = await client.query<{ id: string }>(
+        `INSERT INTO files.file (user_id, purpose, status, filename, declared_type, declared_size, updated_at)
+         VALUES ($1, 'director-cut-video', 'ready', 'cut.mp4', 'video/mp4', 10, now()) RETURNING id`,
+        [userId],
+      );
+      const {
+        rows: [cut],
+      } = await client.query<{ id: string }>(
+        `INSERT INTO ai.director_cut (org_id, plan_id, user_id, title, picks, file_id, duration_ms, updated_at)
+         VALUES ($1, $2, $3, 'Mine', '[]', $4, 1000, now()) RETURNING id`,
+        [orgA, plan?.id, userId, file?.id],
+      );
+      await client.query("COMMIT");
+      return cut?.id;
+    });
+    const publish = (orgId: OrgId) =>
+      tenantTx(api, orgId, (tx) =>
+        tx.directorCut.updateMany({
+          where: { id: cutId },
+          data: {
+            publishStatus: "published",
+            youtubeVideoId: "dQw4w9WgXcQ",
+            visibility: "private",
+          },
+        }),
+      );
+    // Its own workspace's cut, the publish columns and updated_at (Prisma sets it).
+    expect(await publish(orgA)).toEqual({ count: 1 });
+    // Another workspace's: row-level security shows it nothing to update.
+    expect(await publish(orgB)).toEqual({ count: 0 });
+    await asRole("app_api", async (client) => {
+      await expect(client.query("SELECT id FROM ai.director_cut")).resolves.toMatchObject({
+        rowCount: 0,
+      });
+      for (const change of [
+        "title = 'Theirs'",
+        "picks = '[]'",
+        "file_id = gen_random_uuid()",
+        "user_id = gen_random_uuid()",
+        "duration_ms = 0",
+      ]) {
+        await expect(
+          client.query(`UPDATE ai.director_cut SET ${change} WHERE false`),
+          change,
+        ).rejects.toThrow(/permission denied/);
+      }
+      await expect(client.query("DELETE FROM ai.director_cut WHERE false")).rejects.toThrow(
+        /permission denied/,
+      );
+      await expect(
+        client.query(
+          "INSERT INTO ai.director_cut (org_id, plan_id, user_id, title, picks, file_id, duration_ms, updated_at) SELECT org_id, plan_id, user_id, title, picks, file_id, duration_ms, now() FROM ai.director_cut WHERE false",
+        ),
+      ).rejects.toThrow(/permission denied/);
+      await expect(client.query("SELECT id FROM ai.director_plan")).rejects.toThrow(
+        /permission denied/,
+      );
+    });
+  });
+
+  it("lets the API copy seeded templates into a workspace, and write no other plan", async () => {
+    const seed = (orgId: OrgId) => ({
+      orgId,
+      videoId: "Seed_Short1",
+      source: "seed",
+      status: "ready",
+      stage: "ready",
+      plan: { title: "Seed" },
+      model: "seed-model",
+      audioStatus: "ready",
+      audioKey: "seed-audio/Seed_Short1.m4a",
+    });
+    const copy = (data: ReturnType<typeof seed>) =>
+      tenantTx(api, orgA, (tx) => tx.directorPlan.createMany({ data, skipDuplicates: true }));
+    expect(await copy(seed(orgA))).toEqual({ count: 1 });
+    // Copying again adds nothing: (org_id, video_id) is unique.
+    expect(await copy(seed(orgA))).toEqual({ count: 0 });
+    // Only seeds, only into the workspace in app.org_id, and never in anyone's name.
+    await expect(copy({ ...seed(orgA), videoId: "User_Short1", source: "user" })).rejects.toThrow(
+      /row-level security/,
+    );
+    await expect(copy(seed(orgB))).rejects.toThrow(/row-level security/);
+    // Only finished seeds: one the AI service would take for a plan still to write is refused.
+    for (const unfinished of [{ status: "pending" }, { stage: "queued" }]) {
+      await expect(copy({ ...seed(orgA), videoId: "Seed_Short3", ...unfinished })).rejects.toThrow(
+        /row-level security/,
+      );
+    }
+    await expect(
+      tenantTx(api, orgA, (tx) =>
+        tx.directorPlan.create({
+          data: { ...seed(orgA), videoId: "Seed_Short2", createdBy: userId },
+        }),
+      ),
+    ).rejects.toThrow(/permission denied/);
+    await asRole("app_api", async (client) => {
+      await expect(client.query("SELECT id FROM ai.director_plan")).rejects.toThrow(
+        /permission denied/,
+      );
+      await expect(
+        client.query("UPDATE ai.director_plan SET status = 'ready' WHERE false"),
+      ).rejects.toThrow(/permission denied/);
+      await expect(client.query("DELETE FROM ai.director_plan WHERE false")).rejects.toThrow(
+        /permission denied/,
+      );
     });
   });
 
@@ -184,9 +350,9 @@ describe("least privilege", () => {
       await expect(client.query("CREATE TABLE app.nope (id int)")).rejects.toThrow(
         /permission denied/,
       );
-      await expect(client.query("ALTER TABLE app.todo DISABLE ROW LEVEL SECURITY")).rejects.toThrow(
-        /must be owner/,
-      );
+      await expect(
+        client.query("ALTER TABLE app.short_reaction DISABLE ROW LEVEL SECURITY"),
+      ).rejects.toThrow(/must be owner/);
     });
   });
 });

@@ -1,22 +1,18 @@
 /**
- * YouTube Data API v3, as Director reads it: searching shorts, a video's details, its
- * top comments. The only place that knows YouTube's wire format; every response is
- * parsed with a schema here, so a change on YouTube's side fails loudly instead of
- * passing bad data on.
+ * YouTube Data API v3, as Director reads it: whether a video is there and how long it
+ * is, before a short is indexed, and its title and channel, which a published cut
+ * credits. The only place that knows YouTube's wire format; every
+ * response is parsed with a schema here, so a change on YouTube's side fails loudly
+ * instead of passing bad data on.
  *
- * Swapping the source (another platform's API, a curated catalogue): implement the same
- * three reads and construct it in ShortsService.
+ * Swapping the source (another platform's API): implement the same read and construct
+ * it in ShortsService.
  *
- * Quota: a search costs 100 units of the default 10,000 a day, the other reads 1 each,
- * so ShortsService caches what it reads.
+ * Quota: a read costs 1 unit of the default 10,000 a day; ShortsService caches them.
  */
-import type { Short, ShortComment } from "@repo/contracts/api";
-import { SHORT_MAX_SECONDS, SHORTS_PAGE_SIZE } from "@repo/contracts/api";
 import { type VideoId, videoIdSchema } from "@repo/contracts/ids";
 import { PROVIDER_TIMEOUT_MS } from "@repo/contracts/time";
 import * as z from "zod";
-
-const COMMENTS_PAGE = 20;
 
 /** YouTube answered with an error (quota, a bad key, an outage) or not at all. */
 export class YouTubeError extends Error {
@@ -28,50 +24,16 @@ export class YouTubeError extends Error {
   }
 }
 
-const count = z.coerce.number().int().nonnegative();
-const thumbnail = z.object({ url: z.url() });
 const videoResource = z.object({
   id: videoIdSchema,
-  snippet: z.object({
-    title: z.string(),
-    channelTitle: z.string(),
-    publishedAt: z.coerce.date(),
-    thumbnails: z.object({
-      maxres: thumbnail.optional(),
-      high: thumbnail.optional(),
-      medium: thumbnail.optional(),
-      default: thumbnail.optional(),
-    }),
-  }),
   contentDetails: z.object({ duration: z.string() }),
-  statistics: z
-    .object({
-      viewCount: count.optional(),
-      likeCount: count.optional(),
-      commentCount: count.optional(),
-    })
-    .default({}),
 });
 const videosResponse = z.object({ items: z.array(videoResource) });
-const searchResponse = z.object({
-  nextPageToken: z.string().optional(),
-  items: z.array(z.object({ id: z.object({ videoId: videoIdSchema }) })),
-});
-const commentsResponse = z.object({
+const snippetsResponse = z.object({
   items: z.array(
     z.object({
-      id: z.string(),
-      snippet: z.object({
-        topLevelComment: z.object({
-          snippet: z.object({
-            authorDisplayName: z.string(),
-            authorProfileImageUrl: z.url().optional(),
-            textOriginal: z.string(),
-            likeCount: count,
-            publishedAt: z.coerce.date(),
-          }),
-        }),
-      }),
+      id: videoIdSchema,
+      snippet: z.object({ title: z.string(), channelTitle: z.string() }),
     }),
   ),
 });
@@ -81,6 +43,17 @@ const errorResponse = z.object({
     errors: z.array(z.object({ reason: z.string() })).default([]),
   }),
 });
+
+/** A video YouTube shows, as far as Director needs to know before indexing it. */
+export const videoSchema = z.object({
+  videoId: videoIdSchema,
+  durationSeconds: z.number().int().positive(),
+});
+export type Video = z.infer<typeof videoSchema>;
+
+/** Who made a video and what it's called, as YouTube shows them. */
+export const creditSchema = z.object({ title: z.string(), channel: z.string() });
+export type Credit = z.infer<typeof creditSchema>;
 
 /** An ISO 8601 duration ("PT1M5S") in whole seconds; null when it isn't one. */
 function parseDuration(value: string): number | null {
@@ -122,41 +95,13 @@ export function videoIdFromLink(link: string): VideoId | null {
   return parsed.success ? parsed.data : null;
 }
 
-function toShort(video: z.infer<typeof videoResource>): Short | null {
+function toVideo(video: z.infer<typeof videoResource>): Video | null {
   const durationSeconds = parseDuration(video.contentDetails.duration);
-  const thumbnails = video.snippet.thumbnails;
-  const picture = thumbnails.maxres ?? thumbnails.high ?? thumbnails.medium ?? thumbnails.default;
-  // A live stream has no duration and a video without a picture isn't one to show.
-  if (durationSeconds === null || durationSeconds === 0 || !picture) {
+  // A live stream has no duration yet: nothing to film along to.
+  if (durationSeconds === null || durationSeconds === 0) {
     return null;
   }
-  return {
-    videoId: video.id,
-    title: video.snippet.title,
-    channelTitle: video.snippet.channelTitle,
-    thumbnailUrl: picture.url,
-    durationSeconds,
-    viewCount: video.statistics.viewCount ?? null,
-    likeCount: video.statistics.likeCount ?? null,
-    commentCount: video.statistics.commentCount ?? null,
-    publishedAt: video.snippet.publishedAt,
-  };
-}
-
-type Comments = z.infer<typeof commentsResponse>["items"];
-
-function toComments(items: Comments): ShortComment[] {
-  return items.map(({ id, snippet }) => {
-    const comment = snippet.topLevelComment.snippet;
-    return {
-      id,
-      author: comment.authorDisplayName,
-      authorImageUrl: comment.authorProfileImageUrl ?? null,
-      text: comment.textOriginal,
-      likeCount: comment.likeCount,
-      publishedAt: comment.publishedAt,
-    };
-  });
+  return { videoId: video.id, durationSeconds };
 }
 
 export class YouTube {
@@ -182,64 +127,21 @@ export class YouTube {
     return schema.parse(body);
   }
 
-  /** Videos by id, in the order asked for; ones that aren't (or are no longer) there are left out. */
-  async videos(ids: VideoId[]): Promise<Short[]> {
-    if (ids.length === 0) {
-      return [];
-    }
+  /** The video, or null when it isn't (or is no longer) there, or can't be filmed along to. */
+  async video(id: VideoId): Promise<Video | null> {
     const { items } = await this.read(
       "videos",
-      { part: "snippet,contentDetails,statistics", id: ids.join(","), maxResults: "50" },
+      { part: "contentDetails", id, maxResults: "1" },
       videosResponse,
     );
-    const found = new Map(items.map((item) => [item.id, toShort(item)]));
-    return ids.flatMap((id) => found.get(id) ?? []);
+    const found = items.find((item) => item.id === id);
+    return found ? toVideo(found) : null;
   }
 
-  /** One page of shorts matching `query`; only videos short enough for Director. */
-  async search(query: string, pageToken: string | undefined, order: "relevance" | "viewCount") {
-    const page = await this.read(
-      "search",
-      {
-        part: "id",
-        type: "video",
-        videoDuration: "short",
-        safeSearch: "moderate",
-        videoEmbeddable: "true",
-        order,
-        q: query,
-        maxResults: String(SHORTS_PAGE_SIZE),
-        ...(pageToken && { pageToken }),
-      },
-      searchResponse,
-    );
-    const items = await this.videos(page.items.map((item) => item.id.videoId));
-    return {
-      items: items.filter((short) => short.durationSeconds <= SHORT_MAX_SECONDS),
-      nextPageToken: page.nextPageToken ?? null,
-    };
-  }
-
-  /** Its top comments; `disabled` when the channel turned them off. */
-  async comments(videoId: VideoId): Promise<{ items: ShortComment[]; disabled: boolean }> {
-    try {
-      const { items } = await this.read(
-        "commentThreads",
-        {
-          part: "snippet",
-          videoId,
-          order: "relevance",
-          textFormat: "plainText",
-          maxResults: String(COMMENTS_PAGE),
-        },
-        commentsResponse,
-      );
-      return { items: toComments(items), disabled: false };
-    } catch (error) {
-      if (error instanceof YouTubeError && error.reason === "commentsDisabled") {
-        return { items: [], disabled: true };
-      }
-      throw error;
-    }
+  /** The video's title and channel, or null when it isn't (or is no longer) there. */
+  async credit(id: VideoId): Promise<Credit | null> {
+    const { items } = await this.read("videos", { part: "snippet", id }, snippetsResponse);
+    const found = items.find((item) => item.id === id);
+    return found ? { title: found.snippet.title, channel: found.snippet.channelTitle } : null;
   }
 }

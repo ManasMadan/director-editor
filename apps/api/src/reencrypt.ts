@@ -5,7 +5,6 @@
  * src/secrets/reencrypt.ts. How to rotate each key: the rotate-secrets skill.
  */
 import { createDatabase } from "@repo/db";
-import { keysFromEnv, SecretBox } from "@repo/nest-common";
 import { authEncryptionKey } from "./auth/secrets";
 import { env } from "./env";
 import { reencryptSecrets } from "./secrets/reencrypt";
@@ -14,11 +13,9 @@ const database = createDatabase({ url: env.API_DATABASE_URL, poolMax: 2, service
 try {
   const result = await reencryptSecrets(database, {
     authKey: authEncryptionKey(env.BETTER_AUTH_SECRET, env.BETTER_AUTH_SECRETS),
-    box: new SecretBox(keysFromEnv(env.ENCRYPTION_KEYS)),
   });
   console.log(
-    `Re-encrypted ${result.accounts} accounts, ${result.twoFactors} two-factor settings, ` +
-      `${result.signingKeys} signing keys and ${result.webhookEndpoints} webhook endpoints.`,
+    `Re-encrypted ${result.accounts} accounts and ${result.twoFactors} two-factor settings.`,
   );
   if (!env.BETTER_AUTH_SECRETS) {
     console.log(

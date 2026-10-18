@@ -10,14 +10,12 @@
  * cookie cache: signing out or revoking a session deletes it, so the same cookie is
  * rejected on the very next request.
  *
- * Emails (sign-in codes, invitations) are never sent from here. They are queued for the
+ * Emails (sign-in codes, security alerts) are never sent from here. They are queued for the
  * notification service, rendered in the recipient's language, and delivered with
  * retries, so a slow email provider can never slow down or fail a sign-in.
  *
  * After adding or removing a plugin, regenerate the auth tables (db-change skill).
  */
-import { cimd } from "@better-auth/cimd";
-import { fetchClientMetadataResource } from "@better-auth/cimd/node";
 import { passkey } from "@better-auth/passkey";
 import { redisStorage } from "@better-auth/redis-storage";
 import {
@@ -31,31 +29,15 @@ import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { admin } from "better-auth/plugins/admin";
 import { haveIBeenPwned } from "better-auth/plugins/haveibeenpwned";
-import { jwt } from "better-auth/plugins/jwt";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import type { Env } from "../env";
 import { features } from "../features";
 import { type AuthContext, type AuthDependencies, authContext } from "./auth-context";
 import { accountDeletion, databaseHooks, requestHooks } from "./auth-hooks";
-import {
-  apiKeyPlugin,
-  captchaPlugins,
-  emailOtpPlugin,
-  mcpPlugin,
-  organizationPlugin,
-} from "./auth-plugins";
-import { mobileSignIn } from "./mobile-sign-in";
+import { captchaPlugins, emailOtpPlugin, organizationPlugin } from "./auth-plugins";
 
-/** The API key plugin's own endpoints, all turned off (see `disabledPaths`). */
-const API_KEY_PLUGIN_PATHS = [
-  "/api-key/create",
-  "/api-key/get",
-  "/api-key/update",
-  "/api-key/delete",
-  "/api-key/list",
-];
-/** The mobile app's URL scheme (apps/mobile app.config.ts). */
-const MOBILE_SCHEME = "director-editor";
+/** The product's name, as authenticator apps and passkey prompts show it. */
+const APP_NAME = "Director";
 
 const SESSION = {
   expiresIn: 7 * DAY_S,
@@ -83,9 +65,6 @@ const RATE_LIMIT = {
     "/email-otp/*": { window: MINUTE_S, max: 5 },
     "/two-factor/*": { window: MINUTE_S, max: 5 },
     "/forget-password/*": { window: MINUTE_S, max: 3 },
-    // Anyone may register an MCP client (it still needs a user's consent to get a token),
-    // so registration is limited per address.
-    "/oauth2/register": { window: MINUTE_S, max: 5 },
   },
 } satisfies BetterAuthOptions["rateLimit"];
 
@@ -99,31 +78,25 @@ const EMAIL_AND_PASSWORD = {
   revokeSessionsOnPasswordReset: true,
 } satisfies BetterAuthOptions["emailAndPassword"];
 
-/** Google, when it's turned on and configured. */
+/**
+ * Google, when it's turned on and configured. Offline access, so Google hands back a
+ * refresh token: publishing to YouTube (modules/publish) uses the member's access token
+ * long after they signed in, and better-auth refreshes it with that. Sign-in asks for
+ * the profile only; YouTube's upload permission is asked for when someone first publishes
+ * (linkSocial with its scope), and Google adds it to what the account already granted.
+ */
 function socialProviders(env: Env) {
   return {
     ...(features.google &&
       env.GOOGLE_CLIENT_ID &&
       env.GOOGLE_CLIENT_SECRET && {
-        google: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET },
+        google: {
+          clientId: env.GOOGLE_CLIENT_ID,
+          clientSecret: env.GOOGLE_CLIENT_SECRET,
+          accessType: "offline" as const,
+        },
       }),
   };
-}
-
-/**
- * Where passkeys may be made and used: the site, the product's other origins (the
- * mobile app's web build) and the Android app. iOS reports the site's origin for the app
- * too (its associated domain), but Android's Credential Manager reports the app's own,
- * `android:apk-key-hash:` and its signing certificate's SHA-256 in base64url.
- */
-export function passkeyOrigins(
-  env: Pick<Env, "WEB_URL" | "APP_ORIGINS" | "ANDROID_CERT_FINGERPRINTS">,
-) {
-  const app = env.ANDROID_CERT_FINGERPRINTS.map(
-    (fingerprint) =>
-      `android:apk-key-hash:${Buffer.from(fingerprint.replaceAll(":", ""), "hex").toString("base64url")}`,
-  );
-  return [env.WEB_URL, ...env.APP_ORIGINS, ...app];
 }
 
 /**
@@ -135,42 +108,21 @@ const tuple = <T extends unknown[]>(...items: T) => items;
 
 /** Every plugin, in the order better-auth runs their hooks. */
 function plugins(context: AuthContext) {
-  const { env, redis } = context;
+  const { env } = context;
   return tuple(
-    // The mobile app: it sends its origin in a header of its own (native requests have
-    // none), Expo Go's exp:// is trusted in development, and social sign-in hands the
-    // session over without putting it in a link (mobile-sign-in.ts).
-    mobileSignIn(redis),
     emailOtpPlugin(context),
     // Backup codes are encrypted at rest: stored as-is (the default), anyone reading
     // the table could get past a user's second factor.
     twoFactor({
-      issuer: "Director-editor",
+      issuer: APP_NAME,
       backupCodeOptions: { amount: 10, storeBackupCodes: "encrypted" },
     }),
-    passkey({
-      rpID: new URL(env.WEB_URL).hostname,
-      rpName: "Director-editor",
-      origin: passkeyOrigins(env),
-    }),
+    // Passkeys are made and used on the site only.
+    passkey({ rpID: new URL(env.WEB_URL).hostname, rpName: APP_NAME, origin: env.WEB_URL }),
     // Rejects passwords found in public breaches (k-anonymity: only a hash prefix is sent).
     haveIBeenPwned({ enabled: env.PASSWORD_BREACH_CHECK === "on" }),
     organizationPlugin(context),
     admin({ impersonationSessionDuration: 60 * MINUTE_S }),
-    apiKeyPlugin(),
-    // Signing keys for OAuth access tokens, published at /api/auth/jwks so each MCP
-    // server verifies tokens itself. Keys rotate; old ones stay published for the grace
-    // period so tokens signed just before a rotation still verify.
-    jwt({
-      jwks: { rotationInterval: 90 * DAY_S, gracePeriod: 30 * DAY_S },
-      // Sessions stay cookies; only the OAuth flow issues JWTs.
-      disableSettingJwtHeader: true,
-    }),
-    mcpPlugin(context),
-    // Client ID Metadata Documents (the MCP 2026-07-28 way): a client's id is a URL to
-    // its metadata, fetched through a transport that resolves DNS once, refuses private
-    // addresses and never follows redirects (no SSRF).
-    cimd({ fetchClientMetadataResource, metadataProfile: "mcp-2026-07-28" }),
     ...captchaPlugins(env),
   );
 }
@@ -180,19 +132,14 @@ export function createAuth({ database = undefined, ...dependencies }: AuthDepend
   const context = authContext(dependencies);
 
   const options = {
-    appName: "Director-editor",
+    appName: APP_NAME,
     baseURL: env.BETTER_AUTH_URL,
     secret: env.BETTER_AUTH_SECRET,
     // When set, the newest signs and encrypts and BETTER_AUTH_SECRET decrypts older values.
+    // Passed explicitly so only our parser (src/auth/secrets.ts) reads the variable.
     ...(env.BETTER_AUTH_SECRETS && { secrets: env.BETTER_AUTH_SECRETS }),
-    // Browsers may only call auth endpoints from the product's own origins (CSRF
-    // protection); the mobile app's scheme is added by the Expo plugin below.
-    trustedOrigins: [env.WEB_URL, ...env.APP_ORIGINS, `${MOBILE_SCHEME}://`],
-    // The JWT plugin's /token would hand any session a signed JWT; access tokens come only
-    // from the OAuth flow below. API keys are managed through the API's own procedures
-    // (apps/api/src/modules/api-keys: typed, audited, with scopes), so the plugin's
-    // endpoints aren't served.
-    disabledPaths: ["/token", ...API_KEY_PLUGIN_PATHS],
+    // Browsers may only call auth endpoints from the site itself (CSRF protection).
+    trustedOrigins: [env.WEB_URL],
 
     database: database ?? prismaAdapter(db, { provider: "postgresql" }),
     // Session lookups hit Redis, not Postgres, on every request.

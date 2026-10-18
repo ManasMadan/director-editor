@@ -27,15 +27,26 @@ COPY apps/ai/app ./app
 
 FROM ${PYTHON_IMAGE}
 ARG RELEASE=dev
+# renovate: datasource=pypi depName=yt-dlp
+ARG YTDLP_VERSION=2026.8.19
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     RELEASE=${RELEASE}
 # Debian's security updates the base image doesn't have yet: Python links the system
 # OpenSSL, so a fix published after the python image was built must reach this one.
-RUN apt-get update && apt-get -y upgrade && rm -rf /var/lib/apt/lists/*
-# The base image's pip is never used (dependencies are in the virtualenv) and vendors
-# its own, older copies of other packages, which scanners rightly flag: it goes.
+# ffmpeg is yt-dlp's (app/audio.py): it's what extracts and converts a short's audio, at
+# whatever version trixie currently carries (apt doesn't keep old ones on its mirror, so a
+# pin would go stale and fail the build instead of catching a real regression).
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get -y upgrade \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/* \
+    # Pinned so Director's audio capture doesn't drift under us; installed with the base
+    # image's own pip, before it goes (the virtualenv's dependencies never need it).
+    && pip install --break-system-packages --no-cache-dir "yt-dlp==${YTDLP_VERSION}"
+# The base image's pip is never used otherwise (dependencies are in the virtualenv) and
+# vendors its own, older copies of other packages, which scanners rightly flag: it goes.
 RUN python -m pip uninstall --yes --root-user-action=ignore pip
 # The code stays owned by root and read-only to the process.
 COPY --from=build /app /app

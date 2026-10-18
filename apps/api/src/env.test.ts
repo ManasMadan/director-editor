@@ -35,24 +35,31 @@ describe("the environment", () => {
     );
   });
 
+  it("takes a BigQuery dataset name, and refuses one BigQuery wouldn't", async () => {
+    const { env } = await load({ BIGQUERY_DATASET: "director_events" });
+    expect(env.BIGQUERY_DATASET).toBe("director_events");
+    for (const name of ["director.events", "director-events", "a".repeat(1025)]) {
+      vi.resetModules();
+      await expect(load({ BIGQUERY_DATASET: name })).rejects.toThrow(
+        "Invalid environment variables",
+      );
+    }
+  });
+
   it.each([
     [
-      "the fake Stripe",
-      { STRIPE_API_URL: "http://127.0.0.1:12111" },
-      "STRIPE_API_URL is for tests only",
-    ],
-    [
-      "private webhook addresses",
-      { WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "127.0.0.1" },
-      "WEBHOOK_ALLOWED_PRIVATE_ADDRESSES must be empty in production",
-    ],
-    [
       "the mock Google's YouTube",
+      { YOUTUBE_API_URL: "http://localhost:12112/youtube/v3" },
+      "YOUTUBE_API_URL must be HTTPS in production",
+    ],
+    [
+      "a pasted Google access token",
       {
         WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "",
-        YOUTUBE_API_URL: "http://localhost:12112/youtube/v3",
+        YOUTUBE_API_URL: "https://www.googleapis.com/youtube/v3",
+        GOOGLE_ACCESS_TOKEN: "ya29.token",
       },
-      "YOUTUBE_API_URL must be HTTPS in production",
+      "GOOGLE_ACCESS_TOKEN is for local development only",
     ],
   ])("refuses %s in production", async (_, variables, message) => {
     await expect(load({ NODE_ENV: "production", ...variables })).rejects.toThrow(message);
@@ -61,25 +68,30 @@ describe("the environment", () => {
 
 describe("optional features", () => {
   it("are off without their configuration", async () => {
-    const { features } = await load({
-      GOOGLE_CLIENT_ID: "",
-      GOOGLE_CLIENT_SECRET: "",
-      STRIPE_SECRET_KEY: "",
-      STRIPE_PRICE_PRO_MONTHLY: "",
-      STRIPE_PRICE_PRO_YEARLY: "",
-    });
-    expect(features).toMatchObject({ google: false, billing: false });
+    const { features } = await load({ GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" });
+    expect(features).toMatchObject({ google: false });
   });
 
   it("are on with all of it", async () => {
-    const { features } = await load({
-      GOOGLE_CLIENT_ID: "id",
-      GOOGLE_CLIENT_SECRET: "secret",
-      STRIPE_SECRET_KEY: "sk_test_x",
-      STRIPE_PRICE_PRO_MONTHLY: "price_m",
-      STRIPE_PRICE_PRO_YEARLY: "price_y",
+    const { features } = await load({ GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "secret" });
+    expect(features).toMatchObject({ google: true });
+  });
+
+  it("turn files on with the chosen storage provider's bucket, whichever provider it is", async () => {
+    expect((await load({ STORAGE_PROVIDER: "s3", S3_BUCKET: "uploads" })).features.files).toBe(
+      true,
+    );
+    vi.resetModules();
+    vi.unstubAllEnvs();
+    const gcs = await load({
+      STORAGE_PROVIDER: "gcs",
+      S3_BUCKET: "",
+      GCS_BUCKET: "director-media",
     });
-    expect(features).toMatchObject({ google: true, billing: true });
+    expect(gcs.features.files).toBe(true);
+    vi.resetModules();
+    vi.unstubAllEnvs();
+    expect((await load({ STORAGE_PROVIDER: "s3", S3_BUCKET: "" })).features.files).toBe(false);
   });
 
   it.each([
@@ -89,9 +101,14 @@ describe("optional features", () => {
       "Google sign-in (GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET) needs both of its variables set, or neither",
     ],
     [
-      "billing",
-      { STRIPE_SECRET_KEY: "sk_test_x", STRIPE_PRICE_PRO_MONTHLY: "", STRIPE_PRICE_PRO_YEARLY: "" },
-      "Billing needs STRIPE_SECRET_KEY and both STRIPE_PRICE_PRO_* set, or none",
+      "Cloud Storage without its bucket",
+      { STORAGE_PROVIDER: "gcs", S3_BUCKET: "", GCS_BUCKET: "" },
+      "STORAGE_PROVIDER=gcs needs GCS_BUCKET",
+    ],
+    [
+      "a Cloud Storage bucket with the S3 provider",
+      { STORAGE_PROVIDER: "s3", GCS_BUCKET: "director-media" },
+      "GCS_BUCKET is set but STORAGE_PROVIDER is s3",
     ],
   ])("refuse to start %s half configured", async (_, variables, message) => {
     await expect(load(variables)).rejects.toThrow(message);
@@ -101,7 +118,6 @@ describe("optional features", () => {
     // Production as it would be: without the local stand-ins the example sets.
     const production = {
       NODE_ENV: "production",
-      WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "",
       // .env.example points at the local mock Google, which production refuses.
       YOUTUBE_API_URL: "https://www.googleapis.com/youtube/v3",
     };

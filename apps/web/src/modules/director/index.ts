@@ -1,4 +1,6 @@
-// The Director module's public surface: planning, filming and finishing a short.
+// The Director module's public surface: the library, planning, filming and finishing a short.
 export { DirectorPage } from "./pages/director";
-export { ReviewPage } from "./pages/review";
+export { EditPage } from "./pages/edit";
+export { LibraryPage } from "./pages/library";
+export { MediaPage } from "./pages/media";
 export { ShootPage } from "./pages/shoot";

@@ -9,6 +9,7 @@ import {
   type Perception,
   pick,
   QUIET_LOG,
+  stepLines,
   type Words,
 } from "./cues";
 
@@ -197,5 +198,17 @@ describe("Director's voice", () => {
     const log = heard(QUIET_LOG, 5);
     expect(pick(cues, log, 6)).toBeNull();
     expect(pick(cues, log, 5 + GAP_SECONDS)?.id).toBe("framing:step-left");
+  });
+});
+
+describe("stepLines", () => {
+  it("is each step as Director says it when recording reaches it, the first with Action!", () => {
+    const steps = [{ instruction: "Walk in." }, { instruction: "Turn to the camera." }];
+    expect(stepLines(steps, words)).toEqual(["Action! Walk in.", "Turn to the camera."]);
+    const recording = cuesFor(
+      { ...setup, phase: "recording", step: { index: 0, instruction: "Walk in." } },
+      words,
+    );
+    expect(recording.map((cue) => cue.text)).toContain("Action! Walk in.");
   });
 });

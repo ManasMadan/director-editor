@@ -36,6 +36,5 @@ paths:
   Retention work calls a narrowly granted `SECURITY DEFINER` function.
 - Webhooks: inbound provider calls verify the signature on the raw body before anything
   else, store the event with a unique provider id and emit it; processing happens from
-  the queue, never inline. Outbound deliveries are signed (`outbound/signing.ts`) and
-  sent only through `safeFetch`.
+  the queue, never inline.
 - Never hold a database transaction open while awaiting Redis, BullMQ or HTTP.

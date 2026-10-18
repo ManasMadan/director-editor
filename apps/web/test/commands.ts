@@ -7,13 +7,13 @@
 import { randomInt } from "node:crypto";
 import type { NotificationPayload } from "@repo/jobs";
 import { totp as totpCode } from "@repo/testing/totp";
+import { symmetricEncrypt } from "better-auth/crypto";
 import { Queue } from "bullmq";
 import { Redis } from "ioredis";
 import pg from "pg";
 import type { CDPSession, Page, Request, Route } from "playwright";
 import type { BrowserCommand } from "vitest/node";
 // The API's own token format (a relative import: nest-common's entry pulls in Nest).
-import { createSignedTokens } from "../../../packages/nest-common/src/signed-token";
 import { createStorage } from "../../../packages/nest-common/src/storage";
 import { API, REDIS_URL, SITE, services } from "./services";
 import { FAKE_TURNSTILE } from "./turnstile";
@@ -27,7 +27,7 @@ const turnstileModes = new WeakMap<Page, "fake" | "blocked" | "empty" | "held">(
 /**
  * Every test starts signed out, from a client IP of its own (the API rate-limits auth
  * per IP and trusts X-Forwarded-For from loopback), with full-page navigations caught:
- * the test page would otherwise leave for the sign-in page or Stripe's checkout. They
+ * the test page would otherwise leave for the sign-in page. They
  * are answered 204 No Content, which browsers treat as "stay where you are".
  */
 const startTest: BrowserCommand<[]> = async ({ page, context }) => {
@@ -37,6 +37,7 @@ const startTest: BrowserCommand<[]> = async ({ page, context }) => {
   await page.setExtraHTTPHeaders({ "x-forwarded-for": ip });
   turnstileModes.set(page, "fake");
   failing.set(page, []);
+  serving.set(page, []);
   if (!navigations.has(page)) {
     await page.route("https://challenges.cloudflare.com/turnstile/**", async (route) => {
       // Held: answered once the test picks another mode (a slow network, under control).
@@ -60,19 +61,9 @@ const startTest: BrowserCommand<[]> = async ({ page, context }) => {
         !url.searchParams.has("sessionId"),
       (route) => {
         const request = route.request();
-        const failure = failing.get(page)?.find(({ part }) => request.url().includes(part));
-        if (failure) {
-          failure.hits += 1;
-          if (!failure.status) {
-            return route.abort();
-          }
-          return failure.body === undefined
-            ? route.fulfill({ status: failure.status, body: "" })
-            : route.fulfill({
-                status: failure.status,
-                contentType: "application/json",
-                body: JSON.stringify(failure.body),
-              });
+        const answered = answerAsSet(page, route);
+        if (answered !== null) {
+          return answered;
         }
         if (!request.isNavigationRequest() || request.frame() === page.mainFrame()) {
           return route.fallback();
@@ -97,6 +88,36 @@ const startTest: BrowserCommand<[]> = async ({ page, context }) => {
   finished.set(page, []);
 };
 
+/**
+ * Answers a request the test set an answer for: failing (`failRequests`), or with bytes
+ * (`serveRequests`). Null for any other.
+ */
+function answerAsSet(page: Page, route: Route): Promise<void> | null {
+  const url = route.request().url();
+  const failure = failing.get(page)?.find(({ part }) => url.includes(part));
+  if (failure) {
+    failure.hits += 1;
+    if (!failure.status) {
+      return route.abort();
+    }
+    return failure.body === undefined
+      ? route.fulfill({ status: failure.status, body: "" })
+      : route.fulfill({
+          status: failure.status,
+          contentType: "application/json",
+          body: JSON.stringify(failure.body),
+        });
+  }
+  const served = serving.get(page)?.find(({ pattern }) => pattern.test(url));
+  return served
+    ? route.fulfill({
+        status: 200,
+        contentType: served.contentType,
+        body: Buffer.from(served.base64, "base64"),
+      })
+    : null;
+}
+
 /** The page's requests sent since its test started, and those answered, by URL. */
 const started = new WeakMap<Page, WeakSet<Request>>();
 const finished = new WeakMap<Page, string[]>();
@@ -111,6 +132,9 @@ const failing = new WeakMap<
   Page,
   { part: string; status?: number; body?: unknown; hits: number }[]
 >();
+
+/** What the page's requests to matching URLs are answered with instead (`serveRequests`). */
+const serving = new WeakMap<Page, { pattern: RegExp; contentType: string; base64: string }[]>();
 
 /** Sends these headers with the page's requests for the rest of the test (an app version, say). */
 const requestHeaders: BrowserCommand<[headers: Record<string, string>]> = async (
@@ -130,6 +154,17 @@ const failRequests: BrowserCommand<
   [part: string, options?: { status?: number; body?: unknown }]
 > = ({ page }, part, options = {}) => {
   failing.get(page)?.push({ part, ...options, hits: 0 });
+};
+
+/**
+ * Answers the page's requests to URLs matching `pattern` (a RegExp's source) with these
+ * bytes for the rest of the test: a file in storage the local stack doesn't have (a seed
+ * template's generated media). A request `failRequests` also matches fails instead.
+ */
+const serveRequests: BrowserCommand<
+  [pattern: string, file: { contentType: string; base64: string }]
+> = ({ page }, pattern, file) => {
+  serving.get(page)?.push({ pattern: new RegExp(pattern), ...file });
 };
 
 const failedRequests: BrowserCommand<[part: string]> = ({ page }, part) =>
@@ -155,18 +190,16 @@ async function sqlRows<T>(query: string, params: unknown[] = []) {
 const takenRequests = new Set<string>();
 
 /**
- * The data of the notification the API queued for `address` (an email or a phone
- * number): a one-time code, an invitation, a security alert. Waits up to five seconds.
+ * The data of the email the API queued for `address`: a one-time code or a security
+ * alert. Waits up to five seconds.
  */
 const takeNotification: BrowserCommand<[template: string, address: string]> = async (
   _context,
   template,
   address,
 ) => {
-  const matches = (payload: NotificationPayload) => {
-    const to = payload.to as { email?: string; phone?: string };
-    return payload.template === template && (to.email === address || to.phone === address);
-  };
+  const matches = (payload: NotificationPayload) =>
+    payload.template === template && payload.to.email === address;
   // The prefix @repo/jobs gives every queue (queuePrefix).
   const critical = new Queue("notifications-critical", {
     connection: { url: REDIS_URL },
@@ -248,17 +281,6 @@ const turnstile: BrowserCommand<[mode: "fake" | "blocked" | "empty" | "held"]> =
   turnstileModes.set(page, mode);
 };
 
-/** Grants (or clears) a browser permission such as notifications for the test page. */
-const grantPermissions: BrowserCommand<[permissions: string[]]> = async (
-  { context },
-  permissions,
-) => {
-  await context.clearPermissions();
-  if (permissions.length) {
-    await context.grantPermissions(permissions);
-  }
-};
-
 /** The code an authenticator app shows for `secret` now. */
 const totp: BrowserCommand<[secret: string]> = (_context, secret) => totpCode(secret);
 
@@ -297,17 +319,6 @@ const editSession: BrowserCommand<
 const ageSession: BrowserCommand<[]> = (context) =>
   editSession(context, { createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString() });
 
-/** The signed link an email's "Unsubscribe" carries (UNSUBSCRIBE_SECRET, as the API has it). */
-const unsubscribeToken: BrowserCommand<[userId: string, category: string]> = (
-  _context,
-  userId,
-  category,
-) =>
-  createSignedTokens(process.env.UNSUBSCRIBE_SECRET as string).sign("unsubscribe", [
-    userId,
-    category,
-  ]);
-
 /**
  * Signs the user in on another device (a request from Node with that device's user
  * agent), from a client IP of its own, or with none at all.
@@ -334,15 +345,18 @@ const signInElsewhere: BrowserCommand<
 };
 
 /**
- * The next PUT to a URL containing `part` is answered with `status`, as when storage
- * refuses an upload; later requests go through again.
+ * The local object storage's host: this checkout's (a stack of its own moves its port,
+ * docs/environment.md), else the default one.
  */
-const refuseNextPut: BrowserCommand<[part: string, status: number]> = async (
-  { page },
-  part,
-  status,
-) => {
-  const matches = (url: URL) => url.href.includes(part);
+const storageHost = () => new URL(process.env.S3_ENDPOINT ?? "http://localhost:59000").host;
+
+/**
+ * The next PUT to the object storage is answered with `status`, as when storage refuses
+ * an upload; later requests go through again.
+ */
+const refuseNextPut: BrowserCommand<[status: number]> = async ({ page }, status) => {
+  const storage = storageHost();
+  const matches = (url: URL) => url.host === storage;
   const handler = async (route: Route) => {
     if (route.request().method() !== "PUT") {
       return route.fallback();
@@ -365,7 +379,7 @@ const storageCors: BrowserCommand<[]> = async ({ page }) => {
     return;
   }
   withStorageCors.add(page);
-  const storage = new URL(process.env.S3_ENDPOINT ?? "http://localhost:59000").host;
+  const storage = storageHost();
   await page.route(
     (url) => url.host === storage,
     async (route) => {
@@ -402,17 +416,18 @@ const publishRealtime: BrowserCommand<[channel: string, message: { type: string 
   }
 };
 
-/** Calls one of the fake Stripe's test hooks (`/__fake/...`) and returns its answer. */
-const fakeStripe: BrowserCommand<[path: string, method?: string]> = async (
-  _context,
-  path,
-  method = "GET",
-) => {
-  const response = await fetch(`${(await services()).stripeUrl}${path}`, { method });
-  if (!response.ok) {
-    throw new Error(`the fake Stripe answered ${path} with ${response.status}`);
+/**
+ * How many subscribers the realtime `channel` has (`PUBSUB NUMSUB`): the API subscribes
+ * once a page's stream for it is open, so a message published from then on is heard.
+ */
+const realtimeListeners: BrowserCommand<[channel: string]> = async (_context, channel) => {
+  const redis = new Redis(REDIS_URL);
+  try {
+    const [, count] = await redis.pubsub("NUMSUB", `realtime:${channel}`);
+    return Number(count);
+  } finally {
+    redis.disconnect();
   }
-  return response.json();
 };
 
 /**
@@ -432,6 +447,7 @@ const checkUpload: BrowserCommand<[fileId: string, rejectReason?: string]> = asy
     return;
   }
   const storage = createStorage({
+    STORAGE_PROVIDER: "s3",
     S3_BUCKET: process.env.S3_BUCKET ?? "uploads",
     S3_REGION: process.env.S3_REGION ?? "us-east-1",
     S3_ENDPOINT: process.env.S3_ENDPOINT,
@@ -449,10 +465,10 @@ const checkUpload: BrowserCommand<[fileId: string, rejectReason?: string]> = asy
 
 /**
  * What the AI stand-in's Director answers for the short `videoId` (test/fake-ai.ts): its
- * plan (merged over an id and timestamps), the member's takes, and the scene check.
+ * plan (merged over an id and timestamps), the member's takes and cuts, and the scene check.
  */
 const fakeDirector: BrowserCommand<
-  [videoId: string, state: { plan?: object; takes?: object[]; scene?: object }]
+  [videoId: string, state: { plan?: object; takes?: object[]; cuts?: object[]; scene?: object }]
 > = async (_context, videoId, state) => {
   const response = await fetch(`${(await services()).aiUrl}/__fake/director/${videoId}`, {
     method: "PUT",
@@ -464,21 +480,150 @@ const fakeDirector: BrowserCommand<
   }
 };
 
+/**
+ * What the AI stand-in answers as the workspace `orgId`'s library (test/fake-ai.ts): its
+ * plans (each merged over an id and timestamps, and served as its short's plan too),
+ * whether the member has indexed their own, and the refusal indexing a new short gets.
+ */
+const fakeLibrary: BrowserCommand<
+  [
+    orgId: string,
+    state: {
+      templates?: object[];
+      indexUsed?: boolean;
+      indexError?: { status: number; code: string };
+    },
+  ]
+> = async (_context, orgId, state) => {
+  const response = await fetch(`${(await services()).aiUrl}/__fake/library/${orgId}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(state),
+  });
+  if (!response.ok) {
+    throw new Error(`the AI stand-in answered ${response.status}`);
+  }
+};
+
+/** A cut as the AI stand-in answers it, and the YouTube post Gemini writes for it. */
+const fakeCut: BrowserCommand<[cutId: string, state: { cut: object; copy?: object }]> = async (
+  _context,
+  cutId,
+  state,
+) => {
+  const response = await fetch(`${(await services()).aiUrl}/__fake/cuts/${cutId}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(state),
+  });
+  if (!response.ok) {
+    throw new Error(`the AI stand-in answered ${response.status}`);
+  }
+};
+
+const YOUTUBE_UPLOAD = "https://www.googleapis.com/auth/youtube.upload";
+
+/**
+ * Links a Google account allowed to upload to YouTube to the user, as consenting in
+ * the publish sheet would: the mock Google's consent and token exchange give its tokens,
+ * stored the way better-auth stores them (encrypted with BETTER_AUTH_SECRET, which the
+ * full API shares with this process).
+ */
+const linkYouTube: BrowserCommand<[userId: string, email: string]> = async (
+  _context,
+  userId,
+  email,
+) => {
+  const { googleUrl } = await services();
+  const authorize = new URL(`${googleUrl}/o/oauth2/v2/auth`);
+  for (const [name, value] of Object.entries({
+    client_id: "web-tests.apps.googleusercontent.com",
+    redirect_uri: "http://localhost/callback",
+    response_type: "code",
+    login_hint: email,
+    scope: `openid email profile ${YOUTUBE_UPLOAD}`,
+  })) {
+    authorize.searchParams.set(name, value);
+  }
+  const consent = await fetch(authorize, { redirect: "manual" });
+  const code = new URL(String(consent.headers.get("location"))).searchParams.get("code");
+  const tokens = (await (
+    await fetch(`${googleUrl}/token`, {
+      method: "POST",
+      body: new URLSearchParams({ grant_type: "authorization_code", code: String(code) }),
+    })
+  ).json()) as { access_token: string; refresh_token: string; scope: string };
+  const encrypted = (data: string) =>
+    symmetricEncrypt({ key: String(process.env.BETTER_AUTH_SECRET), data });
+  await sqlRows(
+    `INSERT INTO auth.account (account_id, provider_id, user_id, access_token, refresh_token,
+                               access_token_expires_at, scope, updated_at)
+     VALUES ($1, 'google', $2, $3, $4, now() + interval '1 hour', $5, now())`,
+    [
+      email,
+      userId,
+      await encrypted(tokens.access_token),
+      await encrypted(tokens.refresh_token),
+      tokens.scope.split(" ").join(","),
+    ],
+  );
+};
+
+/** Writes a file's bytes into the tests' object storage, where the API reads it from. */
+const storeFile: BrowserCommand<[key: string, base64: string, contentType: string]> = async (
+  _context,
+  key,
+  base64,
+  contentType,
+) => {
+  const storage = createStorage({
+    STORAGE_PROVIDER: "s3",
+    S3_BUCKET: process.env.S3_BUCKET ?? "uploads",
+    S3_REGION: process.env.S3_REGION ?? "us-east-1",
+    S3_ENDPOINT: process.env.S3_ENDPOINT,
+    S3_ACCESS_KEY_ID: process.env.S3_ACCESS_KEY_ID,
+    S3_SECRET_ACCESS_KEY: process.env.S3_SECRET_ACCESS_KEY,
+    S3_FORCE_PATH_STYLE: true,
+  });
+  await storage?.write(key, Buffer.from(base64, "base64"), contentType);
+};
+
+/**
+ * Starts the day's allowance of YouTube uploads afresh (the API's counter in the web
+ * tests' Valkey database, which outlives a run): every test here may publish.
+ */
+const resetPublishAllowance: BrowserCommand<[]> = async () => {
+  const redis = new Redis(REDIS_URL);
+  try {
+    const keys = await redis.keys("publish:uploads:*");
+    if (keys.length) {
+      await redis.del(...keys);
+    }
+  } finally {
+    redis.disconnect();
+  }
+};
+
 export const commands = {
   answeredRequests,
+  resetPublishAllowance,
+  fakeCut,
+  linkYouTube,
+  storeFile,
+  fakeLibrary,
   checkUpload,
   fakeDirector,
-  fakeStripe,
   publishRealtime,
+  realtimeListeners,
   editSession,
   storageCors,
   refuseNextPut,
   signInElsewhere,
-  unsubscribeToken,
   ageSession,
   requestHeaders,
   failRequests,
   failedRequests,
+  serveRequests,
   totp,
   startTest,
   hardNavigations,
@@ -486,28 +631,38 @@ export const commands = {
   sql,
   virtualAuthenticator,
   turnstile,
-  grantPermissions,
 };
 
 declare module "vitest/browser" {
   interface BrowserCommands {
     answeredRequests(part: string): Promise<number>;
-    fakeStripe<T = unknown>(path: string, method?: string): Promise<T>;
     checkUpload(fileId: string, rejectReason?: string): Promise<void>;
+    fakeCut(cutId: string, state: { cut: object; copy?: object }): Promise<void>;
+    resetPublishAllowance(): Promise<void>;
+    linkYouTube(userId: string, email: string): Promise<void>;
+    storeFile(key: string, base64: string, contentType: string): Promise<void>;
     fakeDirector(
       videoId: string,
-      state: { plan?: object; takes?: object[]; scene?: object },
+      state: { plan?: object; takes?: object[]; cuts?: object[]; scene?: object },
+    ): Promise<void>;
+    fakeLibrary(
+      orgId: string,
+      state: {
+        templates?: object[];
+        indexUsed?: boolean;
+        indexError?: { status: number; code: string };
+      },
     ): Promise<void>;
     publishRealtime(channel: string, message: { type: string }): Promise<void>;
+    realtimeListeners(channel: string): Promise<number>;
     storageCors(): Promise<void>;
-    refuseNextPut(part: string, status: number): Promise<void>;
+    refuseNextPut(status: number): Promise<void>;
     signInElsewhere(
       email: string,
       password: string,
       userAgent: string,
       options?: { withoutIp?: boolean },
     ): Promise<void>;
-    unsubscribeToken(userId: string, category: string): Promise<string>;
     ageSession(): Promise<void>;
     editSession(
       fields: Record<string, unknown>,
@@ -517,12 +672,12 @@ declare module "vitest/browser" {
     requestHeaders(headers: Record<string, string>): Promise<void>;
     failRequests(part: string, options?: { status?: number; body?: unknown }): Promise<void>;
     failedRequests(part: string): Promise<number>;
+    serveRequests(pattern: string, file: { contentType: string; base64: string }): Promise<void>;
     totp(secret: string): Promise<string>;
     hardNavigations(): Promise<string[]>;
     takeNotification<T = Record<string, unknown>>(template: string, address: string): Promise<T>;
     sql<T = Record<string, unknown>>(query: string, params?: unknown[]): Promise<T[]>;
     virtualAuthenticator(options?: { verified?: boolean }): Promise<void>;
     turnstile(mode: "fake" | "blocked" | "empty" | "held"): Promise<void>;
-    grantPermissions(permissions: string[]): Promise<void>;
   }
 }

@@ -9,7 +9,6 @@ describe("authErrorKey", () => {
     [{ code: "ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY" }, "PASSKEY_CANCELLED"],
     [{ status: 429 }, "RATE_LIMITED"],
     [{ status: 429, code: "INVALID_OTP" }, "RATE_LIMITED"],
-    [{ error: "invalid_signature" }, "OAUTH_REQUEST_EXPIRED"],
     [{ code: "INVALID_OTP", error: "invalid_signature" }, "INVALID_OTP"],
   ])("%j → %s", (error, key) => {
     expect(authErrorKey(error)).toBe(key);

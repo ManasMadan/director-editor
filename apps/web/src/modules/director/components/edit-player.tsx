@@ -1,6 +1,7 @@
 "use client";
 
-import { Spinner } from "@repo/ui/components/spinner";
+import type { DirectorTakeId } from "@repo/contracts/ids";
+import { GeminiLoader } from "@repo/ui/components/gemini-loader";
 import { cn } from "@repo/ui/lib/utils";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
@@ -69,7 +70,7 @@ function Placeholder({ clip, state }: { clip: Clip; state: MediaState | undefine
   if (clip.state === "cut" && state !== "failed") {
     return (
       <div className="absolute inset-0 flex items-center justify-center">
-        <Spinner />
+        <GeminiLoader label={t("editor.loading")} />
       </div>
     );
   }
@@ -103,7 +104,7 @@ export function EditPlayer({
   onStall,
 }: {
   clips: readonly Clip[];
-  media: Map<number, MediaState>;
+  media: Map<DirectorTakeId, MediaState>;
   time: number;
   playing: boolean;
   clock: () => number;
@@ -115,15 +116,17 @@ export function EditPlayer({
   const videos = useRef(new Map<number, HTMLVideoElement>());
   const active = useVideoSync(videos.current, clips, { time, playing, sound, onStall });
   const loaded = clips.flatMap((clip) => {
-    const state = media.get(clip.index);
-    return typeof state === "object" ? [{ clip, take: state }] : [];
+    const state = clip.take ? media.get(clip.take.id) : undefined;
+    return clip.take && typeof state === "object" ? [{ clip, id: clip.take.id, take: state }] : [];
   });
-  const showing = active ? media.get(active.index) : undefined;
+  const showing = active?.take ? media.get(active.take.id) : undefined;
   return (
     <div className="relative aspect-9/16 h-full max-w-full overflow-hidden rounded-xl bg-studio-foreground/10">
-      {loaded.map(({ clip, take }) => (
+      {loaded.map(({ clip, id, take }) => (
         <ClipMedia
-          key={clip.index}
+          // Another take picked is another element: the old one stops with its own.
+          key={`${clip.index}:${id}`}
+          id={id}
           clip={clip}
           take={take}
           active={clip === active}
@@ -145,12 +148,14 @@ export function EditPlayer({
 
 function ClipMedia({
   clip,
+  id,
   take,
   active,
   time,
   register,
 }: {
   clip: Clip;
+  id: DirectorTakeId;
   take: TakeMedia;
   active: boolean;
   time: number;
@@ -163,6 +168,7 @@ function ClipMedia({
       <img
         src={take.url}
         alt={clip.shot.title}
+        data-take={id}
         className={cn("absolute inset-0 size-full object-cover", !active && "invisible")}
         style={{ transform: `scale(${1 + PHOTO_ZOOM * progress})` }}
       />
@@ -172,6 +178,7 @@ function ClipMedia({
     <video
       ref={register}
       src={take.url}
+      data-take={id}
       muted
       playsInline
       preload="auto"

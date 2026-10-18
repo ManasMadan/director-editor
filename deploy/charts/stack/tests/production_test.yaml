@@ -1,0 +1,76 @@
+# Production's own values (deploy/environments/production/stack.yaml), rendered as Argo
+# CD renders them: the parts a default-values test can't see.
+suite: production
+release: { name: demo, namespace: apps }
+values: [../../../environments/production/stack.yaml]
+set:
+  image.tag: sha-abc123
+tests:
+  - it: keeps the api and the worker on Cloud Storage, with no RustFS keys beside it
+    template: deployment.yaml
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts: &cloudStorage
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: STORAGE_PROVIDER, value: gcs }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: GCS_BUCKET, value: director-media-1053522546520 }
+      # The services refuse S3_BUCKET next to STORAGE_PROVIDER=gcs.
+      - notContains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: S3_BUCKET, valueFrom: { secretKeyRef: { name: storage, key: bucket } } }
+
+  - it: keeps the worker on the same bucket as the api
+    template: deployment.yaml
+    documentSelector: { path: metadata.name, value: demo-worker }
+    asserts: *cloudStorage
+
+  - it: lets the browser reach Cloud Storage's signed URLs from the web app
+    template: deployment.yaml
+    documentSelector: { path: metadata.name, value: demo-web }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: STORAGE_ORIGIN, value: https://storage.googleapis.com }
+      - notContains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: STORAGE_ORIGIN, valueFrom: { secretKeyRef: { name: storage, key: publicEndpoint } } }
+
+  - it: lets the api reach the metadata server for Application Default Credentials
+    template: networkpolicy.yaml
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts: &metadataServer
+      - contains:
+          path: spec.egress
+          content:
+            to: [{ ipBlock: { cidr: 169.254.169.254/32 } }]
+            ports: [{ port: 80 }]
+
+  - it: captures a short's audio into the api's bucket from the ai worker
+    template: deployment.yaml
+    documentSelector: { path: metadata.name, value: demo-ai-worker }
+    asserts: &mediaBucket
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: MEDIA_BUCKET, value: director-media-1053522546520 }
+
+  - it: gives the ai service the same bucket
+    template: deployment.yaml
+    documentSelector: { path: metadata.name, value: demo-ai }
+    asserts: *mediaBucket
+
+  - it: lets the worker reach the metadata server too
+    template: networkpolicy.yaml
+    documentSelector: { path: metadata.name, value: demo-worker }
+    asserts: *metadataServer
+
+  - it: keeps the metadata server closed to services that don't need it
+    template: networkpolicy.yaml
+    documentSelector: { path: metadata.name, value: demo-web }
+    asserts:
+      - notContains:
+          path: spec.egress
+          content:
+            to: [{ ipBlock: { cidr: 169.254.169.254/32 } }]
+            ports: [{ port: 80 }]

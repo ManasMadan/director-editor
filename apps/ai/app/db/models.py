@@ -15,14 +15,20 @@ would.
 import datetime
 import uuid
 
-from pgvector.sqlalchemy import Vector
 from sqlalchemy import ForeignKey, Index, Integer, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from app.schemas import DocumentStatus, PlanStatus, TakeKind, TakeStatus
-
-EMBEDDING_DIMENSIONS = 1536
+from app.schemas import (
+    AudioStatus,
+    PlanSource,
+    PlanStage,
+    PlanStatus,
+    PublishStatus,
+    TakeKind,
+    TakeStatus,
+    Visibility,
+)
 
 
 class Base(DeclarativeBase):
@@ -41,58 +47,6 @@ def _now() -> Mapped[datetime.datetime]:
 
 # SQLAlchemy declares __table_args__ as Any; these are indexes and the schema.
 type TableArgs = tuple[Index | dict[str, str], ...]
-
-
-class Document(Base):
-    __tablename__ = "document"
-    __table_args__: TableArgs = (
-        Index("document_org_id_created_at_idx", "org_id", "created_at"),
-        {"schema": "ai"},
-    )
-
-    id: Mapped[uuid.UUID] = _uuid_pk()
-    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
-    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
-    title: Mapped[str] = mapped_column(Text)
-    # The text as added, kept so the document can be re-indexed.
-    content: Mapped[str] = mapped_column(Text)
-    summary: Mapped[str | None] = mapped_column(Text)
-    status: Mapped[DocumentStatus] = mapped_column(Text, server_default=text("'pending'::text"))
-    error: Mapped[str | None] = mapped_column(Text)
-    chunk_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
-    created_at: Mapped[datetime.datetime] = _now()
-    updated_at: Mapped[datetime.datetime] = mapped_column(TIMESTAMP(timezone=True, precision=3))
-
-    chunks: Mapped[list[DocumentChunk]] = relationship(
-        back_populates="document", passive_deletes=True
-    )
-
-
-class DocumentChunk(Base):
-    __tablename__ = "chunk"
-    __table_args__: TableArgs = (
-        Index("chunk_document_id_ordinal_key", "document_id", "ordinal", unique=True),
-        Index("chunk_org_id_idx", "org_id"),
-        Index(
-            "chunk_embedding_idx",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-        ),
-        {"schema": "ai"},
-    )
-
-    id: Mapped[uuid.UUID] = _uuid_pk()
-    document_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("ai.document.id", ondelete="CASCADE", onupdate="CASCADE"),
-    )
-    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
-    ordinal: Mapped[int] = mapped_column(Integer)
-    content: Mapped[str] = mapped_column(Text)
-    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIMENSIONS))
-
-    document: Mapped[Document] = relationship(back_populates="chunks")
 
 
 class AiUsage(Base):
@@ -117,6 +71,13 @@ class DirectorPlan(Base):
     __table_args__: TableArgs = (
         Index("director_plan_org_id_id_idx", "org_id", text("id DESC")),
         Index("director_plan_org_id_video_id_key", "org_id", "video_id", unique=True),
+        # A member's one short of their own (app/director.py's index).
+        Index(
+            "director_plan_one_user_index",
+            "created_by",
+            unique=True,
+            postgresql_where=text("source = 'user'::text AND status <> 'failed'::text"),
+        ),
         {"schema": "ai"},
     )
 
@@ -124,11 +85,15 @@ class DirectorPlan(Base):
     org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     video_id: Mapped[str] = mapped_column(Text)
+    source: Mapped[PlanSource] = mapped_column(Text, server_default=text("'user'::text"))
     status: Mapped[PlanStatus] = mapped_column(Text, server_default=text("'pending'::text"))
+    stage: Mapped[PlanStage] = mapped_column(Text, server_default=text("'queued'::text"))
     error: Mapped[str | None] = mapped_column(Text)
     # The ShotPlan as JSON (app/schemas.py); parsed back with its model when read.
     plan: Mapped[dict[str, object] | None] = mapped_column(JSONB)
     model: Mapped[str | None] = mapped_column(Text)
+    audio_status: Mapped[AudioStatus] = mapped_column(Text, server_default=text("'none'::text"))
+    audio_key: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime.datetime] = _now()
     updated_at: Mapped[datetime.datetime] = mapped_column(TIMESTAMP(timezone=True, precision=3))
 
@@ -159,5 +124,34 @@ class DirectorTake(Base):
     best_end_ms: Mapped[int | None] = mapped_column(Integer)
     score: Mapped[int | None] = mapped_column(Integer)
     feedback: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime.datetime] = _now()
+    updated_at: Mapped[datetime.datetime] = mapped_column(TIMESTAMP(timezone=True, precision=3))
+
+
+class DirectorCut(Base):
+    __tablename__ = "director_cut"
+    __table_args__: TableArgs = (
+        Index("director_cut_org_id_id_idx", "org_id", text("id DESC")),
+        Index("director_cut_plan_id_user_id_idx", "plan_id", "user_id"),
+        Index("director_cut_user_id_idx", "user_id"),
+        Index("director_cut_file_id_idx", "file_id"),
+        {"schema": "ai"},
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    plan_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("ai.director_plan.id", ondelete="CASCADE", onupdate="CASCADE"),
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    title: Mapped[str] = mapped_column(Text)
+    # [{shotIndex, takeId}] (app/schemas.py CutPick); parsed back with its model when read.
+    picks: Mapped[list[dict[str, object]]] = mapped_column(JSONB)
+    file_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    duration_ms: Mapped[int] = mapped_column(Integer)
+    publish_status: Mapped[PublishStatus] = mapped_column(Text, server_default=text("'none'::text"))
+    youtube_video_id: Mapped[str | None] = mapped_column(Text)
+    visibility: Mapped[Visibility | None] = mapped_column(Text)
     created_at: Mapped[datetime.datetime] = _now()
     updated_at: Mapped[datetime.datetime] = mapped_column(TIMESTAMP(timezone=True, precision=3))

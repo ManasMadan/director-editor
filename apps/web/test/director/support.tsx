@@ -94,6 +94,31 @@ export function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+/** A real WAV file of `seconds` of silence (16-bit mono, 8 kHz), as a link to play. */
+export function silentWav(seconds: number) {
+  const rate = 8000;
+  const bytes = Math.round(rate * seconds) * 2;
+  const view = new DataView(new ArrayBuffer(44 + bytes));
+  const text = (at: number, value: string) => {
+    for (const [i, char] of [...value].entries()) {
+      view.setUint8(at + i, char.charCodeAt(0));
+    }
+  };
+  text(0, "RIFF");
+  view.setUint32(4, 36 + bytes, true);
+  text(8, "WAVEfmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true);
+  view.setUint32(28, rate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  text(36, "data");
+  view.setUint32(40, bytes, true);
+  return URL.createObjectURL(new Blob([view.buffer], { type: "audio/wav" }));
+}
+
 /** A <video> that says it has a frame to show (`readyState`), of a camera this size. */
 export function cameraVideo({ readyState = 4, width = 1080, height = 1920 } = {}) {
   const video = document.createElement("video");

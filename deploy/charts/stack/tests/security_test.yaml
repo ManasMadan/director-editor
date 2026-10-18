@@ -73,3 +73,24 @@ tests:
           content:
             from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: mail } } }]
             ports: [{ port: 3004 }]
+
+  - it: reaches nothing on the metadata server's link-local address by default
+    template: networkpolicy.yaml
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - notContains:
+          path: spec.egress
+          content:
+            to: [{ ipBlock: { cidr: 169.254.169.254/32 } }]
+
+  - it: reaches the metadata server for Application Default Credentials when allowed
+    template: networkpolicy.yaml
+    documentSelector: { path: metadata.name, value: demo-api }
+    set:
+      services.api.allowMetadataServer: true
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            to: [{ ipBlock: { cidr: 169.254.169.254/32 } }]
+            ports: [{ port: 80 }]

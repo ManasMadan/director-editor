@@ -22,7 +22,7 @@ that fits one of them goes there. Code for one service stays in that service.
    `"compilerOptions": { "types": ["node"] }` to its `tsconfig.json`, like `packages/logger`.
    React code extends `@repo/typescript-config/react-library.json` instead.
 4. Consumers add `"@repo/<name>": "workspace:*"` to their `package.json`, then
-   `bun install`. Apps and mobile must not import server-only packages; if the new one
+   `bun install`. The web app must not import server-only packages; if the new one
    is server-only, add it to the `web-has-no-backend-code` rule in `.dependency-cruiser.cjs`.
 5. `bun run lint` (knip flags unused exports and undeclared dependencies),
    `bun run check-types`, `bun run test`.

@@ -14,12 +14,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeOpenApi } from "../apps/api/scripts/openapi";
-import { serveWeb } from "../apps/mobile/scripts/serve-web";
 import { copyStatic } from "../apps/web/scripts/copy-static";
 import { drift } from "../packages/db/scripts/drift";
 import { declareMessages } from "../packages/i18n/scripts/declare-messages";
 import { exportSchemas } from "../packages/jobs/scripts/export-schemas";
-import { captureOutput } from "./stand-ins";
 
 afterEach(() => mock.restore());
 
@@ -74,7 +72,7 @@ describe("packages/jobs' shared schemas", () => {
     const schemas = readdirSync(join(dir, "schemas"));
     expect(schemas).not.toContain("stale.json");
     expect(schemas).toEqual(
-      expect.arrayContaining(["ai_ingest_ingest_job.json", "error_response.json"]),
+      expect.arrayContaining(["ai_director_plan_job.json", "error_response.json"]),
     );
     const errorResponse = JSON.parse(read(join(dir, "schemas/error_response.json")));
     expect(errorResponse).toMatchObject({ title: "ErrorResponse" });
@@ -102,11 +100,11 @@ describe("packages/db's drift check", () => {
     return () => [...out.mock.calls, ...err.mock.calls].map(([text]) => String(text)).join("");
   };
 
-  it("passes when both diffs hold only comments and the ignored index", () => {
+  it("passes when both diffs hold only comments", () => {
     const output = written();
     const { spawn, calls } = prisma(
       { stdout: "-- empty\nLoaded Prisma config\n" },
-      { stdout: 'DROP INDEX "ai"."chunk_embedding_idx";\n' },
+      { stdout: "-- This is an empty migration.\n" },
     );
     expect(drift(spawn)).toBe(0);
     expect(calls).toEqual([
@@ -118,89 +116,13 @@ describe("packages/db's drift check", () => {
 
   it("fails on any other statement, naming which side drifted", () => {
     const output = written();
-    expect(drift(prisma({}, { stdout: 'ALTER TABLE "todo" ADD COLUMN "x" TEXT;' }).spawn)).toBe(1);
-    expect(output()).toContain('Drift (database vs schema):\n  ALTER TABLE "todo"');
+    expect(drift(prisma({}, { stdout: 'ALTER TABLE "file" ADD COLUMN "x" TEXT;' }).spawn)).toBe(1);
+    expect(output()).toContain('Drift (database vs schema):\n  ALTER TABLE "file"');
   });
 
   it("stops when prisma fails", () => {
     const output = written();
     expect(() => drift(prisma({ status: 1 }).spawn)).toThrow("prisma migrate diff failed");
     expect(output()).toContain("prisma failed");
-  });
-});
-
-describe("apps/mobile's web build server", () => {
-  const servers: { stop: (force?: boolean) => unknown }[] = [];
-  afterEach(() => {
-    for (const server of servers.splice(0)) {
-      server.stop(true);
-    }
-  });
-
-  /** A stand-in for the API or the web app: says what it was asked. */
-  const upstream = (name: string) => {
-    const server = Bun.serve({
-      port: 0,
-      async fetch(request) {
-        const { pathname, search } = new URL(request.url);
-        const body = await request.text();
-        return Response.json(
-          { name, method: request.method, path: pathname + search, body },
-          { headers: { "x-upstream": name, connection: "keep-alive" } },
-        );
-      },
-    });
-    servers.push(server);
-    return server.url.href;
-  };
-
-  /** A web build: index.html, an asset and a folder. */
-  const build = () => {
-    const dist = scratch();
-    writeFileSync(join(dist, "index.html"), "<html>app</html>");
-    writeFileSync(join(dist, "app.js"), "console.log(1)");
-    mkdirSync(join(dist, "assets"));
-    return dist;
-  };
-
-  it("needs its settings and a build", () => {
-    const printed = captureOutput();
-    expect(serveWeb({ API_URL: "x", WEB_URL: "y" }, build())).toBeNull();
-    expect(printed()).toContain("MOBILE_WEB_PORT isn't set");
-    const env = { MOBILE_WEB_PORT: "0", API_URL: "x", WEB_URL: "y" };
-    expect(serveWeb(env, scratch())).toBeNull();
-    expect(printed()).toContain("No web build");
-  });
-
-  it("serves the app, sends /rpc and /api to the API and the captcha page to the web app", async () => {
-    const printed = captureOutput();
-    const env = { MOBILE_WEB_PORT: "0", API_URL: upstream("api"), WEB_URL: upstream("web") };
-    const server = serveWeb(env, build());
-    if (!server) {
-      throw new Error("the server didn't start");
-    }
-    servers.push(server);
-    expect(printed()).toContain(`Mobile web build on http://localhost:${server.port}`);
-    const get = (path: string, init?: RequestInit) => fetch(new URL(path, server.url), init);
-
-    expect(await (await get("/healthz")).text()).toBe("ok");
-    const rpc = await get("/rpc/todos?limit=2");
-    expect(await rpc.json()).toEqual({
-      name: "api",
-      method: "GET",
-      path: "/rpc/todos?limit=2",
-      body: "",
-    });
-    expect(rpc.headers.get("x-upstream")).toBe("api");
-    const posted = await get("/api/v1/todos", { method: "POST", body: '{"title":"a"}' });
-    expect(await posted.json()).toMatchObject({ method: "POST", body: '{"title":"a"}' });
-    expect(await (await get("/captcha")).json()).toMatchObject({ name: "web", path: "/captcha" });
-
-    expect(await (await get("/app.js")).text()).toBe("console.log(1)");
-    for (const path of ["/assets", "/settings/profile"]) {
-      const page = await get(path);
-      expect(page.headers.get("content-type")).toBe("text/html");
-      expect(await page.text()).toBe("<html>app</html>");
-    }
   });
 });

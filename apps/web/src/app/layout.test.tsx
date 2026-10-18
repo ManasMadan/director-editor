@@ -24,13 +24,17 @@ const render = async () =>
 
 describe("the root layout", () => {
   it("renders the page in the request's language, inside the app shell", async () => {
-    request.cookies.set("locale", "es");
+    request.cookies.set("locale", "en");
     request.headers.set("x-nonce", "abc123");
     const html = await render();
-    expect(html).toMatch(/<html lang="es" dir="ltr"/);
+    expect(html).toMatch(/<html lang="en" dir="ltr"/);
     expect(html).toContain("--font-geist-sans");
     expect(html).toContain("<main");
     expect(html).toContain("page content");
+    // The site's footer is the page's own landmark, after the main content, not inside it.
+    expect(html).toMatch(/<\/main><footer[^>]*>.*<nav aria-label="Legal"/s);
+    expect(html).toContain('href="/terms"');
+    expect(html).toContain('href="/privacy"');
     // next-themes' inline script runs under the proxy's CSP nonce.
     expect(html).toContain('nonce="abc123"');
   });
@@ -43,7 +47,7 @@ describe("the root layout", () => {
 
   it("titles pages after the site", async () => {
     expect(await generateMetadata()).toEqual({
-      title: { default: "Director-editor", template: "%s · Director-editor" },
+      title: { default: "Director", template: "%s · Director" },
       description: expect.any(String),
     });
   });

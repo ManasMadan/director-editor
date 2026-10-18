@@ -109,13 +109,8 @@ const SMOKE_CHECKS: [string, string, (r: Response) => boolean][] = [
   ["web page", "/sign-in", (r) => r.status === 200],
   ["api", "/api/v1/system", (r) => r.status === 200],
   ["api auth", "/api/auth/ok", (r) => r.status === 200],
-  ["OAuth metadata", "/.well-known/oauth-authorization-server/api/auth", (r) => r.status === 200],
-  [
-    "AI MCP server",
-    "/ai/mcp",
-    (r) => r.status === 401 && String(r.headers["www-authenticate"]).includes("resource_metadata"),
-  ],
-  ["webhooks", "/webhooks/stripe", (r) => r.status === 404 || r.status === 405 || r.status === 400],
+  // Unsigned, the mail server's route refuses the request; any answer from the service will do.
+  ["webhooks", "/webhooks/stalwart", (r) => [400, 401, 404, 405].includes(r.status)],
 ];
 
 const secret = (bytes = 32) => randomBytes(bytes).toString("base64url");
@@ -130,24 +125,20 @@ const secretManifest = (name: string, stringData: Record<string, string>, type =
 });
 
 /**
- * The services' Secrets' values, generated together: shared values (encryption keys, the
- * service secret) must match.
+ * The services' Secrets' values, generated together: shared values (the AI service
+ * secret) must match.
  */
 function serviceSecrets(): Record<string, Record<string, string>> {
-  const encryptionKeys = `k1:${randomBytes(32).toString("base64")}`;
-  const unsubscribe = secret();
   const aiService = secret();
   // Mailpit takes any login; production settings still want one.
   const smtpUrl = `smtps://no-reply%40${MAIL_DOMAIN}:${secret(16)}@mailpit:1025`;
   return {
     api: {
       BETTER_AUTH_SECRET: secret(),
-      ENCRYPTION_KEYS: encryptionKeys,
-      UNSUBSCRIBE_SECRET: unsubscribe,
       AI_SERVICE_SECRET: aiService,
     },
-    notifications: { UNSUBSCRIBE_SECRET: unsubscribe, SMTP_URL: smtpUrl },
-    webhooks: { ENCRYPTION_KEYS: encryptionKeys },
+    notifications: { SMTP_URL: smtpUrl },
+    webhooks: { STALWART_WEBHOOK_SECRET: secret() },
     ai: { AI_SERVICE_SECRET: aiService },
   };
 }

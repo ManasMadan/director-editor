@@ -1,44 +1,31 @@
 /**
- * The AI features, on top of the Python service through its generated client
- * (packages/ai-client). This API has authenticated the user and checked their
- * membership; each call to the service carries a token naming them and the workspace.
+ * Calls to the Python AI service through its generated client (packages/ai-client). This
+ * API has authenticated the user and checked their membership; each call to the service
+ * carries a token naming them and the workspace.
  *
  * Service errors are mapped to this API's error codes; anything unexpected becomes
  * UPSTREAM_UNAVAILABLE, never the service's own message.
  */
 
-import { Injectable } from "@nestjs/common";
 import { type AiCaller, AiServiceError, createAiClient } from "@repo/ai-client";
-import type { AiDocument, AssistantEvent } from "@repo/contracts/api";
 import type { ErrorCode } from "@repo/contracts/errors";
-import {
-  type DocumentId,
-  documentIdSchema,
-  type OrgId,
-  type UserId,
-  userIdSchema,
-} from "@repo/contracts/ids";
-import { canManageWorkspace, type OrgRole } from "@repo/contracts/roles";
-import {
-  AppError,
-  currentContext,
-  describeError,
-  InjectPinoLogger,
-  PinoLogger,
-} from "@repo/nest-common";
+import type { OrgId, UserId } from "@repo/contracts/ids";
+import { AppError, currentContext } from "@repo/nest-common";
 import { env } from "../../env";
 
 // Error codes the service may answer with that clients understand.
 const PASSED_ON = new Set<ErrorCode>([
-  "DOCUMENT_NOT_FOUND",
   "AI_BUDGET_EXCEEDED",
   "FEATURE_DISABLED",
   "VALIDATION_FAILED",
+  "DIRECTOR_INDEX_LIMIT",
   "UPSTREAM_UNAVAILABLE",
   "DIRECTOR_PLAN_NOT_FOUND",
   "DIRECTOR_PLAN_NOT_READY",
   "DIRECTOR_SHOT_NOT_FOUND",
+  "DIRECTOR_TAKE_NOT_FOUND",
   "DIRECTOR_TAKE_KIND_MISMATCH",
+  "DIRECTOR_CUT_NOT_FOUND",
 ]);
 
 /** The AI service's client, when it is configured (the `ai` feature). */
@@ -68,95 +55,6 @@ export async function callAi<T>(work: (ai: AiClient) => Promise<T>): Promise<T> 
 }
 
 type AiClient = ReturnType<typeof createAiClient>;
-
-@Injectable()
-export class AiService {
-  constructor(@InjectPinoLogger(AiService.name) private readonly log: PinoLogger) {}
-
-  async sentiment(userId: UserId, orgId: OrgId, text: string) {
-    return callAi((ai) => ai.sentiment(aiCaller(userId, orgId), text));
-  }
-
-  async documents(userId: UserId, orgId: OrgId): Promise<AiDocument[]> {
-    const rows = await callAi((ai) => ai.listDocuments(aiCaller(userId, orgId)));
-    return rows.map(toDocument);
-  }
-
-  async addDocument(userId: UserId, orgId: OrgId, input: { title: string; content: string }) {
-    const row = await callAi((ai) => ai.createDocument(aiCaller(userId, orgId), input));
-    return toDocument(row);
-  }
-
-  /** A member may remove their own documents; owners and admins any. */
-  async removeDocument(userId: UserId, orgId: OrgId, role: OrgRole, documentId: DocumentId) {
-    if (!canManageWorkspace(role)) {
-      const document = (await this.documents(userId, orgId)).find((d) => d.id === documentId);
-      if (!document) {
-        throw new AppError("DOCUMENT_NOT_FOUND");
-      }
-      if (document.createdBy !== userId) {
-        throw new AppError("FORBIDDEN");
-      }
-    }
-    await callAi((ai) => ai.deleteDocument(aiCaller(userId, orgId), documentId));
-  }
-
-  /**
-   * Starts an answer: the budget and an unavailable service are refused here, as
-   * typed errors, before the stream begins. A failure midway (the connection drops)
-   * ends the stream with an `error` event, which the contract has for exactly that.
-   */
-  async ask(
-    userId: UserId,
-    orgId: OrgId,
-    question: string,
-    signal?: AbortSignal,
-  ): Promise<AsyncGenerator<AssistantEvent, void, unknown>> {
-    const stream = await callAi((ai) => ai.answer(aiCaller(userId, orgId), question, signal));
-    const log = this.log;
-    return (async function* () {
-      try {
-        yield* stream;
-      } catch (error) {
-        if (signal?.aborted) {
-          return; // the client went away
-        }
-        // The client hears the service failed either way; the log says which it was.
-        log[streamFailureLevel(error)]({ err: describeError(error) }, "assistant stream failed");
-        yield { type: "error", code: "UPSTREAM_UNAVAILABLE" } as const;
-      }
-    })();
-  }
-}
-
-function toDocument(row: {
-  id: string;
-  title: string;
-  status: AiDocument["status"];
-  error: string | null;
-  chunkCount: number;
-  summary: string | null;
-  createdBy: string | null;
-  createdAt: string;
-}): AiDocument {
-  return {
-    ...row,
-    id: documentIdSchema.parse(row.id),
-    createdBy: userIdSchema.nullable().parse(row.createdBy),
-    createdAt: new Date(row.createdAt),
-  };
-}
-
-/**
- * How loudly to log an answer that broke off: the service or the connection failing is a
- * warning (it happens); anything else, like the stream breaking its contract, is a bug.
- */
-export function streamFailureLevel(error: unknown): "warn" | "error" {
-  const dropped =
-    error instanceof AiServiceError ||
-    (error instanceof TypeError && error.message === "terminated");
-  return dropped ? "warn" : "error";
-}
 
 function toAppError(error: unknown): AppError {
   if (error instanceof AppError) {

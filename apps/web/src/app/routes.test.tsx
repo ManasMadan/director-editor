@@ -3,11 +3,9 @@
  * checks every one against what it should serve.
  */
 import en from "@repo/i18n/messages/en.json" with { type: "json" };
-import { isValidElement, type ReactElement, Suspense } from "react";
+import { type ReactElement, Suspense } from "react";
 import { describe, expect, it } from "vitest";
-import { AssistantPage } from "@/modules/assistant";
 import {
-  CaptchaPage,
   ForgotPasswordPage,
   ResetPasswordPage,
   SignInPage,
@@ -15,50 +13,18 @@ import {
   TwoFactorPage,
   VerifyEmailPage,
 } from "@/modules/auth";
-import { BillingPage } from "@/modules/billing";
-import { DashboardPage } from "@/modules/dashboard";
-import { DirectorPage, ReviewPage, ShootPage } from "@/modules/director";
-import { InvitationPage } from "@/modules/invitations";
-import {
-  NotificationSettingsPage,
-  NotificationsPage,
-  UnsubscribePage,
-} from "@/modules/notifications";
-import { OAuthConsentPage } from "@/modules/oauth";
+import { DirectorPage, EditPage, LibraryPage, MediaPage, ShootPage } from "@/modules/director";
 import { ProfileSettingsPage, SecuritySettingsPage, SettingsLayout } from "@/modules/settings";
-import { HomePage, SavedPage, ShortsPlayerPage } from "@/modules/shorts";
-import {
-  WebhookEndpointPage,
-  WorkspaceApiKeysPage,
-  WorkspaceAuditPage,
-  WorkspaceGeneralPage,
-  WorkspaceMembersPage,
-  WorkspaceWebhooksPage,
-} from "@/modules/workspace";
 import { renderHtml } from "../../test/next-server";
-import * as assistant from "./(app)/assistant/page";
-import * as dashboard from "./(app)/dashboard/page";
+import * as edit from "./(app)/director/[videoId]/edit/page";
 import * as director from "./(app)/director/[videoId]/page";
-import * as review from "./(app)/director/[videoId]/review/page";
 import * as shoot from "./(app)/director/[videoId]/shoot/page";
-import * as home from "./(app)/home/page";
-import * as invitation from "./(app)/invitations/[id]/page";
-import * as notifications from "./(app)/notifications/page";
-import * as consent from "./(app)/oauth/consent/page";
-import * as saved from "./(app)/saved/page";
-import * as apiKeys from "./(app)/settings/api-keys/page";
-import * as audit from "./(app)/settings/audit/page";
-import * as billing from "./(app)/settings/billing/page";
+import * as library from "./(app)/library/page";
+import * as media from "./(app)/media/page";
 import SettingsRouteLayout from "./(app)/settings/layout";
-import * as members from "./(app)/settings/members/page";
-import * as notificationSettings from "./(app)/settings/notifications/page";
 import * as profile from "./(app)/settings/page";
 import * as security from "./(app)/settings/security/page";
-import * as webhookEndpoint from "./(app)/settings/webhooks/[id]/page";
-import * as webhooks from "./(app)/settings/webhooks/page";
-import * as general from "./(app)/settings/workspace/page";
 import * as short from "./(app)/shorts/[videoId]/page";
-import * as shorts from "./(app)/shorts/page";
 import * as forgotPassword from "./(auth)/forgot-password/page";
 import AuthLayout from "./(auth)/layout";
 import * as resetPassword from "./(auth)/reset-password/page";
@@ -66,10 +32,8 @@ import * as signIn from "./(auth)/sign-in/page";
 import * as signUp from "./(auth)/sign-up/page";
 import * as twoFactor from "./(auth)/two-factor/page";
 import * as verifyEmail from "./(auth)/verify-email/page";
-import * as captcha from "./captcha/page";
 import * as privacy from "./privacy/page";
 import * as terms from "./terms/page";
-import * as unsubscribe from "./unsubscribe/page";
 
 interface Route {
   generateMetadata: () => Promise<{ title?: unknown }>;
@@ -77,25 +41,10 @@ interface Route {
 }
 
 const pages: [string, Route, string, unknown][] = [
-  ["/assistant", assistant, en.assistant.title, AssistantPage],
-  ["/dashboard", dashboard, en.common.dashboard, DashboardPage],
-  ["/home", home, en.shorts.homeTitle, HomePage],
-  ["/notifications", notifications, en.notificationCenter.title, NotificationsPage],
-  ["/saved", saved, en.shorts.savedTitle, SavedPage],
-  ["/settings/api-keys", apiKeys, en.workspace.apiKeys.title, WorkspaceApiKeysPage],
-  ["/settings/audit", audit, en.workspace.audit.title, WorkspaceAuditPage],
-  ["/settings/billing", billing, en.billing.title, BillingPage],
-  ["/settings/members", members, en.workspace.members.title, WorkspaceMembersPage],
-  [
-    "/settings/notifications",
-    notificationSettings,
-    en.notificationSettings.title,
-    NotificationSettingsPage,
-  ],
+  ["/library", library, en.common.library, LibraryPage],
+  ["/media", media, en.director.media.title, MediaPage],
   ["/settings", profile, en.settings.profile.title, ProfileSettingsPage],
   ["/settings/security", security, en.settings.security.title, SecuritySettingsPage],
-  ["/settings/webhooks", webhooks, en.workspace.webhooks.title, WorkspaceWebhooksPage],
-  ["/settings/workspace", general, en.workspace.general.title, WorkspaceGeneralPage],
   ["/forgot-password", forgotPassword, en.auth.forgotTitle, ForgotPasswordPage],
   ["/reset-password", resetPassword, en.auth.resetTitle, ResetPasswordPage],
   ["/sign-in", signIn, en.auth.signInTitle, SignInPage],
@@ -119,25 +68,13 @@ describe("route files", () => {
     expect(await route.generateMetadata()).toEqual({ title });
   });
 
-  it("serves invitations and webhook endpoints by their id", async () => {
-    const params = Promise.resolve({ id: "abc" });
-    expect(await rendered(invitation.default, { params })).toEqual(<InvitationPage id="abc" />);
-    expect(await rendered(webhookEndpoint.default, { params })).toEqual(
-      <WebhookEndpointPage id="abc" />,
-    );
-    expect(await invitation.generateMetadata()).toEqual({ title: en.invitations.title });
-    expect(await webhookEndpoint.generateMetadata()).toEqual({
-      title: en.workspace.webhooks.title,
-    });
-  });
-
-  it("plays the Shorts feed, from the short in the address when there is one", async () => {
-    expect(await rendered(shorts.default)).toEqual(<ShortsPlayerPage />);
-    expect(
-      await rendered(short.default, { params: Promise.resolve({ videoId: "kJQP7kiw5Fk" }) }),
-    ).toEqual(<ShortsPlayerPage videoId="kJQP7kiw5Fk" />);
-    expect(await shorts.generateMetadata()).toEqual({ title: en.shorts.title });
-    expect(await short.generateMetadata()).toEqual({ title: en.shorts.title });
+  it("sends an old link to a short on to its page in Director, for good", async () => {
+    await expect(
+      short.default({
+        params: Promise.resolve({ videoId: "kJQP7kiw5Fk" }),
+        searchParams: Promise.resolve({}),
+      }),
+    ).rejects.toMatchObject({ digest: "NEXT_REDIRECT;replace;/director/kJQP7kiw5Fk;308;" });
   });
 
   it("serves Director's pages for a short, with the shot and audio from the query", async () => {
@@ -150,42 +87,39 @@ describe("route files", () => {
         params,
         searchParams: Promise.resolve({ shot: ["2", "5"], audio: "voice" }),
       }),
-    ).toEqual(<ShootPage videoId="dQw4w9WgXcQ" shot="2" audio="voice" />);
+    ).toEqual(<ShootPage videoId="dQw4w9WgXcQ" shot="2" audio="voice" back={undefined} />);
+    // A retake from the editor goes back there once it's kept.
+    expect(
+      await rendered(shoot.default, {
+        params,
+        searchParams: Promise.resolve({ shot: "1", audio: "voice", back: "edit" }),
+      }),
+    ).toEqual(<ShootPage videoId="dQw4w9WgXcQ" shot="1" audio="voice" back="edit" />);
     expect(await rendered(shoot.default, { params, searchParams: Promise.resolve({}) })).toEqual(
-      <ShootPage videoId="dQw4w9WgXcQ" shot={undefined} audio={undefined} />,
+      <ShootPage videoId="dQw4w9WgXcQ" shot={undefined} audio={undefined} back={undefined} />,
     );
     expect(
-      await rendered(review.default, {
+      await rendered(edit.default, {
         params,
         searchParams: Promise.resolve({ audio: ["original", "voice"] }),
       }),
-    ).toEqual(<ReviewPage videoId="dQw4w9WgXcQ" audio="original" wrap={false} />);
+    ).toEqual(<EditPage videoId="dQw4w9WgXcQ" audio="original" wrap={false} />);
     expect(
-      await rendered(review.default, { params, searchParams: Promise.resolve({ audio: "voice" }) }),
-    ).toEqual(<ReviewPage videoId="dQw4w9WgXcQ" audio="voice" wrap={false} />);
+      await rendered(edit.default, { params, searchParams: Promise.resolve({ audio: "voice" }) }),
+    ).toEqual(<EditPage videoId="dQw4w9WgXcQ" audio="voice" wrap={false} />);
     // Arriving from the last shot: the wrap.
     expect(
-      await rendered(review.default, {
+      await rendered(edit.default, {
         params,
         searchParams: Promise.resolve({ audio: "voice", wrap: "1" }),
       }),
-    ).toEqual(<ReviewPage videoId="dQw4w9WgXcQ" audio="voice" wrap />);
+    ).toEqual(<EditPage videoId="dQw4w9WgXcQ" audio="voice" wrap />);
     expect(await director.generateMetadata()).toEqual({ title: en.director.title });
     expect(await shoot.generateMetadata()).toEqual({ title: en.director.title });
-    expect(await review.generateMetadata()).toEqual({ title: en.director.review.title });
+    expect(await edit.generateMetadata()).toEqual({ title: en.director.editor.title });
   });
 
-  it("renders pages that read the query string inside a Suspense boundary", async () => {
-    for (const [route, page, title] of [
-      [consent, OAuthConsentPage, en.oauth.title],
-      [unsubscribe, UnsubscribePage, en.unsubscribe.title],
-      [captcha, CaptchaPage, en.captcha.title],
-    ] as const) {
-      const element = await rendered(route.default);
-      expect(element.type).toBe(Suspense);
-      expect(isValidElement(element.props.children) && element.props.children.type).toBe(page);
-      expect(await route.generateMetadata()).toEqual({ title });
-    }
+  it("renders the sign-in steps, which read the query string, inside a Suspense boundary", () => {
     const children = <p>step</p>;
     expect(AuthLayout({ children })).toEqual(<Suspense>{children}</Suspense>);
   });

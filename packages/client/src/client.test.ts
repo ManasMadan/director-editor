@@ -7,7 +7,6 @@ const info = {
   release: "1.0.0",
   features: {
     ai: false,
-    billing: false,
     captcha: false,
     director: false,
     files: false,
@@ -15,7 +14,7 @@ const info = {
   },
   minimumClientVersion: "1.0.0",
   captchaSiteKey: null,
-  webPushPublicKey: null,
+  demo: null,
 };
 
 /** A stand-in that also records each request as sent. */

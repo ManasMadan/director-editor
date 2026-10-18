@@ -1,58 +1,6 @@
 {
   "components": {
     "schemas": {
-      "AssistantEvent": {
-        "description": "One server-sent event of an answer.",
-        "properties": {
-          "event": {
-            "discriminator": {
-              "mapping": {
-                "done": "#/components/schemas/DoneEvent",
-                "error": "#/components/schemas/ErrorEvent",
-                "sources": "#/components/schemas/SourcesEvent",
-                "text": "#/components/schemas/TextEvent"
-              },
-              "propertyName": "type"
-            },
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/TextEvent"
-              },
-              {
-                "$ref": "#/components/schemas/SourcesEvent"
-              },
-              {
-                "$ref": "#/components/schemas/DoneEvent"
-              },
-              {
-                "$ref": "#/components/schemas/ErrorEvent"
-              }
-            ],
-            "title": "Event"
-          }
-        },
-        "required": [
-          "event"
-        ],
-        "title": "AssistantEvent",
-        "type": "object"
-      },
-      "AssistantRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "question": {
-            "maxLength": 2000,
-            "minLength": 1,
-            "title": "Question",
-            "type": "string"
-          }
-        },
-        "required": [
-          "question"
-        ],
-        "title": "AssistantRequest",
-        "type": "object"
-      },
       "Box": {
         "properties": {
           "height": {
@@ -106,6 +54,29 @@
         ],
         "type": "string"
       },
+      "CutPick": {
+        "additionalProperties": false,
+        "description": "The take picked for one shot of a cut.",
+        "properties": {
+          "shotIndex": {
+            "exclusiveMaximum": 12.0,
+            "minimum": 0.0,
+            "title": "Shotindex",
+            "type": "integer"
+          },
+          "takeId": {
+            "format": "uuid",
+            "title": "Takeid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shotIndex",
+          "takeId"
+        ],
+        "title": "CutPick",
+        "type": "object"
+      },
       "Direction": {
         "enum": [
           "none",
@@ -117,6 +88,169 @@
           "turn-right"
         ],
         "type": "string"
+      },
+      "DirectorCutCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "fileId": {
+            "format": "uuid",
+            "title": "Fileid",
+            "type": "string"
+          },
+          "picks": {
+            "items": {
+              "$ref": "#/components/schemas/CutPick"
+            },
+            "maxItems": 12,
+            "minItems": 1,
+            "title": "Picks",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "videoId": {
+            "pattern": "^[A-Za-z0-9_-]{11}$",
+            "title": "Videoid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "videoId",
+          "title",
+          "fileId",
+          "picks"
+        ],
+        "title": "DirectorCutCreate",
+        "type": "object"
+      },
+      "DirectorCutOut": {
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "durationMs": {
+            "minimum": 0.0,
+            "title": "Durationms",
+            "type": "integer"
+          },
+          "fileId": {
+            "format": "uuid",
+            "title": "Fileid",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "picks": {
+            "items": {
+              "$ref": "#/components/schemas/CutPick"
+            },
+            "title": "Picks",
+            "type": "array"
+          },
+          "planId": {
+            "format": "uuid",
+            "title": "Planid",
+            "type": "string"
+          },
+          "publishStatus": {
+            "enum": [
+              "none",
+              "uploading",
+              "published",
+              "failed"
+            ],
+            "title": "Publishstatus",
+            "type": "string"
+          },
+          "templateTitle": {
+            "description": "The plan's title.",
+            "title": "Templatetitle",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "videoId": {
+            "title": "Videoid",
+            "type": "string"
+          },
+          "visibility": {
+            "anyOf": [
+              {
+                "enum": [
+                  "private",
+                  "unlisted",
+                  "public"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visibility"
+          },
+          "youtubeVideoId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Youtubevideoid"
+          }
+        },
+        "required": [
+          "id",
+          "planId",
+          "videoId",
+          "templateTitle",
+          "title",
+          "picks",
+          "fileId",
+          "durationMs",
+          "publishStatus",
+          "youtubeVideoId",
+          "visibility",
+          "createdAt"
+        ],
+        "title": "DirectorCutOut",
+        "type": "object"
+      },
+      "DirectorLibraryOut": {
+        "properties": {
+          "indexUsed": {
+            "description": "The caller has indexed their one short of their own.",
+            "title": "Indexused",
+            "type": "boolean"
+          },
+          "templates": {
+            "description": "The workspace's plans, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/DirectorPlanOut"
+            },
+            "title": "Templates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "templates",
+          "indexUsed"
+        ],
+        "title": "DirectorLibraryOut",
+        "type": "object"
       },
       "DirectorPlanCreate": {
         "additionalProperties": false,
@@ -135,6 +269,27 @@
       },
       "DirectorPlanOut": {
         "properties": {
+          "audioKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The original audio's object key in storage, once captured; apps/api turns it into a short-lived link.",
+            "title": "Audiokey"
+          },
+          "audioStatus": {
+            "enum": [
+              "ready",
+              "failed",
+              "none"
+            ],
+            "title": "Audiostatus",
+            "type": "string"
+          },
           "createdAt": {
             "format": "date-time",
             "title": "Createdat",
@@ -177,6 +332,25 @@
               }
             ]
           },
+          "source": {
+            "enum": [
+              "seed",
+              "user"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "stage": {
+            "enum": [
+              "queued",
+              "watching",
+              "writing",
+              "ready",
+              "failed"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
           "status": {
             "enum": [
               "pending",
@@ -200,10 +374,14 @@
         "required": [
           "id",
           "videoId",
+          "source",
           "status",
+          "stage",
           "error",
           "plan",
           "model",
+          "audioStatus",
+          "audioKey",
           "createdAt",
           "updatedAt"
         ],
@@ -376,126 +554,6 @@
         "title": "DirectorTakeOut",
         "type": "object"
       },
-      "DocumentCreate": {
-        "additionalProperties": false,
-        "properties": {
-          "content": {
-            "description": "Plain text.",
-            "maxLength": 200000,
-            "minLength": 1,
-            "title": "Content",
-            "type": "string"
-          },
-          "title": {
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Title",
-            "type": "string"
-          }
-        },
-        "required": [
-          "title",
-          "content"
-        ],
-        "title": "DocumentCreate",
-        "type": "object"
-      },
-      "DocumentOut": {
-        "properties": {
-          "chunkCount": {
-            "title": "Chunkcount",
-            "type": "integer"
-          },
-          "createdAt": {
-            "format": "date-time",
-            "title": "Createdat",
-            "type": "string"
-          },
-          "createdBy": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Createdby"
-          },
-          "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "status": {
-            "enum": [
-              "pending",
-              "indexing",
-              "ready",
-              "failed"
-            ],
-            "title": "Status",
-            "type": "string"
-          },
-          "summary": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Summary"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "title",
-          "status",
-          "error",
-          "chunkCount",
-          "summary",
-          "createdBy",
-          "createdAt"
-        ],
-        "title": "DocumentOut",
-        "type": "object"
-      },
-      "DoneEvent": {
-        "properties": {
-          "type": {
-            "const": "done",
-            "default": "done",
-            "title": "Type",
-            "type": "string"
-          },
-          "usage": {
-            "$ref": "#/components/schemas/Usage"
-          }
-        },
-        "required": [
-          "usage"
-        ],
-        "title": "DoneEvent",
-        "type": "object"
-      },
       "ErrorCode": {
         "enum": [
           "BAD_REQUEST",
@@ -514,17 +572,12 @@
           "IDEMPOTENCY_IN_PROGRESS",
           "FEATURE_DISABLED",
           "CLIENT_OUTDATED",
-          "FRESH_SESSION_REQUIRED",
           "DESTINATION_NOT_ALLOWED",
           "RESPONSE_TOO_LARGE",
           "TOO_MANY_REDIRECTS",
           "UPSTREAM_UNAVAILABLE",
           "NO_ACTIVE_ORGANIZATION",
-          "PHONE_CODE_INVALID",
-          "PHONE_NUMBER_TAKEN",
-          "ENTITLEMENT_REQUIRED",
-          "ALREADY_SUBSCRIBED",
-          "NO_SUBSCRIPTION",
+          "DEMO_ACCOUNT_LOCKED",
           "FILE_NOT_FOUND",
           "FILE_TYPE_NOT_ALLOWED",
           "FILE_TOO_LARGE",
@@ -533,31 +586,26 @@
           "FILE_UNREADABLE",
           "FILE_NOT_UPLOADED",
           "FILE_NOT_READY",
-          "UNSUBSCRIBE_LINK_INVALID",
           "INVALID_SIGNATURE",
-          "WEBHOOK_ENDPOINT_NOT_FOUND",
-          "WEBHOOK_DELIVERY_NOT_FOUND",
-          "WEBHOOK_URL_NOT_ALLOWED",
-          "WEBHOOK_ENDPOINT_LIMIT",
-          "APP_NOT_FOUND",
-          "API_KEY_NOT_FOUND",
-          "API_KEY_LIMIT_REACHED",
-          "API_KEY_SCOPE_MISSING",
-          "DOCUMENT_NOT_FOUND",
-          "DOCUMENT_INDEXING_FAILED",
           "AI_BUDGET_EXCEEDED",
-          "AI_RUN_LIMIT",
-          "SHORT_NOT_FOUND",
-          "SHORT_TOO_LONG",
+          "DIRECTOR_INDEX_LIMIT",
+          "DIRECTOR_VIDEO_UNAVAILABLE",
+          "DIRECTOR_TOO_LONG",
           "DIRECTOR_PLAN_NOT_FOUND",
           "DIRECTOR_PLAN_NOT_READY",
           "DIRECTOR_SHOT_NOT_FOUND",
+          "DIRECTOR_TAKE_NOT_FOUND",
           "DIRECTOR_TAKE_KIND_MISMATCH",
+          "DIRECTOR_CALL_TOO_FAST",
+          "DIRECTOR_CUT_NOT_FOUND",
+          "PUBLISH_DEMO_DISABLED",
+          "PUBLISH_NEEDS_YOUTUBE",
+          "PUBLISH_CUT_NOT_READY",
+          "PUBLISH_NO_CHANNEL",
+          "PUBLISH_QUOTA_EXHAUSTED",
           "DIRECTOR_VIDEO_UNREADABLE",
           "DIRECTOR_ANALYSIS_FAILED",
-          "DIRECTOR_REVIEW_FAILED",
-          "TODO_NOT_FOUND",
-          "TODO_VERSION_CONFLICT"
+          "DIRECTOR_REVIEW_FAILED"
         ],
         "title": "ErrorCode",
         "type": "string"
@@ -609,29 +657,6 @@
           "params"
         ],
         "title": "ErrorData",
-        "type": "object"
-      },
-      "ErrorEvent": {
-        "properties": {
-          "code": {
-            "enum": [
-              "AI_RUN_LIMIT",
-              "UPSTREAM_UNAVAILABLE"
-            ],
-            "title": "Code",
-            "type": "string"
-          },
-          "type": {
-            "const": "error",
-            "default": "error",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "code"
-        ],
-        "title": "ErrorEvent",
         "type": "object"
       },
       "ErrorIssue": {
@@ -830,6 +855,96 @@
         "title": "PhoneAngle",
         "type": "object"
       },
+      "PublishCopy": {
+        "properties": {
+          "credits": {
+            "maxLength": 300,
+            "title": "Credits",
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 3000,
+            "title": "Description",
+            "type": "string"
+          },
+          "hashtags": {
+            "description": "Single words, without the #.",
+            "items": {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 15,
+            "title": "Hashtags",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 91,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "description",
+          "hashtags",
+          "credits"
+        ],
+        "title": "PublishCopy",
+        "type": "object"
+      },
+      "PublishCopyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "cutId": {
+            "format": "uuid",
+            "title": "Cutid",
+            "type": "string"
+          },
+          "original": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublishOriginal"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The original Short, when YouTube still shows it."
+          }
+        },
+        "required": [
+          "cutId",
+          "original"
+        ],
+        "title": "PublishCopyRequest",
+        "type": "object"
+      },
+      "PublishOriginal": {
+        "additionalProperties": false,
+        "description": "The original Short as YouTube shows it, for the credits.",
+        "properties": {
+          "channel": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Channel",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "channel"
+        ],
+        "title": "PublishOriginal",
+        "type": "object"
+      },
       "SceneCheck": {
         "properties": {
           "direction": {
@@ -973,55 +1088,6 @@
         "title": "ScriptLine",
         "type": "object"
       },
-      "SentimentRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "text": {
-            "description": "Text to classify.",
-            "maxLength": 5000,
-            "minLength": 1,
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": [
-          "text"
-        ],
-        "title": "SentimentRequest",
-        "type": "object"
-      },
-      "SentimentResponse": {
-        "properties": {
-          "label": {
-            "enum": [
-              "positive",
-              "negative",
-              "neutral"
-            ],
-            "title": "Label",
-            "type": "string"
-          },
-          "model": {
-            "description": "Identifier of the model that produced the prediction.",
-            "title": "Model",
-            "type": "string"
-          },
-          "score": {
-            "description": "Confidence of the predicted label.",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Score",
-            "type": "number"
-          }
-        },
-        "required": [
-          "label",
-          "score",
-          "model"
-        ],
-        "title": "SentimentResponse",
-        "type": "object"
-      },
       "Shot": {
         "properties": {
           "camera": {
@@ -1057,7 +1123,7 @@
             "$ref": "#/components/schemas/TargetPose"
           },
           "purpose": {
-            "description": "What it shows, and why.",
+            "description": "The scene's role in the story (hook, setup, reveal or payoff) and the feeling it's going for.",
             "maxLength": 240,
             "minLength": 1,
             "title": "Purpose",
@@ -1225,46 +1291,36 @@
         "title": "ShotStep",
         "type": "object"
       },
-      "Source": {
+      "SpeechRequest": {
+        "additionalProperties": false,
         "properties": {
-          "documentId": {
-            "format": "uuid",
-            "title": "Documentid",
+          "text": {
+            "description": "The line to say.",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Text",
             "type": "string"
           },
-          "title": {
-            "title": "Title",
-            "type": "string"
+          "voice": {
+            "$ref": "#/components/schemas/SpeechVoice"
           }
         },
         "required": [
-          "documentId",
-          "title"
+          "text",
+          "voice"
         ],
-        "title": "Source",
+        "title": "SpeechRequest",
         "type": "object"
       },
-      "SourcesEvent": {
-        "properties": {
-          "sources": {
-            "items": {
-              "$ref": "#/components/schemas/Source"
-            },
-            "title": "Sources",
-            "type": "array"
-          },
-          "type": {
-            "const": "sources",
-            "default": "sources",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "sources"
+      "SpeechVoice": {
+        "enum": [
+          "Puck",
+          "Kore",
+          "Aoede",
+          "Charon",
+          "Sulafat"
         ],
-        "title": "SourcesEvent",
-        "type": "object"
+        "type": "string"
       },
       "TargetPose": {
         "properties": {
@@ -1289,43 +1345,6 @@
           "keypoints"
         ],
         "title": "TargetPose",
-        "type": "object"
-      },
-      "TextEvent": {
-        "properties": {
-          "text": {
-            "title": "Text",
-            "type": "string"
-          },
-          "type": {
-            "const": "text",
-            "default": "text",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "text"
-        ],
-        "title": "TextEvent",
-        "type": "object"
-      },
-      "Usage": {
-        "properties": {
-          "inputTokens": {
-            "title": "Inputtokens",
-            "type": "integer"
-          },
-          "outputTokens": {
-            "title": "Outputtokens",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "inputTokens",
-          "outputTokens"
-        ],
-        "title": "Usage",
         "type": "object"
       }
     }
@@ -1422,9 +1441,75 @@
         "summary": "Ready"
       }
     },
-    "/v1/assistant/answers": {
+    "/v1/director/cuts": {
+      "get": {
+        "description": "Every cut of the caller's, newest first.",
+        "operationId": "listDirectorMedia",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DirectorCutOut"
+                  },
+                  "title": "Response Listdirectormedia",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "List Director Media"
+      },
       "post": {
-        "operationId": "answer",
+        "description": "Records a cut of the caller's, from their takes picked one per shot.",
+        "operationId": "createDirectorCut",
         "parameters": [
           {
             "in": "header",
@@ -1463,23 +1548,22 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AssistantRequest"
+                "$ref": "#/components/schemas/DirectorCutCreate"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantEvent"
+                  "$ref": "#/components/schemas/DirectorCutOut"
                 }
-              },
-              "text/event-stream": {}
+              }
             },
-            "description": "Server-sent events, each `data:` line one AssistantEvent."
+            "description": "Successful Response"
           },
           "default": {
             "content": {
@@ -1492,13 +1576,149 @@
             "description": "An error."
           }
         },
-        "summary": "Answer"
+        "summary": "Create Director Cut"
+      }
+    },
+    "/v1/director/cuts/{cut_id}": {
+      "get": {
+        "description": "One of the caller's cuts (DIRECTOR_CUT_NOT_FOUND unless it's theirs).",
+        "operationId": "getDirectorCut",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cut_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Cut Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectorCutOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Get Director Cut"
+      }
+    },
+    "/v1/director/library": {
+      "get": {
+        "description": "The workspace's plans, and whether the caller has indexed their own short.",
+        "operationId": "getDirectorLibrary",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectorLibraryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Get Director Library"
       }
     },
     "/v1/director/plans": {
       "post": {
-        "description": "The workspace's plan for a short; asking queues its analysis when there is none.",
-        "operationId": "requestDirectorPlan",
+        "description": "The workspace's plan for a short; asking queues its analysis when there is none,\nas the caller's one short of their own (DIRECTOR_INDEX_LIMIT past it).",
+        "operationId": "indexDirectorPlan",
         "parameters": [
           {
             "in": "header",
@@ -1565,7 +1785,7 @@
             "description": "An error."
           }
         },
-        "summary": "Request Director Plan"
+        "summary": "Index Director Plan"
       }
     },
     "/v1/director/plans/{video_id}": {
@@ -1638,6 +1858,83 @@
           }
         },
         "summary": "Get Director Plan"
+      }
+    },
+    "/v1/director/plans/{video_id}/cuts": {
+      "get": {
+        "description": "The caller's cuts of the short, newest first.",
+        "operationId": "listDirectorCuts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "video_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{11}$",
+              "title": "Video Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DirectorCutOut"
+                  },
+                  "title": "Response Listdirectorcuts",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "List Director Cuts"
       }
     },
     "/v1/director/plans/{video_id}/takes": {
@@ -1717,6 +2014,79 @@
         "summary": "List Director Takes"
       }
     },
+    "/v1/director/publish-copy": {
+      "post": {
+        "description": "Gemini's YouTube post for one of the caller's cuts: a title, a description and\nhashtags in the Short's language, and the credits to the original.",
+        "operationId": "writeDirectorPublishCopy",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishCopyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishCopy"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Write Director Publish Copy"
+      }
+    },
     "/v1/director/scene-checks": {
       "post": {
         "description": "Where to go for a shot, judged from one camera frame.",
@@ -1790,6 +2160,80 @@
         "summary": "Check Director Scene"
       }
     },
+    "/v1/director/speak": {
+      "post": {
+        "description": "A line in Director's voice (Gemini's text-to-speech), as a WAV file.",
+        "operationId": "speakDirectorLine",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpeechRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "audio/wav": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The line, spoken, as a WAV file."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Speak Director Line"
+      }
+    },
     "/v1/director/takes": {
       "post": {
         "description": "Records a take and queues its review.",
@@ -1861,279 +2305,6 @@
           }
         },
         "summary": "Create Director Take"
-      }
-    },
-    "/v1/documents": {
-      "get": {
-        "operationId": "listDocuments",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-request-id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Request-Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/DocumentOut"
-                  },
-                  "title": "Response Listdocuments",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "An error."
-          }
-        },
-        "summary": "List Documents"
-      },
-      "post": {
-        "operationId": "createDocument",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-request-id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Request-Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DocumentCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DocumentOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "An error."
-          }
-        },
-        "summary": "Create Document"
-      }
-    },
-    "/v1/documents/{document_id}": {
-      "delete": {
-        "operationId": "deleteDocument",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "document_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Document Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-request-id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Request-Id"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "An error."
-          }
-        },
-        "summary": "Delete Document"
-      }
-    },
-    "/v1/sentiment": {
-      "post": {
-        "operationId": "sentiment",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-request-id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Request-Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SentimentRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SentimentResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "default": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "An error."
-          }
-        },
-        "summary": "Sentiment"
       }
     }
   }

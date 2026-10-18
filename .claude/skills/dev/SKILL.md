@@ -1,6 +1,6 @@
 ---
 name: dev
-description: Start, stop or troubleshoot the local development stack. Use when the user wants to run the app, see it in the browser, turn on optional services (AI, file uploads, billing), or when a local service or app fails to start.
+description: Start, stop or troubleshoot the local development stack. Use when the user wants to run the app, see it in the browser, turn on optional services (AI and Director, file uploads), or when a local service or app fails to start.
 ---
 
 # Local development
@@ -10,18 +10,13 @@ description: Start, stop or troubleshoot the local development stack. Use when t
   the worker (:3002), notifications (:3003) and webhooks (:3004) services, all in turbo's
   terminal UI.
 - `bun dev:full` adds every optional service: the Python AI service (:8000), S3 storage
-  (RustFS on :59000, console http://localhost:59001), ClamAV (:53310), the Expo bundler
-  and the email previews (http://localhost:3030). Uploads stay off until
-  `bun run env:set S3_BUCKET=uploads`.
-  Billing without a Stripe account: `bun run stripe:fake` (see the Billing block in
-  .env.example).
-- Customer webhooks can point at a local receiver on 127.0.0.1 (allowed by
-  WEBHOOK_ALLOWED_PRIVATE_ADDRESSES in .env; refused in production). For real Stripe
-  test events, run `stripe listen --forward-to localhost:3004/webhooks/stripe` (the
-  webhooks service's `WEBHOOKS_PORT`) and set
-  the printed secret with `bun run env:set STRIPE_WEBHOOK_SECRET=whsec_...`.
+  (RustFS on :59000, console http://localhost:59001), ClamAV (:53310) and the email
+  previews (http://localhost:3030). Uploads stay off until
+  `bun run env:set S3_BUCKET=uploads`; Director needs them and a real Gemini and YouTube
+  key (docs/director.md). Neither `bun dev` nor `bun dev:full` starts the mock Google
+  (:12112): it's a test fixture only (`bun run google:fake` starts it by hand).
 - Emails never leave the machine: open Mailpit at http://localhost:58025 to read sign-up
-  codes, notifications and texts (SMS_PROVIDER=email delivers them there too).
+  codes and security alerts.
 - Every port, the services' and the apps', comes from `.env` (`POSTGRES_PORT`,
   `WEB_PORT`, `API_PORT`, …; the numbers above are `.env.example`'s defaults); if one is
   taken, see the setup skill.

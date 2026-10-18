@@ -1,0 +1,5 @@
+# A rebase (including `git pull --rebase`, which runs no post-merge) that changes bun.lock
+# reinstalls the dependencies (scripts/sync-install.ts). An amend changes nothing upstream.
+if [ "$1" = "rebase" ]; then
+  bun scripts/sync-install.ts ORIG_HEAD HEAD
+fi

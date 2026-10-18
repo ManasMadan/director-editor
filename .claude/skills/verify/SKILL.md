@@ -24,7 +24,7 @@ the checks below.
 1. `bun run lint`: Biome, the dependency and render-only boundaries, knip, the
    `ponytail:` marker check, and ruff for `apps/ai`.
 2. `bun run check-types`: every package, `scripts/` and `.claude/hooks/`.
-3. `bun run test`: unit tests, cached per package (Jest in `apps/mobile`, pytest in
+3. `bun run test`: unit tests, cached per package (pytest in
    `apps/ai`).
 4. `bun test ./scripts/ ./.claude/hooks/`: the repo scripts' and hooks' own tests, which
    turbo doesn't run.
@@ -41,9 +41,8 @@ tools colour their output, so a search for "error TS" can miss real errors.
 | Any source file | `bun run test:coverage`: every suite, merged, with every file at 100%. It names each line, branch or function no test reaches |
 | `packages/db/prisma/migrations` | `bun run db:lint` and `bun run --filter @repo/db drift` |
 | `packages/ui` components | `bun run --cwd packages/ui test:stories` (and `test:visual`, which needs Docker) |
-| `apps/web` or `apps/mobile` user flows | `bun run test:e2e --app web` or `--app mobile` (needs the full profile and nothing listening on the stack's ports: stop `bun dev` first, or say it wasn't run) |
+| `apps/web` user flows | `bun run test:e2e --app web` (needs the full profile and nothing listening on the stack's ports: stop `bun dev` first, or say it wasn't run) |
 | `apps/web` pages or dependencies | after e2e's build, `bun run --cwd apps/web budget` |
-| `apps/ai` prompts, retrieval or models | `bun run --cwd apps/ai evals` |
 | `turbo/generators` | `bun scripts/generators.ts` (runs each generator in a scratch worktree, then lint, types and tests on its output) |
 | `deploy/` | `bun run charts:check` (needs helm and helm-unittest; also checks every file in the secrets directories is encrypted) |
 | `infra/tofu` | `bun run infra:check` (needs tofu) |

@@ -90,6 +90,51 @@ tests:
           path: "spec.template.spec.containers[0].env"
           content: { name: BETTER_AUTH_URL, value: "https://app.example.com" }
 
+  - it: gives the ai service the Google Cloud project Vertex AI calls address by
+    set:
+      services.ai.env.GOOGLE_CLOUD_PROJECT: test-project
+    documentSelector: { path: metadata.name, value: demo-ai }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: GOOGLE_CLOUD_PROJECT, value: test-project }
+
+  - it: gives the ai-worker the same Google Cloud project, for indexing jobs
+    set:
+      services.ai-worker.env.GOOGLE_CLOUD_PROJECT: test-project
+    documentSelector: { path: metadata.name, value: demo-ai-worker }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: GOOGLE_CLOUD_PROJECT, value: test-project }
+
+  - it: gives the api the BigQuery dataset its analytics events are streamed into
+    set:
+      services.api.env.BIGQUERY_DATASET: test-dataset
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: BIGQUERY_DATASET, value: test-dataset }
+
+  - it: gives the ai service the same BigQuery dataset, for take reviews
+    set:
+      services.ai.env.BIGQUERY_DATASET: test-dataset
+    documentSelector: { path: metadata.name, value: demo-ai }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: BIGQUERY_DATASET, value: test-dataset }
+
+  - it: gives the ai-worker, which runs the take reviews, the same BigQuery dataset
+    set:
+      services.ai-worker.env.BIGQUERY_DATASET: test-dataset
+    documentSelector: { path: metadata.name, value: demo-ai-worker }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: BIGQUERY_DATASET, value: test-dataset }
+
   - it: leaves variables with an empty value unset
     set:
       env.SENTRY_DSN: ""
@@ -154,6 +199,24 @@ tests:
           content:
             name: S3_BUCKET
             valueFrom: { secretKeyRef: { name: storage, key: bucket } }
+
+  - it: points a service at Cloud Storage instead, without the RustFS variables
+    set:
+      services.api.storage: none
+      services.api.env.STORAGE_PROVIDER: gcs
+      services.api.env.GCS_BUCKET: director-media-test
+    documentSelector: { path: metadata.name, value: demo-api }
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: STORAGE_PROVIDER, value: gcs }
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: GCS_BUCKET, value: director-media-test }
+      # The services refuse S3_BUCKET next to STORAGE_PROVIDER=gcs.
+      - notContains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: S3_BUCKET, valueFrom: { secretKeyRef: { name: storage, key: bucket } } }
 
   - it: exports nothing without observability
     documentSelector: { path: metadata.name, value: demo-api }
