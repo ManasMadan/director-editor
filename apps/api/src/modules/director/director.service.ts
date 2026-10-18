@@ -27,7 +27,7 @@ import {
   shotPlanSchema,
 } from "@repo/contracts/api";
 import type { UploadPurpose } from "@repo/contracts/files";
-import type { FileId, OrgId, UserId, VideoId } from "@repo/contracts/ids";
+import type { DirectorCutId, FileId, OrgId, UserId, VideoId } from "@repo/contracts/ids";
 import { HOUR_S, MINUTE_S } from "@repo/contracts/time";
 import { AppError } from "@repo/nest-common";
 import * as z from "zod";
@@ -202,6 +202,11 @@ export class DirectorService {
   async cuts(userId: UserId, orgId: OrgId, videoId: VideoId): Promise<DirectorCut[]> {
     const rows = await callAi((ai) => ai.director.listCuts(aiCaller(userId, orgId), videoId));
     return rows.map(toCut);
+  }
+
+  /** One of the caller's cuts (DIRECTOR_CUT_NOT_FOUND unless it's theirs). */
+  async cut(userId: UserId, orgId: OrgId, cutId: DirectorCutId): Promise<DirectorCut> {
+    return toCut(await callAi((ai) => ai.director.getCut(aiCaller(userId, orgId), cutId)));
   }
 
   async media(userId: UserId, orgId: OrgId): Promise<DirectorCut[]> {

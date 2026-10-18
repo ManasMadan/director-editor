@@ -25,6 +25,7 @@ const PASSED_ON = new Set<ErrorCode>([
   "DIRECTOR_SHOT_NOT_FOUND",
   "DIRECTOR_TAKE_NOT_FOUND",
   "DIRECTOR_TAKE_KIND_MISMATCH",
+  "DIRECTOR_CUT_NOT_FOUND",
 ]);
 
 /** The AI service's client, when it is configured (the `ai` feature). */

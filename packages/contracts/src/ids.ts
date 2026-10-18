@@ -38,6 +38,7 @@ export const directorTakeIdSchema = z.uuid().brand<"DirectorTakeId">();
 export type DirectorTakeId = z.infer<typeof directorTakeIdSchema>;
 
 export const directorCutIdSchema = z.uuid().brand<"DirectorCutId">();
+export type DirectorCutId = z.infer<typeof directorCutIdSchema>;
 
 /** A YouTube video id: 11 characters of URL-safe base64. */
 export const videoIdSchema = z

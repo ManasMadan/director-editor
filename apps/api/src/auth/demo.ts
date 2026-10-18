@@ -8,7 +8,8 @@
  * @repo/contracts/auth-settings). Everyone shares it, so nobody signed in to it may
  * change it for the next person, or see who else uses it:
  * - it can't publish: whatever publishes refuses a session whose user has `demo` set,
- *   with DEMO_ACCOUNT_LOCKED (the profile picture too: modules/user);
+ *   with PUBLISH_DEMO_DISABLED (modules/publish), and its profile picture with
+ *   DEMO_ACCOUNT_LOCKED (modules/user);
  * - it can't change, lock or empty the account or its workspace (DEMO_LOCKED_PATHS, and
  *   its name only through the command: refuseDemoProfileChange), all refused by the auth
  *   hooks: one judge changing the password, signing everyone out or deleting the

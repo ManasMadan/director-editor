@@ -62,6 +62,7 @@
       },
       "devDependencies": {
         "@orpc/client": "catalog:",
+        "@repo/fake-google": "workspace:*",
         "@repo/testing": "workspace:*",
         "@repo/tsdown-config": "workspace:*",
         "@repo/typescript-config": "workspace:*",

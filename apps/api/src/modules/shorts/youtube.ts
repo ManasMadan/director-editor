@@ -1,6 +1,6 @@
 /**
  * YouTube Data API v3, as Director reads it: whether a video is there and how long it is,
- * before a short is indexed. The only place that knows YouTube's wire format; every
+ * before a short is indexed, and its title and channel, which a published cut credits. The only place that knows YouTube's wire format; every
  * response is parsed with a schema here, so a change on YouTube's side fails loudly
  * instead of passing bad data on.
  *
@@ -28,6 +28,14 @@ const videoResource = z.object({
   contentDetails: z.object({ duration: z.string() }),
 });
 const videosResponse = z.object({ items: z.array(videoResource) });
+const snippetsResponse = z.object({
+  items: z.array(
+    z.object({
+      id: videoIdSchema,
+      snippet: z.object({ title: z.string(), channelTitle: z.string() }),
+    }),
+  ),
+});
 const errorResponse = z.object({
   error: z.object({
     code: z.number(),
@@ -41,6 +49,10 @@ export const videoSchema = z.object({
   durationSeconds: z.number().int().positive(),
 });
 export type Video = z.infer<typeof videoSchema>;
+
+/** Who made a video and what it's called, as YouTube shows them. */
+export const creditSchema = z.object({ title: z.string(), channel: z.string() });
+export type Credit = z.infer<typeof creditSchema>;
 
 /** An ISO 8601 duration ("PT1M5S") in whole seconds; null when it isn't one. */
 function parseDuration(value: string): number | null {
@@ -123,5 +135,12 @@ export class YouTube {
     );
     const found = items.find((item) => item.id === id);
     return found ? toVideo(found) : null;
+  }
+
+  /** The video's title and channel, or null when it isn't (or is no longer) there. */
+  async credit(id: VideoId): Promise<Credit | null> {
+    const { items } = await this.read("videos", { part: "snippet", id }, snippetsResponse);
+    const found = items.find((item) => item.id === id);
+    return found ? { title: found.snippet.title, channel: found.snippet.channelTitle } : null;
   }
 }

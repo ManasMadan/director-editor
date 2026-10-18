@@ -89,4 +89,19 @@ describe("features off", () => {
     );
     expect(error.data?.params).toEqual({ feature: "director" });
   });
+
+  it("answers FEATURE_DISABLED for publishing without Google sign-in", async () => {
+    const session = await signedIn();
+    const error = await expectError(
+      session.rpc.publish.upload({
+        cutId: "0199f3a0-0000-7000-8000-000000000001",
+        title: "Mine",
+        description: "",
+        hashtags: [],
+        credits: "",
+      }),
+      "FEATURE_DISABLED",
+    );
+    expect(error.data?.params).toEqual({ feature: "google" });
+  });
 });

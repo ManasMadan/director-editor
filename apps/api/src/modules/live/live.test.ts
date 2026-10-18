@@ -73,6 +73,7 @@ const caller: OrgCaller = {
   userId: userIdSchema.parse("5e2d7c3a-1b4f-4a8e-9c6d-7f0a2b3c4d5e"),
   role: "member",
   signedInAt: new Date(0),
+  demo: false,
 };
 
 const WEB = "http://localhost:3000";
