@@ -127,38 +127,7 @@ export class MaintenanceProcessor extends JobProcessor implements OnApplicationB
         break;
       }
       case "outbox-retention":
-        for (const source of OUTBOX_SOURCES) {
-          const outbox = await row(
-            count,
-            db.$queryRawUnsafe(
-              `SELECT "${source}".purge_published_outbox(make_interval(days => $1::int)) AS n`,
-              env.OUTBOX_RETENTION_DAYS,
-            ),
-          );
-          const processed = await row(
-            count,
-            db.$queryRawUnsafe(
-              `SELECT "${source}".purge_processed_events(make_interval(days => $1::int)) AS n`,
-              env.PROCESSED_EVENT_RETENTION_DAYS,
-            ),
-          );
-          result[`${source}.outbox`] = Number(outbox.n);
-          result[`${source}.processed`] = Number(processed.n);
-        }
-        {
-          const history = await row(
-            count,
-            db.$queryRaw`
-              SELECT webhooks.purge_history(make_interval(days => ${env.WEBHOOK_HISTORY_DAYS}::int)) AS n`,
-          );
-          result["webhooks.history"] = Number(history.n);
-          const notifications = await row(
-            count,
-            db.$queryRaw`
-              SELECT notifications.purge_history(make_interval(days => ${env.NOTIFICATION_HISTORY_DAYS}::int)) AS n`,
-          );
-          result["notifications.history"] = Number(notifications.n);
-        }
+        Object.assign(result, await this.outboxRetention());
         break;
       case "files-cleanup":
         Object.assign(result, await this.files.run());
@@ -176,6 +145,43 @@ export class MaintenanceProcessor extends JobProcessor implements OnApplicationB
       }
     }
     this.log.info({ task, ...result }, "maintenance task finished");
+    return result;
+  }
+
+  /** Published outbox events, processed-event records and delivery histories past their keeping. */
+  private async outboxRetention() {
+    const db = this.database.write;
+    const result: Record<string, number> = {};
+    for (const source of OUTBOX_SOURCES) {
+      const outbox = await row(
+        count,
+        db.$queryRawUnsafe(
+          `SELECT "${source}".purge_published_outbox(make_interval(days => $1::int)) AS n`,
+          env.OUTBOX_RETENTION_DAYS,
+        ),
+      );
+      const processed = await row(
+        count,
+        db.$queryRawUnsafe(
+          `SELECT "${source}".purge_processed_events(make_interval(days => $1::int)) AS n`,
+          env.PROCESSED_EVENT_RETENTION_DAYS,
+        ),
+      );
+      result[`${source}.outbox`] = Number(outbox.n);
+      result[`${source}.processed`] = Number(processed.n);
+    }
+    const history = await row(
+      count,
+      db.$queryRaw`
+        SELECT webhooks.purge_history(make_interval(days => ${env.WEBHOOK_HISTORY_DAYS}::int)) AS n`,
+    );
+    result["webhooks.history"] = Number(history.n);
+    const notifications = await row(
+      count,
+      db.$queryRaw`
+        SELECT notifications.purge_history(make_interval(days => ${env.NOTIFICATION_HISTORY_DAYS}::int)) AS n`,
+    );
+    result["notifications.history"] = Number(notifications.n);
     return result;
   }
 

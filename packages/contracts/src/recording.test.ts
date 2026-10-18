@@ -76,7 +76,8 @@ describe("a part's first bytes", () => {
   const bytes = (...values: (number | string)[]) =>
     new Uint8Array(
       values.flatMap((value) =>
-        typeof value === "string" ? [...new TextEncoder().encode(value)] : [value],
+        // ASCII only, so each character is its own byte.
+        typeof value === "string" ? [...value].map((char) => char.charCodeAt(0)) : [value],
       ),
     );
 
