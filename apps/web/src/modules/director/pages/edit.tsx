@@ -133,6 +133,11 @@ function useSaveVideo(videoId: string, title: string) {
         file: new File([video], `director-${videoId}.${extension}`, { type: video.type }),
         signal,
       });
+      // Cancelled while the cut was being recorded, too late to stop it: the member was
+      // already shown the editor again, so it isn't put back over it.
+      if (signal.aborted) {
+        return;
+      }
       setSaving({ step: "saved", video, clips: input.clips });
     } catch (error) {
       if (!signal.aborted) {
