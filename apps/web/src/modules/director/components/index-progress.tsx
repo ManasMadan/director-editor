@@ -3,16 +3,22 @@
 import { GeminiLoader, GeminiShimmer } from "@repo/ui/components/gemini-loader";
 import { cn } from "@repo/ui/lib/utils";
 import { useTranslations } from "next-intl";
-import { INDEX_STEPS } from "../lib/library";
+import { INDEX_STEPS, type IndexStep } from "../lib/library";
 
 /**
  * Gemini at work on a short: what it's doing now, under the loader, and a track of the
- * steps indexing goes through with the current one shimmering. `step` is an index into
- * INDEX_STEPS short of "ready" (a ready or failed plan shows its own state instead).
+ * steps indexing goes through with the current one shimmering. A ready or failed plan
+ * shows its own state instead.
  */
-export function IndexProgress({ step, className }: { step: number; className?: string }) {
+export function IndexProgress({
+  step: current,
+  className,
+}: {
+  step: IndexStep;
+  className?: string;
+}) {
   const t = useTranslations("library.stage");
-  const current = INDEX_STEPS[step] ?? "queued";
+  const step = INDEX_STEPS.indexOf(current);
   return (
     <div className={cn("flex flex-col items-center gap-5 text-center", className)}>
       <GeminiLoader label={t(current)} size="lg" />

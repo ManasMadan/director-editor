@@ -4,10 +4,10 @@ import { angleOf, INDEX_STEPS, indexStep, nextShot, shotRhythm } from "./library
 describe("indexStep", () => {
   it("follows the indexing stage, step by step", () => {
     expect(INDEX_STEPS).toEqual(["queued", "watching", "writing", "ready"]);
-    expect(indexStep("pending", "queued")).toBe(0);
-    expect(indexStep("analyzing", "watching")).toBe(1);
-    expect(indexStep("analyzing", "writing")).toBe(2);
-    expect(indexStep("ready", "ready")).toBe(3);
+    expect(indexStep("pending", "queued")).toBe("queued");
+    expect(indexStep("analyzing", "watching")).toBe("watching");
+    expect(indexStep("analyzing", "writing")).toBe("writing");
+    expect(indexStep("ready", "ready")).toBe("ready");
   });
 
   it("is failed whenever the plan failed, whatever stage it reached", () => {
@@ -16,10 +16,10 @@ describe("indexStep", () => {
   });
 
   it("falls back on the status for a stage it doesn't know", () => {
-    expect(indexStep("pending", "uploading")).toBe(0);
-    expect(indexStep("analyzing", "thinking")).toBe(1);
-    expect(indexStep("ready", "polishing")).toBe(3);
-    expect(indexStep("unknown", "unknown")).toBe(0);
+    expect(indexStep("pending", "uploading")).toBe("queued");
+    expect(indexStep("analyzing", "thinking")).toBe("watching");
+    expect(indexStep("ready", "polishing")).toBe("ready");
+    expect(indexStep("unknown", "unknown")).toBe("queued");
   });
 });
 

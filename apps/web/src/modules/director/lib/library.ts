@@ -5,21 +5,31 @@
 
 /** The steps indexing goes through, as the library draws them. */
 export const INDEX_STEPS = ["queued", "watching", "writing", "ready"] as const;
+export type IndexStep = (typeof INDEX_STEPS)[number];
 
-/** Where each stage sits, and each status for a stage this page doesn't know yet. */
-const STAGE_STEP: Record<string, number> = { queued: 0, watching: 1, writing: 2, ready: 3 };
-const STATUS_STEP: Record<string, number> = { pending: 0, analyzing: 1, ready: 3 };
+/** The step each stage is, and each status for a stage this page doesn't know yet. */
+const STAGE_STEP: Record<string, IndexStep> = {
+  queued: "queued",
+  watching: "watching",
+  writing: "writing",
+  ready: "ready",
+};
+const STATUS_STEP: Record<string, IndexStep> = {
+  pending: "queued",
+  analyzing: "watching",
+  ready: "ready",
+};
 
 /**
- * The step a plan is on (an index into INDEX_STEPS), or "failed". Takes plain strings:
- * the AI service may report a finer stage than this page was built with, which then
- * falls back on the plan's status instead of breaking the page.
+ * The step a plan is on, or "failed". Takes plain strings: the AI service may report a
+ * finer stage than this page was built with, which then falls back on the plan's status
+ * instead of breaking the page.
  */
-export function indexStep(status: string, stage: string): number | "failed" {
+export function indexStep(status: string, stage: string): IndexStep | "failed" {
   if (status === "failed") {
     return "failed";
   }
-  return STAGE_STEP[stage] ?? STATUS_STEP[status] ?? 0;
+  return STAGE_STEP[stage] ?? STATUS_STEP[status] ?? "queued";
 }
 
 /** Each shot's share of the short, for the strip that draws its rhythm. */

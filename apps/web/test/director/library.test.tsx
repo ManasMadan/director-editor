@@ -200,33 +200,38 @@ describe("indexing a short of your own", () => {
     expect(await commands.failedRequests("/rpc/director/index")).toBe(1);
   });
 
-  it("says why indexing failed, which didn't count, and takes another link", async () => {
-    const orgId = await member();
-    const videoId = newVideoId();
-    await showLibrary();
-    await userEvent.fill(link(), `https://youtu.be/${videoId}`);
-    await userEvent.click(page.getByRole("button", { name: "Index it" }));
-    await expect.element(page.getByRole("status", { name: "Waiting for Gemini" })).toBeVisible();
+  it.each([
+    [
+      "DIRECTOR_VIDEO_UNREADABLE",
+      "Director couldn't watch this short. It may be private, age-restricted or removed.",
+    ],
+    [null, "Director couldn't work out how to film this short. Try again."],
+  ])(
+    "says why indexing failed (%s), which didn't count, and takes another link",
+    async (error, message) => {
+      const orgId = await member();
+      const videoId = newVideoId();
+      await showLibrary();
+      await userEvent.fill(link(), `https://youtu.be/${videoId}`);
+      await userEvent.click(page.getByRole("button", { name: "Index it" }));
+      await expect.element(page.getByRole("status", { name: "Waiting for Gemini" })).toBeVisible();
 
-    await commands.fakeLibrary(orgId, {
-      templates: [
-        {
-          videoId,
-          status: "failed",
-          stage: "failed",
-          error: "DIRECTOR_VIDEO_UNREADABLE",
-          plan: null,
-        },
-      ],
-      indexUsed: false,
-    });
-    await commands.publishRealtime(`org:${orgId}`, { type: "director.changed" });
-    await expect
-      .element(page.getByRole("alert"))
-      .toHaveTextContent(
-        "Director couldn't watch this short. It may be private, age-restricted or removed.",
-      );
-    await userEvent.click(page.getByRole("button", { name: "Try another link" }));
-    await expect.element(link()).toHaveValue("");
-  });
+      await commands.fakeLibrary(orgId, {
+        templates: [
+          {
+            videoId,
+            status: "failed",
+            stage: "failed",
+            error,
+            plan: null,
+          },
+        ],
+        indexUsed: false,
+      });
+      await commands.publishRealtime(`org:${orgId}`, { type: "director.changed" });
+      await expect.element(page.getByRole("alert")).toHaveTextContent(message);
+      await userEvent.click(page.getByRole("button", { name: "Try another link" }));
+      await expect.element(link()).toHaveValue("");
+    },
+  );
 });

@@ -146,7 +146,9 @@ export function IndexCard({
   const index = useIndexShortMutation();
   const id = useId();
   const started = index.data;
-  const plan = started && (templates.find((p) => p.videoId === started.videoId) ?? started);
+  // The library's copy once it lists the short (the realtime nudge keeps it fresh), the
+  // answer to indexing until then.
+  const plan = started && [...templates, started].find((p) => p.videoId === started.videoId);
 
   const submit = (link: string) =>
     index.mutate(

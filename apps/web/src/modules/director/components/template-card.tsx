@@ -8,7 +8,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { thumbnailUrl } from "@/modules/shorts";
-import { INDEX_STEPS, indexStep, shotRhythm } from "../lib/library";
+import { indexStep, shotRhythm } from "../lib/library";
 import { timecode } from "../lib/track";
 
 /** The shots as a strip along the picture's foot, each as wide as its share of the short. */
@@ -46,7 +46,7 @@ function Status({ plan }: { plan: DirectorPlan }) {
     <span className="absolute inset-0 flex items-center justify-center bg-studio/60 p-3">
       <GeminiShimmer className="absolute inset-0 rounded-none bg-transparent" />
       <span className="relative rounded-full bg-studio/80 px-3 py-1 text-center text-xs font-medium backdrop-blur">
-        {t(`stage.${INDEX_STEPS[step] ?? "queued"}`)}
+        {t(`stage.${step}`)}
       </span>
     </span>
   );
