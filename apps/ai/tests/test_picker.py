@@ -131,7 +131,15 @@ def test_a_slot_starts_from_the_original_s_reference(
 ) -> None:
     org, user, _ = ready
     got = slots(client, org, user)
-    assert [slot.assetId for slot in got.slots] == ["chart", "card", "music", "end-card"]
+    # The plan's own assets, then a B-roll slot per shot, for when the member skips it.
+    assert [slot.assetId for slot in got.slots] == [
+        "chart",
+        "card",
+        "music",
+        "end-card",
+        "shot-1",
+        "shot-2",
+    ]
     chart = got.slots[0]
     assert chart.prompt.startswith('A flat black-and-white infographic titled "12 MALE')
     assert "Style: Flat vector infographic" in chart.prompt
