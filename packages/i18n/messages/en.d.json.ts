@@ -784,6 +784,9 @@ declare const messages: {
       "deaf": "Director can't hear you. Allow the microphone in your browser's settings, or type to it below.",
       "stillFilm": "You can still film: tap the shutter for each take.",
       "retry": "Try again",
+      "slower": "Slower line",
+      "reconnect": "Reconnect",
+      "away": "Director can't connect right now. You're still recording, and I'll sort your footage when I'm back.",
       "failed": {
         "dropped": "Director lost the connection.",
         "INTERNAL": "Director can't join right now.",

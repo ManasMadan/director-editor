@@ -296,9 +296,28 @@ handle Gemini gave it; without one, it catches the new connection up with the la
 lines said. The old connection is let go only once the new one is ready, so the member
 never notices, and the hourly allowance counts shoots, not these reconnections. In the
 browser, a dropped line is retried once, silently, after two seconds, picking the
-conversation up (`&resume=1`, no second hello); only if that fails too does the screen
-say why. The first time a shoot reaches Gemini, the API records a `call_started` event
-in BigQuery.
+conversation up (`&resume=1`, no second hello); if that fails too, Director moves to
+the slower line (below). The first time a shoot reaches Gemini, the API records a
+`call_started` event in BigQuery.
+
+### The slower line
+
+When Live can't start or drops twice (or is off for the member, `LIVE_OFF_USERS`, or its
+hourly allowance is spent), the shoot screen carries on with Director turn by turn:
+`director.chat` (`apps/api/src/modules/live/live.chat.ts`) asks Gemini Flash on Vertex AI
+(`CHAT_MODEL`, the global endpoint) for each reply, with Live's persona and shot brief,
+a few lines on how this line differs, and the same tool declarations, checked by the same
+code (`live.tools.ts`). Each turn carries the member's words (typed, or dictated by the
+browser's own speech recogniser, `lib/dictation.ts`), a frame of the camera, the shoot's
+changes, the last eight lines said and what came of the last reply's tool calls; nothing
+is kept on the server. The browser (`lib/slow-session.ts`) captions the reply at once,
+carries the calls out with the same code as Live's, and speaks the reply through
+`director.speak` in Live's voice, so an answer is on screen in about a second and heard
+within about four. A pill under the indicator says "Slower line" with Reconnect, which
+tries Live again with the shoot's changes and falls straight back if it still can't.
+While Gemini is out of reach, a banner says Director can't connect; filming carries on.
+Only what neither line can fix (signed out, the plan gone, another tab) leaves Director
+away with the reason.
 
 ## Continuous recording
 

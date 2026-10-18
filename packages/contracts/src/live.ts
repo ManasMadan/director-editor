@@ -17,6 +17,9 @@ import { errorCode } from "./errors";
 
 export const LIVE_PATH = "/api/live";
 
+/** Director's voice, the same on Live and on the slower line (one of `director.speak`'s voices). */
+export const LIVE_VOICE = "Sulafat";
+
 /**
  * What Director can do on the shoot screen (Gemini's function calls). Nothing here starts
  * or stops a take: only the member's own tap on the shutter does that.
@@ -32,7 +35,7 @@ export type LiveTool = (typeof LIVE_TOOLS)[number];
 
 /** About two seconds of 16 kHz 16-bit mono audio, base64; the browser sends ~100 ms at a time. */
 const LIVE_AUDIO_MAX_LENGTH = 90_000;
-const LIVE_TEXT_MAX_LENGTH = 2000;
+export const LIVE_TEXT_MAX_LENGTH = 2000;
 /** A tool call's id, as the relay hands it to the browser and the browser hands it back. */
 const LIVE_TOOL_ID_MAX_LENGTH = 64;
 /** A mark's line or note: Director's few words on an attempt. */
@@ -44,7 +47,7 @@ const shotIndex = z
   .int()
   .min(0)
   .max(DIRECTOR_MAX_SHOTS - 1);
-const facing = z.enum(["front", "back"]);
+export const facing = z.enum(["front", "back"]);
 export type Facing = z.infer<typeof facing>;
 const adaptedRow = z.string().trim().min(1).max(LIVE_ADAPTATION_MAX_LENGTH);
 
@@ -61,7 +64,7 @@ export const liveAdaptation = z.object({
 export type LiveAdaptation = z.infer<typeof liveAdaptation>;
 
 /** A tool call as the browser carries it out: which, and with what (a shot is 0-based). */
-const liveToolCall = z.discriminatedUnion("name", [
+export const liveToolCall = z.discriminatedUnion("name", [
   z.object({ name: z.literal("go_to_shot"), shot: shotIndex }),
   z.object({ name: z.literal("switch_camera"), to: facing }),
   liveAdaptation.extend({ name: z.literal("adapt_shot") }),
@@ -89,7 +92,7 @@ export type LiveToolCall = z.infer<typeof liveToolCall>;
  * off, the roll is paused (only the member's touch resumes it) or nothing is recording;
  * or what Director pointed at isn't in the picture.
  */
-const LIVE_TOOL_RESULTS = [
+export const LIVE_TOOL_RESULTS = [
   "done",
   "busy",
   "no_camera",
@@ -103,14 +106,20 @@ export type LiveToolResult = (typeof LIVE_TOOL_RESULTS)[number];
  * Where a take is: counting in (the 3-2-1), the count called off, recording, just
  * recorded (the member is watching it back), or thrown away to go again.
  */
-const LIVE_TAKE_STATES = ["countdown", "cancelled", "recording", "recorded", "discarded"] as const;
+export const LIVE_TAKE_STATES = [
+  "countdown",
+  "cancelled",
+  "recording",
+  "recorded",
+  "discarded",
+] as const;
 export type LiveTakeState = (typeof LIVE_TAKE_STATES)[number];
 
 /**
  * Where the roll (the continuous recording) is: recording from Start shooting, paused
  * and resumed by the member's touch, done.
  */
-const LIVE_ROLL_STATES = ["recording", "paused", "resumed", "done"] as const;
+export const LIVE_ROLL_STATES = ["recording", "paused", "resumed", "done"] as const;
 export type LiveRollState = (typeof LIVE_ROLL_STATES)[number];
 
 /**

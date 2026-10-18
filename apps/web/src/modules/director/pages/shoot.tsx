@@ -46,6 +46,7 @@ import {
   Shutter,
   type ShutterMode,
 } from "../components/shoot-parts";
+import { AwayBanner, SlowerLinePill } from "../components/slower-line";
 import { TakeReview } from "../components/take-review";
 import { Teleprompter } from "../components/teleprompter";
 import { useCamera } from "../hooks/use-camera";
@@ -242,6 +243,17 @@ function LiveNotice({ live, liveOn }: { live: DirectorLive; liveOn: boolean }) {
   return null;
 }
 
+/**
+ * Under the indicator, whenever Director is on the slower line: the pill with Reconnect,
+ * or, while Gemini is out of reach, the banner that says so. Filming goes on either way.
+ */
+function SlowerLine({ live }: { live: DirectorLive }) {
+  if (live.line !== "slower" || live.state !== "live") {
+    return null;
+  }
+  return live.away ? <AwayBanner live={live} /> : <SlowerLinePill live={live} />;
+}
+
 /** The text box: anything typed goes to Director as the member's own words. */
 function TellBox({ live }: { live: DirectorLive }) {
   const t = useTranslations("director.shoot.tell");
@@ -407,6 +419,7 @@ function Overlay(screen: Screen) {
             <LeaveLink videoId={videoId} onClick={onLeave} />
           </div>
         </div>
+        <SlowerLine live={live} />
         {setup ? <ShotCard shot={shot} index={index} changed={changed} /> : null}
         {setup ? <LiveNotice live={live} liveOn={liveOn} /> : null}
       </div>

@@ -103,6 +103,8 @@ async function start(): Promise<Services> {
     GOOGLE_CLOUD_PROJECT: "",
     LIVE_API_URL: "",
     GOOGLE_ACCESS_TOKEN: "",
+    CHAT_API_URL: "",
+    LIVE_OFF_USERS: "",
     DEMO_GUESTS: "",
   };
   const variants = {
@@ -121,6 +123,8 @@ async function start(): Promise<Services> {
       GOOGLE_CLOUD_PROJECT: "web-tests-project",
       LIVE_API_URL: `${google.url.replace("http:", "ws:")}${LIVE_API_PATH}`,
       GOOGLE_ACCESS_TOKEN: "web-tests-youtube-key",
+      // Director's slower line, on the mock's Vertex AI (the same token).
+      CHAT_API_URL: google.url,
     },
     bare: {
       ...off,

@@ -11,7 +11,7 @@ import { useSearchParams } from "next/navigation";
 import { Activity, type ReactNode, useState } from "react";
 import { flushSync } from "react-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { commands, userEvent } from "vitest/browser";
 import { ShootPage } from "@/modules/director";
 import { DirectorOrb } from "@/modules/director/components/director-captions";
 import { useDirectorLive } from "@/modules/director/hooks/use-director-live";
@@ -383,7 +383,7 @@ describe("Director live on the shoot screen", () => {
     await expect.element(page.getByText("Director", { exact: true })).toBeVisible();
   });
 
-  it("comes back by itself once when the line drops, then says why if it can't", async () => {
+  it("comes back by itself once when the line drops, then carries on on the slower line", async () => {
     canvasCamera();
     const { page, videoId, socket } = await shoot();
     socket.hangUp();
@@ -399,23 +399,25 @@ describe("Director live on the shoot screen", () => {
     FakeSocket.last.hangUp("UPSTREAM_UNAVAILABLE");
     await expect.poll(() => FakeSocket.all.length, { timeout: 5_000 }).toBe(3);
     FakeSocket.last.hangUp("UPSTREAM_UNAVAILABLE");
-    await expect.element(page.getByText("Director can't reach Gemini right now.")).toBeVisible();
+    // Live is out twice: Director carries on on the slower line, and speaks first there.
+    await expect.element(page.getByRole("status").getByText("Slower line")).toBeVisible();
     await expect
-      .element(page.getByText("You can still film: tap the shutter for each take."))
+      .element(
+        page.getByText("Hey! I'm a bit slow to answer right now. How much time have you got?"),
+      )
       .toBeVisible();
-    await expect.element(page.getByRole("textbox", { name: "Tell Director" })).toBeDisabled();
+    expect(page.getByText("Director can't reach Gemini right now.").query()).toBeNull();
+    await expect.element(page.getByRole("textbox", { name: "Tell Director" })).toBeEnabled();
     await expect.element(page.getByRole("button", { name: "Record a take" })).toBeEnabled();
-    await userEvent.click(page.getByRole("button", { name: "Try again" }));
-    await expect.poll(() => FakeSocket.all.length).toBe(4);
-    expect(FakeSocket.last.url).not.toContain("resume");
+    expect(FakeSocket.all).toHaveLength(3);
   });
 
   it("says why in its own words, or the API's when it has none", async () => {
     canvasCamera();
     const { page } = await shoot();
+    // What the slower line can't fix either: Director is away, and says why.
     const cases: [string, string][] = [
-      ["RATE_LIMITED", "Director has joined you a lot this hour. Give it a little while."],
-      ["TIMEOUT", "That's half an hour with Director, the most in one go."],
+      ["CONFLICT", "Director is already with you in another tab."],
       ["NO_ACTIVE_ORGANIZATION", "Choose a workspace first."],
     ];
     for (const [code, message] of cases) {
@@ -469,6 +471,129 @@ describe("Director live on the shoot screen", () => {
   });
 });
 
+/**
+ * The browser's speech recogniser, as the test plays it: `hear` says a phrase, `refuse`
+ * turns the microphone down.
+ */
+class FakeRecognition {
+  static last: FakeRecognition | null = null;
+  continuous = false;
+  interimResults = true;
+  lang = "";
+  running = false;
+  onresult: ((event: { resultIndex: number; results: unknown[] }) => void) | null = null;
+  onend: (() => void) | null = null;
+  onerror: ((event: { error: string }) => void) | null = null;
+  constructor() {
+    FakeRecognition.last = this;
+  }
+  start() {
+    this.running = true;
+  }
+  stop() {
+    if (this.running) {
+      this.running = false;
+      queueMicrotask(() => this.onend?.());
+    }
+  }
+  hear(text: string) {
+    const result = Object.assign([{ transcript: ` ${text} ` }], { isFinal: true });
+    this.onresult?.({ resultIndex: 0, results: [result] });
+  }
+}
+
+const HELLO = "Hey! I'm a bit slow to answer right now. How much time have you got?";
+
+describe("Director's slower line", () => {
+  /** The shoot with Live refused for the member: Director comes in on the slower line. */
+  async function slower() {
+    vi.stubGlobal("SpeechRecognition", FakeRecognition);
+    canvasCamera();
+    const started = await shoot();
+    started.socket.hangUp("FEATURE_DISABLED");
+    await expect.element(started.page.getByRole("status").getByText("Slower line")).toBeVisible();
+    await expect.element(started.page.getByText(HELLO)).toBeVisible();
+    return started;
+  }
+
+  it('answers typed and spoken turns, and adapts the card for "I\'m fine inside"', async () => {
+    const { page } = await slower();
+    const box = page.getByRole("textbox", { name: "Tell Director" });
+    const typedAt = performance.now();
+    await userEvent.fill(box, "can you hear me?");
+    await userEvent.keyboard("{Enter}");
+    await expect.element(page.getByText("Got it.")).toBeVisible();
+    // The app's share of the four seconds a slower answer may take.
+    expect(performance.now() - typedAt).toBeLessThan(4000);
+    await expect.poll(() => FakeRecognition.last?.running).toBe(true);
+    FakeRecognition.last?.hear("nah I'm fine inside");
+    await expect.element(page.getByText("nah I'm fine inside")).toBeVisible();
+    await expect
+      .element(page.getByText("Totally, inside it is. Stand so the window's just behind you."))
+      .toBeVisible();
+    await expect.element(page.getByText("Inside, by a window")).toBeVisible();
+    await expect.element(page.getByText("changed for you")).toBeVisible();
+    // Filming never stopped.
+    await expect.element(page.getByRole("button", { name: "Record a take" })).toBeEnabled();
+  });
+
+  it("brings Live back on Reconnect, with what the shoot changed", async () => {
+    const { page } = await slower();
+    await userEvent.fill(page.getByRole("textbox", { name: "Tell Director" }), "I'm fine inside");
+    await userEvent.keyboard("{Enter}");
+    await expect.element(page.getByText("Inside, by a window")).toBeVisible();
+    await userEvent.click(page.getByRole("button", { name: "Reconnect" }));
+    await expect.poll(() => FakeSocket.all.length).toBe(2);
+    expect(FakeSocket.last.url).toContain("resume=1");
+    FakeSocket.last.open();
+    await expect
+      .poll(() => FakeSocket.last.sentOf("context"))
+      .toEqual([{ type: "context", adaptations: [{ shot: 0, where: "Inside, by a window" }] }]);
+    expect(page.getByText("Slower line").query()).toBeNull();
+    await expect.element(page.getByText("Inside, by a window")).toBeVisible();
+  });
+
+  it("goes back to the slower line when Live still can't be had", async () => {
+    const { page } = await slower();
+    await userEvent.click(page.getByRole("button", { name: "Reconnect" }));
+    await expect.poll(() => FakeSocket.all.length).toBe(2);
+    FakeSocket.last.hangUp("UPSTREAM_UNAVAILABLE");
+    await expect.element(page.getByRole("status").getByText("Slower line")).toBeVisible();
+    expect(FakeSocket.all).toHaveLength(2);
+  });
+
+  it("says Director can't connect while Gemini is out of reach, and filming carries on", async () => {
+    // A gateway's 502: Gemini (and the API's way to it) out of reach.
+    await commands.failRequests("/rpc/director/chat", { status: 502 });
+    vi.stubGlobal("SpeechRecognition", FakeRecognition);
+    canvasCamera();
+    const { page, socket } = await shoot();
+    socket.hangUp("FEATURE_DISABLED");
+    await expect
+      .element(
+        page
+          .getByRole("alert")
+          .getByText(
+            "Director can't connect right now. You're still recording, and I'll sort your footage when I'm back.",
+          ),
+      )
+      .toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Record a take" })).toBeEnabled();
+    await userEvent.click(page.getByRole("button", { name: "Try again" }));
+    await expect.poll(() => FakeSocket.all.length).toBe(2);
+  });
+
+  it("types instead when there's no recogniser to dictate with", async () => {
+    vi.stubGlobal("SpeechRecognition", undefined);
+    vi.stubGlobal("webkitSpeechRecognition", undefined);
+    canvasCamera();
+    const { page, socket } = await shoot();
+    socket.hangUp("FEATURE_DISABLED");
+    await expect.element(page.getByRole("status").getByText("Slower line")).toBeVisible();
+    await expect.element(page.getByText(/Director can't hear you/)).toBeVisible();
+  });
+});
+
 describe("Director live's hook", () => {
   const options = (shotIndex = 0) => ({
     videoId: "abcdefghijk",
@@ -509,7 +634,7 @@ describe("Director live's hook", () => {
     expect(FakeSocket.last.sentOf("take")).toEqual([]);
     // Flipped, then gone before the frame could go: nothing more is sent on the old line.
     hook.current.camera("back");
-    FakeSocket.last.hangUp("RATE_LIMITED");
+    FakeSocket.last.hangUp("CONFLICT");
     await expect.poll(() => hook.current.state).toBe("unavailable");
     expect(FakeSocket.last.sentOf("camera")).toHaveLength(1);
   });

@@ -133,6 +133,26 @@ export const envSchema = {
   // Test hook: where the Live API lives (the tests' stand-in in the mock Google). Unset:
   // the region's own endpoint, from LIVE_LOCATION.
   LIVE_API_URL: z.url({ protocol: /^wss?$/ }).optional(),
+  // Director's slower line (director.chat), for when Gemini Live can't run: the Gemini
+  // model on Vertex AI, by its Vertex name, addressed at the global endpoint.
+  CHAT_MODEL: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9.-]*$/, "a model name")
+    .default("gemini-3.8-flash"),
+  // Test hook: where Vertex AI's generateContent lives (the mock Google). Unset: Vertex
+  // AI's global endpoint. Must be https:// in production.
+  CHAT_API_URL: z.url().optional(),
+  // Users (ids, comma-separated) who get the slower line instead of Gemini Live, to try
+  // it or to take a member off Live without turning it off for everyone. Empty: nobody.
+  LIVE_OFF_USERS: z
+    .string()
+    .default("")
+    .transform((ids) =>
+      ids
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean),
+    ),
   // Local development only: a Google access token (`gcloud auth print-access-token`) in
   // place of the GCE metadata server's. Production refuses it.
   GOOGLE_ACCESS_TOKEN: z.string().min(1).optional(),
@@ -171,6 +191,10 @@ for (const [name, url] of [
   if (env.NODE_ENV === "production" && !url.startsWith("https://")) {
     throw new Error(`${name} must be HTTPS in production`);
   }
+}
+
+if (env.NODE_ENV === "production" && env.CHAT_API_URL && !env.CHAT_API_URL.startsWith("https://")) {
+  throw new Error("CHAT_API_URL must be https:// in production");
 }
 
 // A pasted token expires within the hour; production uses the machine's service account.

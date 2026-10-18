@@ -234,6 +234,7 @@ async function startApi(overrides: Partial<LiveOptions> = {}, fake = new FakeLiv
       url: fake.url,
       auth: tokenAuth,
     },
+    liveOff: () => false,
     log,
     now: () => clock,
     recordCallStarted: vi.fn(),
@@ -1471,6 +1472,7 @@ describe("moving to a fresh connection to Gemini", () => {
 describe("starting a call", () => {
   it.each([
     ["the feature is off", { upstream: null }, "FEATURE_DISABLED"],
+    ["Live is off for the caller", { liveOff: () => true }, "FEATURE_DISABLED"],
     [
       "the caller isn't signed in",
       { caller: () => Promise.reject(new AppError("UNAUTHENTICATED")) },

@@ -89,6 +89,7 @@ export function liveCallOptions(deps: {
     spendCallLimit: async ({ userId, guest }) => {
       await (guest ? deps.guestCalls : deps.calls).take(userId);
     },
+    liveOff: (userId) => env.LIVE_OFF_USERS.includes(userId),
     upstream: liveUpstream({
       project: env.GOOGLE_CLOUD_PROJECT,
       location: env.LIVE_LOCATION,

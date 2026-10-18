@@ -10,18 +10,19 @@
  * BidiGenerateContentClientContent), in their JSON form.
  */
 import type { Shot, ShotPlan } from "@repo/contracts/api";
-import type {
-  Facing,
-  LiveAdaptation,
-  LiveRollState,
-  LiveTakeState,
-  LiveTool,
+import {
+  type Facing,
+  LIVE_VOICE,
+  type LiveAdaptation,
+  type LiveRollState,
+  type LiveTakeState,
+  type LiveTool,
 } from "@repo/contracts/live";
 import { POINT_AT_DECLARATION } from "./live.marks";
 import { PERSONA } from "./live.persona";
 
-// A warm, natural voice from the Live API's prebuilt set.
-const VOICE = "Sulafat";
+// A warm, natural voice from the Live API's prebuilt set, the slower line's too.
+const VOICE = LIVE_VOICE;
 
 /**
  * The member's version of a shot, where they changed it, quoted as what they want: it
@@ -269,10 +270,12 @@ const TOOL_DECLARATIONS: Record<LiveTool, object> = {
   point_at: POINT_AT_DECLARATION,
 };
 
-const functionDeclarations = Object.entries(TOOL_DECLARATIONS).map(([name, declaration]) => ({
-  name,
-  ...declaration,
-}));
+export const functionDeclarations = Object.entries(TOOL_DECLARATIONS).map(
+  ([name, declaration]) => ({
+    name,
+    ...declaration,
+  }),
+);
 
 /** Which Vertex AI model Director live uses, and where. */
 export interface LiveModel {

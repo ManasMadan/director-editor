@@ -155,12 +155,12 @@ export function createPlayer(context: AudioContext, onSpeaking: (speaking: boole
   };
 
   return {
-    /** Queues a chunk to play right after the last one. */
-    play(pcm: Int16Array) {
+    /** Queues a chunk (at `rate`, Live's by default) to play right after the last one. */
+    play(pcm: Int16Array, rate = PLAYBACK_RATE) {
       if (held || pcm.length === 0) {
         return;
       }
-      const buffer = context.createBuffer(1, pcm.length, PLAYBACK_RATE);
+      const buffer = context.createBuffer(1, pcm.length, rate);
       buffer.copyToChannel(fromPcm16(pcm), 0);
       const source = context.createBufferSource();
       source.buffer = buffer;
