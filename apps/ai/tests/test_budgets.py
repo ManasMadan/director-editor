@@ -31,7 +31,7 @@ def test_a_run_may_spend_only_what_is_left_of_the_month(client: TestClient) -> N
         org,
         "INSERT INTO ai.usage (org_id, feature, model, input_tokens, output_tokens)"
         " VALUES (%s, 'director-plan', 'x', %s, 0)",
-        (org, MONTHLY - 20),
+        (org, MONTHLY - 6_000),
     )
 
     async def twice() -> tuple[int | None, int | None]:
@@ -39,7 +39,35 @@ def test_a_run_may_spend_only_what_is_left_of_the_month(client: TestClient) -> N
         second = await reserve(org, user, "director-plan", "m", most=20_000, allowance=ALLOWANCE)
         return (first.tokens if first else None, second.tokens if second else None)
 
-    assert on_app_loop(client, twice) == (20, None)
+    assert on_app_loop(client, twice) == (6_000, None)
+
+
+def test_a_sliver_under_the_floor_is_never_handed_out(client: TestClient) -> None:
+    """A run is billed in full before its cap is checked: a reservation too small for it
+    would only pay for a run that then fails."""
+    org, user = new_org()
+    as_org(
+        org,
+        "INSERT INTO ai.usage (org_id, feature, model, input_tokens, output_tokens)"
+        " VALUES (%s, 'director-plan', 'x', %s, 0)",
+        (org, MONTHLY - 4_999),
+    )
+
+    async def asks() -> tuple[int | None, int | None, int | None]:
+        default = await reserve(org, user, "director-plan", "m", most=20_000, allowance=ALLOWANCE)
+        whole = await reserve(
+            org, user, "director-asset", "m", most=4_000, allowance=ALLOWANCE, least=4_000
+        )
+        small = await reserve(org, user, "director-locate", "m", most=1_000, allowance=ALLOWANCE)
+        return (
+            default.tokens if default else None,
+            whole.tokens if whole else None,
+            small.tokens if small else None,
+        )
+
+    # Under a quarter of 20,000 left: nothing; then a whole image's 4,000; then 999 of a
+    # locate's 1,000, over its floor of 250.
+    assert on_app_loop(client, asks) == (None, 4_000, 999)
 
 
 def test_settling_records_what_the_run_used_instead_of_what_it_reserved(
@@ -88,7 +116,7 @@ def test_a_demo_guests_workspace_gets_the_smaller_allowance(client: TestClient) 
             (guest_org, guest),
         )
     member_org, member = new_org()
-    allowance = Allowance(monthly=50_000, demo_guest=1_000)
+    allowance = Allowance(monthly=50_000, demo_guest=6_000)
 
     async def both() -> tuple[int | None, int | None]:
         theirs = await reserve(
@@ -100,7 +128,7 @@ def test_a_demo_guests_workspace_gets_the_smaller_allowance(client: TestClient) 
         return (theirs.tokens if theirs else None, ours.tokens if ours else None)
 
     try:
-        assert on_app_loop(client, both) == (1_000, 20_000)
+        assert on_app_loop(client, both) == (6_000, 20_000)
     finally:
         # These tests share one database: a guest left behind would one day be expired,
         # and the guests' purge lets the migrator read expired guests' usage.

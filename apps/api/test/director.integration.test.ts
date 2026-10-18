@@ -10,6 +10,7 @@ import { ORPCError } from "@orpc/client";
 import { directorSeeds } from "@repo/contracts/director-seeds";
 import { directorTakeIdSchema } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
+import { TAKE_REVIEW_READ_S } from "@repo/jobs";
 import { jwtVerify } from "jose";
 import pg from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -747,7 +748,8 @@ describe("Director", () => {
     });
     const source = new URL(lastSourceUrl);
     expect(source.pathname).toContain(`files/${file.id}`);
-    expect(source.searchParams.get("X-Amz-Expires")).toBe("1800");
+    // It outlives the review job's retries and a backlog ahead of it (packages/jobs).
+    expect(source.searchParams.get("X-Amz-Expires")).toBe(String(TAKE_REVIEW_READ_S));
 
     expect((await session.rpc.director.takes({ videoId: VIDEO })).map((t) => t.id)).toEqual([
       take.id,

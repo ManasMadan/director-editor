@@ -53,7 +53,9 @@ def test_jobs_get_the_typescript_queue_options() -> None:
     options = job_options(DIRECTOR, "plan-1")
     assert options == {
         "attempts": 3,
-        "backoff": {"type": "exponential", "delay": 5000},
+        # The TypeScript side's jittered exponential backoff, under the type this service's
+        # workers compute it as (app/queues.py).
+        "backoff": {"type": "exponential-jitter", "delay": 5000},
         "removeOnComplete": {"age": 86400},
         "removeOnFail": {"age": 604800},
         "jobId": "plan-1",

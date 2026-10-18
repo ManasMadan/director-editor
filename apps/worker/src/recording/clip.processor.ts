@@ -42,7 +42,7 @@ import { realtimeChannel } from "@repo/contracts/realtime";
 import { footageThrough, RECORDING_TYPES, recordingSliceKey } from "@repo/contracts/recording";
 import { MINUTE_S } from "@repo/contracts/time";
 import { tenantTx, withTenant } from "@repo/db";
-import { parseJob, queuePrefix, queues, type UncheckedJob } from "@repo/jobs";
+import { parseJob, queuePrefix, queues, TAKE_REVIEW_READ_S, type UncheckedJob } from "@repo/jobs";
 import {
   type Database,
   InjectDatabase,
@@ -63,8 +63,7 @@ import { publishRealtime } from "../realtime/publish";
 export const AI_CLIENT = Symbol("AI_CLIENT");
 export type AiClient = ReturnType<typeof createAiClient>;
 
-// Long enough for the clipper to fetch a whole part on a retry, and the review's retries
-// (three, minutes apart) to read the take, no longer.
+// Long enough for the clipper to fetch a whole part on a retry, no longer.
 const READ_EXPIRES_S = 30 * MINUTE_S;
 const TAKE_TYPE = "video/mp4";
 const recordingType = z.enum(RECORDING_TYPES);
@@ -184,8 +183,9 @@ export class ClipProcessor extends JobProcessor {
     const caller = { userId: attempt.session.userId, orgId };
     const clip = await ai.director.clip(caller, await this.request(storage, orgId, attempt));
     const fileId = await this.storeTake(storage, orgId, attempt, Buffer.from(clip.video));
+    // The take's review reads it, maybe behind a backlog and after minutes of retries.
     const { url } = await storage.presignDownload(`files/${fileId}`, {
-      expiresInSeconds: READ_EXPIRES_S,
+      expiresInSeconds: TAKE_REVIEW_READ_S,
     });
     const take = await ai.director.createTake(caller, {
       videoId: attempt.session.videoId,

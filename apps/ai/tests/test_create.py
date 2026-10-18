@@ -62,6 +62,7 @@ WRITTEN: dict[str, object] = {
     "durationSeconds": 20,
     "assets": [],
     "edits": [],
+    "brands": [],
     "shots": [
         {
             **SHOT,

@@ -68,7 +68,8 @@ lets it in (`deploy/charts/data/templates/valkey.yaml`).
 | `events-audit` | `event` | the outbox relay | worker (audit log) |
 | `events-notifications` | `event` | the outbox relay | notifications (security alerts, and suppressing an address that hard-bounced) |
 | `files` | `process` | api (upload completed) | worker |
-| `ai-director` | `plan`, `assets`, `review-take`, `session-pass` | ai (FastAPI and its worker) | ai worker (Python) |
+| `ai-director` | `plan`, `assets`, `session-pass` (and `review-take`, until the jobs the previous release queued there are done) | ai (FastAPI and its worker) | ai worker (Python) |
+| `ai-review` | `review-take` | ai (a take added) | ai worker (Python), two at a time |
 | `recording` | `clip` | api (an ended attempt whose footage is all stored), worker (sessions whose footage stopped coming: left open, or finished with a part never closed or a slice missing), both through `createProducer`, so with the queue's retries | worker (through the AI service's clipper) |
 | `maintenance` | `outbox-retention`, `audit-partitions`, `session-retention`, `files-cleanup`, `demo-retention`, `recording-retention` | worker (job schedulers) | worker |
 
@@ -80,7 +81,9 @@ so each occurrence runs once whatever the replica count.
 Most queues retry 5 times with exponential backoff from 2 s, with jitter (each delay
 somewhere in its upper half) so jobs that failed together don't all return at once.
 `ai-director` retries 3 times from 5 s (model calls cost money, and a provider outage
-passes), `recording` 5 times from 10 s (a clipper outage passes; the last failure
+passes), `ai-review` 6 times from 15 s, about eight minutes in all (a roll's takes are
+reviewed together, and Gemini answers a burst with 429s for minutes; a take's read link
+lasts `TAKE_REVIEW_READ_S`, well past that), `recording` 5 times from 10 s (a clipper outage passes; the last failure
 fails the attempt), and `maintenance` 3 times from a minute.
 
 A job that fails validation or runs out of attempts stays in BullMQ's failed set for
@@ -180,11 +183,13 @@ stay so the events-compat check and the audit log's labels for past rows keep wo
 
 ## The Python worker
 
-`apps/ai` produces and consumes `ai-director` with the Python `bullmq` package. Its job
-payloads are the Pydantic models generated from the zod schemas, one per job
-(`app/contracts/ai_director_plan_job.py`, `ai_director_review_take_job.py`), and its
-prefix and retry options come from `app/contracts/queue_settings.json`, generated from
-`queues` (see [codegen.md](codegen.md)). It publishes live nudges on the same Redis
+`apps/ai` produces and consumes `ai-director` and `ai-review` with the Python `bullmq`
+package. Its job payloads are the Pydantic models generated from the zod schemas, one
+per job (`app/contracts/ai_director_plan_job.py`, `ai_review_review_take_job.py`), and
+its prefix and retry options come from `app/contracts/queue_settings.json`, generated
+from `queues` (see [codegen.md](codegen.md)). Python's `bullmq` ignores a backoff's
+`jitter`, so the jobs it adds carry the backoff type `exponential-jitter`, which its
+workers compute as Node does (`app/queues.py`). It publishes live nudges on the same Redis
 pub/sub channels as the TypeScript services, validated against the generated
 `RealtimeMessage`.
 

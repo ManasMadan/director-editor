@@ -11,6 +11,7 @@ connection also doesn't read the Redis version, so a delayed job can start up to
 second late on this side.
 """
 
+import random
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Protocol
@@ -30,7 +31,8 @@ from app.contracts.ai_director_assets_job import AiDirectorAssetsJob
 from app.contracts.ai_director_create_plan_job import AiDirectorCreatePlanJob
 from app.contracts.ai_director_job_name import AiDirectorJobName
 from app.contracts.ai_director_plan_job import AiDirectorPlanJob
-from app.contracts.ai_director_review_take_job import AiDirectorReviewTakeJob
+from app.contracts.ai_review_job_name import AiReviewJobName
+from app.contracts.ai_review_review_take_job import AiReviewReviewTakeJob
 from app.contracts.queue_setting import QueueSetting
 from app.contracts.shared_queue_name import SharedQueueName
 
@@ -38,13 +40,39 @@ SETTINGS = TypeAdapter(dict[SharedQueueName, QueueSetting]).validate_json(
     (Path(__file__).parent / "contracts" / "queue_settings.json").read_bytes()
 )
 DIRECTOR: SharedQueueName = "ai-director"
+REVIEW: SharedQueueName = "ai-review"
 _JOB_OPTIONS = TypeAdapter(JobOptions)
+# Python's bullmq reads a backoff's type and delay only, so a jittered exponential
+# backoff (packages/jobs gives every queue one) is added under this type, which this
+# service's workers compute themselves (`jittered_backoff`): jobs that failed together,
+# a roll's reviews that Gemini rate-limited, then come back spread out rather than all at
+# once. A job added by Node keeps bullmq's own "exponential", without the jitter.
+JITTERED = "exponential-jitter"
 
 
 def job_options(queue: SharedQueueName, job_id: str) -> JobOptions:
     """The queue's shared job options, as bullmq's own options type."""
     options = SETTINGS[queue].options.model_dump(mode="json", exclude_none=True)
+    backoff = SETTINGS[queue].options.backoff
+    if backoff.type == "exponential" and backoff.jitter:
+        options["backoff"] = {"type": JITTERED, "delay": backoff.delay}
     return _JOB_OPTIONS.validate_python({**options, "jobId": job_id})
+
+
+def jittered_backoff(
+    queue: SharedQueueName, draw: Callable[[], float] = random.random
+) -> Callable[[int, object, object, object], int]:
+    """How long a job of `queue` waits before its next attempt, in milliseconds, as Node's
+    bullmq computes a jittered exponential backoff: the delay doubled for each attempt
+    made, then shortened at random by up to the queue's jitter."""
+    backoff = SETTINGS[queue].options.backoff
+    delay, jitter = backoff.delay or 0, backoff.jitter or 0
+
+    def wait(attempts_made: int, _type: object, _error: object, _job: object) -> int:
+        longest: int = delay << (attempts_made - 1)
+        return round(longest * (1 - jitter * draw()))
+
+    return wait
 
 
 class DirectorQueue:
@@ -54,6 +82,8 @@ class DirectorQueue:
     def __init__(self, redis_url: str) -> None:
         options: QueueBaseOptions = {"connection": redis_url, "prefix": SETTINGS[DIRECTOR].prefix}
         self._queue = Queue(DIRECTOR, options)
+        reviews: QueueBaseOptions = {"connection": redis_url, "prefix": SETTINGS[REVIEW].prefix}
+        self._reviews = Queue(REVIEW, reviews)
 
     async def add_plan(
         self,
@@ -118,15 +148,16 @@ class DirectorQueue:
         request_id: str | None,
         user_id: UUID | None,
     ) -> None:
-        data = AiDirectorReviewTakeJob.model_validate(
+        data = AiReviewReviewTakeJob.model_validate(
             {
                 "meta": _meta(org_id, request_id, user_id),
                 "payload": {"takeId": take_id, "orgId": org_id, "sourceUrl": source_url},
             }
         )
-        # One review per take.
-        await self._add(
-            "review-take", data.model_dump(mode="json", exclude_none=True), str(take_id)
+        name: AiReviewJobName = "review-take"
+        # One review per take, on the reviews' own queue.
+        await self._reviews.add(  # pyright: ignore[reportUnknownMemberType]  # bullmq leaves the job's data untyped
+            name, data.model_dump(mode="json", exclude_none=True), job_options(REVIEW, str(take_id))
         )
 
     async def _add(self, name: AiDirectorJobName, data: dict[str, object], job_id: str) -> None:
@@ -136,6 +167,7 @@ class DirectorQueue:
 
     async def close(self) -> None:
         await self._queue.close()
+        await self._reviews.close()
 
 
 def _meta(org_id: UUID, request_id: str | None, user_id: UUID | None) -> dict[str, str | None]:
@@ -172,5 +204,7 @@ def start_worker(
         "prefix": SETTINGS[queue].prefix,
         "concurrency": concurrency,
     }
-    # bullmq types the processor as returning a Future; any coroutine function works.
-    return Worker(queue, process, options)  # pyright: ignore[reportArgumentType]  # see above
+    # bullmq types the processor as returning a Future (any coroutine function works), and
+    # its WorkerOptions leaves out `settings`, where it looks up a backoff type of its own.
+    settings = {"settings": {"backoffStrategy": jittered_backoff(queue)}}
+    return Worker(queue, process, {**options, **settings})  # pyright: ignore[reportArgumentType]  # see above

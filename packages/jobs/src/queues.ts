@@ -107,6 +107,38 @@ const retrying: JobsOptions = {
   backoff: { type: "exponential", delay: 2_000, jitter: 0.5 },
 };
 
+const takeReview = z.object({
+  takeId: directorTakeIdSchema,
+  orgId: orgIdSchema,
+  sourceUrl: z.url(),
+});
+
+/**
+ * A take review's retries: Gemini's 429s and 5xx last minutes, not seconds, when a roll
+ * is cut into a dozen takes that all ask for a review at once, so the retries spread over
+ * about eight minutes (15 s, then doubling, each up to half shorter at random).
+ */
+const REVIEW_ATTEMPTS = 6;
+const REVIEW_BACKOFF_MS = 15 * SECOND_MS;
+
+/**
+ * The longest a review job can wait for its last attempt: every backoff at its full
+ * length (the jitter only shortens them).
+ */
+export const REVIEW_RETRY_WINDOW_MS = Array.from(
+  { length: REVIEW_ATTEMPTS - 1 },
+  (_, retry) => REVIEW_BACKOFF_MS * 2 ** retry,
+).reduce((total, backoff) => total + backoff, 0);
+
+/**
+ * How long a take's presigned read (a review job's `sourceUrl`) lasts. It must outlive
+ * the job's last attempt, with room for a backlog of reviews ahead of it (a session's
+ * takes queue together, two reviewed at a time): a read that expired turns into a 403 and
+ * a review that can never succeed. apps/api and apps/worker sign every take's read for
+ * this long.
+ */
+export const TAKE_REVIEW_READ_S = 6 * HOUR_S;
+
 export const queues = {
   /**
    * Time-critical notifications (sign-in codes, security alerts), delivered by
@@ -166,15 +198,11 @@ export const queues = {
         photoUrls: z.array(z.url()).max(4),
       }),
       /**
-       * Review a take. `sourceUrl` is a presigned read of the take's file (apps/api signs
-       * it for 30 minutes): the AI service has no storage credentials of its own, and the
-       * URL only ever sits in this queue, never in a table.
+       * A take review queued by the previous release. Reviews have their own queue now
+       * (`ai-review`); this stays until those already queued here are done, and goes in a
+       * later release.
        */
-      "review-take": z.object({
-        takeId: directorTakeIdSchema,
-        orgId: orgIdSchema,
-        sourceUrl: z.url(),
-      }),
+      "review-take": takeReview,
       /**
        * The post-session pass: once a shoot's recording session is done, Gemini watches
        * all of it to find attempts the live marks missed and edges that were off. Queued
@@ -186,6 +214,29 @@ export const queues = {
     options: {
       attempts: 3,
       backoff: { type: "exponential", delay: 5 * SECOND_MS, jitter: 0.5 },
+      removeOnComplete: { age: DAY_S },
+      removeOnFail: { age: 7 * DAY_S },
+    },
+  },
+  /**
+   * Take reviews (apps/ai produces and consumes it): Gemini watches each take a member
+   * records. Their own queue, apart from `ai-director`'s plans and drawings, so a roll's
+   * burst of takes is reviewed a couple at a time (the AI worker's concurrency on this
+   * queue) without holding up anything else, and retried over minutes when Gemini is
+   * rate limiting.
+   */
+  "ai-review": {
+    jobs: {
+      /**
+       * Review a take. `sourceUrl` is a presigned read of the take's file, signed for
+       * `TAKE_REVIEW_READ_S`: the AI service has no storage credentials of its own, and
+       * the URL only ever sits in this queue, never in a table.
+       */
+      "review-take": takeReview,
+    },
+    options: {
+      attempts: REVIEW_ATTEMPTS,
+      backoff: { type: "exponential", delay: REVIEW_BACKOFF_MS, jitter: 0.5 },
       removeOnComplete: { age: DAY_S },
       removeOnFail: { age: 7 * DAY_S },
     },

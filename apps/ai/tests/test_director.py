@@ -53,7 +53,7 @@ from app.schemas import (
 from app.session_recordings import create_session_pass
 from app.settings import get_settings
 from app.usage import Allowance
-from app.worker import director_processor
+from app.worker import director_processor, review_processor
 from tests.fakes import (
     BIGQUERY_DATASET,
     BIGQUERY_PROJECT,
@@ -1668,8 +1668,10 @@ def test_a_take_is_reviewed_and_keeps_its_best_part(
     with serve_files({"/take.webm": ("video/webm", b"\x1a\x45\xdf\xa3" + b"\x00" * 64)}) as files:
         take = add_take(client, org, user, f"{files.url}/take.webm?X-Amz-Signature=abc")
         assert take.status == "pending"
-        job = stored_job(f"{{ai-director}}:ai-director:{take.id}")
+        # On the reviews' own queue, retried with a jittered backoff this service computes.
+        job = stored_job(f"{{ai-review}}:ai-review:{take.id}")
         assert job[b"name"] == b"review-take"
+        assert b'"type":"exponential-jitter"' in job[b"opts"]
         on_app_loop(
             client,
             lambda: director().review(
@@ -2104,6 +2106,103 @@ def test_a_review_over_its_token_cap_or_the_budget_fails_without_retrying(
     assert takes_of(client, org, user)[0].error == "AI_BUDGET_EXCEEDED"
 
 
+def leave_in_the_month(org: UUID, tokens: int) -> None:
+    """Uses the workspace's allowance (AI_MONTHLY_TOKENS_PER_ORG in the tests) up to the
+    last `tokens`."""
+    _ = as_org(
+        org,
+        "INSERT INTO ai.usage (org_id, feature, model, input_tokens, output_tokens)"
+        " VALUES (%s, 'director-plan', 'x', %s, 0)",
+        (org, 2_000_000 - spent_this_month(org) - tokens),
+    )
+
+
+def spent_this_month(org: UUID) -> int:
+    [(total,)] = as_org(org, "SELECT coalesce(sum(input_tokens + output_tokens), 0) FROM ai.usage")
+    assert isinstance(total, int)
+    return total
+
+
+def test_a_review_with_less_left_than_it_needs_is_a_budget_failure(
+    client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    """A run is billed before its cap is checked: a review that ran over a reservation cut
+    short by the month's end is the budget's failure, and one with too little left to
+    start isn't started."""
+    org, user = new_org()
+    _ = ready_plan(client, org, user)
+    leave_in_the_month(org, 50_000)
+    gemini[1][GEMINI_PATH] = gemini_output(REVIEW, tokens=60_000)
+    with serve_files({"/t": ("video/webm", b"\x1a\x45\xdf\xa3")}) as files:
+        take = add_take(client, org, user, f"{files.url}/t")
+        on_app_loop(client, lambda: director().review(org, take.id, f"{files.url}/t", user))
+        assert takes_of(client, org, user)[0].error == "AI_BUDGET_EXCEEDED"
+        # Under a quarter of a review's cap left (the test's 120,000): Gemini isn't asked.
+        asked = len(gemini[0].received)
+        broke = add_take(client, org, user, f"{files.url}/t")
+        on_app_loop(client, lambda: director().review(org, broke.id, f"{files.url}/t", user))
+    assert takes_of(client, org, user)[0].error == "AI_BUDGET_EXCEEDED"
+    assert len(gemini[0].received) == asked
+
+
+@pytest.mark.parametrize(
+    ("status", "reason", "cause"),
+    [(429, "RESOURCE_EXHAUSTED", "ModelHTTPError"), (503, "UNAVAILABLE", "ModelHTTPError")],
+)
+def test_a_rate_limited_review_is_retried_and_its_failure_says_why(
+    client: TestClient,
+    gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]],
+    monkeypatch: pytest.MonkeyPatch,
+    status: int,
+    reason: str,
+    cause: str,
+) -> None:
+    org, user = new_org()
+    _ = ready_plan(client, org, user)
+    activities = Activities()
+    monkeypatch.setattr("app.director.log_activity", activities)
+    gemini[1][GEMINI_PATH] = gemini_error(status, reason)
+    with serve_files({"/t": ("video/webm", b"\x1a\x45\xdf\xa3")}) as files:
+        take = add_take(client, org, user, f"{files.url}/t")
+        url = f"{files.url}/t"
+        with pytest.raises(ReviewInterrupted):
+            on_app_loop(client, lambda: director().review(org, take.id, url, user, final=False))
+        assert takes_of(client, org, user)[0].status == "reviewing"
+        assert activities.named("director.take_reviewed") == []
+        with pytest.raises(ReviewInterrupted):
+            on_app_loop(client, lambda: director().review(org, take.id, url, user))
+    assert takes_of(client, org, user)[0].error == "DIRECTOR_REVIEW_FAILED"
+    [(failed, _)] = activities.named("director.take_reviewed")
+    assert failed["target"] == {"takeId": str(take.id), "cause": cause}
+
+
+def test_a_take_is_never_left_reviewing_after_its_last_attempt(
+    client: TestClient,
+    gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Something the review doesn't expect (the ledger unreachable as it settles): retried
+    while attempts are left, and the take failed on the last."""
+    org, user = new_org()
+    _ = ready_plan(client, org, user)
+    gemini[1][GEMINI_PATH] = gemini_output(REVIEW)
+
+    async def unreachable(*_args: object) -> None:
+        raise ConnectionError("the database went away")
+
+    monkeypatch.setattr("app.director.settle", unreachable)
+    with serve_files({"/t": ("video/webm", b"\x1a\x45\xdf\xa3")}) as files:
+        take = add_take(client, org, user, f"{files.url}/t")
+        url = f"{files.url}/t"
+        with pytest.raises(ConnectionError):
+            on_app_loop(client, lambda: director().review(org, take.id, url, user, final=False))
+        assert takes_of(client, org, user)[0].status == "reviewing"
+        with pytest.raises(ConnectionError):
+            on_app_loop(client, lambda: director().review(org, take.id, url, user))
+    [failed] = takes_of(client, org, user)
+    assert (failed.status, failed.error) == ("failed", "DIRECTOR_REVIEW_FAILED")
+
+
 def test_a_review_for_a_take_that_s_gone_does_nothing(client: TestClient) -> None:
     org, user = new_org()
     on_app_loop(client, lambda: director().review(org, uuid4(), "http://unused", user))
@@ -2192,6 +2291,13 @@ def test_the_worker_runs_both_director_jobs(
         )
         on_app_loop(client, lambda: process(review))
     assert takes_of(client, org, user)[0].status == "ready"
+    # A review queued by the previous release, on `ai-director`, is still run.
+    assert activities.named("job.finished")[-1][0]["target"] == {
+        "queue": "ai-director",
+        "job": "review-take",
+        "jobId": "job-1",
+        "attempt": 1,
+    }
     # A job without a user still names whose take it reviewed, and the score.
     [(reviewed, _)] = activities.named("director.take_reviewed")
     assert reviewed["user_id"] == user
@@ -2221,8 +2327,70 @@ def test_the_worker_runs_both_director_jobs(
         on_app_loop(client, lambda: process(Job("unknown", {})))
 
 
-def test_the_worker_process_plans_queued_shorts(
-    client: TestClient, extra_env: dict[str, str]
+def test_the_worker_runs_reviews_from_their_own_queue(
+    client: TestClient,
+    gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    org, user = new_org()
+    _ = ready_plan(client, org, user)
+    activities = Activities()
+    monkeypatch.setattr("app.worker.log_activity", activities)
+    gemini[1][GEMINI_PATH] = gemini_output(REVIEW)
+    process = review_processor(director())
+    with serve_files({"/t": ("video/webm", b"\x1a\x45\xdf\xa3")}) as files:
+        take = add_take(client, org, user, f"{files.url}/t")
+        review = Job(
+            "review-take",
+            {
+                "meta": {"orgId": str(org)},
+                "payload": {
+                    "takeId": str(take.id),
+                    "orgId": str(org),
+                    "sourceUrl": f"{files.url}/t",
+                },
+            },
+        )
+        on_app_loop(client, lambda: process(review))
+    assert takes_of(client, org, user)[0].status == "ready"
+    [(finished, _)] = activities.named("job.finished")
+    assert finished["target"] == {
+        "queue": "ai-review",
+        "job": "review-take",
+        "jobId": "job-1",
+        "attempt": 1,
+    }
+    # Its last attempt is the queue's sixth: a failure before then is retried.
+    gemini[1][GEMINI_PATH] = gemini_error(429, "RESOURCE_EXHAUSTED")
+    with serve_files({"/t": ("video/webm", b"\x1a\x45\xdf\xa3")}) as files:
+        again = add_take(client, org, user, f"{files.url}/t")
+        retried = Job(
+            "review-take",
+            {
+                "meta": {"orgId": str(org)},
+                "payload": {
+                    "takeId": str(again.id),
+                    "orgId": str(org),
+                    "sourceUrl": f"{files.url}/t",
+                },
+            },
+        )
+        retried.attemptsMade = 4
+        with pytest.raises(ReviewInterrupted):
+            on_app_loop(client, lambda: process(retried))
+        assert takes_of(client, org, user)[0].status == "reviewing"
+        retried.attemptsMade = 5
+        with pytest.raises(ReviewInterrupted):
+            on_app_loop(client, lambda: process(retried))
+    assert takes_of(client, org, user)[0].status == "failed"
+    with pytest.raises(ValidationError):
+        on_app_loop(client, lambda: process(Job("plan", {})))
+
+
+def test_the_worker_process_plans_and_reviews_what_s_queued(
+    client: TestClient,
+    gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]],
+    extra_env: dict[str, str],
 ) -> None:
     org, user = new_org()
     plan = index_plan(client, org, user)
@@ -2230,11 +2398,20 @@ def test_the_worker_process_plans_queued_shorts(
         [sys.executable, "-m", "app.worker"], env={**os.environ, **ENV, **extra_env}
     )
     try:
-        deadline = time.monotonic() + 20
+        deadline = time.monotonic() + 60
         while time.monotonic() < deadline and plan.status != "ready":
             time.sleep(0.2)
             plan = plan_of(client, org, user)
         assert plan.status == "ready"
+        # A take's review, from the reviews' own queue.
+        gemini[1][GEMINI_PATH] = gemini_output(REVIEW)
+        with serve_files({"/t": ("video/webm", b"\x1a\x45\xdf\xa3")}) as files:
+            take = add_take(client, org, user, f"{files.url}/t")
+            deadline = time.monotonic() + 60
+            while time.monotonic() < deadline and take.status != "ready":
+                time.sleep(0.2)
+                take = takes_of(client, org, user)[0]
+        assert take.status == "ready"
     finally:
         worker.terminate()
         assert worker.wait(timeout=10) == 0

@@ -27,6 +27,7 @@ from google.genai.types import MediaResolution
 from psycopg.errors import UniqueViolation
 from pydantic import TypeAdapter
 from pydantic_ai import Agent, BinaryContent
+from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.models import Model
 from pydantic_ai.models.google import GoogleModel, GoogleModelSettings
 from pydantic_ai.providers.google import GoogleProvider
@@ -547,6 +548,18 @@ def best_range(review: TakeReview, kind: str) -> tuple[int | None, int | None]:
     return (start_ms, end_ms) if end_ms > start_ms else (None, None)
 
 
+@dataclass(frozen=True)
+class _Watching:
+    """What a take's review is judged against, and who and what it's for."""
+
+    shot: Shot
+    notes: list[str]
+    kind: str
+    shot_index: int
+    reviewer: UUID
+    video_id: str
+
+
 class Director:
     def __init__(
         self,
@@ -1058,7 +1071,8 @@ class Director:
         final: bool = True,
     ) -> None:
         """Watches a take and records the review (the review-take job). Safe to run again:
-        a reviewed take is left as it is. Failures are retried like a plan's (`analyze`)."""
+        a reviewed take is left as it is. Failures are retried like a plan's (`analyze`),
+        and a take is never left reviewing after its last attempt, whatever failed."""
         async with tenant(org_id) as session:
             take = await session.get(DirectorTake, take_id)
             if take is None or take.status == "ready":
@@ -1070,15 +1084,41 @@ class Director:
             # Judged against the shot as the member is filming it, and what they've told
             # Director (app/your_version.py), never the original's place they changed.
             version = await your_version(session, take.user_id, plan.video_id)
-            shot = apply_shot_version(
-                _shot(plan, take.shot_index), shot_version(version, take.shot_index)
+            watching = _Watching(
+                shot=apply_shot_version(
+                    _shot(plan, take.shot_index), shot_version(version, take.shot_index)
+                ),
+                notes=told(version),
+                kind=take.kind,
+                shot_index=take.shot_index,
+                # For the analytics event: the take's own user, since a job may not name one.
+                reviewer=take.user_id,
+                video_id=plan.video_id,
             )
-            notes = told(version)
-            kind = take.kind
-            # For the analytics event: the take's own user, since a job may not name one.
-            reviewer, video_id, shot_index = take.user_id, plan.video_id, take.shot_index
             take.status, take.updated_at = "reviewing", func.now()
         await publish_to_org(self._redis, org_id, CHANGED)
+        try:
+            await self._watch(org_id, take_id, source_url, user_id, watching, final)
+        except ReviewInterrupted:
+            raise
+        except Exception as error:
+            # Anything the review itself doesn't handle (the database or Redis between its
+            # steps): retried, and on the last attempt the take fails rather than staying
+            # "reviewing" for good.
+            log.exception("take review failed", take_id=str(take_id), error=type(error).__name__)
+            if final:
+                await self._fail_take(org_id, take_id, cause=type(error).__name__)
+            raise
+
+    async def _watch(
+        self,
+        org_id: UUID,
+        take_id: UUID,
+        source_url: str,
+        user_id: UUID | None,
+        watching: _Watching,
+        final: bool,
+    ) -> None:
         try:
             data, content_type = await self._download(source_url)
         except (httpx.HTTPError, ValueError) as error:
@@ -1104,23 +1144,44 @@ class Director:
         try:
             result = await self._reviewer.run(
                 [
-                    "The shot, as they're filming it:\n" + shot.model_dump_json(),
+                    "The shot, as they're filming it:\n" + watching.shot.model_dump_json(),
                     "What they've told you (always holds):\n"
-                    + ("\n".join(notes) or "(nothing yet)"),
-                    f"The take, a {kind}:",
+                    + ("\n".join(watching.notes) or "(nothing yet)"),
+                    f"The take, a {watching.kind}:",
                     BinaryContent(data=data, media_type=content_type),
                 ],
                 usage=usage,
                 usage_limits=UsageLimits(total_tokens_limit=reservation.tokens),
             )
             review = repair_review(result.output)
+        except UsageLimitExceeded as error:
+            # Run over a reservation cut short by what's left of the month: that's the
+            # budget, not the review (a full one run over is the review's own failure).
+            log.warning("take review over its reservation", take_id=str(take_id))
+            if reservation.tokens < self._budgets.per_review:
+                await self._fail_take(
+                    org_id, take_id, "AI_BUDGET_EXCEEDED", cause=type(error).__name__
+                )
+                return
+            await self._end_take(org_id, take_id, error, final)
+            return
         except Exception as error:
-            log.exception("take review failed", take_id=str(take_id))
+            log.exception("take review failed", take_id=str(take_id), error=type(error).__name__)
             await self._end_take(org_id, take_id, error, final)
             return
         finally:
             await settle(reservation, usage.input_tokens, usage.output_tokens)
-        start, end = best_range(review, kind)
+        await self._keep_review(org_id, take_id, watching, review, usage)
+
+    async def _keep_review(
+        self,
+        org_id: UUID,
+        take_id: UUID,
+        watching: _Watching,
+        review: TakeReview,
+        usage: RunUsage,
+    ) -> None:
+        start, end = best_range(review, watching.kind)
         async with tenant(org_id) as session:
             await session.execute(
                 update(DirectorTake)
@@ -1141,21 +1202,24 @@ class Director:
         # Only here, once the score is stored: a review that fails or is retried isn't one.
         self._events.record(
             AnalyticsEvent(
-                kind="take_reviewed", user_id=reviewer, video_id=video_id, score=review.score
+                kind="take_reviewed",
+                user_id=watching.reviewer,
+                video_id=watching.video_id,
+                score=review.score,
             )
         )
         log_activity(
             "director.take_reviewed",
             target={
                 "takeId": str(take_id),
-                "videoId": video_id,
-                "shotIndex": shot_index,
-                "kind": kind,
+                "videoId": watching.video_id,
+                "shotIndex": watching.shot_index,
+                "kind": watching.kind,
                 "score": review.score,
                 "inputTokens": usage.input_tokens,
                 "outputTokens": usage.output_tokens,
             },
-            user_id=reviewer,
+            user_id=watching.reviewer,
         )
 
     # ------------------------------------------------------------------------ editor
@@ -1410,13 +1474,20 @@ class Director:
         """A review that failed: retried (by raising a clean error) while it may yet succeed,
         failed once it can't."""
         if final or not retryable(error):
-            await self._fail_take(org_id, take_id)
+            await self._fail_take(org_id, take_id, cause=type(error).__name__)
         if retryable(error):
             raise ReviewInterrupted(take_id) from None
 
     async def _fail_take(
-        self, org_id: UUID, take_id: UUID, code: ErrorCode = "DIRECTOR_REVIEW_FAILED"
+        self,
+        org_id: UUID,
+        take_id: UUID,
+        code: ErrorCode = "DIRECTOR_REVIEW_FAILED",
+        *,
+        cause: str | None = None,
     ) -> None:
+        """Fails the take with `code`. `cause` is the error's type, logged with the
+        failure so a failed review says why (a 429, a timeout, an expired read)."""
         async with tenant(org_id) as session:
             await session.execute(
                 update(DirectorTake)
@@ -1428,7 +1499,7 @@ class Director:
             "director.take_reviewed",
             outcome=outcome_of(code),
             reason=code,
-            target={"takeId": str(take_id)},
+            target={"takeId": str(take_id), "cause": cause or code},
         )
 
     async def _reserve(

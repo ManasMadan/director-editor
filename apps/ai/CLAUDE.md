@@ -1,8 +1,8 @@
 # apps/ai
 
 Python 3.14 service: Director on Gemini (FastAPI on port 8000, Pydantic AI) and a
-BullMQ worker (`app/worker.py`, queue `ai-director`) that plans shorts and reviews
-takes. Internal only: callers sign a short-lived JWT with `AI_SERVICE_SECRET`; the
+BullMQ worker (`app/worker.py`, queues `ai-director` and `ai-review`) that plans shorts
+and reviews takes. Internal only: callers sign a short-lived JWT with `AI_SERVICE_SECRET`; the
 TypeScript client is `packages/ai-client`.
 
 ## Commands (from the repo root)

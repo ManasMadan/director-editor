@@ -308,7 +308,7 @@ services:
     terminationGracePeriodSeconds: 120
     keda:
       enabled: true
-      queues: [ai-director]
+      queues: [ai-director, ai-review]
 
   # Virus scanning for uploads (only needed when file uploads are on).
   clamav:

@@ -1,5 +1,12 @@
+import { SECOND_MS } from "@repo/contracts/time";
 import { describe, expect, it } from "vitest";
-import { eventSubscribers, queues, type RoutedEvent } from "./queues";
+import {
+  eventSubscribers,
+  queues,
+  REVIEW_RETRY_WINDOW_MS,
+  type RoutedEvent,
+  TAKE_REVIEW_READ_S,
+} from "./queues";
 
 /** Whether a value of type `U` is accepted where `T` is expected. */
 type Takes<T, U> = [U] extends [T] ? true : false;
@@ -32,5 +39,16 @@ describe("event routing", () => {
         expect(backoff.jitter, name).toBeGreaterThan(0);
       }
     }
+  });
+});
+
+describe("take reviews", () => {
+  it("retry over minutes, so a burst Gemini rate-limits isn't failed in seconds", () => {
+    expect(REVIEW_RETRY_WINDOW_MS).toBe(465 * SECOND_MS);
+    expect(queues["ai-review"].options.attempts).toBe(6);
+  });
+
+  it("read the take through a link that outlives the last retry, with room for a backlog", () => {
+    expect(TAKE_REVIEW_READ_S * SECOND_MS).toBeGreaterThan(10 * REVIEW_RETRY_WINDOW_MS);
   });
 });
