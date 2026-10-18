@@ -14,7 +14,6 @@ export default function robots(): MetadataRoute.Robots {
       disallow: [
         "/library",
         "/shorts",
-        "/saved",
         "/director",
         "/settings",
         "/sign-",

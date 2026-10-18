@@ -588,7 +588,6 @@
           "FILE_NOT_READY",
           "INVALID_SIGNATURE",
           "AI_BUDGET_EXCEEDED",
-          "SHORT_NOT_FOUND",
           "DIRECTOR_INDEX_LIMIT",
           "DIRECTOR_VIDEO_UNAVAILABLE",
           "DIRECTOR_TOO_LONG",

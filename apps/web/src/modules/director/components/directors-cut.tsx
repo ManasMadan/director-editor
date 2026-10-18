@@ -1,7 +1,7 @@
 "use client";
 
 import type { Shot } from "@repo/contracts/api";
-import { Spinner } from "@repo/ui/components/spinner";
+import { GeminiLoader } from "@repo/ui/components/gemini-loader";
 import { cn } from "@repo/ui/lib/utils";
 import { Check, RotateCcw } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
@@ -126,6 +126,7 @@ export function DirectorsCut({
   raised?: boolean;
 }) {
   const t = useTranslations("director.live.cut");
+  const shoot = useTranslations("director.shoot");
   const locale = useLocale();
   const photo = take.type.startsWith("image/");
   return (
@@ -185,7 +186,11 @@ export function DirectorsCut({
             disabled={sending}
             className="flex h-13 flex-[1.4] items-center justify-center gap-2 rounded-full bg-studio-foreground font-semibold text-studio shadow-xl transition-transform active:scale-95 disabled:opacity-70"
           >
-            {sending ? <Spinner /> : <Check className="size-5" aria-hidden />}
+            {sending ? (
+              <GeminiLoader label={shoot("sending")} size="sm" />
+            ) : (
+              <Check className="size-5" aria-hidden />
+            )}
             {t("keep")}
           </button>
         </div>

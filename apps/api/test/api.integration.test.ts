@@ -82,6 +82,12 @@ async function expectError(promise: Promise<unknown>, code: string) {
   return orpcError;
 }
 
+/**
+ * What a workspace procedure answers here once the member is let through: the library
+ * asks the AI service, which this file's API runs without.
+ */
+const LET_IN = "FEATURE_DISABLED";
+
 describe("error responses", () => {
   const send = (path: string, init: RequestInit = {}) => fetch(`${harness.baseUrl}${path}`, init);
   const json = (body: string, type = "application/json") => ({
@@ -91,12 +97,12 @@ describe("error responses", () => {
   });
 
   it.each([
-    ["a malformed JSON body", "/api/v1/shorts/lookup", json("{bad"), 400, "BAD_REQUEST"],
+    ["a malformed JSON body", "/api/v1/director/library", json("{bad"), 400, "BAD_REQUEST"],
     ["an unknown route under /api/v1", "/api/v1/nope", {}, 404, "NOT_FOUND"],
     ["an unknown route anywhere else", "/v1/me", {}, 404, "NOT_FOUND"],
     [
       "the wrong media type",
-      "/api/v1/shorts/lookup",
+      "/api/v1/director/library",
       json("x", "text/plain"),
       415,
       "UNSUPPORTED_MEDIA_TYPE",
@@ -129,14 +135,14 @@ describe("error responses", () => {
 
   it("refuses, outside production, to answer a code the procedure's contract doesn't declare", async () => {
     const { session } = await signedInUser();
-    const { ShortsService } = await import("../src/modules/shorts");
-    const shorts = harness.app.get(ShortsService);
-    // A code the shorts contract has no business returning.
-    const reactions = vi
-      .spyOn(shorts, "reactionsOf")
+    const { DirectorService } = await import("../src/modules/director");
+    const director = harness.app.get(DirectorService);
+    // A code the director contract has no business returning.
+    const library = vi
+      .spyOn(director, "library")
       .mockRejectedValueOnce(new AppError("INVALID_SIGNATURE"));
-    await expectError(session.rpc.shorts.reactions({ videoId: "dQw4w9WgXcQ" }), "INTERNAL");
-    reactions.mockRestore();
+    await expectError(session.rpc.director.library(), "INTERNAL");
+    library.mockRestore();
   });
 
   it("gives better-auth's errors the same envelope, keeping their codes", async () => {
@@ -176,10 +182,10 @@ describe("request bodies", () => {
 
   it("refuses an oversized body before any procedure or auth check runs", async () => {
     const big = 2 * 1024 * 1024;
-    expect(await statusFor("/rpc/shorts/lookup", big)).toBe(413);
-    expect(await statusFor("/api/v1/shorts/lookup", big)).toBe(413);
+    expect(await statusFor("/rpc/director/index", big)).toBe(413);
+    expect(await statusFor("/api/v1/director/library", big)).toBe(413);
     // 100 MB of text, unauthenticated: refused from the headers, never read.
-    expect(await statusFor("/rpc/shorts/lookup", 100 * 1024 * 1024, "text/plain")).toBe(415);
+    expect(await statusFor("/rpc/director/index", 100 * 1024 * 1024, "text/plain")).toBe(415);
   });
 
   it("accepts only JSON on the API routes", async () => {
@@ -188,14 +194,16 @@ describe("request bodies", () => {
       "application/octet-stream",
       "multipart/form-data; boundary=x",
     ]) {
-      expect((await post("/rpc/shorts/lookup", type, "x".repeat(1024))).status, type).toBe(415);
-      expect((await post("/api/v1/shorts/lookup", type, "x".repeat(1024))).status, type).toBe(415);
+      expect((await post("/rpc/director/index", type, "x".repeat(1024))).status, type).toBe(415);
+      expect((await post("/api/v1/director/library", type, "x".repeat(1024))).status, type).toBe(
+        415,
+      );
     }
   });
 
   it("still serves JSON calls", async () => {
     const response = await post(
-      "/rpc/shorts/lookup",
+      "/rpc/director/index",
       "application/json",
       JSON.stringify({ json: { url: "https://youtube.com/shorts/dQw4w9WgXcQ" } }),
     );
@@ -244,10 +252,7 @@ describe("an account without a workspace", () => {
     await session.auth("/sign-out");
     expect((await session.auth("/sign-in/email", { email, password })).status).toBe(200);
     expect((await session.rpc.user.me()).activeOrganizationId).toBeNull();
-    await expectError(
-      session.rpc.shorts.reactions({ videoId: "dQw4w9WgXcQ" }),
-      "NO_ACTIVE_ORGANIZATION",
-    );
+    await expectError(session.rpc.director.library(), "NO_ACTIVE_ORGANIZATION");
   });
 });
 
@@ -749,18 +754,15 @@ describe("organizations and the audit trail", () => {
 
   it("a removed member loses access on their very next request", async () => {
     const { owner, member, orgId } = await team();
-    await member.session.rpc.shorts.react({ videoId: "dQw4w9WgXcQ", kind: "like", on: true });
+    await expectError(member.session.rpc.director.library(), LET_IN);
 
     await owner.session.auth("/organization/remove-member", {
       memberIdOrEmail: member.email,
       organizationId: orgId,
     });
+    await expectError(member.session.rpc.director.library(), "NO_ACTIVE_ORGANIZATION");
     await expectError(
-      member.session.rpc.shorts.reactions({ videoId: "dQw4w9WgXcQ" }),
-      "NO_ACTIVE_ORGANIZATION",
-    );
-    await expectError(
-      member.session.rpc.shorts.react({ videoId: "dQw4w9WgXcQ", kind: "save", on: true }),
+      member.session.rpc.director.index({ url: "https://youtu.be/dQw4w9WgXcQ" }),
       "NO_ACTIVE_ORGANIZATION",
     );
   });
@@ -771,15 +773,12 @@ describe("organizations and the audit trail", () => {
     const elsewhere = createSession(harness);
     await elsewhere.auth("/sign-in/email", { email: member.email, password: member.password });
     await elsewhere.auth("/organization/set-active", { organizationId: orgId });
-    await elsewhere.rpc.shorts.reactions({ videoId: "dQw4w9WgXcQ" });
+    await expectError(elsewhere.rpc.director.library(), LET_IN);
 
     expect(
       (await member.session.auth("/organization/leave", { organizationId: orgId })).status,
     ).toBe(200);
-    await expectError(
-      elsewhere.rpc.shorts.reactions({ videoId: "dQw4w9WgXcQ" }),
-      "NO_ACTIVE_ORGANIZATION",
-    );
+    await expectError(elsewhere.rpc.director.library(), "NO_ACTIVE_ORGANIZATION");
     const removed = await outbox("org_id = $1::uuid AND name = 'org.member_removed.v1'", [orgId]);
     expect(removed).toEqual([
       expect.objectContaining({
@@ -822,18 +821,18 @@ describe("organizations and the audit trail", () => {
       }
     };
 
-    const reactions = () => member.session.rpc.shorts.reactions({ videoId: "dQw4w9WgXcQ" });
+    const library = () => member.session.rpc.director.library();
     // better-auth joins several roles with commas: the strongest one counts.
     await setRole("member,admin");
-    expect(await reactions()).toEqual({ liked: false, saved: false });
+    await expectError(library(), LET_IN);
     // A role the API doesn't know (a future "viewer", a typo, a hand edit) isn't a member:
     // it grants nothing at all.
     await setRole("viewer");
-    await expectError(reactions(), "NO_ACTIVE_ORGANIZATION");
+    await expectError(library(), "NO_ACTIVE_ORGANIZATION");
     await setRole("member,viewer");
-    await expectError(reactions(), "NO_ACTIVE_ORGANIZATION");
+    await expectError(library(), "NO_ACTIVE_ORGANIZATION");
     await setRole("member");
-    expect(await reactions()).toEqual({ liked: false, saved: false });
+    await expectError(library(), LET_IN);
   });
 });
 
@@ -1217,35 +1216,53 @@ describe("uploads and the profile picture", { tags: ["files"] }, () => {
 });
 
 describe("account deletion", () => {
-  /** Counts an organization's reactions and says whether the org still exists (as the migrator). */
-  async function orgState(orgId: string) {
+  /** Runs `work` as the migrator, in a transaction scoped to the organization. */
+  async function inOrganization<T>(orgId: string, work: (client: pg.Client) => Promise<T>) {
     const client = new pg.Client({ connectionString: harness.testDb.urlFor("migrator") });
     await client.connect();
     try {
       await client.query("BEGIN");
       await client.query("SELECT set_config('app.org_id', $1, true)", [orgId]);
-      const reactions = await client.query<{ count: string }>(
-        "SELECT count(*) AS count FROM app.short_reaction",
-      );
-      const org = await client.query("SELECT 1 FROM auth.organization WHERE id = $1", [orgId]);
+      const result = await work(client);
       await client.query("COMMIT");
-      return { exists: org.rowCount === 1, reactions: Number(reactions.rows[0]?.count) };
+      return result;
     } finally {
       await client.end();
     }
   }
 
+  /** A short in the organization's library: data of its own, as the AI service writes it. */
+  const addPlan = (orgId: string) =>
+    inOrganization(orgId, (client) =>
+      client.query(
+        "INSERT INTO ai.director_plan (org_id, video_id, updated_at) VALUES ($1, 'dQw4w9WgXcQ', now())",
+        [orgId],
+      ),
+    );
+
+  /** Counts an organization's plans and says whether the org still exists. */
+  const orgState = (orgId: string) =>
+    inOrganization(orgId, async (client) => {
+      // The migrator reads every workspace's plans (for ai.index_used): ask for this one's.
+      const plans = await client.query<{ count: string }>(
+        "SELECT count(*) AS count FROM ai.director_plan WHERE org_id = $1",
+        [orgId],
+      );
+      const org = await client.query("SELECT 1 FROM auth.organization WHERE id = $1", [orgId]);
+      return { exists: org.rowCount === 1, plans: Number(plans.rows[0]?.count) };
+    });
+
   it("removes the personal workspace and its data", async () => {
     const { session, password } = await signedInUser();
-    await session.rpc.shorts.react({ videoId: "dQw4w9WgXcQ", kind: "like", on: true });
     const orgId = required(
       (await session.rpc.user.me()).activeOrganizationId,
       "the active workspace",
     );
-    expect(await orgState(orgId)).toEqual({ exists: true, reactions: 1 });
+    await addPlan(orgId);
+    expect(await orgState(orgId)).toEqual({ exists: true, plans: 1 });
 
     expect((await session.auth("/delete-user", { password })).status).toBe(200);
-    expect(await orgState(orgId)).toEqual({ exists: false, reactions: 0 });
+    expect(await orgState(orgId)).toEqual({ exists: false, plans: 0 });
   });
 
   it("won't leave a shared workspace without an owner, and keeps its data", async () => {
@@ -1257,7 +1274,7 @@ describe("account deletion", () => {
     });
     await addMember(team.body.id, (await member.session.rpc.user.me()).id);
     await member.session.auth("/organization/set-active", { organizationId: team.body.id });
-    await member.session.rpc.shorts.react({ videoId: "dQw4w9WgXcQ", kind: "like", on: true });
+    await addPlan(team.body.id);
 
     const blocked = await owner.session.auth<{ code: string }>("/delete-user", {
       password: owner.password,
@@ -1285,7 +1302,7 @@ describe("account deletion", () => {
       200,
     );
     // The team and the member's data survive.
-    expect(await orgState(team.body.id)).toEqual({ exists: true, reactions: 1 });
+    expect(await orgState(team.body.id)).toEqual({ exists: true, plans: 1 });
   });
 });
 

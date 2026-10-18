@@ -1,8 +1,6 @@
-// The Shorts module's public surface: the YouTube-style feed Director starts from.
+// YouTube's side of Director: its player for the original short, the short's picture, and
+// the gate every Director page sits behind (on only when the API says Director is set up).
 export { DirectorGate } from "./components/director-gate";
 
 export { YouTubeEmbed } from "./components/youtube-embed";
-export { type EmbedOptions, sendCommand } from "./lib/embed";
-export { HomePage } from "./pages/home";
-export { ShortsPlayerPage } from "./pages/player";
-export { SavedPage } from "./pages/saved";
+export { type EmbedOptions, sendCommand, thumbnailUrl } from "./lib/embed";

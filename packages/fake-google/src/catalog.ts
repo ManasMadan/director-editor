@@ -17,8 +17,6 @@ export interface CatalogShort {
   likeCount: number;
   commentCount: number;
   publishedAt: string;
-  /** The topic chips it's found under (the API's queries name them, as hashtags). */
-  topics: readonly string[];
   template: Template;
 }
 
@@ -32,7 +30,6 @@ export const CATALOG: readonly CatalogShort[] = [
     likeCount: 92_000,
     commentCount: 1_204,
     publishedAt: "2026-09-12T15:00:00Z",
-    topics: ["grwm", "outfit", "fit"],
     template: "office-grwm",
   },
   {
@@ -44,7 +41,6 @@ export const CATALOG: readonly CatalogShort[] = [
     likeCount: 240_000,
     commentCount: 3_890,
     publishedAt: "2026-09-20T18:30:00Z",
-    topics: ["sneakers", "shoe"],
     template: "pen-drop",
   },
   {
@@ -56,7 +52,6 @@ export const CATALOG: readonly CatalogShort[] = [
     likeCount: 41_000,
     commentCount: 512,
     publishedAt: "2026-09-25T08:10:00Z",
-    topics: ["travel", "comedy", "fitness"],
     template: "tree-talk",
   },
   {
@@ -68,7 +63,6 @@ export const CATALOG: readonly CatalogShort[] = [
     likeCount: 66_000,
     commentCount: 845,
     publishedAt: "2026-10-01T19:45:00Z",
-    topics: ["grwm", "outfit"],
     template: "grwm",
   },
   {
@@ -80,7 +74,6 @@ export const CATALOG: readonly CatalogShort[] = [
     likeCount: 88_000,
     commentCount: 970,
     publishedAt: "2026-10-03T12:00:00Z",
-    topics: ["sneakers", "dance"],
     template: "pen-drop",
   },
   {
@@ -92,7 +85,6 @@ export const CATALOG: readonly CatalogShort[] = [
     likeCount: 25_000,
     commentCount: 301,
     publishedAt: "2026-10-05T07:20:00Z",
-    topics: ["pets", "cooking", "travel"],
     template: "tree-talk",
   },
 ];
@@ -112,15 +104,7 @@ export function shortOf(videoId: string): CatalogShort {
       likeCount: 800,
       commentCount: 40,
       publishedAt: "2026-10-08T10:00:00Z",
-      topics: [],
       template: "tree-talk",
     }
   );
-}
-
-/** The catalog's shorts a YouTube search for `query` finds: every topic named in it, or all. */
-export function search(query: string): CatalogShort[] {
-  const words = new Set(query.toLowerCase().match(/[a-z]+/g) ?? []);
-  const found = CATALOG.filter((short) => short.topics.some((topic) => words.has(topic)));
-  return found.length > 0 ? found : [...CATALOG];
 }

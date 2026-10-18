@@ -2,14 +2,15 @@
 
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { IMMERSIVE_PATHS, matchesPath } from "@/lib/routes";
+import { IMMERSIVE_PATHS, matchesPath, STUDIO_PATHS } from "@/lib/routes";
 
 /**
- * The site header, the page column and the site footer around every page, except the
- * immersive ones (IMMERSIVE_PATHS), which fill the screen with their own chrome. The footer
- * sits after `<main>`, so it's the page's own landmark rather than part of its content. A
- * client component, as the root layout stays mounted across navigations and couldn't follow
- * the path itself.
+ * The site header, the page column and the site footer around every page: on Director's
+ * dark stage for the studio pages (STUDIO_PATHS), on the theme's background for the rest,
+ * and none at all for the immersive ones (IMMERSIVE_PATHS), which fill the screen with
+ * their own chrome. The footer sits after `<main>`, so it's the page's own landmark rather
+ * than part of its content. A client component, as the root layout stays mounted across
+ * navigations and couldn't follow the path itself.
  */
 export function SiteChrome({
   header,
@@ -24,6 +25,14 @@ export function SiteChrome({
   const pathname: string | null = usePathname();
   if (pathname !== null && matchesPath(pathname, IMMERSIVE_PATHS)) {
     return <main className="min-h-dvh bg-studio text-studio-foreground">{children}</main>;
+  }
+  if (pathname !== null && matchesPath(pathname, STUDIO_PATHS)) {
+    return (
+      <div className="min-h-dvh bg-studio text-studio-foreground">
+        {header}
+        <main className="mx-auto w-full max-w-6xl px-4 pb-16">{children}</main>
+      </div>
+    );
   }
   return (
     <>

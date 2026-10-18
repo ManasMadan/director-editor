@@ -7,7 +7,7 @@ paths:
 # apps/api modules
 
 - A feature is `src/modules/<name>/` with `<name>.module.ts`, `.service.ts`,
-  `.repository.ts`, `.router.ts` and an `index.ts` barrel. `modules/shorts` is the
+  `.repository.ts`, `.router.ts` and an `index.ts` barrel. `modules/files` is the
   reference; copy its shape. Register the module in `app.module.ts` and its router in
   `src/rpc/router.ts` (`os.router` makes a missing or extra procedure a compile error).
 - Other modules import a module only through its `index.ts` (dependency-cruiser

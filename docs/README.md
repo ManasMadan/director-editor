@@ -18,7 +18,7 @@ production release. `CLAUDE.md` is the same material condensed for Claude Code.
 | [notifications.md](notifications.md) | email: templates, delivery, suppression, adding a notification |
 | [files.md](files.md) | the upload pipeline and storage |
 | [python-services.md](python-services.md) | apps/ai: Director's service, the worker, budgets |
-| [director.md](director.md) | Director: the Shorts feed, Gemini's shot plans, the guided camera, take reviews and the finished short |
+| [director.md](director.md) | Director: the library of templates, Gemini's shot plans, the guided camera, take reviews and the finished short |
 | [web-and-mobile.md](web-and-mobile.md) | the render-only web app, packages/client and packages/ui |
 | [testing.md](testing.md) | every test layer and its command, the coverage rule, what CI runs and when |
 | [deploy.md](deploy.md) | images, environments, staging and production releases, rollback, previews |

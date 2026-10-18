@@ -1,14 +1,15 @@
 # Director
 
-Director teaches someone to film their own version of a YouTube short. They pick a short
-in a YouTube-style feed, Gemini watches it and writes the shot plan (how many shots,
+Director teaches someone to film their own version of a YouTube short. They pick a template
+from the library (the six seed Shorts every workspace starts with, or one Short of their
+own they paste a link to), Gemini watches it and writes the shot plan (how many shots,
 which are videos and which photos, in what order, where to stand, how to hold the phone,
 what to say), and the camera screen guides each take live. Gemini then reviews each take
 and picks its best part, and the browser stitches the takes into the finished short.
 
 ```
-apps/web (Shorts UI, camera)  ──@repo/client──▶  apps/api  ──ai-client (JWT)──▶  apps/ai  ──▶  Gemini
-  │ getUserMedia, MediaRecorder,                 │ shorts: YouTube Data API v3      │ plan job: watches the short by URL
+apps/web (library, camera)    ──@repo/client──▶  apps/api  ──ai-client (JWT)──▶  apps/ai  ──▶  Gemini
+  │ getUserMedia, MediaRecorder,                 │ shorts: YouTube link check       │ plan job: watches the short by URL
   │ DeviceOrientation, MediaPipe pose,           │ director: checks, then proxies    │ scene check: one camera frame
   │ speech synthesis, canvas stitching           │ files: take uploads, signed reads │ review job: watches one take
   └── presigned PUT ──▶ storage ──▶ apps/worker (ClamAV, type check) ─────────────────┘
@@ -57,7 +58,7 @@ Run indexer instead of in the worker ([deploy.md](deploy.md#the-cloud-run-indexe
 
 Integration, e2e and fuzz suites never need a real key: they start the mock Google
 themselves (`startFakeGoogle` from `packages/fake-google`, e.g.
-`apps/web/test/global-setup.ts`), which answers the feed with six real public YouTube
+`apps/web/test/global-setup.ts`), which answers YouTube's video reads for six real public YouTube
 videos (their pictures and the embedded player are YouTube's own, the answers are mock
 data): the first, "GRWM for the office in summer time!", is the short the demo recreates
 (`packages/fake-google/src/catalog.ts`, `plans.ts`), the other five stand in for shorts,
@@ -68,10 +69,9 @@ and any pasted link opens too. Its scene checks and take reviews are in
 
 | Route | What it is |
 |---|---|
-| `/library` | YouTube's home: topic chips, a grid of real shorts (YouTube search, cached), a box to paste any Shorts link |
-| `/shorts/[videoId]` | the vertical player: swipe for the next; like, comments, share, save and the Director button |
-| `/saved` | the member's liked and saved shorts |
-| `/director/[videoId]` | the plan: "You need 6 shots: 4 videos and 2 photos", the order, speak-or-original-audio, Record |
+| `/library` | the workspace's templates (starters and members' own, each with its shot rhythm and length, or its indexing stage), and "Bring your own Short": paste a link and Gemini indexes it, live; a second one of your own opens the "You've used your AI credit" dialog |
+| `/shorts/[videoId]` | an old link: redirects to `/director/[videoId]` |
+| `/director/[videoId]` | the template: the original, its storyboard, each shot's scene, framing, phone angle and lines, what you've filmed, the audio choice, Start shooting |
 | `/director/[videoId]/shoot?shot=n&audio=voice\|original` | the camera, one shot at a time |
 | `/director/[videoId]/review` | every shot's newest take and its review; "Make my short" stitches and downloads |
 
@@ -170,7 +170,8 @@ iOS asks before a page may read the tilt: the level shows a button for that.
   `director_plan_one_user_index` and read through `ai.index_used`),
   `ai.director_take` (each member's own; never replaced, the best-scored is picked),
   `ai.director_cut` (a member's rendered video of a plan and how far publishing it got),
-  `app.short_reaction` (likes and saves); all under row-level security. Plans are a JSON
+  `app.short_reaction` (the removed feed's likes and saves: nothing reads it, and a
+  later migration drops it); all under row-level security. Plans are a JSON
   column validated by `ShotPlan` on the way in and out.
 - AI service: `apps/ai/app/director.py` (the three Gemini calls, their token budgets and
   failures), queue `ai-director` (`plan`, `review-take`) in `packages/jobs`.
@@ -186,19 +187,21 @@ iOS asks before a page may read the tilt: the level shows a button for that.
   `bun run --filter @repo/api director:seed-workspaces` (deployed: `node
   dist/director-seed-workspaces.mjs` in the api image), which adds only what's missing and
   is safe to run again.
-- API: `apps/api/src/modules/shorts` (YouTube; `youtube.ts` is the only code that knows its
-  wire format), `apps/api/src/modules/director` (checks, then the AI service).
-- Contracts: `packages/contracts/src/api/{shorts,director}.ts`; the plan's shape is checked
+- API: `apps/api/src/modules/shorts` (whether a pasted link is a Short Director can film:
+  `youtube.ts` is the only code that knows YouTube's wire format),
+  `apps/api/src/modules/director` (checks, then the AI service).
+- Contracts: `packages/contracts/src/api/director.ts`; the plan's shape is checked
   against the Python model by `apps/api/src/modules/director/limits.test.ts`.
-- Web: `apps/web/src/modules/shorts` and `apps/web/src/modules/director` (`lib/` holds the
+- Web: `apps/web/src/modules/director` (the library, the template, the camera and the
+  editor; `lib/` holds the
   pure parts: tilt, pose, framing, timeline, doodles, the edit, the stitcher).
 
 ## Limits
 
 - A take is at most 60 seconds and 15 MB, so it stays under the 20 MB Gemini takes inline
   in one request once base64 has grown it; the recorder aims at 1.5 Mbit/s.
-- YouTube's free quota is 10,000 units a day and a search costs 100: feed pages are cached
-  for 30 minutes, videos for an hour, comments for ten minutes.
+- YouTube's free quota is 10,000 units a day; checking a link costs 1, and each video's
+  answer is cached for an hour.
 - Token caps per plan, scene check and review come out of the workspace's monthly AI
   allowance (`AI_MONTHLY_TOKENS_PER_ORG`).
 - Stitching happens in the browser and takes as long as the short plays.

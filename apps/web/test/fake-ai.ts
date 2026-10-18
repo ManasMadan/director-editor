@@ -3,7 +3,10 @@
  * does. The API checks the contract (packages/ai-client validates every response), and
  * apps/ai's own tests cover the service itself. Director's plans, takes and scene checks
  * are what a test sets for its short (`PUT /__fake/director/<videoId>`, the
- * `fakeDirector` command).
+ * `fakeDirector` command). A workspace's library is what a test sets for it
+ * (`PUT /__fake/library/<orgId>`, the `fakeLibrary` command), and indexing a short adds
+ * to it as the real service does: once per member, a short already there answered with
+ * its plan.
  */
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage } from "node:http";
@@ -17,6 +20,23 @@ async function body(request: IncomingMessage): Promise<Record<string, unknown>> 
   return chunks.length
     ? (JSON.parse(Buffer.concat(chunks).toString()) as Record<string, unknown>)
     : {};
+}
+
+/** A workspace's library: its plans (newest first), and whether the member indexed one. */
+interface Library {
+  templates: Record<string, unknown>[];
+  indexUsed: boolean;
+  /** What indexing a new short answers instead, when the test sets it: `{ status, code }`. */
+  indexError?: { status: number; code: string };
+}
+
+/** The workspace a call is made for: the `org` claim of the API's token (not checked here). */
+function orgOf(request: IncomingMessage): string {
+  const token = request.headers.authorization?.split(".")[1] ?? "";
+  const claims = JSON.parse(Buffer.from(token, "base64url").toString() || "{}") as {
+    org?: string;
+  };
+  return claims.org ?? "";
 }
 
 /** What Director answers for one short: set by the test, takes added as they're sent. */
@@ -33,6 +53,12 @@ export async function startFakeAi() {
     shorts.set(videoId, found);
     return found;
   };
+  const libraries = new Map<string, Library>();
+  const library = (orgId: string) => {
+    const found = libraries.get(orgId) ?? { templates: [], indexUsed: false };
+    libraries.set(orgId, found);
+    return found;
+  };
   const server = createServer(async (request, response) => {
     const reply = (status: number, payload?: unknown) => {
       response.writeHead(status, { "content-type": "application/json" });
@@ -46,6 +72,10 @@ export async function startFakeAi() {
 
     if (route === "GET /health/ready") {
       return reply(200, {});
+    }
+    const indexed = libraryRoute(route, input, orgOf(request), library, short);
+    if (indexed) {
+      return reply(indexed.status, indexed.body);
     }
     const director = directorRoute(route, input, short);
     if (director) {
@@ -63,16 +93,81 @@ export async function startFakeAi() {
 
 const now = () => new Date().toISOString();
 
+/** A plan as the service answers it: what the test set, over an id and the defaults. */
+const planBody = (videoId: string, found: Record<string, unknown>) => ({
+  id: randomUUID(),
+  videoId,
+  source: "user",
+  stage: "queued",
+  error: null,
+  model: "stand-in",
+  audioStatus: "none",
+  audioKey: null,
+  createdAt: now(),
+  updatedAt: now(),
+  ...found,
+});
+
+const failure = (status: number, code: string) => ({
+  status,
+  body: { defined: true, code, status, message: code, data: { params: {} } },
+});
+
+/**
+ * The library's routes: the test sets a workspace's library (each plan also becomes its
+ * short's, for the plan route), reads it back, and indexes a short into it.
+ */
+function libraryRoute(
+  route: string,
+  input: Record<string, unknown>,
+  orgId: string,
+  library: (orgId: string) => Library,
+  short: (videoId: string) => DirectorShort,
+): { status: number; body?: unknown } | null {
+  const set = /^PUT \/__fake\/library\/([\w-]+)$/.exec(route);
+  if (set?.[1]) {
+    const found = library(set[1]);
+    Object.assign(found, input);
+    found.templates = found.templates.map((plan) => {
+      const body = planBody(String(plan.videoId), plan);
+      short(String(plan.videoId)).plan = body;
+      return body;
+    });
+    return { status: 204 };
+  }
+  if (route === "GET /v1/director/library") {
+    const { templates, indexUsed } = library(orgId);
+    return { status: 200, body: { templates, indexUsed } };
+  }
+  if (route !== "POST /v1/director/plans") {
+    return null;
+  }
+  const videoId = String(input.videoId);
+  const found = library(orgId);
+  const existing = found.templates.find((plan) => plan.videoId === videoId);
+  if (existing) {
+    return { status: 200, body: existing };
+  }
+  if (found.indexError) {
+    return failure(found.indexError.status, found.indexError.code);
+  }
+  if (found.indexUsed) {
+    return failure(409, "DIRECTOR_INDEX_LIMIT");
+  }
+  const plan = planBody(videoId, { status: "pending", plan: null });
+  found.templates.unshift(plan);
+  found.indexUsed = true;
+  short(videoId).plan = plan;
+  return { status: 200, body: plan };
+}
+
 /** Director's routes (apps/ai/app/director.py), answered from what the test set. */
 function directorRoute(
   route: string,
   input: Record<string, unknown>,
   short: (videoId: string) => DirectorShort,
 ): { status: number; body?: unknown } | null {
-  const notFound = (code: string) => ({
-    status: 404,
-    body: { defined: true, code, status: 404, message: code, data: { params: {} } },
-  });
+  const notFound = (code: string) => failure(404, code);
   const set = /^PUT \/__fake\/director\/([\w-]{11})$/.exec(route);
   if (set?.[1]) {
     Object.assign(short(set[1]), input);
@@ -82,22 +177,7 @@ function directorRoute(
   if (plan?.[1]) {
     const found = short(plan[1]).plan;
     return found
-      ? {
-          status: 200,
-          body: {
-            id: randomUUID(),
-            videoId: plan[1],
-            source: "user",
-            stage: "queued",
-            error: null,
-            model: "stand-in",
-            audioStatus: "none",
-            audioKey: null,
-            createdAt: now(),
-            updatedAt: now(),
-            ...found,
-          },
-        }
+      ? { status: 200, body: planBody(plan[1], found) }
       : notFound("DIRECTOR_PLAN_NOT_FOUND");
   }
   const takes = /^GET \/v1\/director\/plans\/([\w-]{11})\/takes$/.exec(route);

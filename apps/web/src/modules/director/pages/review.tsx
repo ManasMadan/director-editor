@@ -9,7 +9,7 @@ import { useDirectorTakesQuery } from "@repo/client/api/director/takes";
 import type { ShotPlan } from "@repo/contracts/api";
 import { required } from "@repo/contracts/objects";
 import { buttonVariants } from "@repo/ui/components/button";
-import { Spinner } from "@repo/ui/components/spinner";
+import { GeminiLoader } from "@repo/ui/components/gemini-loader";
 import { ChevronRight, Pause, Play, Redo2, Undo2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -377,8 +377,10 @@ function Stage({ editor, progress }: { editor: EditorState; progress: number | n
           aria-live="polite"
           className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-studio/80"
         >
-          <Spinner className="size-8" />
-          <p className="font-semibold">{t("rendering", { done: progress })}</p>
+          <GeminiLoader label={t("rendering", { done: progress })} size="lg" />
+          <p aria-hidden className="font-semibold">
+            {t("rendering", { done: progress })}
+          </p>
         </div>
       )}
     </div>
@@ -568,7 +570,7 @@ function Review({
   }
   return (
     <div className="flex h-dvh items-center justify-center">
-      <Spinner />
+      <GeminiLoader label={t("starting")} size="lg" />
     </div>
   );
 }

@@ -202,7 +202,7 @@ address.
   `userEvent` and `page` locators from `vitest/browser`. They call the real API: the
   global setup builds apps/api and runs it twice, once with every optional feature on
   (files on RustFS, a stand-in for the AI service in
-  `test/fake-ai.ts`, Google sign-in, Director's Shorts feed from the mock YouTube in
+  `test/fake-ai.ts`, Google sign-in, YouTube's link check from the mock YouTube in
   `packages/fake-google`) and once with them all off except captcha, where
   Turnstile's script is a stand-in (`test/commands.ts`) and tokens are checked with
   Cloudflare's always-pass test secret. Files named `*.features-off.test.tsx` run against
@@ -313,6 +313,7 @@ file below 100%, or one no test loads.
 | `apps/webhooks/test/stalwart.integration.test.ts` | `STALWART_URL` is unset, as above | CI's integration job, with the `mail` profile |
 | `apps/web/e2e/captcha.spec.ts` | the API has no Turnstile keys (`TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`), so the captcha is off | CI's e2e job, with Cloudflare's always-pass test keys: the real widget and token flow, reaching challenges.cloudflare.com; a real site's keys only by hand |
 | `apps/web/e2e/google.spec.ts` | `E2E_GOOGLE_EMAIL` and `E2E_GOOGLE_PASSWORD` are unset | by hand, with a test Google account |
+| `apps/web/e2e/library.spec.ts` | Director is off (`features.director`): the API has no `YOUTUBE_API_KEY`, AI service or uploads, as in CI's e2e job, so a link can't be checked on YouTube | against a stack with the real Google services (`bun dev:full` and `bun run --cwd apps/web test:e2e`); the same refusal and dialog are covered on every run by `apps/web/test/director/library.test.tsx` against the AI stand-in |
 
 ## Suppressions
 
@@ -333,7 +334,7 @@ file below 100%, or one no test loads.
 | `deploy/docker/ai.Dockerfile` | `# hadolint ignore=DL3008` | ffmpeg comes from trixie's apt mirror, which doesn't keep old versions: a pin would go stale and fail the build instead of catching a real regression |
 | `.github/zizmor.yml` | `self-repository` off | GitHub's `uses: $/...` syntax for this repository's own actions, which actionlint (in the same lint job) doesn't read yet |
 | `biome.jsonc` | `noExcessiveLinesPerFunction` off in tests, end-to-end specs and stories | a `describe` block is as long as its list of cases |
-| `biome.jsonc` | `noSkippedTests` off in `apps/web/e2e/captcha.spec.ts` and `apps/web/e2e/google.spec.ts` | Playwright's conditional skip, for the two browser tests that need real credentials (both under Skipped tests) |
+| `biome.jsonc` | `noSkippedTests` off in `apps/web/e2e/captcha.spec.ts`, `apps/web/e2e/google.spec.ts` and `apps/web/e2e/library.spec.ts` | Playwright's conditional skip, for the browser tests that need real credentials or real Google services (all under Skipped tests) |
 | `biome.jsonc` | `noDuplicateCustomProperties` off in `packages/ui/src/styles/theme.css` | the theme sets each variable once per variant (light, dark), and Biome reads the blocks as one rule |
 | `biome.jsonc` | `useImportType` and `noStaticOnlyClass` off in the Nest services and `packages/nest-common` | Nest's dependency injection needs the imported class at run time, which `import type` erases; a module is a class with only a decorator and static members |
 | `biome.jsonc` | `noConsole` off in `scripts/`, the hooks, config files and the API's command-line scripts | they talk to whoever runs them through the console |

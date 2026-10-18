@@ -1,7 +1,7 @@
 /**
  * Starts what the browser tests talk to: two builds of the real API, one with every
  * optional feature on (files on the local RustFS, the AI stand-in, Google sign-in,
- * Director's Shorts feed from the mock YouTube) and one with every feature off except
+ * YouTube's link check from the mock YouTube) and one with every feature off except
  * captcha, both on one
  * cloned database. The browser reaches them on its own origin, through the proxy in
  * vitest.config.ts, exactly like the site does through the gateway.

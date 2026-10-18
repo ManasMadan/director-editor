@@ -4,18 +4,24 @@
  */
 export const APP_PATHS = [
   "/settings",
-  // Director: the library of Shorts to film, and filming one.
+  // Director: the library of Shorts to film, and filming one. /shorts only redirects
+  // old links to a short's page in Director.
   "/library",
   "/shorts",
-  "/saved",
   "/director",
 ];
 
 /**
- * Full-screen pages that bring their own chrome (the YouTube-style feed and Director's
- * camera), so the site header and the page column stay out of their way.
+ * Pages on Director's dark stage: the header and the page sit on it too, so the library's
+ * thumbnails and the template's video read as they do on YouTube.
  */
-export const IMMERSIVE_PATHS = ["/library", "/shorts", "/saved", "/director"];
+export const STUDIO_PATHS = ["/library"];
+
+/**
+ * Full-screen pages that bring their own chrome (a short's page and Director's camera),
+ * so the site header and the page column stay out of their way.
+ */
+export const IMMERSIVE_PATHS = ["/director"];
 
 /** Where a signed-in person lands: after signing in, and from the site's own links. */
 export const HOME_PATH = "/library";

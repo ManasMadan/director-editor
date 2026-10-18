@@ -25,7 +25,8 @@ declare const messages: {
       "dark": "Dark",
       "system": "System"
     },
-    "captchaFailed": "The security check couldn't load. Check your connection, allow challenges.cloudflare.com if you use a blocker, and reload."
+    "captchaFailed": "The security check couldn't load. Check your connection, allow challenges.cloudflare.com if you use a blocker, and reload.",
+    "nav": "Main"
   },
   "meta": {
     "title": "Director",
@@ -361,7 +362,6 @@ declare const messages: {
     "FILE_NOT_UPLOADED": "The file didn't finish uploading. Try again.",
     "FILE_NOT_READY": "That file is still being checked. Try again in a moment.",
     "AI_BUDGET_EXCEEDED": "You've used this month's AI allowance. It resets on the 1st.",
-    "SHORT_NOT_FOUND": "That short isn't on YouTube, or it's private.",
     "DIRECTOR_INDEX_LIMIT": "You've already added your own Short. Film it, or pick one of the templates.",
     "DIRECTOR_VIDEO_UNAVAILABLE": "That video isn't on YouTube, or it's private. Check the link and try again.",
     "DIRECTOR_TOO_LONG": "Director works with Shorts up to {maxSeconds, number} seconds long. Pick a shorter video.",
@@ -488,69 +488,6 @@ declare const messages: {
         }
       }
     }
-  },
-  "shorts": {
-    "title": "Shorts",
-    "homeTitle": "Home",
-    "savedTitle": "You",
-    "brand": "Director",
-    "off": "Director isn't set up yet.",
-    "nav": {
-      "label": "Main",
-      "home": "Home",
-      "shorts": "Shorts",
-      "saved": "You"
-    },
-    "topicsLabel": "Topics",
-    "topics": {
-      "all": "All",
-      "grwm": "GRWM",
-      "outfits": "Outfits",
-      "sneakers": "Sneakers",
-      "dance": "Dance",
-      "cooking": "Cooking",
-      "travel": "Travel",
-      "comedy": "Comedy",
-      "fitness": "Fitness",
-      "pets": "Pets"
-    },
-    "paste": {
-      "label": "Paste a Shorts link",
-      "placeholder": "youtube.com/shorts/…",
-      "submit": "Open"
-    },
-    "views": "{count, number, ::compact-short} views",
-    "count": "{count, number, ::compact-short}",
-    "loadMore": "Show more",
-    "empty": "No shorts here yet.",
-    "embedTitle": "{title} on YouTube",
-    "player": {
-      "like": "Like",
-      "comments": "Comments",
-      "share": "Share",
-      "save": "Save",
-      "director": "Director",
-      "copied": "Link copied",
-      "next": "Next short",
-      "previous": "Previous short",
-      "by": "@{channel}",
-      "mute": "Mute",
-      "unmute": "Unmute"
-    },
-    "comments": {
-      "title": "Comments",
-      "disabled": "Comments are turned off for this short.",
-      "empty": "No comments yet.",
-      "onYouTube": "Comment on YouTube",
-      "close": "Close"
-    },
-    "saved": {
-      "liked": "Liked",
-      "saved": "Saved",
-      "empty": "Nothing here yet. Like or save a short from the feed."
-    },
-    "account": "Your account",
-    "leave": "Go to settings"
   },
   "director": {
     "title": "Director",
@@ -679,12 +616,31 @@ declare const messages: {
       "renderFailed": "Your short couldn't be put together in this browser. Try Chrome or Safari."
     },
     "template": {
-      "use": "Use template",
+      "use": "Start shooting",
       "storyboard": "Storyboard",
       "watchShot": "Watch shot {index, number}: {title}",
       "shots": "{count, plural, one {# shot} other {# shots}}",
       "playing": "Playing shot {index, number}: {title}",
-      "watchAll": "Watch the whole short"
+      "watchAll": "Watch the whole short",
+      "continue": "Continue shooting",
+      "mute": "Mute",
+      "unmute": "Unmute",
+      "backToLibrary": "Back to the library",
+      "toLibrary": "Go to the library",
+      "audioFailed": "The original audio couldn't be fetched, so your mic will be used.",
+      "failedHelp": "A Short that couldn't be indexed doesn't use up your own. Try another link from the library.",
+      "scene": "Where",
+      "framing": "Framing",
+      "angle": "Phone",
+      "script": "Lines",
+      "frame": "{size}: where you stand in the picture",
+      "level": "Held level",
+      "tiltUp": "Tilted up {degrees, number}°",
+      "tiltDown": "Tilted down {degrees, number}°",
+      "filmed": "Filmed",
+      "scored": "Filmed, {score, number}/100",
+      "needsRetake": "Needs a retake ({score, number}/100)",
+      "reviewing": "Director is reviewing your take"
     },
     "editor": {
       "quality": "{height, number}p",
@@ -720,7 +676,8 @@ declare const messages: {
         "pop": "Pop",
         "classic": "Classic",
         "off": "Off"
-      }
+      },
+      "loading": "Loading this take…"
     },
     "live": {
       "live": "Live",
@@ -895,6 +852,56 @@ declare const messages: {
       },
       "fallback": "Director Live is guiding you on this shot, and your takes are safe.",
       "timeUp": "Calls last up to ten minutes. Call Director again to keep going."
+    },
+    "off": "Director isn't set up yet.",
+    "leave": "Go to settings",
+    "starting": "Getting Director ready…"
+  },
+  "library": {
+    "heading": "Pick a Short. Shoot your own.",
+    "intro": "Gemini has broken each of these Shorts into shots. Pick one and it directs you through every shot, right from your phone.",
+    "loading": "Loading your library…",
+    "templates": "Templates",
+    "count": "{count, plural, one {# Short} other {# Shorts}}",
+    "empty": "Nothing here yet. Paste a Shorts link above and Gemini will turn it into a template.",
+    "card": {
+      "seed": "Starter",
+      "user": "Yours",
+      "shots": "{count, plural, one {# shot} other {# shots}}",
+      "pending": "New Short",
+      "failed": "Couldn't index"
+    },
+    "index": {
+      "title": "Bring your own Short",
+      "body": "Paste a YouTube Shorts link and Gemini works out every shot for you. Each account can add one Short of its own.",
+      "used": "You've added your own Short. A link to one already in the library still opens it.",
+      "label": "YouTube Shorts link",
+      "placeholder": "youtube.com/shorts/…",
+      "submit": "Index it",
+      "checking": "Checking the link…",
+      "open": "See the shots",
+      "another": "Try another link"
+    },
+    "stage": {
+      "label": "Indexing progress",
+      "queued": "Waiting for Gemini",
+      "watching": "Gemini is watching the Short",
+      "writing": "Writing the shot list",
+      "ready": "Ready to shoot",
+      "failed": "This Short couldn't be indexed",
+      "hint": "This takes about a minute. You can leave this page, it keeps going.",
+      "steps": {
+        "queued": "Queued",
+        "watching": "Watching",
+        "writing": "Writing shots",
+        "ready": "Ready"
+      }
+    },
+    "credit": {
+      "title": "You've used your AI credit",
+      "body": "Each account can index one Short of its own, and yours is already in your library.",
+      "seeds": "These starter templates are ready to shoot right now:",
+      "close": "Got it"
     }
   }
 };

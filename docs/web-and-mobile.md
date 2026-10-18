@@ -50,7 +50,7 @@ Every call goes through `packages/client`:
   contract in `packages/contracts` and its TanStack Query utilities, sending
   `x-app-version` and `x-locale` with every request.
 - Hooks live one per procedure and are imported by exact path:
-  `import { useSavedShortsQuery } from "@repo/client/api/shorts/saved"`. Each file
+  `import { useDirectorLibraryQuery } from "@repo/client/api/director/library"`. Each file
   exports one hook, which `lint:boundaries` checks.
 - `@repo/client/auth` is the better-auth client (with its plugins), and
   `@repo/client/auth/<thing>` the queries on it (sessions, passkeys), which take the app's auth client and build their keys

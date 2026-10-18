@@ -8,7 +8,7 @@ import { keysOf } from "./objects";
  *
  * The wire shape is oRPC's error JSON, the same over /rpc and REST (/api/v1), with the
  * HTTP status from this catalog:
- *   { code: "SHORT_NOT_FOUND", status: 404, message: "…", data: { requestId: "…", params: { … } } }
+ *   { code: "DIRECTOR_PLAN_NOT_FOUND", status: 404, message: "…", data: { requestId: "…", params: { … } } }
  * `message` is for logs only; clients translate `code`.
  *
  * Adding a code: add it here with its HTTP status, then add `errors.<CODE>` to every
@@ -60,7 +60,6 @@ export const ERROR_CODES = {
   // AI
   AI_BUDGET_EXCEEDED: 429,
   // Shorts (YouTube) and Director
-  SHORT_NOT_FOUND: 404,
   /** A member indexes one short of their own; the seeded templates don't count. */
   DIRECTOR_INDEX_LIMIT: 409,
   /** The link isn't a YouTube video, or YouTube won't show it (private, removed). */

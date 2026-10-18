@@ -10,7 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@repo/ui/components/card";
-import { Skeleton } from "@repo/ui/components/skeleton";
+import { GeminiShimmer } from "@repo/ui/components/gemini-loader";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
 import { useState } from "react";
@@ -59,7 +59,7 @@ export function PasskeysCard() {
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {staleSession ? <ReauthPrompt /> : null}
-        {passkeys.isPending ? <Skeleton className="h-10" /> : null}
+        {passkeys.isPending ? <GeminiShimmer className="h-10" /> : null}
         {!passkeys.isPending && !passkeys.data?.length ? (
           <p className="text-sm text-muted-foreground">{t("empty")}</p>
         ) : null}

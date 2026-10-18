@@ -427,8 +427,34 @@ const fakeDirector: BrowserCommand<
   }
 };
 
+/**
+ * What the AI stand-in answers as the workspace `orgId`'s library (test/fake-ai.ts): its
+ * plans (each merged over an id and timestamps, and served as its short's plan too),
+ * whether the member has indexed their own, and the refusal indexing a new short gets.
+ */
+const fakeLibrary: BrowserCommand<
+  [
+    orgId: string,
+    state: {
+      templates?: object[];
+      indexUsed?: boolean;
+      indexError?: { status: number; code: string };
+    },
+  ]
+> = async (_context, orgId, state) => {
+  const response = await fetch(`${(await services()).aiUrl}/__fake/library/${orgId}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(state),
+  });
+  if (!response.ok) {
+    throw new Error(`the AI stand-in answered ${response.status}`);
+  }
+};
+
 export const commands = {
   answeredRequests,
+  fakeLibrary,
   checkUpload,
   fakeDirector,
   publishRealtime,
@@ -456,6 +482,14 @@ declare module "vitest/browser" {
     fakeDirector(
       videoId: string,
       state: { plan?: object; takes?: object[]; scene?: object },
+    ): Promise<void>;
+    fakeLibrary(
+      orgId: string,
+      state: {
+        templates?: object[];
+        indexUsed?: boolean;
+        indexError?: { status: number; code: string };
+      },
     ): Promise<void>;
     publishRealtime(channel: string, message: { type: string }): Promise<void>;
     storageCors(): Promise<void>;

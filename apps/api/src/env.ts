@@ -80,7 +80,7 @@ export const envSchema = {
   // (the same AI_SERVICE_SECRET the service verifies with).
   AI_URL: z.url().optional(),
   AI_SERVICE_SECRET: z.string().min(32).optional(),
-  // Optional: Director's Shorts feed (YouTube Data API v3). Director is on when it and
+  // Optional: checks a pasted Shorts link (YouTube Data API v3). Director is on when it and
   // the AI service are both set (src/features.ts).
   YOUTUBE_API_KEY: z.string().min(1).optional(),
   // Test hook: where YouTube's API lives (the tests' stand-in).

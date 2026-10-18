@@ -3,7 +3,7 @@
  * with (COMMON_ERRORS: authentication, validation, limits, the server refusing the
  * request); each contract module adds the codes its own procedures throw with
  * `.errors(errorsOf(...))`. So a client gets the union of codes a call can fail with
- * (`isDefinedError(error) && error.code === "SHORT_NOT_FOUND"`), the OpenAPI document
+ * (`isDefinedError(error) && error.code === "DIRECTOR_PLAN_NOT_FOUND"`), the OpenAPI document
  * lists only those per operation, and every surface returns the same structure. The API
  * refuses, outside production, to answer a code a procedure didn't declare.
  * Procedures also carry metadata (ProcedureMeta): which API key scope lets a key call

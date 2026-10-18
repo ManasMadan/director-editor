@@ -39,11 +39,11 @@ describe("sign in", () => {
   it("sends an unverified account to verify its email, keeping the query", async () => {
     const user = newUser();
     await auth("/sign-up/email", user);
-    const page = await renderPage(<SignInPage />, { url: "/sign-in?next=/saved" });
+    const page = await renderPage(<SignInPage />, { url: "/sign-in?next=/settings" });
     await fillIn(page, user.email, user.password);
     await expect
       .poll(currentUrl)
-      .toBe(`/verify-email?next=%2Fsaved&email=${encodeURIComponent(user.email)}`);
+      .toBe(`/verify-email?next=%2Fsettings&email=${encodeURIComponent(user.email)}`);
   });
 
   it("continues on the two-step page when the account has it on", async () => {
@@ -80,7 +80,7 @@ describe("sign in", () => {
   });
 
   it("offers Google when it's on, and goes there with ?next= as the way back", async () => {
-    const page = await renderPage(<SignInPage />, { url: "/sign-in?next=/saved" });
+    const page = await renderPage(<SignInPage />, { url: "/sign-in?next=/settings" });
     await userEvent.click(page.getByRole("button", { name: "Continue with Google" }));
     await expect
       .poll(async () => (await commands.hardNavigations())[0])

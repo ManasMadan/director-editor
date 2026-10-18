@@ -1,5 +1,5 @@
 /**
- * The Shorts feed and Director through the API, against strict stand-ins for YouTube's
+ * Director through the API, against strict stand-ins for YouTube's
  * Data API and for the Python AI service (which checks the per-call token the API signs).
  * The real AI service is covered by its own tests (apps/ai/tests/test_director.py).
  */
@@ -46,27 +46,17 @@ const youtubeCalls: URL[] = [];
 const aiCalls: { route: string; org: string; user: string; body: unknown }[] = [];
 /** The presigned read the AI service was last handed for a take. */
 let lastSourceUrl = "";
-/** What YouTube does next: answer, run out of quota, have comments off, or answer garbage. */
-let youtubeMode: "ok" | "quota" | "comments-off" | "garbled" = "ok";
+/** What YouTube does next: answer, run out of quota, or answer garbage. */
+let youtubeMode: "ok" | "quota" | "garbled" = "ok";
 
 function video(id: string, duration: string) {
-  return {
-    id,
-    snippet: {
-      title: `Video ${id}`,
-      channelTitle: "Creator",
-      publishedAt: "2026-09-01T10:00:00Z",
-      thumbnails: { high: { url: `https://i.ytimg.com/vi/${id}/hqdefault.jpg` } },
-    },
-    contentDetails: { duration },
-    statistics: { viewCount: "1200", likeCount: "80", commentCount: "5" },
-  };
+  return { id, contentDetails: { duration } };
 }
 
 const VIDEOS: Partial<Record<string, ReturnType<typeof video>>> = {
   [VIDEO]: video(VIDEO, "PT45S"),
   [LONG]: video(LONG, "PT4M2S"),
-  short2: video("Short2xxxxx", "PT12S"),
+  Short2xxxxx: video("Short2xxxxx", "PT12S"),
 };
 
 function send(response: ServerResponse, status: number, body: unknown) {
@@ -87,44 +77,9 @@ function youtubeRoute(request: IncomingMessage, response: ServerResponse) {
   if (youtubeMode === "garbled") {
     return send(response, 200, { items: "not a list" });
   }
-  if (url.pathname === "/search") {
-    const page = url.searchParams.get("pageToken");
-    return send(response, 200, {
-      ...(page ? {} : { nextPageToken: "page-2" }),
-      items: (page ? ["Short2xxxxx"] : [VIDEO, LONG]).map((id) => ({ id: { videoId: id } })),
-    });
-  }
   if (url.pathname === "/videos") {
     const ids = (url.searchParams.get("id") ?? "").split(",");
-    const all: Partial<Record<string, ReturnType<typeof video>>> = {
-      ...VIDEOS,
-      Short2xxxxx: video("Short2xxxxx", "PT12S"),
-    };
-    return send(response, 200, { items: ids.flatMap((id) => all[id] ?? []) });
-  }
-  if (url.pathname === "/commentThreads") {
-    if (youtubeMode === "comments-off") {
-      return send(response, 403, {
-        error: { code: 403, errors: [{ reason: "commentsDisabled" }] },
-      });
-    }
-    return send(response, 200, {
-      items: [
-        {
-          id: "c1",
-          snippet: {
-            topLevelComment: {
-              snippet: {
-                authorDisplayName: "Fan",
-                textOriginal: "Love this trend",
-                likeCount: 3,
-                publishedAt: "2026-09-02T10:00:00Z",
-              },
-            },
-          },
-        },
-      ],
-    });
+    return send(response, 200, { items: ids.flatMap((id) => VIDEOS[id] ?? []) });
   }
   return send(response, 404, { error: { code: 404, errors: [{ reason: "notFound" }] } });
 }
@@ -475,121 +430,31 @@ async function sql(query: string, params: unknown[] = []) {
   }
 }
 
-describe("the Shorts feed", () => {
+describe("checking a link on YouTube", () => {
   it("is on with YouTube and the AI service configured", async () => {
     const { session } = await signedIn();
     expect((await session.rpc.system.info()).features.director).toBe(true);
   });
 
-  it("pages through YouTube's shorts, leaving out what's too long, from the cache the second time", async () => {
+  it("asks YouTube once an hour per short, from the cache in between", async () => {
     const { session } = await signedIn();
-    const first = await session.rpc.shorts.feed({ topic: "grwm" });
-    expect(first.items.map((s) => s.videoId)).toEqual([VIDEO]);
-    expect(first.items[0]).toMatchObject({
-      durationSeconds: 45,
-      viewCount: 1200,
-      publishedAt: expect.any(Date),
-    });
-    expect(first.nextPageToken).toBe("page-2");
-    const search = youtubeCalls.findLast((url) => url.pathname === "/search");
-    expect(search?.searchParams.get("videoDuration")).toBe("short");
-    expect(search?.searchParams.get("q")).toContain("grwm");
-
-    const before = youtubeCalls.length;
-    await expect(session.rpc.shorts.feed({ topic: "grwm" })).resolves.toEqual(first);
-    expect(youtubeCalls.length).toBe(before);
-
-    const second = await session.rpc.shorts.feed({ topic: "grwm", pageToken: "page-2" });
-    expect(second).toEqual({
-      items: [expect.objectContaining({ videoId: "Short2xxxxx" })],
-      nextPageToken: null,
-    });
-  });
-
-  it("finds a short from any kind of link, and says when there's none", async () => {
-    const { session } = await signedIn();
-    for (const url of [
-      `https://www.youtube.com/shorts/${VIDEO}`,
-      `youtube.com/watch?v=${VIDEO}`,
-      `https://youtu.be/${VIDEO}`,
-      VIDEO,
-    ]) {
-      await expect(session.rpc.shorts.lookup({ url })).resolves.toMatchObject({ videoId: VIDEO });
-    }
-    await expectError(
-      session.rpc.shorts.lookup({ url: "https://example.com/watch?v=x" }),
-      "SHORT_NOT_FOUND",
-    );
-    await expectError(session.rpc.shorts.get({ videoId: GONE }), "SHORT_NOT_FOUND");
-  });
-
-  it("reads comments, and says when they're off", async () => {
-    const { session } = await signedIn();
-    await expect(session.rpc.shorts.comments({ videoId: VIDEO })).resolves.toEqual({
-      disabled: false,
-      items: [
-        expect.objectContaining({ author: "Fan", text: "Love this trend", authorImageUrl: null }),
-      ],
-    });
-    youtubeMode = "comments-off";
-    await expect(session.rpc.shorts.comments({ videoId: "Short2xxxxx" })).resolves.toEqual({
-      disabled: true,
-      items: [],
-    });
+    await session.rpc.director.index({ url: VIDEO });
+    const asked = youtubeCalls.filter((url) => url.pathname === "/videos").length;
+    await session.rpc.director.index({ url: `https://youtu.be/${VIDEO}` });
+    expect(youtubeCalls.filter((url) => url.pathname === "/videos").length).toBe(asked);
+    expect(youtubeCalls.at(-1)?.searchParams.get("id")).toBe(VIDEO);
   });
 
   it("turns YouTube's refusals into UPSTREAM_UNAVAILABLE", async () => {
     const { session } = await signedIn();
     youtubeMode = "quota";
-    await expectError(session.rpc.shorts.feed({ topic: "dance" }), "UPSTREAM_UNAVAILABLE");
+    await expectError(session.rpc.director.index({ url: VIDEO }), "UPSTREAM_UNAVAILABLE");
   });
 
   it("fails as a bug, not as YouTube being down, when YouTube's answer isn't its format", async () => {
     const { session } = await signedIn();
     youtubeMode = "garbled";
-    await expectError(session.rpc.shorts.feed({ topic: "dance" }), "INTERNAL");
-  });
-
-  it("orders the topic of everything by views, and the trends by relevance", async () => {
-    const { session } = await signedIn();
-    await session.rpc.shorts.feed({ topic: "all" });
-    expect(
-      youtubeCalls.findLast((url) => url.pathname === "/search")?.searchParams.get("order"),
-    ).toBe("viewCount");
-    await session.rpc.shorts.feed({ topic: "pets" });
-    expect(
-      youtubeCalls.findLast((url) => url.pathname === "/search")?.searchParams.get("order"),
-    ).toBe("relevance");
-  });
-
-  it("keeps each member's likes and saves, in their workspace only", async () => {
-    const { session } = await signedIn();
-    await expect(session.rpc.shorts.reactions({ videoId: VIDEO })).resolves.toEqual({
-      liked: false,
-      saved: false,
-    });
-    await session.rpc.shorts.react({ videoId: VIDEO, kind: "like", on: true });
-    // Twice is the same as once.
-    await expect(
-      session.rpc.shorts.react({ videoId: VIDEO, kind: "save", on: true }),
-    ).resolves.toEqual({
-      liked: true,
-      saved: true,
-    });
-    await session.rpc.shorts.react({ videoId: VIDEO, kind: "save", on: true });
-    expect((await session.rpc.shorts.saved({ kind: "save" })).map((s) => s.videoId)).toEqual([
-      VIDEO,
-    ]);
-    await expect(
-      session.rpc.shorts.react({ videoId: VIDEO, kind: "like", on: false }),
-    ).resolves.toEqual({
-      liked: false,
-      saved: true,
-    });
-    expect(await session.rpc.shorts.saved({ kind: "like" })).toEqual([]);
-
-    const other = await signedIn();
-    expect(await other.session.rpc.shorts.saved({ kind: "save" })).toEqual([]);
+    await expectError(session.rpc.director.index({ url: VIDEO }), "INTERNAL");
   });
 });
 

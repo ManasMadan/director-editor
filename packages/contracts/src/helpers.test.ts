@@ -40,7 +40,7 @@ describe("page", () => {
 
 describe("isErrorCode", () => {
   it("knows the catalog's codes and nothing else", () => {
-    expect(isErrorCode("SHORT_NOT_FOUND")).toBe(true);
+    expect(isErrorCode("DIRECTOR_PLAN_NOT_FOUND")).toBe(true);
     expect(isErrorCode("NOT_A_CODE")).toBe(false);
     expect(isErrorCode("toString")).toBe(false);
     expect(isErrorCode(404)).toBe(false);

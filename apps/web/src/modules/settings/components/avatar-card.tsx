@@ -22,7 +22,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@repo/ui/components/card";
-import { Spinner } from "@repo/ui/components/spinner";
+import { GeminiLoader } from "@repo/ui/components/gemini-loader";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -159,11 +159,11 @@ export function AvatarCard() {
             ) : null}
           </div>
           {busy ? (
-            <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
-              {/* Decorative: the text beside it is what's announced. */}
-              <Spinner role="presentation" aria-hidden="true" aria-label={undefined} />
-              {uploading ? t("uploading") : t("checking")}
-            </p>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <GeminiLoader label={uploading ? t("uploading") : t("checking")} size="sm" />
+              {/* The loader announces it; this is the same words, drawn. */}
+              <span aria-hidden>{uploading ? t("uploading") : t("checking")}</span>
+            </div>
           ) : null}
           {problem ? (
             <p role="alert" className="text-sm text-destructive">

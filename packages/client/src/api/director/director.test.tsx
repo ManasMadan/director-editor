@@ -1,5 +1,11 @@
 import { ORPCError } from "@orpc/client";
-import type { DirectorPlan, DirectorTake, FileInfo, SceneCheck } from "@repo/contracts/api";
+import type {
+  DirectorPlan,
+  DirectorShot,
+  DirectorTake,
+  FileInfo,
+  SceneCheck,
+} from "@repo/contracts/api";
 import type { FileRejection, UploadPurpose } from "@repo/contracts/files";
 import {
   directorPlanIdSchema,
@@ -14,7 +20,10 @@ import { errorCode } from "../../errors";
 import { useCheckSceneMutation } from "./check-scene";
 import { useIndexShortMutation } from "./index-short";
 import { latestTakes, takeInProgress } from "./latest";
+import { useDirectorLibraryQuery } from "./library";
 import { useDirectorPlanQuery } from "./plan";
+import { planInProgress } from "./progress";
+import { useDirectorShotsQuery } from "./shots";
 import { useSpeakMutation } from "./speak";
 import { useSubmitTakeMutation } from "./submit-take";
 import { useDirectorTakesQuery } from "./takes";
@@ -168,6 +177,111 @@ describe("a short's plan", () => {
     const error = await result.current.index.mutateAsync({ url: videoId }).catch((e: unknown) => e);
     expect(errorCode(error)).toBe("DIRECTOR_INDEX_LIMIT");
     expect(result.current.plan.data).toBeUndefined();
+  });
+});
+
+describe("planInProgress", () => {
+  it("is true until Director has finished with the plan, either way", () => {
+    expect(planInProgress(plan("pending"))).toBe(true);
+    expect(planInProgress(plan("analyzing"))).toBe(true);
+    expect(planInProgress(plan("ready"))).toBe(false);
+    expect(planInProgress(plan("failed"))).toBe(false);
+    expect(planInProgress(undefined)).toBe(false);
+  });
+});
+
+describe("the library", () => {
+  it("is followed while a short in it is being indexed, and left alone once none is", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const seed = { ...plan("ready"), source: "seed" as const };
+    const answers = [
+      { templates: [plan("pending"), seed], indexUsed: true },
+      { templates: [plan("analyzing"), seed], indexUsed: true },
+      { templates: [plan("ready"), seed], indexUsed: true },
+    ];
+    let asked = 0;
+    const api = standIn((os) => ({
+      director: {
+        library: os.director.library.handler(
+          () =>
+            answers[Math.min(asked++, answers.length - 1)] ?? { templates: [], indexUsed: false },
+        ),
+      },
+    }));
+    const status = () => result.current.data?.templates[0]?.status;
+    const { result } = renderHook(() => useDirectorLibraryQuery(), api);
+    await until(() => expect(status()).toBe("pending"));
+    await vi.advanceTimersByTimeAsync(3 * SECOND_MS);
+    await until(() => expect(status()).toBe("analyzing"));
+    await vi.advanceTimersByTimeAsync(3 * SECOND_MS);
+    await until(() => expect(status()).toBe("ready"));
+    await vi.advanceTimersByTimeAsync(MINUTE_MS);
+    expect(asked).toBe(3);
+    expect(result.current.data?.indexUsed).toBe(true);
+  });
+
+  it("is asked for again once a short is indexed", async () => {
+    let indexed = false;
+    const api = standIn((os) => ({
+      director: {
+        library: os.director.library.handler(() => ({
+          templates: indexed ? [plan("pending")] : [],
+          indexUsed: indexed,
+        })),
+        index: os.director.index.handler(() => {
+          indexed = true;
+          return plan("pending");
+        }),
+      },
+    }));
+    const { result } = renderHook(
+      () => ({ library: useDirectorLibraryQuery(), index: useIndexShortMutation() }),
+      api,
+    );
+    await until(() => expect(result.current.library.data?.indexUsed).toBe(false));
+    await result.current.index.mutateAsync({ url: `https://youtu.be/${videoId}` });
+    await until(() => expect(result.current.library.data?.indexUsed).toBe(true));
+    expect(api.calls).toEqual(["director/library", "director/index", "director/library"]);
+  });
+});
+
+describe("the takes, shot by shot", () => {
+  const shot = (index: number, takes: DirectorTake[]): DirectorShot => ({
+    index,
+    takes,
+    pickedTakeId: null,
+    needsRetake: false,
+  });
+
+  it("are not asked for until enabled (before the plan is ready)", () => {
+    const api = standIn((os) => ({ director: { shots: os.director.shots.handler(() => []) } }));
+    const { result } = renderHook(() => useDirectorShotsQuery(videoId, false), api);
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(api.calls).toEqual([]);
+  });
+
+  it("are followed while a take is being reviewed, until every take is", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const answers = [
+      [shot(0, [take(1, 0, "reviewing")]), shot(1, [])],
+      [shot(0, [take(1, 0, "ready")]), shot(1, [])],
+    ];
+    let asked = 0;
+    const api = standIn((os) => ({
+      director: {
+        shots: os.director.shots.handler(({ input }) => {
+          expect(input).toEqual({ videoId });
+          return answers[Math.min(asked++, answers.length - 1)] ?? [];
+        }),
+      },
+    }));
+    const first = () => result.current.data?.[0]?.takes[0]?.status;
+    const { result } = renderHook(() => useDirectorShotsQuery(videoId), api);
+    await until(() => expect(first()).toBe("reviewing"));
+    await vi.advanceTimersByTimeAsync(3 * SECOND_MS);
+    await until(() => expect(first()).toBe("ready"));
+    await vi.advanceTimersByTimeAsync(MINUTE_MS);
+    expect(asked).toBe(2);
   });
 });
 
