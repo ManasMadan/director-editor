@@ -10,23 +10,33 @@ import socket
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
+import cv2
 import httpx
 import httpx2
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
 from app import aligning as aligning_module
+from app.aligner import services
 from app.aligning import (
     FPS,
     LocalAligner,
+    Patch,
     RemoteAligner,
     Similarity,
     aligning,
     apply,
     create_locator,
     frame_command,
+    jpeg,
+    match,
+    patch_of,
     pick_cut,
     read_frames,
+    refine,
+    seed_warp,
+    similarity,
     uncovered,
     within_tolerance,
 )
@@ -36,6 +46,7 @@ from app.errors import AppError
 from app.schemas import (
     AlignRequest,
     AlignResult,
+    Box,
     MatchCutAlignment,
     MatchCutTransform,
     TakeVideoType,
@@ -519,3 +530,61 @@ def test_a_read_given_up_on_stops_its_ffmpeg(monkeypatch: pytest.MonkeyPatch) ->
         assert raised.value.code == "UPSTREAM_UNAVAILABLE"
     finally:
         hung.close()
+
+
+# ------------------------------------------------------------------------ the pieces
+
+# The working frame's size (app/aligning.py), smaller than the finished one.
+WORK_WIDTH, WORK_HEIGHT = aligning_module.WIDTH, aligning_module.HEIGHT
+
+
+def textured() -> np.ndarray[tuple[int, int], np.dtype[np.float32]]:
+    """A working-size gray frame with texture everywhere, for matching to lock on to."""
+    noise = np.random.default_rng(1).random((WORK_HEIGHT, WORK_WIDTH), dtype=np.float32)
+    return np.asarray(cv2.GaussianBlur(noise * 255, (9, 9), 3), dtype=np.float32)
+
+
+def test_the_aligner_s_services_exist_only_while_it_runs() -> None:
+    with pytest.raises(RuntimeError, match="isn't started"):
+        _ = services()
+
+
+def test_a_frame_too_big_to_encode_is_refused() -> None:
+    with pytest.raises(ValueError, match="couldn't be encoded"):
+        _ = jpeg(np.zeros((70_000, 1, 3), dtype=np.uint8))
+
+
+def test_a_patch_too_big_to_grow_is_matched_at_the_sizes_that_fit() -> None:
+    frame = textured()
+    width, height = WORK_WIDTH - 10, WORK_HEIGHT - 10
+    patch = Patch(frame[:height, :width].copy(), 0, 0, width, height)
+    warp, score = match(patch, frame, None, 1.0)
+    assert score == pytest.approx(1, abs=1e-3)
+    assert apply(warp, 0, 0) == (pytest.approx(0), pytest.approx(0))
+
+
+def test_a_sighting_at_the_edge_searches_the_whole_frame() -> None:
+    frame = textured()
+    patch = patch_of(frame, Box(x=0.4, y=0.4, width=0.3, height=0.3))
+    # Gemini's box runs off the frame's corner, so no window around it fits the patch.
+    off_the_edge = Box(x=1, y=1, width=1, height=1)
+    warp, score = match(patch, frame, off_the_edge, 1.0)
+    assert score == pytest.approx(1, abs=1e-3)
+    assert apply(warp, 0, 0) == (pytest.approx(patch.x), pytest.approx(patch.y))
+
+
+def test_refining_keeps_the_seed_when_ecc_can_t_help() -> None:
+    frame = textured()
+    patch = patch_of(frame, Box(x=0.45, y=0.45, width=0.05, height=0.05))
+    seed = seed_warp(1, patch.x, patch.y)
+    # A blank frame: nothing to converge on.
+    blank = np.zeros((WORK_HEIGHT, WORK_WIDTH), dtype=np.float32)
+    assert np.array_equal(refine(patch, blank, seed), seed)
+    # The patch three times its size in the frame: ECC finds it, but that's no scale a
+    # phone moves by between takes.
+    tripled = cv2.resize(patch.pixels, (patch.width * 3, patch.height * 3))
+    zoomed = frame.copy()
+    zoomed[100 : 100 + patch.height * 3, 50 : 50 + patch.width * 3] = tripled
+    seed = seed_warp(3, 50, 100)
+    assert np.array_equal(refine(patch, zoomed, seed), seed)
+    assert similarity(seed)[0] == pytest.approx(3)
