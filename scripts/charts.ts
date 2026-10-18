@@ -3,7 +3,7 @@
  *
  *   1. helm lint, with values.schema.json (unknown or malformed values fail), and
  *      helm-unittest, for every chart of ours: deploy/charts/{stack,data} and the
- *      platform's (deploy/platform/{config,mail,jaeger,alerts,internal-tools});
+ *      platform's (deploy/platform/{config,mail,jaeger,alerts,internal-tools,dashboards});
  *   2. renders both application charts for every environment in deploy/environments,
  *      as Argo CD would, and validates each manifest against the Kubernetes API of the
  *      version the clusters run (k3s's, infra/tofu/modules/k3s) and the CRDs it uses (Gateway API, KEDA, CloudNativePG, Barman Cloud) with kubeconform;
@@ -84,6 +84,7 @@ const OWN_CHARTS: Record<string, string[]> = {
   "deploy/platform/jaeger": ["--set", "domain=example.com"],
   "deploy/platform/internal-tools": ["--set", "domain=example.com", "--set", "observability=true"],
   "deploy/platform/alerts": ["--set", "domain=example.com", "--set", "email=ops@example.com"],
+  "deploy/platform/dashboards": [],
 };
 
 /**

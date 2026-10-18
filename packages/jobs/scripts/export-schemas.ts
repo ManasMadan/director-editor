@@ -3,7 +3,7 @@
  * committed), the shared queues' Redis prefix and job options
  * (generated/queue-settings.json), the error catalog's statuses
  * (generated/error-codes.json) and the realtime channels' Redis names
- * (generated/realtime-channels.json).
+ * (generated/realtime-channels.json), and the activity logs' line and the analytics kinds.
  * apps/ai turns them into Pydantic models, so a payload is defined once, in zod, and
  * both languages validate the same shape; CI fails if the committed files drift.
  *
@@ -16,11 +16,13 @@
  */
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { activityName, analyticsKind } from "@repo/contracts/activity";
 import { errorData, errorIssue, errorResponse } from "@repo/contracts/api/base";
 import { ERROR_CODES, errorCode } from "@repo/contracts/errors";
 import { events } from "@repo/contracts/events";
 import { keysOf } from "@repo/contracts/objects";
 import { REALTIME_REDIS_PREFIX, realtimeChannel, realtimeMessage } from "@repo/contracts/realtime";
+import { activityActor, activityLine, activityOutcome } from "@repo/logger/activity";
 import * as z from "zod";
 import { jobMeta, queuePrefix, queues } from "../src/queues";
 
@@ -72,6 +74,13 @@ const schemas: Record<string, { title: string; schema: z.ZodType; io: "input" | 
   error_response: { title: "ErrorResponse", schema: errorResponse, io: "output" },
   queue_setting: { title: "QueueSetting", schema: queueSetting, io: "output" },
   shared_queue_name: { title: "SharedQueueName", schema: z.enum(shared), io: "output" },
+  // Python logs activity lines and records analytics under the same names as TypeScript.
+  activity_line: {
+    title: "ActivityLine",
+    schema: activityLine.extend({ activity: activityName }),
+    io: "output",
+  },
+  analytics_kind: { title: "AnalyticsKind", schema: analyticsKind, io: "output" },
 };
 for (const queue of shared) {
   const jobs = queues[queue].jobs;
@@ -94,6 +103,9 @@ const titles = new Map<z.core.$ZodType, string>([
   [errorCode, "ErrorCode"],
   [errorData, "ErrorData"],
   [errorIssue, "ErrorIssue"],
+  [activityName, "ActivityName"],
+  [activityActor, "ActivityActor"],
+  [activityOutcome, "ActivityOutcome"],
   // Each realtime message by what it says: "director.changed" → DirectorChanged.
   ...realtimeMessage.options.map((option): [z.core.$ZodType, string] => [
     option,

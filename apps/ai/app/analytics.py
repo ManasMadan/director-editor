@@ -25,19 +25,16 @@ import threading
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Literal, Protocol
+from typing import Protocol
 from uuid import UUID
 
 from google.api_core.retry import Retry
 from google.cloud.bigquery import DEFAULT_RETRY, Client
 from pydantic import BaseModel, JsonValue, TypeAdapter
 
+from app.contracts.analytics_kind import AnalyticsKind
 from app.log import log
 from app.settings import Settings
-
-# The kinds apps/api records too (ANALYTICS_KINDS in apps/api/src/modules/analytics): one
-# spelling for each, across both services.
-type AnalyticsKind = Literal["indexed", "take_reviewed", "cut_saved", "published", "call_started"]
 
 # A failed insert is retried (BigQuery's own retry policy) for at most this long: it runs
 # in a worker thread, which a long outage shouldn't hold for the default ten minutes.

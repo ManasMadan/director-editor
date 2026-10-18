@@ -1,0 +1,11 @@
+# The namespace the dashboards open on: where the application's pods log (the envs
+# ApplicationSet deploys the stack to director-editor). Each dashboard can switch to
+# another (a preview's pr-<n>) from its namespace picker.
+namespace: director-editor
+
+# The Jaeger data source's uid (kube-prometheus-stack's additionalDataSources), which the
+# tables link each line's traceId to.
+jaegerUid: jaeger
+
+# The Grafana folder the dashboards are filed in (the sidecar's folder annotation).
+folder: Director

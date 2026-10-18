@@ -1,0 +1,222 @@
+{
+  "title": "Director",
+  "uid": "director-activity",
+  "description": "Indexing, live calls, takes, cuts and publishes, with their outcomes and errors, from the activity logs (docs/observability.md).",
+  "tags": ["director", "activity"],
+  "timezone": "browser",
+  "editable": true,
+  "schemaVersion": 39,
+  "refresh": "1m",
+  "time": { "from": "now-7d", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Logs",
+        "type": "datasource",
+        "query": "loki",
+        "hide": 0
+      },
+      {
+        "name": "namespace",
+        "label": "Namespace",
+        "type": "query",
+        "datasource": { "type": "loki", "uid": "${datasource}" },
+        "query": "label_values(namespace)",
+        "definition": "label_values(namespace)",
+        "refresh": 2,
+        "current": { "text": "__NAMESPACE__", "value": "__NAMESPACE__" },
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Indexing",
+      "description": "Shorts asked for (director.index_requested) and what the AI worker made of them (director.indexed: ok, failed, or refused when the workspace was out of tokens).",
+      "gridPos": { "x": 0, "y": 0, "w": 16, "h": 8 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "custom": { "drawStyle": "bars", "stacking": { "mode": "normal" } } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{activity}} {{outcome}}",
+          "expr": "sum by (activity, outcome) (count_over_time({namespace=\"$namespace\"} |= \"director.index\" | json | activity=\"director.index_requested\" or activity=\"director.indexed\" [$__interval]))"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Tokens spent indexing",
+      "gridPos": { "x": 16, "y": 0, "w": 8, "h": 8 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "instant",
+          "legendFormat": "input",
+          "expr": "sum(sum_over_time({namespace=\"$namespace\"} |= \"director.indexed\" | json activity, tokens=\"target.inputTokens\" | activity=\"director.indexed\" | unwrap tokens | __error__=\"\" [$__range]) by (activity))"
+        },
+        {
+          "refId": "B",
+          "queryType": "instant",
+          "legendFormat": "output",
+          "expr": "sum(sum_over_time({namespace=\"$namespace\"} |= \"director.indexed\" | json activity, tokens=\"target.outputTokens\" | activity=\"director.indexed\" | unwrap tokens | __error__=\"\" [$__range]) by (activity))"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Live calls",
+      "description": "Calls that started (or were refused before they could), and how they ended.",
+      "gridPos": { "x": 0, "y": 8, "w": 8, "h": 8 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "custom": { "drawStyle": "bars", "stacking": { "mode": "normal" } } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{activity}} {{outcome}}",
+          "expr": "sum by (activity, outcome) (count_over_time({namespace=\"$namespace\"} |= \"director.call_\" | json | activity=\"director.call_started\" or activity=\"director.call_ended\" [$__interval]))"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Why calls ended",
+      "description": "HUNG_UP when the browser left, TIMEOUT at the ten-minute limit, an error code otherwise.",
+      "gridPos": { "x": 8, "y": 8, "w": 8, "h": 8 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "custom": { "drawStyle": "bars", "stacking": { "mode": "normal" } } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{reason}}",
+          "expr": "sum by (reason) (count_over_time({namespace=\"$namespace\"} |= \"director.call_ended\" | json | activity=\"director.call_ended\" [$__interval]))"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Call length",
+      "gridPos": { "x": 16, "y": 8, "w": 8, "h": 8 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "average",
+          "expr": "avg_over_time({namespace=\"$namespace\"} |= \"director.call_ended\" | json activity, durationMs | activity=\"director.call_ended\" | unwrap durationMs | __error__=\"\" [$__interval]) by (activity)"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Takes and scene checks",
+      "gridPos": { "x": 0, "y": 16, "w": 16, "h": 8 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "custom": { "drawStyle": "bars", "stacking": { "mode": "normal" } } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{activity}} {{outcome}}",
+          "expr": "sum by (activity, outcome) (count_over_time({namespace=\"$namespace\"} |= \"director.\" | json | activity=\"director.take_recorded\" or activity=\"director.take_reviewed\" or activity=\"director.scene_checked\" [$__interval]))"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Average take score",
+      "gridPos": { "x": 16, "y": 16, "w": 8, "h": 8 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "min": 0, "max": 100 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "score",
+          "expr": "avg_over_time({namespace=\"$namespace\"} |= \"director.take_reviewed\" | json activity, outcome, score=\"target.score\" | activity=\"director.take_reviewed\" | outcome=\"ok\" | unwrap score | __error__=\"\" [$__interval]) by (activity)"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Cuts and publishes",
+      "description": "Cuts saved, posts drafted, publishes started, and how each publish ended (refused with its code: the demo account, no YouTube permission, the day's quota).",
+      "gridPos": { "x": 0, "y": 24, "w": 16, "h": 8 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "custom": { "drawStyle": "bars", "stacking": { "mode": "normal" } } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{activity}} {{outcome}}",
+          "expr": "sum by (activity, outcome) (count_over_time({namespace=\"$namespace\"} |= \"director.\" | json | activity=\"director.cut_saved\" or activity=\"director.publish_copy_drafted\" or activity=\"director.publish_started\" or activity=\"director.published\" [$__interval]))"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "Refusals and errors",
+      "description": "Every Director activity that didn't end ok in the time range, by its code.",
+      "gridPos": { "x": 16, "y": 24, "w": 8, "h": 8 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "instant",
+          "format": "table",
+          "expr": "sum by (activity, outcome, reason) (count_over_time({namespace=\"$namespace\"} |= \"director.\" | json | activity=~\"director.+\" | outcome!=\"ok\" [$__range]))"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": { "excludeByName": { "Time": true }, "renameByName": { "Value #A": "Count" } }
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "logs",
+      "title": "Director failures",
+      "description": "Each failure as it was logged, with who it happened to; open a line for its trace.",
+      "gridPos": { "x": 0, "y": 32, "w": 24, "h": 10 },
+      "datasource": { "type": "loki", "uid": "${datasource}" },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "enableLogDetails": true,
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{namespace=\"$namespace\"} |= \"director.\" | json | activity=~\"director.+\" | outcome=\"failed\" | line_format \"{{.activity}} {{.reason}} for {{.actor_email}}{{.actor_userId}} {{.target_videoId}}\""
+        }
+      ]
+    }
+  ]
+}

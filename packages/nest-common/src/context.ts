@@ -21,6 +21,17 @@ export interface RequestContext {
   timeZone?: string | undefined;
   /** App version sent by web/mobile clients (x-app-version). */
   clientVersion?: string | undefined;
+  /** The client's address, as resolved through TRUSTED_PROXIES, and its user agent. */
+  ip?: string | undefined;
+  userAgent?: string | undefined;
+  /**
+   * Who the signed-in user is, once the session is resolved: for activity lines only
+   * (activity.ts), never stamped on every line like the ids.
+   */
+  email?: string | undefined;
+  name?: string | undefined;
+  /** The shared demo account. */
+  demo?: boolean | undefined;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();
@@ -48,13 +59,14 @@ export function currentContext(): RequestContext | undefined {
 
 /**
  * The request's ids to copy onto a job it queues (a job's `meta`), so the job's logs
- * carry the same request id as the HTTP request that asked for it.
+ * carry the same request id, user and workspace as the HTTP request that asked for it.
  */
 export function jobMetaFromContext() {
   const context = currentContext();
   return {
     ...(context?.requestId && { requestId: context.requestId }),
     ...(context?.userId && { userId: context.userId }),
+    ...(context?.orgId && { orgId: context.orgId }),
   };
 }
 

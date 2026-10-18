@@ -55,7 +55,8 @@ def test_requests_are_traced_and_logs_carry_the_trace(exporter: InMemorySpanExpo
     assert server[0].resource.attributes["service.name"] == "ai-test"
     context = server[0].get_span_context()
     assert context is not None
-    assert logged["trace_id"] == format(context.trace_id, "032x")
+    assert logged["traceId"] == format(context.trace_id, "032x")
+    assert logged["spanId"] == format(context.span_id, "016x")
 
 
 @pytest.mark.integration

@@ -1,0 +1,186 @@
+/**
+ * Account activity as activity lines (src/activity.ts): sign-ups, sign-ins and how,
+ * sign-outs and revoked sessions, Google linked or allowed to upload, and the demo
+ * account's refusals. What succeeded is written from better-auth's database hooks (they
+ * know the user and the session); what failed, from the answer itself (auth.routes.ts),
+ * since a refused sign-in writes nothing. Never the code, the password or a token: a
+ * failed sign-in names only the address that was tried.
+ */
+import type { ActivityName } from "@repo/contracts/activity";
+import { allowsUploads } from "@repo/contracts/api";
+import type { Activity } from "@repo/nest-common";
+import * as z from "zod";
+import { sessionEndReason, sessionMethod } from "./auth-events";
+
+type AuthActivity = Activity<ActivityName>;
+
+/**
+ * How someone signed in or up, from the endpoint: the demo account whatever the way in
+ * (it signs in with its public password), Google for the social provider (the only one).
+ */
+export function signInMethod(path: string | undefined, demo: boolean): string {
+  if (demo) {
+    return "demo";
+  }
+  const method = sessionMethod(path);
+  return method === "social" ? "google" : method;
+}
+
+/** Who an account or session is for, as the hooks read it. */
+export interface Subject {
+  userId: string;
+  email: string;
+  name: string;
+  demo: boolean;
+}
+
+/**
+ * Whether an admin made the change for someone else (the admin plugin's endpoints:
+ * creating a user, impersonating one). Then the admin, already the request's actor,
+ * stays its actor, and the person it was done to is the target.
+ */
+export const byAdmin = (path: string | undefined) => path?.startsWith("/admin/") === true;
+
+/** An account made: by the person signing up, or by an admin for someone. */
+export function signedUp(user: Subject, path: string | undefined): AuthActivity {
+  return byAdmin(path)
+    ? {
+        activity: "auth.signed_up",
+        target: { method: "admin", userId: user.userId, email: user.email },
+      }
+    : {
+        activity: "auth.signed_up",
+        actor: user,
+        target: { method: signInMethod(path, user.demo) },
+      };
+}
+
+/** A session started: the person signing in, or an admin impersonating someone. */
+export function signedIn(user: Subject, path: string | undefined): AuthActivity {
+  const method = signInMethod(path, user.demo);
+  return byAdmin(path)
+    ? { activity: "auth.signed_in", target: { method, userId: user.userId, email: user.email } }
+    : { activity: "auth.signed_in", actor: user, target: { method } };
+}
+
+/** A session that ended: signed out, or revoked (and why). */
+export function sessionEnded(path: string | undefined, userId: string): AuthActivity {
+  const reason = sessionEndReason(path);
+  return reason === "sign-out"
+    ? { activity: "auth.signed_out", target: { userId } }
+    : { activity: "auth.session_revoked", target: { userId, reason } };
+}
+
+/** A Google account linked (at sign-up or later), and allowed to upload if it says so. */
+export function googleLinked(account: { providerId: string; scope?: string | null }) {
+  if (account.providerId !== "google") {
+    return [];
+  }
+  const linked: AuthActivity = { activity: "auth.google_linked", target: { provider: "google" } };
+  return allowsUploads(account.scope) ? [linked, youtubeGranted] : [linked];
+}
+
+export const youtubeGranted: AuthActivity = {
+  activity: "auth.youtube_granted",
+  target: { provider: "google" },
+};
+
+/** The endpoints a sign-in (or its second step) is attempted at, by email, code or passkey. */
+const SIGN_IN_PATHS: ReadonlySet<string> = new Set([
+  "/sign-in/email",
+  "/sign-in/email-otp",
+  "/email-otp/verify-email",
+  "/passkey/verify-authentication",
+  "/two-factor/verify-totp",
+  "/two-factor/verify-otp",
+  "/two-factor/verify-backup-code",
+]);
+const SIGN_UP_PATH = "/sign-up/email";
+
+/**
+ * Only the address of what was sent: the rest (a password, a code) is never read, and
+ * neither is a field that isn't an address (a password typed into it by mistake).
+ */
+const triedAddress = z.object({ email: z.email().max(320) });
+
+function addressIn(body: unknown): string | undefined {
+  if (!Buffer.isBuffer(body)) {
+    return undefined;
+  }
+  try {
+    return triedAddress.safeParse(JSON.parse(body.toString("utf8"))).data?.email;
+  } catch {
+    // Not JSON: there is no address to name.
+    return undefined;
+  }
+}
+
+/** What an auth endpoint answered, as auth.routes.ts sees it. */
+export interface AuthAnswer {
+  /** The endpoint, under /api/auth (`/sign-in/email`). */
+  path: string;
+  status: number;
+  /** The error's code, when it answered one. */
+  code: string | undefined;
+  /** Where it redirected to (Google's callback). */
+  location: string | null;
+  /** The raw request body. */
+  body: unknown;
+  /** Whether the request came with a session already (a link, not a sign-in). */
+  signedIn: boolean;
+}
+
+/** An OAuth error code (`access_denied`, `state_mismatch`). */
+const OAUTH_ERROR = /^[\w.-]{1,64}$/;
+
+/**
+ * Why a Google sign-in came back refused: the `error` its callback redirects with. It
+ * arrives in a URL anyone can write, so only a code is logged as it is.
+ */
+function callbackError(location: string | null) {
+  const error = location ? new URL(location, "http://localhost").searchParams.get("error") : null;
+  if (error === null) {
+    return null;
+  }
+  return OAUTH_ERROR.test(error) ? error : "unreadable_error";
+}
+
+/**
+ * The activity line for an auth answer that went wrong, or null: a sign-in or sign-up
+ * refused (too many tries) or failed (a wrong password or code, an unverified address),
+ * Google's sign-in coming back with an error, and anything the demo account was refused.
+ */
+export function failedAuthActivity(answer: AuthAnswer): AuthActivity | null {
+  const { path, status, code } = answer;
+  if (code === "DEMO_ACCOUNT_LOCKED") {
+    return { activity: "auth.demo_refused", outcome: "refused", reason: code, target: { path } };
+  }
+  const googleError = path.startsWith("/callback/") ? callbackError(answer.location) : null;
+  if (googleError) {
+    // Someone already signed in was linking Google (or allowing YouTube), not signing in.
+    return answer.signedIn
+      ? {
+          activity: "auth.google_linked",
+          outcome: "failed",
+          reason: googleError,
+          target: { provider: "google" },
+        }
+      : {
+          activity: "auth.signed_in",
+          outcome: "failed",
+          reason: googleError,
+          target: { method: "google" },
+        };
+  }
+  if (status < 400 || !(SIGN_IN_PATHS.has(path) || path === SIGN_UP_PATH)) {
+    return null;
+  }
+  const email = addressIn(answer.body);
+  return {
+    activity: path === SIGN_UP_PATH ? "auth.signed_up" : "auth.signed_in",
+    outcome: status === 429 ? "refused" : "failed",
+    reason: code ?? (status === 429 ? "RATE_LIMITED" : `HTTP_${status}`),
+    ...(email && { actor: { email } }),
+    target: { method: signInMethod(path, false) },
+  };
+}

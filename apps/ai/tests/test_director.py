@@ -20,6 +20,7 @@ from uuid import UUID, uuid4
 import httpx2 as httpx
 import jwt
 import pytest
+import structlog
 from fastapi.testclient import TestClient
 from httpx import AsyncClient as HttpClient
 from psycopg.types.json import Jsonb
@@ -1808,18 +1809,58 @@ class Job:
         self.attemptsMade = 0
 
 
+class Activities:
+    """The activity lines written, with the user bound on the log context when each was:
+    recorded at the call, since the app's logger was configured (and cached) before any
+    test could capture its output."""
+
+    def __init__(self) -> None:
+        self.lines: list[tuple[str, dict[str, object], str | None]] = []
+
+    def __call__(self, activity: str, **fields: object) -> None:
+        user = structlog.contextvars.get_contextvars().get("userId")
+        self.lines.append((activity, fields, user if isinstance(user, str) else None))
+
+    def named(self, activity: str) -> list[tuple[dict[str, object], str | None]]:
+        return [(fields, user) for name, fields, user in self.lines if name == activity]
+
+
 def test_the_worker_runs_both_director_jobs(
-    client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+    client: TestClient,
+    gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     org, user = new_org()
     plan = index_plan(client, org, user)
     process = director_processor(director())
+    activities = Activities()
+    monkeypatch.setattr("app.director.log_activity", activities)
+    monkeypatch.setattr("app.worker.log_activity", activities)
     meta = {"requestId": "req-1", "userId": str(user), "orgId": str(org)}
     job: JobLike = Job(
         "plan", {"meta": meta, "payload": {"planId": str(plan.id), "orgId": str(org)}}
     )
     on_app_loop(client, lambda: process(job))
     assert plan_of(client, org, user).status == "ready"
+    # Its activity lines, for the user the job ran for: the plan written, and the job run.
+    [(indexed, _)] = activities.named("director.indexed")
+    assert indexed["user_id"] == user
+    assert indexed["target"] == {
+        "planId": str(plan.id),
+        "videoId": plan.videoId,
+        "model": "gemini-test",
+        "audio": "none",
+        "inputTokens": 900,
+        "outputTokens": 100,
+    }
+    [(finished, bound)] = activities.named("job.finished")
+    assert finished["target"] == {
+        "queue": "ai-director",
+        "job": "plan",
+        "jobId": "job-1",
+        "attempt": 1,
+    }
+    assert bound == str(user)
     gemini[1][GEMINI_PATH] = gemini_output(REVIEW)
     with serve_files({"/t": ("video/webm", b"\x1a\x45\xdf\xa3")}) as files:
         take = add_take(client, org, user, f"{files.url}/t")
@@ -1836,6 +1877,18 @@ def test_the_worker_runs_both_director_jobs(
         )
         on_app_loop(client, lambda: process(review))
     assert takes_of(client, org, user)[0].status == "ready"
+    # A job without a user still names whose take it reviewed, and the score.
+    [(reviewed, _)] = activities.named("director.take_reviewed")
+    assert reviewed["user_id"] == user
+    assert reviewed["target"] == {
+        "takeId": str(take.id),
+        "videoId": plan.videoId,
+        "shotIndex": 0,
+        "kind": "video",
+        "score": REVIEW["score"],
+        "inputTokens": 900,
+        "outputTokens": 100,
+    }
     with pytest.raises(ValidationError):
         on_app_loop(client, lambda: process(Job("unknown", {})))
 

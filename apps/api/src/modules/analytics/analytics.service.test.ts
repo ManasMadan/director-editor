@@ -1,8 +1,9 @@
+import { ANALYTICS_KINDS } from "@repo/contracts/activity";
 import { userIdSchema, videoIdSchema } from "@repo/contracts/ids";
 import type { Analytics } from "@repo/nest-common";
 import { PinoLogger } from "nestjs-pino";
 import { describe, expect, it, vi } from "vitest";
-import { ANALYTICS_KINDS, AnalyticsService } from "./analytics.service";
+import { AnalyticsService } from "./analytics.service";
 
 const userId = userIdSchema.parse("5e2d7c3a-1b4f-4a8e-9c6d-7f0a2b3c4d5e");
 const videoId = videoIdSchema.parse("dQw4w9WgXcQ");

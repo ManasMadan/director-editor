@@ -96,7 +96,7 @@ def live() -> HealthResponse:
 async def index(body: IndexRequest) -> IndexResult:
     """The short's plan, and its audio when MEDIA_BUCKET is set."""
     structlog.contextvars.bind_contextvars(
-        org_id=str(body.orgId), plan_id=str(body.planId), video_id=body.videoId
+        orgId=str(body.orgId), planId=str(body.planId), videoId=body.videoId
     )
     try:
         return await services().indexer.index(body, watched=_nothing_to_announce)

@@ -12,10 +12,12 @@ import {
 } from "@repo/nest-common";
 import type { FastifyInstance } from "fastify";
 import { Logger } from "nestjs-pino";
+import { ACTIVITY, type RecordActivity } from "./activity";
 import { AppModule } from "./app.module";
 import { AUTH, type Auth, MEMBERSHIPS, type Memberships } from "./auth/auth.module";
 import { mountAuth } from "./auth/auth.routes";
 import { env } from "./env";
+import { upgradeContext } from "./http-context";
 import { AnalyticsService } from "./modules/analytics";
 import { DirectorService } from "./modules/director";
 import { FilesService, mountFileContent } from "./modules/files";
@@ -36,7 +38,8 @@ export function createApiServer() {
       const auth = app.get<Auth>(AUTH);
       const memberships = app.get<Memberships>(MEMBERSHIPS);
       const logger = app.get(Logger);
-      mountAuth(fastify, auth, env.BETTER_AUTH_URL);
+      const recordActivity = app.get<RecordActivity>(ACTIVITY);
+      mountAuth(fastify, auth, env.BETTER_AUTH_URL, recordActivity);
       mountFileContent(fastify, auth, app.get(FilesService));
       mountDirectorCall(fastify, {
         caller: orgCallerFor(auth, memberships),
@@ -44,6 +47,7 @@ export function createApiServer() {
         analytics: app.get(AnalyticsService),
         redis: app.get<Redis>(REDIS),
         logger,
+        activity: recordActivity,
       });
       await mountRpc(
         fastify,
@@ -51,6 +55,7 @@ export function createApiServer() {
         {
           logError: (error, level) =>
             logger[level]({ err: describeError(error) }, "error in procedure"),
+          recordActivity,
           publicUrl: env.BETTER_AUTH_URL,
           release: env.RELEASE,
           exposeDocs: env.NODE_ENV !== "production",
@@ -73,6 +78,7 @@ export function liveCallOptions(deps: {
   // Only the one method this needs, so a test gives a plain stand-in, not a real limiter.
   calls: { take(userId: string): Promise<void> };
   logger: Pick<Logger, "warn" | "error">;
+  activity: RecordActivity;
 }): LiveOptions {
   return {
     allowedOrigins: [env.WEB_URL],
@@ -91,6 +97,8 @@ export function liveCallOptions(deps: {
     now: Date.now,
     recordCallStarted: (userId, videoId) =>
       deps.analytics.record("call_started", { userId, videoId }),
+    context: upgradeContext(env.TRUSTED_PROXIES),
+    activity: deps.activity,
   };
 }
 
@@ -103,6 +111,7 @@ function mountDirectorCall(
     analytics: AnalyticsService;
     redis: Redis;
     logger: Logger;
+    activity: RecordActivity;
   },
 ) {
   // Each call is minutes of Gemini audio and video: a few an hour is plenty to film a short.

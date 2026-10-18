@@ -11,6 +11,7 @@ import type { Producer } from "@repo/jobs";
 import { currentContext } from "@repo/nest-common";
 import type { BetterAuthOptions } from "better-auth";
 import type { Redis } from "ioredis";
+import type { RecordActivity } from "../activity";
 import type { Env } from "../env";
 import { type EventOrigin, emitEvent } from "../outbox";
 import { createAccountLimits, createEmailLimits } from "./account-limits";
@@ -24,6 +25,8 @@ export interface AuthDependencies {
   redis: Redis;
   notifications: Pick<Producer<"notifications-critical">, "add">;
   memberships: Memberships;
+  /** Writes account activity: sign-ins, sign-outs, Google linked (auth-activity.ts). */
+  activity: RecordActivity;
   /** Where better-auth stores its rows; Postgres through Prisma unless given (auth.cli.ts). */
   database?: BetterAuthOptions["database"];
 }

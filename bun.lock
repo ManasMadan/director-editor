@@ -358,6 +358,7 @@
         "zod": "catalog:",
       },
       "devDependencies": {
+        "@repo/logger": "workspace:*",
         "@repo/testing": "workspace:*",
         "@repo/typescript-config": "workspace:*",
         "@repo/vitest-config": "workspace:*",
@@ -370,6 +371,7 @@
       "name": "@repo/logger",
       "dependencies": {
         "pino": "catalog:",
+        "zod": "catalog:",
       },
       "devDependencies": {
         "@repo/typescript-config": "workspace:*",

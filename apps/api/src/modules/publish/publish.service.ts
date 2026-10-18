@@ -12,11 +12,11 @@
  */
 import { Injectable } from "@nestjs/common";
 import {
+  allowsUploads,
   type DirectorCut,
   type PublishCopy,
   type PublishVisibility,
   publishCopySchema,
-  YOUTUBE_UPLOAD_SCOPE,
   youtubeDescription,
   youtubeTitle,
 } from "@repo/contracts/api";
@@ -31,6 +31,7 @@ import {
   PinoLogger,
 } from "@repo/nest-common";
 import * as z from "zod";
+import { InjectActivity, type RecordActivity } from "../../activity";
 import { type Auth, InjectAuth } from "../../auth/auth.module";
 import { env } from "../../env";
 import { features } from "../../features";
@@ -56,10 +57,6 @@ export interface Publisher {
 type Upload = PublishCopy & { cutId: DirectorCutId; visibility: PublishVisibility };
 
 const videoLength = z.coerce.number().int().positive();
-
-/** Whether a Google account's granted scopes (better-auth joins them with commas) allow uploads. */
-export const allowsUploads = (scope: string | null) =>
-  (scope ?? "").split(/[\s,]+/).includes(YOUTUBE_UPLOAD_SCOPE);
 
 /** YouTube's reasons for refusing an upload over the project's quota or its rate. */
 const QUOTA_REASONS = new Set([
@@ -112,6 +109,7 @@ export class PublishService {
     private readonly analytics: AnalyticsService,
     private readonly allowance: DailyAllowance,
     @InjectPinoLogger(PublishService.name) private readonly log: PinoLogger,
+    @InjectActivity() private readonly activity: RecordActivity,
   ) {}
 
   /** Gemini's draft of the post, knowing the original Short as YouTube shows it. */
@@ -139,6 +137,12 @@ export class PublishService {
       await video.body.cancel();
       return this.director.cut(userId, orgId, cut.id);
     }
+    // Claimed, with a place of the day's: on its way to YouTube (the call's own line says
+    // how it ended).
+    this.activity({
+      activity: "director.publish_started",
+      target: { cutId: cut.id, videoId: cut.videoId, visibility: input.visibility },
+    });
     const uploaded = await this.youtube
       .upload(
         ready.accessToken,

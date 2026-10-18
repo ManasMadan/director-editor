@@ -10,8 +10,10 @@
  * `dist/telemetry.mjs` and started with `node --import ./dist/telemetry.mjs dist/main.mjs`.
  *
  * Instrumented: HTTP in and out, Postgres (pg, under Prisma's driver adapter), Redis
- * (ioredis, so BullMQ's commands too), and pino, whose log lines then carry `trace_id`
- * and `span_id` next to the request id. Trace context isn't carried through queued jobs;
+ * (ioredis, so BullMQ's commands too), and pino, whose log lines then carry `traceId`
+ * and `spanId` next to the request id (camelCase like every other field, and as the
+ * Python service writes them, so Grafana links any service's line to its trace the same
+ * way). Trace context isn't carried through queued jobs;
  * the request id already is (JobMeta).
  *
  * Seam: this is where metrics and traces leave the process. Another exporter or protocol
@@ -60,7 +62,9 @@ export async function startTelemetry(service: string): Promise<boolean> {
       }),
       new PgInstrumentation(),
       new IORedisInstrumentation(),
-      new PinoInstrumentation(),
+      new PinoInstrumentation({
+        logKeys: { traceId: "traceId", spanId: "spanId", traceFlags: "traceFlags" },
+      }),
     ],
   });
   sdk.start();

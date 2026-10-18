@@ -3,6 +3,7 @@
  * checks before, security alerts after), on its database writes (normalised user rows,
  * the personal workspace, audit events), and on account deletion.
  */
+import { allowsUploads } from "@repo/contracts/api";
 import { NAME_MAX_LENGTH } from "@repo/contracts/auth";
 import type { AuthErrorCode } from "@repo/contracts/errors";
 import { type OrgId, orgIdSchema, type UserId, userIdSchema } from "@repo/contracts/ids";
@@ -10,11 +11,22 @@ import { required } from "@repo/contracts/objects";
 import { parseOrgRole } from "@repo/contracts/roles";
 import { transaction } from "@repo/db";
 import { isLocale, isTimeZone, negotiateLocale } from "@repo/i18n";
+import { updateContext } from "@repo/nest-common";
 import type { BetterAuthOptions } from "better-auth";
 import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from "better-auth/api";
+import { actorContext } from "../http-context";
 import { copySeedTemplates } from "../modules/director/seeds.repository";
 import { requestNotification } from "../notifications";
 import { emitAnyEvent, emitEvent } from "../outbox";
+import {
+  byAdmin,
+  googleLinked,
+  type Subject,
+  sessionEnded,
+  signedIn,
+  signedUp,
+  youtubeGranted,
+} from "./auth-activity";
 import type { AuthContext } from "./auth-context";
 import { auditEventForAlert, sessionEndReason, sessionMethod } from "./auth-events";
 import { DEMO_LOCKED_PATHS, ownSessionOnly, refuseDemoProfileChange, refuseForDemo } from "./demo";
@@ -149,14 +161,14 @@ export function requestHooks(context: AuthContext) {
 type DatabaseHooks = NonNullable<BetterAuthOptions["databaseHooks"]>;
 
 /** New users get their personal workspace; profile edits follow the sign-up rules. */
-function userHooks({ db, record }: AuthContext): DatabaseHooks["user"] {
+function userHooks({ db, record, activity }: AuthContext): DatabaseHooks["user"] {
   return {
     create: {
       before: async (user, ctx) => ({ data: newUserFields(user, ctx) }),
       // Every user gets a personal workspace, so tenant-scoped features work from the
       // first sign-in, for solo users and teams alike. Its library starts with Director's
       // seeded templates, in the same transaction: no workspace exists without them.
-      after: async (user) => {
+      after: async (user, ctx) => {
         const userId = userIdOf(user);
         await transaction(db, async (tx) => {
           const org = await tx.organization.create({
@@ -179,6 +191,8 @@ function userHooks({ db, record }: AuthContext): DatabaseHooks["user"] {
             origin,
           );
         });
+        // Only once the account has its workspace: a rollback leaves no "ok" line.
+        logSignedUp(activity, actorContext(user), ctx?.path);
       },
     },
     delete: {
@@ -225,8 +239,34 @@ function userHooks({ db, record }: AuthContext): DatabaseHooks["user"] {
   };
 }
 
-/** Sessions start in a workspace, and their start and end are audited. */
-function sessionHooks({ db, record, actor }: AuthContext): DatabaseHooks["session"] {
+/**
+ * Logs a new account. Unless an admin made it, the rest of the request (the account
+ * linked, the session started) is the new person's: they become its actor.
+ */
+function logSignedUp(activity: AuthContext["activity"], user: Subject, path?: string) {
+  if (!byAdmin(path)) {
+    updateContext(user);
+  }
+  activity(signedUp(user, path));
+}
+
+/** Logs a new session, for its person, or for the admin impersonating them. */
+async function logSignedIn(context: AuthContext, userId: UserId, path?: string) {
+  const user = actorContext(
+    await context.db.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { id: true, email: true, name: true, demo: true },
+    }),
+  );
+  if (!byAdmin(path)) {
+    updateContext(user);
+  }
+  context.activity(signedIn(user, path));
+}
+
+/** Sessions start in a workspace, and their start and end are audited and logged. */
+function sessionHooks(context: AuthContext): DatabaseHooks["session"] {
+  const { db, record, actor, activity } = context;
   return {
     create: {
       // New sessions start in the user's first workspace (their personal one).
@@ -251,6 +291,7 @@ function sessionHooks({ db, record, actor }: AuthContext): DatabaseHooks["sessio
           { userId, sessionId: session.id, method: sessionMethod(ctx?.path) },
           { actorId: userId, orgId: null },
         );
+        await logSignedIn(context, userId, ctx?.path);
       },
     },
     delete: {
@@ -262,13 +303,49 @@ function sessionHooks({ db, record, actor }: AuthContext): DatabaseHooks["sessio
           { userId, sessionId: session.id, reason: sessionEndReason(ctx?.path) },
           { actorId: actor(userId), orgId: null },
         );
+        activity(sessionEnded(ctx?.path, userId));
+      },
+    },
+  };
+}
+
+/**
+ * Google accounts linked, at sign-up or later, and allowed to upload to YouTube: better-auth
+ * writes an account's scopes only when someone links it again with more (linkSocial, as
+ * the first publish asks), so an update carrying the upload scope is that grant. The
+ * request it happens in is remembered from before the write to after it.
+ */
+function accountHooks({ activity }: AuthContext): DatabaseHooks["account"] {
+  const granting = new WeakSet<object>();
+  return {
+    create: {
+      after: async (account) => {
+        for (const line of googleLinked(account)) {
+          activity({ ...line, actor: { userId: account.userId } });
+        }
+      },
+    },
+    update: {
+      before: async (account, ctx) => {
+        if (ctx && allowsUploads(account.scope)) {
+          granting.add(ctx);
+        }
+      },
+      after: async (account, ctx) => {
+        if (ctx && granting.delete(ctx)) {
+          activity({ ...youtubeGranted, actor: { userId: account.userId } });
+        }
       },
     },
   };
 }
 
 export function databaseHooks(context: AuthContext): DatabaseHooks {
-  return { user: userHooks(context), session: sessionHooks(context) };
+  return {
+    user: userHooks(context),
+    session: sessionHooks(context),
+    account: accountHooks(context),
+  };
 }
 
 /**

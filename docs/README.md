@@ -23,6 +23,7 @@ for Claude Code.
 | [python-services.md](python-services.md) | apps/ai: Director's service, the worker, budgets |
 | [director.md](director.md) | Director: the library of templates, Gemini's shot plans, the guided camera, take reviews and the finished short |
 | [web-and-mobile.md](web-and-mobile.md) | the render-only web app, packages/client and packages/ui |
+| [observability.md](observability.md) | the activity logs: what every service logs about who did what, what it never logs, and following one person in Grafana |
 | [testing.md](testing.md) | every test layer and its command, the coverage rule, what CI runs and when |
 | [deploy.md](deploy.md) | images, environments, staging and production releases, rollback, previews |
 | [new-project.md](new-project.md) | everything a new app made from this director-editor needs once, in order |

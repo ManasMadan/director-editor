@@ -32,6 +32,10 @@ const errors = errorsOf(
  * they first publish (better-auth's linkSocial), not at sign-in.
  */
 export const YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload";
+
+/** Whether a Google account's granted scopes (better-auth joins them with commas) allow uploads. */
+export const allowsUploads = (scope: string | null | undefined) =>
+  (scope ?? "").split(/[\s,]+/).includes(YOUTUBE_UPLOAD_SCOPE);
 /** What marks a video as a Short in its title. */
 const SHORTS_TAG = "#Shorts";
 /** YouTube's longest title, #Shorts included. */

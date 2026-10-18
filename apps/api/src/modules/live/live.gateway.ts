@@ -10,22 +10,35 @@
  * Fastify's routing never sees an upgrade, so this listens on the Node server itself and
  * does its own auth and validation, like the other routes outside oRPC.
  */
+import { AsyncResource } from "node:async_hooks";
 import { type IncomingMessage, STATUS_CODES } from "node:http";
 import type { Duplex } from "node:stream";
+import type { ActivityName } from "@repo/contracts/activity";
 import { DIRECTOR_MAX_SHOTS, type DirectorPlan, type ShotPlan } from "@repo/contracts/api";
 import { type UserId, type VideoId, videoIdSchema } from "@repo/contracts/ids";
 import { LIVE_PATH } from "@repo/contracts/live";
 import { required } from "@repo/contracts/objects";
 import { MINUTE_MS, SECOND_MS } from "@repo/contracts/time";
-import { AppError, describeError, isAppError } from "@repo/nest-common";
+import {
+  type Activity,
+  type ActivityTarget,
+  AppError,
+  describeError,
+  isAppError,
+  outcomeOf,
+  type RequestContext,
+  runWithContext,
+  updateContext,
+} from "@repo/nest-common";
 import type { FastifyInstance } from "fastify";
 import { WebSocket, WebSocketServer } from "ws";
 import * as z from "zod";
+import type { RecordActivity } from "../../activity";
 import { toHeaders } from "../../http-context";
 import type { OrgCaller } from "../../rpc/procedures";
 import type { GoogleAuth } from "./google-auth";
 import { CLIENT_MAX_PAYLOAD_BYTES } from "./live.messages";
-import { closeWithError, type LiveLog, LiveRelay } from "./live.relay";
+import { type CallEnd, closeWithError, type LiveLog, LiveRelay } from "./live.relay";
 import { type LiveModel, liveUrl, setupMessage } from "./live.setup";
 
 /**
@@ -56,6 +69,10 @@ export interface LiveOptions {
   now: () => number;
   /** Records that a call reached Gemini and started (fire-and-forget analytics). */
   recordCallStarted(userId: UserId, videoId: VideoId): void;
+  /** The upgrade's request context: its id, address and user agent (http-context.ts). */
+  context(request: IncomingMessage): RequestContext;
+  /** Writes the call's activity lines: started (or refused), and how it ended. */
+  activity: RecordActivity;
 }
 
 /** The upstream for the environment's settings; null turns the feature off. */
@@ -134,8 +151,37 @@ function relayFor(
     frameIntervalMs: FRAME_INTERVAL_MS,
     now: options.now,
     log: options.log,
-    onCallStarted: () => options.recordCallStarted(call.userId, call.videoId),
+    // Called from Gemini's socket, outside the call's request context: bound back to it,
+    // so the line names the caller and the request.
+    onCallStarted: AsyncResource.bind(() => {
+      options.recordCallStarted(call.userId, call.videoId);
+      options.activity({ activity: "director.call_started", target: callTarget(call) });
+    }),
   });
+}
+
+/** What a call's activity lines are about: its short and the shot it opened on. */
+function callTarget(call: { videoId: VideoId; shot: number }): ActivityTarget {
+  return { videoId: call.videoId, shot: call.shot };
+}
+
+/**
+ * How a call ended, as an activity line: ok when the browser hung up or the call ran its
+ * time, refused or failed by its code otherwise, and how long it lasted once it started.
+ */
+export function callEnded(
+  { code, startedAt }: CallEnd,
+  target: ActivityTarget,
+  now: number,
+): Activity<ActivityName> {
+  const ok = code === null || code === "TIMEOUT";
+  return {
+    activity: "director.call_ended",
+    outcome: ok ? "ok" : outcomeOf({ code }).outcome,
+    reason: code ?? "HUNG_UP",
+    target: { ...target, started: startedAt !== null },
+    durationMs: startedAt === null ? undefined : now - startedAt,
+  };
 }
 
 /**
@@ -146,8 +192,8 @@ function registerUpgrade(
   fastify: FastifyInstance,
   sockets: WebSocketServer,
   allowedOrigins: ReadonlySet<string>,
-  options: Pick<LiveOptions, "log">,
-  call: (client: WebSocket, headers: Headers, url: URL) => void,
+  options: Pick<LiveOptions, "log" | "context">,
+  call: (client: WebSocket, headers: Headers, url: URL) => Promise<void>,
 ) {
   Object.assign(fastify.server, { shouldUpgradeCallback: isLiveUpgrade });
   fastify.server.on("upgrade", (request, socket, head) => {
@@ -168,7 +214,8 @@ function registerUpgrade(
     const headers = toHeaders(request);
     sockets.handleUpgrade(request, socket, head, (client) => {
       socket.off("error", onError);
-      call(client, headers, url);
+      // Its own request context, like any request: the call's lines carry its id.
+      void runWithContext(options.context(request), () => call(client, headers, url));
     });
   });
 }
@@ -185,6 +232,8 @@ export function mountLive(fastify: FastifyInstance, options: LiveOptions) {
       options.log("warn", { err: describeError(error) }, "live client socket failed"),
     );
     let userId: UserId | null = null;
+    // What the call is about, for its activity lines, once its query is known to be valid.
+    let target: ActivityTarget = {};
     try {
       const upstream = options.upstream;
       if (!upstream) {
@@ -194,7 +243,9 @@ export function mountLive(fastify: FastifyInstance, options: LiveOptions) {
       if (!query.success) {
         throw new AppError("VALIDATION_FAILED");
       }
+      target = callTarget(query.data);
       const caller = await options.caller(headers);
+      updateContext({ orgId: caller.orgId });
       if (calling.has(caller.userId)) {
         throw new AppError("CONFLICT");
       }
@@ -204,15 +255,19 @@ export function mountLive(fastify: FastifyInstance, options: LiveOptions) {
       // Only a call that can really start is charged.
       await options.spendCallLimit(caller.userId);
       if (client.readyState !== WebSocket.OPEN) {
-        return; // hung up while the plan loaded
+        // Hung up while the plan loaded: a call that ended before it began.
+        options.activity(callEnded({ code: null, startedAt: null }, target, options.now()));
+        return;
       }
-      await relayFor(
+      const ended = await relayFor(
         client,
         upstream,
         { plan, shot: query.data.shot, userId: caller.userId, videoId: query.data.videoId },
         options,
       ).run();
+      options.activity(callEnded(ended, target, options.now()));
     } catch (error) {
+      options.activity({ activity: "director.call_started", ...outcomeOf(error), target });
       refuseCall(options.log, client, error);
     } finally {
       if (userId) {
@@ -221,13 +276,7 @@ export function mountLive(fastify: FastifyInstance, options: LiveOptions) {
     }
   }
 
-  registerUpgrade(
-    fastify,
-    sockets,
-    allowedOrigins,
-    options,
-    (client, headers, url) => void call(client, headers, url),
-  );
+  registerUpgrade(fastify, sockets, allowedOrigins, options, call);
 
   // Open calls would hold the server's close until they end; end them first.
   fastify.addHook("preClose", async () => {

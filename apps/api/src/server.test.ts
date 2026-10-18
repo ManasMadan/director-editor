@@ -5,6 +5,7 @@
  * as far as spendCallLimit or recordCallStarted (both need a real Gemini connection), so
  * this is where those two closures are proven to delegate to the right thing.
  */
+import type { IncomingMessage } from "node:http";
 import { orgIdSchema, userIdSchema, videoIdSchema } from "@repo/contracts/ids";
 import { describe, expect, it, vi } from "vitest";
 import { liveCallOptions } from "./server";
@@ -21,6 +22,7 @@ function options(overrides: Partial<Parameters<typeof liveCallOptions>[0]> = {})
     analytics: { record: vi.fn() },
     calls: { take: vi.fn(() => Promise.resolve()) },
     logger: { warn: vi.fn(), error: vi.fn() },
+    activity: vi.fn(),
     ...overrides,
   });
 }
@@ -45,6 +47,17 @@ describe("the live call's wiring", () => {
     const live = options({ analytics: { record } });
     live.recordCallStarted(userId, videoId);
     expect(record).toHaveBeenCalledWith("call_started", { userId, videoId });
+  });
+
+  it("writes the call's activity through the API's recorder, in the upgrade's own context", () => {
+    const activity = vi.fn();
+    const live = options({ activity });
+    expect(live.activity).toBe(activity);
+    const upgrade = { headers: {}, socket: { remoteAddress: "203.0.113.9" } };
+    expect(live.context(upgrade as unknown as IncomingMessage)).toMatchObject({
+      requestId: expect.any(String),
+      ip: "203.0.113.9",
+    });
   });
 
   it("logs through the given logger, at the level asked for", () => {

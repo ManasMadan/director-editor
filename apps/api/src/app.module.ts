@@ -6,6 +6,7 @@ import {
   LoggerModule,
   RedisModule,
 } from "@repo/nest-common";
+import { ActivityModule } from "./activity";
 import { AuthModule } from "./auth/auth.module";
 import { env } from "./env";
 import { AnalyticsModule } from "./modules/analytics";
@@ -31,6 +32,7 @@ import { NotificationsProducerModule } from "./notifications";
     RedisModule.forRoot({ url: env.REDIS_URL }),
     HealthModule.forRoot(["db", "redis"]),
     I18nModule.forRoot(),
+    ActivityModule,
     NotificationsProducerModule,
     AuthModule,
     UserModule,

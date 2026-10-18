@@ -348,6 +348,63 @@ export const PRODUCTION = {
   YOUTUBE_API_URL: "https://www.googleapis.com/youtube/v3",
 };
 
+/** Google's hosts that better-auth calls itself, and where packages/fake-google answers each. */
+const GOOGLE_HOSTS: Record<string, string> = {
+  "https://oauth2.googleapis.com/token": "/token",
+  "https://www.googleapis.com/oauth2/v3/certs": "/oauth2/v3/certs",
+};
+
+/**
+ * Sends better-auth's requests for Google's hosts to the fake at `googleUrl`; every other
+ * goes out. Returns the spy, to restore when the test is done with Google.
+ */
+export function throughFakeGoogle(googleUrl: string) {
+  const real = globalThis.fetch;
+  return vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const path = GOOGLE_HOSTS[url.split("?")[0] ?? ""];
+    return path ? real(`${googleUrl}${path}`, init) : real(input, init);
+  });
+}
+
+/**
+ * Goes through Google's consent the way a browser does: from where better-auth sends it
+ * (`started`, the fake's authorization endpoint at Google's address), back to the API's
+ * callback with the code, which better-auth trades at the fake's token endpoint. Keeps
+ * the cookies the callback sets on the session, and answers the callback.
+ */
+export async function googleConsent(
+  harness: Harness,
+  googleUrl: string,
+  session: ReturnType<typeof createSession>,
+  started: { status: number; body: { url: string } },
+) {
+  if (started.status !== 200) {
+    throw new Error(`Google sign-in didn't start: ${JSON.stringify(started.body)}`);
+  }
+  const authorize = new URL(started.body.url);
+  if (authorize.origin !== "https://accounts.google.com") {
+    throw new Error(`not sent to Google: ${authorize.origin}`);
+  }
+  const atFake = await fetch(`${googleUrl}${authorize.pathname}${authorize.search}`, {
+    redirect: "manual",
+  });
+  const back = new URL(atFake.headers.get("location") ?? "");
+  const google = throughFakeGoogle(googleUrl);
+  const cookie = [...session.cookies()].map(([name, value]) => `${name}=${value}`).join("; ");
+  const callback = await fetch(`${harness.baseUrl}${back.pathname}${back.search}`, {
+    redirect: "manual",
+    headers: { cookie, "x-forwarded-for": session.ip },
+  }).finally(() => google.mockRestore());
+  const cookies = session.cookies();
+  for (const set of callback.headers.getSetCookie()) {
+    const [name = "", ...value] = (set.split(";")[0] ?? "").split("=");
+    cookies.set(name, value.join("="));
+  }
+  session.useCookies(cookies);
+  return callback;
+}
+
 /** process.exit, stopped short so a command's refusal can be seen. */
 export function refusingExit() {
   return vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
