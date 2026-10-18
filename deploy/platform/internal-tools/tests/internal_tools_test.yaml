@@ -1,0 +1,84 @@
+suite: internal-tools
+templates: [routes.yaml]
+release: { name: internal-tools, namespace: gateway-system }
+set:
+  domain: example.com
+tests:
+  - it: puts each tool on its own host under the zone, proxied through external-dns's record
+    documentSelector: { path: "spec.hostnames[0]", value: argocd.example.com }
+    asserts:
+      - equal: { path: metadata.name, value: internal-argocd }
+      - equal: { path: spec.parentRefs, value: [{ name: public }] }
+      - equal: { path: metadata.annotations, value: { director-editor.dev/external-dns: "true" } }
+      - equal:
+          path: "spec.rules[0].backendRefs"
+          value: [{ name: argocd-server, namespace: argocd, port: 80 }]
+
+  - it: uses the direct zone when the cluster has one, under OpenTofu's wildcard record
+    set: { directZone: app.example.com }
+    documentSelector: { path: "spec.hostnames[0]", value: argocd.app.example.com }
+    asserts:
+      - equal: { path: metadata.name, value: internal-argocd }
+      - notExists: { path: metadata.annotations }
+
+  - it: asks for the basic-auth password on every tool, and keeps its header from the tool
+    documentSelector: { path: "spec.hostnames[0]", value: mail-admin.example.com }
+    asserts:
+      - equal: { path: "spec.rules[0].name", value: protected }
+      - equal:
+          path: "spec.rules[0].filters"
+          value: [{ type: RequestHeaderModifier, requestHeaderModifier: { remove: [Authorization] } }]
+
+  - it: protects each route's rule with the shared basic-auth Secret
+    documentSelector: { path: kind, value: SecurityPolicy, matchMany: true }
+    asserts:
+      - equal: { path: "spec.targetRefs[0].sectionName", value: protected }
+      - equal: { path: "spec.targetRefs[0].kind", value: HTTPRoute }
+      - equal: { path: spec.basicAuth.users, value: { name: internal-tools-auth } }
+
+  - it: leaves a tool's open paths to its own sign-in
+    set:
+      tools.mail-admin.openPaths: [/api, /auth]
+    documentSelector: { path: "spec.hostnames[0]", value: mail-admin.example.com }
+    asserts:
+      - equal: { path: "spec.rules[0].name", value: open }
+      - equal:
+          path: "spec.rules[0].matches"
+          value: [{ path: { type: PathPrefix, value: /api } }, { path: { type: PathPrefix, value: /auth } }]
+      - notExists: { path: "spec.rules[0].filters" }
+      - equal: { path: "spec.rules[1].name", value: protected }
+
+  - it: has no observability tools on a cluster without observability
+    asserts:
+      - hasDocuments: { count: 11 }
+      - notContains: { path: spec.hostnames, content: grafana.example.com }
+        documentSelector: { path: kind, value: HTTPRoute, matchMany: true }
+
+  - it: has them on a cluster with observability
+    set: { observability: "true" }
+    documentSelector: { path: "spec.hostnames[0]", value: grafana.example.com }
+    asserts:
+      - equal: { path: metadata.name, value: internal-grafana }
+      - equal:
+          path: "spec.rules[0].backendRefs"
+          value: [{ name: kube-prometheus-stack-grafana, namespace: observability, port: 80 }]
+
+  - it: lets the routes reach each tool's namespace, and only Services there
+    set: { observability: "true" }
+    documentSelector: { path: metadata.namespace, value: observability }
+    asserts:
+      - equal:
+          path: spec.from
+          value: [{ group: gateway.networking.k8s.io, kind: HTTPRoute, namespace: gateway-system }]
+      - equal: { path: spec.to, value: [{ group: "", kind: Service }] }
+
+  - it: leaves out a tool that's turned off
+    set:
+      tools.backups.enabled: false
+    asserts:
+      - hasDocuments: { count: 9 }
+
+  - it: needs the cluster's domain
+    set: { domain: "" }
+    asserts:
+      - failedTemplate: { errorMessage: domain is required }

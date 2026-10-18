@@ -41,10 +41,11 @@ The settings, as stalwart-cli apply operations (NDJSON, one per line; lists are 
 keyed "0", "1", …; "#domain" is the domain of an earlier line): logs to stdout, the
 listeners (exactly these: the server's defaults on 443, 995 and 4190 go), the
 domain with our own DKIM key and certificate, the host name, the account the
-application submits as, and the delivery-failure webhook. Upserts match on a natural
+application submits as, the web admin's administrator, and the delivery-failure webhook. Upserts match on a natural
 key, so applying them again changes nothing that didn't change. Secrets are
 read from files and the environment by the server itself, except the submission
-password, which the plan init container writes in for @SMTP_PASSWORD@.
+and web admin passwords, which the plan init container writes in for @SMTP_PASSWORD@
+and @WEBADMIN_PASSWORD@.
 */}}
 {{- define "mail.plan" -}}
 {{- $domain := include "mail.emailDomain" . -}}
@@ -81,6 +82,16 @@ password, which the plan init container writes in for @SMTP_PASSWORD@.
     "domainId" "#domain"
     "credentials" (dict "0" (dict "@type" "Password" "secret" "@SMTP_PASSWORD@")))))
 -}}
+{{- if .Values.webAdmin.enabled -}}
+{{- /* The web admin's administrator. The plan init container fills in its password, or
+       drops this line when the Secret has none. */ -}}
+{{- $ops = append $ops (dict "@type" "upsert" "object" "Account" "matchOn" (list "name" "domainId") "value" (dict "webadmin" (dict
+    "@type" "User"
+    "name" .Values.webAdmin.account
+    "domainId" "#domain"
+    "roles" (dict "@type" "Admin")
+    "credentials" (dict "0" (dict "@type" "Password" "secret" "@WEBADMIN_PASSWORD@"))))) -}}
+{{- end -}}
 {{- if .Values.webhook.enabled -}}
 {{- $events := dict -}}
 {{- range .Values.webhook.events }}{{ $_ := set $events . true }}{{ end -}}

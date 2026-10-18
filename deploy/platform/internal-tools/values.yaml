@@ -1,0 +1,59 @@
+# The cluster's facts (the platform ApplicationSet sets them from its Argo CD Secret).
+# Each tool is at <host>.<directZone> when the cluster has a direct zone (served by the
+# gateway with its own certificate, under OpenTofu's DNS-only wildcard, like the files
+# host), or else at <host>.<domain>, proxied by Cloudflare through a record external-dns
+# publishes.
+domain: ""
+directZone: ""
+# "true" on clusters labelled director-editor.dev/observability: only those run the
+# tools marked `observability`.
+observability: ""
+
+# The Gateway the routes attach to, in this release's namespace (the routes live there,
+# beside the one basic-auth Secret; each tool's namespace grants them its Service).
+gateway: public
+
+# Every host asks for this user and password first (Envoy Gateway's basic auth), before
+# the tool's own sign-in where it has one. The Secret, in this release's namespace, has
+# the key `.htpasswd`: one line, user:{SHA}<base64 of the password's SHA-1>, the one
+# hash Envoy takes (deploy/platform/secrets/<env>/internal-tools-auth.sops.yaml).
+basicAuth:
+  secretName: internal-tools-auth
+
+# The tools: the host's first label, and the Service it routes to. `openPaths` are path
+# prefixes left to the tool's own sign-in, without basic auth: requests the tool's page
+# makes with its own Authorization header, which basic auth would refuse. Everything
+# else asks for the basic-auth password, and the Authorization header it adds is
+# removed before the request reaches the tool.
+tools:
+  argocd:
+    host: argocd
+    service: { namespace: argocd, name: argocd-server, port: 80 }
+  grafana:
+    host: grafana
+    observability: true
+    service: { namespace: observability, name: kube-prometheus-stack-grafana, port: 80 }
+  prometheus:
+    host: prometheus
+    observability: true
+    service: { namespace: observability, name: kube-prometheus-stack-prometheus, port: 9090 }
+  alertmanager:
+    host: alertmanager
+    observability: true
+    service: { namespace: observability, name: kube-prometheus-stack-alertmanager, port: 9093 }
+  jaeger:
+    host: jaeger
+    observability: true
+    service: { namespace: observability, name: jaeger, port: 16686 }
+  # Stalwart's web admin (deploy/platform/mail, webAdmin).
+  mail-admin:
+    host: mail-admin
+    service: { namespace: mail, name: mail-admin, port: 8080 }
+  # RustFS's consoles (deploy/charts/data, storage.<server>.console), in the
+  # environment's namespace.
+  storage:
+    host: storage
+    service: { namespace: director-editor, name: director-editor-uploads, port: 9001 }
+  backups:
+    host: backups
+    service: { namespace: director-editor, name: director-editor-backups, port: 9001 }

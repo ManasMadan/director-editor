@@ -443,6 +443,39 @@ tests:
       - equal: { path: "spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem", value: true }
       - equal: { path: "spec.template.spec.containers[0].readinessProbe.httpGet.path", value: /health }
 
+  - it: turns a server's console off when asked
+    template: storage.yaml
+    documentSelector: { path: kind, value: StatefulSet }
+    set:
+      storage.uploads.console: false
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: RUSTFS_CONSOLE_ENABLE, value: "false" }
+      - equal: { path: "spec.template.spec.containers[0].ports", value: [{ name: s3, containerPort: 9000 }] }
+
+  - it: serves the console on its own port, to the gateway's proxies only
+    template: storage.yaml
+    asserts:
+      - contains:
+          path: "spec.template.spec.containers[0].env"
+          content: { name: RUSTFS_CONSOLE_ENABLE, value: "true" }
+        documentSelector: { path: kind, value: StatefulSet }
+      - contains:
+          path: "spec.template.spec.containers[0].ports"
+          content: { name: console, containerPort: 9001 }
+        documentSelector: { path: kind, value: StatefulSet }
+      - contains:
+          path: spec.ports
+          content: { name: console, port: 9001, targetPort: console }
+        documentSelector: { path: kind, value: Service }
+      - contains:
+          path: spec.ingress
+          content:
+            from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: envoy-gateway-system } } }]
+            ports: [{ port: 9001 }]
+        documentSelector: { path: kind, value: NetworkPolicy }
+
   - it: routes the public files host to the uploads server
     template: storage.yaml
     documentSelector: { path: kind, value: HTTPRoute }
@@ -480,6 +513,7 @@ tests:
     set:
       postgres.backups.enabled: true
       storage.uploads.enabled: false
+      storage.backups.console: false
     documentSelector: { path: kind, value: NetworkPolicy }
     asserts:
       - equal:
@@ -490,6 +524,19 @@ tests:
                 - podSelector: { matchLabels: { app.kubernetes.io/name: buckets, app.kubernetes.io/instance: demo } }
                 - podSelector: { matchLabels: { app.kubernetes.io/name: offsite, app.kubernetes.io/instance: demo } }
               ports: [{ port: 9000 }]
+
+  - it: lets the gateway's proxies reach the backups server's console, and nothing else of it
+    template: storage.yaml
+    set:
+      postgres.backups.enabled: true
+      storage.uploads.enabled: false
+    documentSelector: { path: kind, value: NetworkPolicy }
+    asserts:
+      - equal:
+          path: "spec.ingress[1]"
+          value:
+            from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: envoy-gateway-system } } }]
+            ports: [{ port: 9001 }]
 
   - it: copies the backups and the uploads outside the cluster, never deleting there
     template: offsite.yaml

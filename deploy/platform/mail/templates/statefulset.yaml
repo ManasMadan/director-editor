@@ -80,12 +80,25 @@ spec:
               # provisioning's markers intact: clear them so it provisions from the start
               # again, as a new pod would (applying the plan twice changes nothing).
               rm -f /run/provision/applied /run/provision/stopped
-              sed "s/@SMTP_PASSWORD@/$SMTP_PASSWORD/g" /etc/stalwart/plan.ndjson > /run/provision/plan.ndjson
+              # The web admin's account only when it has a password.
+              case "${WEBADMIN_PASSWORD:-}" in
+                "") webadmin='/@WEBADMIN_PASSWORD@/d' ;;
+                *[!A-Za-z0-9._~-]*)
+                  echo "WEBADMIN_PASSWORD must be letters, digits and ._~- only" >&2
+                  exit 1 ;;
+                *) webadmin="s/@WEBADMIN_PASSWORD@/$WEBADMIN_PASSWORD/g" ;;
+              esac
+              sed -e "s/@SMTP_PASSWORD@/$SMTP_PASSWORD/g" -e "$webadmin" /etc/stalwart/plan.ndjson > /run/provision/plan.ndjson
               cp /usr/local/bin/stalwart /run/provision/stalwart
           env:
             - name: SMTP_PASSWORD
               valueFrom:
                 secretKeyRef: { name: {{ .Values.secretName }}, key: SMTP_PASSWORD }
+            {{- if .Values.webAdmin.enabled }}
+            - name: WEBADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.secretName }}, key: WEBADMIN_PASSWORD, optional: true }
+            {{- end }}
           resources:
             requests: { cpu: 10m, memory: 16Mi }
             limits: { cpu: 100m, memory: 64Mi }

@@ -202,9 +202,10 @@ describe("the charts check", () => {
       "deploy/environments/staging/secrets/api.yaml: only *.sops.yaml files belong here",
     );
     expect(output).toContain("deploy/platform/secrets/staging/nested: not a file");
-    // Only the environments whose charts both rendered are validated: not production.
+    // Only the environments whose charts both rendered are validated: not production. The
+    // platform's charts but mail (config, internal-tools, jaeger, alerts), and Argo CD's.
     const validated = calls.filter((line) => line.startsWith("kubeconform -strict")).length;
-    expect(validated).toBe(3 + 3 + 1);
+    expect(validated).toBe(3 + 4 + 1);
   });
 
   it("fails when Argo CD's chart doesn't render, with helm's error", () => {

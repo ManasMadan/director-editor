@@ -44,6 +44,11 @@ spec:
     - name: s3
       port: 9000
       targetPort: s3
+    {{- if $c.console }}
+    - name: console
+      port: 9001
+      targetPort: console
+    {{- end }}
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -88,14 +93,24 @@ spec:
                 secretKeyRef: { name: {{ $server.secret }}, key: secretAccessKey }
             - name: RUSTFS_VOLUMES
               value: /data
+            # The web console (its own port) only where it's asked for: the
+            # internal tools route to it, behind the gateway's basic auth.
             - name: RUSTFS_CONSOLE_ENABLE
-              value: "false"
+              value: {{ $c.console | toString | quote }}
+            {{- if $c.console }}
+            - name: RUSTFS_CONSOLE_ADDRESS
+              value: ":9001"
+            {{- end }}
             # Empty: logs go to stdout, not to files in the container.
             - name: RUSTFS_OBS_LOG_DIRECTORY
               value: ""
           ports:
             - name: s3
               containerPort: 9000
+            {{- if $c.console }}
+            - name: console
+              containerPort: 9001
+            {{- end }}
           startupProbe:
             httpGet: { path: /health, port: s3 }
             periodSeconds: 5
@@ -178,6 +193,15 @@ spec:
               app.kubernetes.io/instance: {{ $.Release.Name }}
       ports:
         - port: 9000
+    {{- end }}
+    {{- if $c.console }}
+    # The console, from the gateway's proxies (the internal tools' route).
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml $.Values.gateway.namespaceSelector | nindent 14 }}
+      ports:
+        - port: 9001
     {{- end }}
 ---
 apiVersion: batch/v1

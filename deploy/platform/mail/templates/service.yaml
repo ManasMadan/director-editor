@@ -29,3 +29,21 @@ spec:
     {{- range $name, $l := include "mail.listeners" . | fromYaml }}
     - { name: {{ $name }}, port: {{ $l.port }}, targetPort: {{ $name }} }
     {{- end }}
+{{- if .Values.webAdmin.enabled }}
+---
+# The web admin (/admin) and the API it calls, inside the cluster only: the gateway
+# routes the internal tools' mail-admin host here.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mail.name" . }}-admin
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "mail.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "mail.selectorLabels" . | nindent 4 }}
+  ports:
+    - { name: http, port: 8080, targetPort: http }
+{{- end }}
