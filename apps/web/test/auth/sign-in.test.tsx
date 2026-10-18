@@ -144,8 +144,23 @@ describe("sign in", () => {
     expect((await currentSession()).user.demo).toBe(true);
   });
 
-  // First of the captcha tests: Turnstile's script loads once a page, and this one needs
-  // it still on its way.
+  // First of the captcha tests: Turnstile's script loads once a page, and once it has, it
+  // can't be blocked any more. A failed load is forgotten, so the next test loads it again.
+  it("falls back to the shared demo account when Turnstile can't load", async () => {
+    await serveSystemInfo(withCaptcha);
+    await commands.turnstile("blocked");
+    const page = await renderPage(<SignInPage />, { url: "/sign-in?demo=1" });
+    await expect
+      .element(page.getByText("Your own demo couldn't start just now.", { exact: false }))
+      .toBeVisible();
+    const card = page.getByRole("region", { name: "Try Director with the demo account" });
+    await expect.element(card.getByText(DEMO.password)).toBeVisible();
+    await expect.element(page.getByLabelText("Email")).toHaveValue(DEMO.email);
+    await expect.element(page.getByLabelText("Password")).toHaveValue(DEMO.password);
+    expect(await commands.sentHeaders("/api/auth/sign-in/guest")).toEqual([]);
+  });
+
+  // Next: this one needs the script still on its way.
   it("waits for Turnstile's token before starting the guest from ?demo=1", async () => {
     await serveSystemInfo(withCaptcha);
     await commands.turnstile("held");
@@ -175,6 +190,28 @@ describe("sign in", () => {
     await expect.poll(currentUrl).toBe("/library");
     const [sent] = await commands.sentHeaders("/api/auth/sign-in/guest");
     expect(sent?.["x-captcha-response"]).toBe("XXXX.DUMMY.TOKEN.XXXX");
+  });
+
+  it("stops waiting for a token that never comes, and says why", { timeout: 20_000 }, async () => {
+    // No shared account to fall back on, this time: the card stays, and says what's wrong.
+    await serveSystemInfo((info) => {
+      withCaptcha(info);
+      info.demo = null;
+    });
+    Object.assign(window, { turnstileSilent: true });
+    try {
+      const page = await renderPage(<SignInPage />, { url: "/sign-in?demo=1" });
+      await expect
+        .element(page.getByRole("alert"), { timeout: 12_000 })
+        .toHaveTextContent(
+          "The security check couldn't load. Check your connection, allow challenges.cloudflare.com if you use a blocker, and reload.",
+        );
+      const card = page.getByRole("region", { name: "Just looking? Use the demo." });
+      await expect.element(card.getByRole("button", { name: "Use the demo" })).toBeDisabled();
+      expect(await commands.sentHeaders("/api/auth/sign-in/guest")).toEqual([]);
+    } finally {
+      Object.assign(window, { turnstileSilent: false });
+    }
   });
 
   it("falls back to the shared demo account, in the form, when no guest can be made", async () => {

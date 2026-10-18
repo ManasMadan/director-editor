@@ -1,5 +1,6 @@
 import { cn } from "@repo/ui/lib/utils";
 import { getTranslations } from "next-intl/server";
+import { HeroLoop } from "./hero-loop";
 
 /*
  * The hero: a conversation with Director over a selfie frame, looping in CSS alone
@@ -12,7 +13,7 @@ import { getTranslations } from "next-intl/server";
  * as a list, and then the shot card as it ends up (the card sits after the exchange in
  * the page, though it's drawn at the top of the frame; the card it changes from is
  * hidden from it, being the past). With reduced motion, the frame rests on the end of the
- * exchange.
+ * exchange; otherwise a button below it pauses the loop (hero-loop.tsx).
  */
 
 const bubble = "max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-snug shadow-lg";
@@ -20,7 +21,7 @@ const bubble = "max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-snug shadow-lg
 export async function HeroChat() {
   const t = await getTranslations("home.hero");
   return (
-    <figure className="flex flex-col gap-3">
+    <HeroLoop pauseLabel={t("pause")}>
       <div className="relative mx-auto aspect-9/16 w-full max-w-72 overflow-hidden rounded-[2rem] border-4 border-studio-foreground/15 bg-live-night text-studio-foreground shadow-2xl">
         {/* The selfie: a head and shoulders by a window's light. */}
         <div aria-hidden className="absolute inset-0">
@@ -61,7 +62,7 @@ export async function HeroChat() {
             aria-hidden
             className="flex items-center gap-1.5 rounded-full bg-studio/70 px-2 py-1 font-mono text-xs tabular-nums backdrop-blur"
           >
-            <span className="size-2 rounded-full bg-record motion-safe:animate-pulse" />
+            <span className="hero-rec size-2 rounded-full bg-record motion-safe:animate-pulse" />
             {t("rec")}
           </p>
         </div>
@@ -69,6 +70,6 @@ export async function HeroChat() {
       <figcaption className="text-center text-sm text-pretty text-muted-foreground">
         {t("caption")}
       </figcaption>
-    </figure>
+    </HeroLoop>
   );
 }

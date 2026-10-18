@@ -30,8 +30,9 @@
 import { randomUUID } from "node:crypto";
 import { DEMO_GUEST_LIFETIME_S } from "@repo/contracts/auth";
 import type { AuthErrorCode } from "@repo/contracts/errors";
-import { fieldOf } from "@repo/contracts/objects";
+import { fieldOf, required } from "@repo/contracts/objects";
 import { HOUR_S, SECOND_MS } from "@repo/contracts/time";
+import type { Db } from "@repo/db";
 import { bundledMessages, createI18n, negotiateLocale } from "@repo/i18n";
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthEndpoint, getSessionFromCtx } from "better-auth/api";
@@ -54,7 +55,8 @@ const LIVE_GUESTS_KEY = "demo:live-guests";
  * Takes a place for a new guest if fewer than `limit` guests are live, in one step: the
  * places whose day is over are dropped, the rest counted, and the new one added, all in
  * one script, which Valkey runs alone, so concurrent sign-ins can't both see the last
- * place free. The key itself expires with the last place in it.
+ * place free. The key itself expires with the last place in it. Valkey holds the count,
+ * and Postgres the guests: when Valkey loses it, recountWhenLost puts it back first.
  */
 const TAKE_PLACE = `
 redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
@@ -71,8 +73,45 @@ const guestEmail = () => `guest-${randomUUID()}@${GUEST_EMAIL_DOMAIN}`;
 /** When a guest made `now` is deleted. */
 const guestUntilFrom = (now: Date) => new Date(now.getTime() + DEMO_GUEST_LIFETIME_S * SECOND_MS);
 
+/**
+ * Puts the live guests' places back, only while there are none: a sign-in that took a
+ * place in the meantime made the key, and its guest may already be among those read from
+ * Postgres, so adding them then would count it twice.
+ */
+const RESTORE_PLACES = `
+if redis.call('EXISTS', KEYS[1]) == 1 then return 0 end
+redis.call('ZADD', KEYS[1], unpack(ARGV))
+return 1`;
+
+/**
+ * Puts the live guests back in Valkey when their places are gone (Valkey restarted without
+ * its data, or was emptied), counted from Postgres, so losing Valkey's data can't free
+ * every place at once.
+ */
+async function recountWhenLost(db: Db, redis: Redis) {
+  if (await redis.exists(LIVE_GUESTS_KEY)) {
+    return;
+  }
+  const live = await db.user.findMany({
+    where: { guestUntil: { gt: new Date() } },
+    select: { id: true, guestUntil: true },
+  });
+  const places = live.flatMap(({ id, guestUntil }) => [
+    required(guestUntil, "a live guest's day").getTime(),
+    id,
+  ]);
+  if (places.length > 0) {
+    await redis.eval(RESTORE_PLACES, 1, LIVE_GUESTS_KEY, ...places);
+  }
+}
+
 /** Takes a place among the live guests for a guest about to be made; throws when there's none. */
-async function takePlace(redis: Redis, until: Date, limit: number) {
+async function takePlace(
+  { db, redis }: Pick<AuthContext, "db" | "redis">,
+  until: Date,
+  limit: number,
+) {
+  await recountWhenLost(db, redis);
   const taken = z
     .number()
     .parse(
@@ -114,7 +153,7 @@ export function clampToGuestDay<T extends { expiresAt?: Date | undefined }>(
 /** What the browser may say about its guest: its time zone, for the dates it's shown. */
 const guestBody = z.object({ timezone: z.string().max(100).optional() });
 
-function guestPlugin({ env, redis }: AuthContext) {
+function guestPlugin({ db, env, redis }: AuthContext) {
   return {
     id: "demo-guest",
     endpoints: {
@@ -128,7 +167,7 @@ function guestPlugin({ env, redis }: AuthContext) {
             return ctx.json({ created: false });
           }
           const guestUntil = guestUntilFrom(new Date());
-          await takePlace(redis, guestUntil, env.DEMO_GUEST_LIMIT);
+          await takePlace({ db, redis }, guestUntil, env.DEMO_GUEST_LIMIT);
           const locale = negotiateLocale(
             ctx.headers?.get("x-locale") ?? ctx.headers?.get("accept-language"),
           );

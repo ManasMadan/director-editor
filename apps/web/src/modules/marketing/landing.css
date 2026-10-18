@@ -232,3 +232,9 @@
     animation: hero-after 10s ease-out infinite both;
   }
 }
+
+/* Paused with the button below the hero (components/hero-loop.tsx): every part of the
+ * loop holds where it is, the recording dot too, until it plays again. */
+.hero-paused :is(.hero-say-1, .hero-say-2, .hero-say-3, .hero-before, .hero-after, .hero-rec) {
+  animation-play-state: paused;
+}

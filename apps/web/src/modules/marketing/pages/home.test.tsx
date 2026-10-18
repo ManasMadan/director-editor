@@ -36,6 +36,9 @@ describe("the landing page", () => {
     }
     // Who says what, for screen readers, in the order it's said.
     expect(html.indexOf("Director:")).toBeLessThan(html.indexOf("You:"));
+    // A loop that never stops gets a way to stop it.
+    expect(html).toContain("Pause the conversation");
+    expect(html).toContain('aria-pressed="false"');
     // The shot card it changes comes after the exchange that changes it.
     expect(html.indexOf("Inside it is!")).toBeLessThan(html.indexOf("Where: by your window"));
     // Nothing of the live call the shoot no longer has.

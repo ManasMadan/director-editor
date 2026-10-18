@@ -67,8 +67,9 @@ export const envSchema = {
   // Optional: Google sign-in.
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
-  // Optional: Cloudflare Turnstile on sign-up, emailed codes and password reset. The
-  // site key is public (browsers render the widget with it); the secret stays here.
+  // Optional: Cloudflare Turnstile on sign-up, emailed codes, password reset and the demo's
+  // guest sign-in. The site key is public (browsers render the widget with it); the
+  // secret stays here.
   TURNSTILE_SITE_KEY: z.string().min(1).optional(),
   TURNSTILE_SECRET_KEY: z.string().min(1).optional(),
   // Refuse passwords found in public breaches (Have I Been Pwned, k-anonymity: only a

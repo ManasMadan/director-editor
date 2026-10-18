@@ -262,6 +262,17 @@ describe("the demo's limits", () => {
     expect((await createSession(harness).auth("/sign-in/guest", {})).status).toBe(503);
   });
 
+  it("still holds the limit after Valkey loses the count: it's recounted from Postgres", async () => {
+    for (let made = 0; made < GUEST_LIMIT; made++) {
+      await guest();
+    }
+    // As after a restart of Valkey without its data.
+    await harness.redis.del("demo:live-guests");
+    const full = await createSession(harness).auth<{ code: string }>("/sign-in/guest", {});
+    expect(full.status).toBe(503);
+    expect(await harness.redis.zcard("demo:live-guests")).toBe(GUEST_LIMIT);
+  });
+
   it("holds the limit when many browsers ask at once", async () => {
     const answers = await Promise.all(
       Array.from({ length: GUEST_LIMIT * 2 }, () =>

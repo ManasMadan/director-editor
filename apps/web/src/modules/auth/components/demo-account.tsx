@@ -47,8 +47,15 @@ export function DemoOffer({ onUse, onSignedIn }: DemoProps) {
   return shared ? <SharedOffer demo={shared} wanted={wanted} onUse={onUse} /> : null;
 }
 
-/** The sign-in as a guest: not tried yet, under way, or refused (with why). */
-type GuestState = { state: "idle" } | { state: "starting" } | { state: "failed"; error: unknown };
+/**
+ * The sign-in as a guest: not tried yet, under way, refused (with why), or impossible for
+ * now because the captcha can't give the token it needs.
+ */
+type GuestState =
+  | { state: "idle" }
+  | { state: "starting" }
+  | { state: "failed"; error: unknown }
+  | { state: "unavailable" };
 
 function GuestOffer({
   shared,
@@ -86,6 +93,17 @@ function GuestOffer({
     if (wanted && captcha.ready && !started.current) {
       started.current = true;
       void start();
+    }
+  });
+  // No token to be had (Turnstile blocked, or Cloudflare not answering): no dead end, the
+  // shared account takes over as it does when the sign-in itself fails.
+  useEffect(() => {
+    if (captcha.unavailable && !started.current) {
+      started.current = true;
+      setGuest({ state: "unavailable" });
+      if (shared) {
+        onUse(shared);
+      }
     }
   });
 
@@ -126,7 +144,7 @@ function GuestCard({
       <GeminiLoader label={t("auth.demo.signingIn")} showLabel size="sm" className="mx-auto" />
     );
   }
-  if (guest.state === "failed" && shared) {
+  if ((guest.state === "failed" || guest.state === "unavailable") && shared) {
     return (
       <>
         <p role="alert" className="text-sm">
