@@ -125,16 +125,20 @@ describe("the roll", () => {
   });
 
   it("pauses the clock, and marks only while it records", async () => {
-    const { roll, api, recorders, tick } = setup();
+    const mark = vi.fn<RollApi["mark"]>(() => Promise.resolve({}));
+    const { roll, api, recorders, tick } = setup({ mark });
     expect(await roll.mark("start", 0, {})).toBe("not_recording");
     await roll.start("abcdefghijk", stream, "front");
+    // No attempt has started: there's nothing to end.
+    expect(await roll.mark("end", 0, {})).toBe("not_recording");
     tick(2_000);
     expect(await roll.mark("start", 1, { line: "Hi!" })).toBe("done");
-    expect(api.mark).toHaveBeenCalledWith({
+    expect(mark).toHaveBeenCalledWith({
       sessionId: SESSION,
       partIndex: 0,
       atMs: 2_000,
       event: "start",
+      attempt: 1,
       shotIndex: 1,
       line: "Hi!",
     });
@@ -155,12 +159,20 @@ describe("the roll", () => {
     // Resuming what isn't paused does nothing.
     await roll.resume(stream, "front");
     expect(api.resume).toHaveBeenCalledTimes(1);
+    // The attempt that started ends with the same number; the next is the second.
+    expect(await roll.mark("end", 1, { note: "Good" })).toBe("done");
+    expect(await roll.mark("start", 2, {})).toBe("done");
+    expect(mark.mock.calls.map(([input]) => [input.event, input.attempt])).toEqual([
+      ["start", 1],
+      ["end", 1],
+      ["start", 2],
+    ]);
   });
 
   it("answers a mark the API refused as not recorded", async () => {
-    const { roll } = setup({ mark: () => Promise.reject(new Error("RECORDING_ATTEMPT_NOT_OPEN")) });
+    const { roll } = setup({ mark: () => Promise.reject(new Error("RECORDING_PAUSED")) });
     await roll.start("abcdefghijk", stream, "front");
-    expect(await roll.mark("end", 0, {})).toBe("not_recording");
+    expect(await roll.mark("start", 0, {})).toBe("not_recording");
   });
 
   it("starts a new part on a flip, and on resuming after the browser stopped the recorder", async () => {

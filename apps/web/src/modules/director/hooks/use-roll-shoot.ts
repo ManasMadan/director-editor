@@ -20,12 +20,20 @@ interface Options {
   wanted: boolean;
 }
 
-/** Locking the phone or switching apps pauses, as the pause button does. */
-function usePauseWhenHidden(pause: () => void) {
+/**
+ * Locking the phone or switching apps pauses, as the pause button does; so does the
+ * upload queue holding five minutes already, until it catches up.
+ */
+function useAutoPause(pause: () => void, full: boolean) {
   const latest = useRef(pause);
   useLayoutEffect(() => {
     latest.current = pause;
   });
+  useEffect(() => {
+    if (full) {
+      latest.current();
+    }
+  }, [full]);
   useEffect(() => {
     const hidden = () => {
       if (document.visibilityState === "hidden") {
@@ -82,7 +90,7 @@ export function useRollShoot({ props, camera, live, wanted }: Options) {
       latest.current.live.roll("paused");
     }
   };
-  usePauseWhenHidden(pause);
+  useAutoPause(pause, upload.full);
 
   useEffect(() => {
     if (phase === "done" && upload.pending === 0) {

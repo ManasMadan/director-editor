@@ -109,7 +109,13 @@ export function useRoll() {
     phase,
     elapsedMs: roll.elapsedMs(),
     /** Footage still to upload, and the last failure (shown, and tried again). */
-    upload: { pending: uploader.pending, behindMs: uploader.behindMs, error: uploader.error },
+    upload: {
+      pending: uploader.pending,
+      behindMs: uploader.behindMs,
+      error: uploader.error,
+      /** The queue holds five minutes already: the screen pauses until it catches up. */
+      full: uploader.full,
+    },
   };
 }
 

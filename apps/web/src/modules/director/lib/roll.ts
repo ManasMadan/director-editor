@@ -64,7 +64,13 @@ export interface RollApi {
   pause(input: Where): Promise<unknown>;
   resume(input: Where): Promise<unknown>;
   mark(
-    input: Where & { event: "start" | "end"; shotIndex: number; line?: string; note?: string },
+    input: Where & {
+      event: "start" | "end";
+      attempt: number;
+      shotIndex: number;
+      line?: string;
+      note?: string;
+    },
   ): Promise<unknown>;
   finish(input: { sessionId: RecordingSessionId }): Promise<unknown>;
 }
@@ -80,7 +86,8 @@ export interface PartRecorder {
 
 export interface RollOptions {
   api: RollApi;
-  enqueue: (item: QueuedItem) => Promise<void>;
+  /** Queues for upload; the screen pauses when the queue is full (the uploader says so). */
+  enqueue: (item: QueuedItem) => Promise<unknown>;
   /** A recorder for `stream`, or null when this browser can't record it. */
   record: (
     stream: MediaStream,
@@ -124,6 +131,8 @@ export class Roll {
   private parts = 0;
   /** Media recorded by the parts that have ended. */
   private endedMs = 0;
+  /** The attempts started so far: each start mark numbers the next, its end the same. */
+  private attempts = 0;
 
   constructor(private readonly options: RollOptions) {}
 
@@ -207,11 +216,15 @@ export class Roll {
       return "paused";
     }
     const part = this.part;
-    if (this.phase !== "recording" || !part) {
+    if (this.phase !== "recording" || !part || (event === "end" && this.attempts === 0)) {
       return "not_recording";
     }
+    if (event === "start") {
+      this.attempts += 1;
+    }
+    const attempt = this.attempts;
     try {
-      await this.options.api.mark({ ...this.where(part), event, shotIndex, ...words });
+      await this.options.api.mark({ ...this.where(part), event, attempt, shotIndex, ...words });
       return "done";
     } catch {
       // The API refused it (an end with no attempt open, most likely): nothing recorded.
