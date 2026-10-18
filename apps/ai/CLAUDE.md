@@ -18,6 +18,9 @@ TypeScript client is `packages/ai-client`.
 - After changing the plan schema (`ShotPlan`): `bun run --filter @repo/ai seeds:build`
   re-indexes the 6 seed Shorts on Vertex AI into `packages/contracts/src/director-seeds.json`
   (commit it; the API copies it into every new workspace)
+- After changing indexing (the planner prompt, `repair_plan`, `INDEX_MODEL`):
+  `bun run --filter @repo/ai evals:index` indexes the 12 Shorts in `evals/shorts.json`
+  on Vertex AI and fails unless every one gives a filmable plan
 
 ## Where things are
 

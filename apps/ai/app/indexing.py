@@ -126,6 +126,7 @@ async def index_short(
     video_id: str,
     usage: RunUsage,
     usage_limits: UsageLimits,
+    drafted: Callable[[ShotPlanDraft], None] | None = None,
 ) -> tuple[ShotPlan, str]:
     """Watches `video_id` with `planner` and returns its repaired shot plan and the name
     of whichever model actually wrote it: `planner_name`, or `fallback_name` once
@@ -139,13 +140,17 @@ async def index_short(
     One implementation of "index a short into a usable plan", shared by the plan job
     (`LocalIndexer`, in the worker or on Cloud Run) and the seed-building script
     (apps/ai/scripts/build_seeds.py, which builds its own pair of agents and a budget of
-    its own instead of a reservation's)."""
+    its own instead of a reservation's).
+
+    `drafted`, when given, is handed the plan exactly as Gemini answered it, before
+    `repair_plan` touches it; it changes nothing about the run. The indexing evaluation
+    (apps/ai/evals/index_shorts.py) uses it to show what repair had to fix."""
     messages = [youtube_video(video_id), "Write the shot plan for this short."]
     last_error: Exception | None = None
     for attempt in range(PLANNER_RETRIES + 1):
         try:
             result = await planner.run(messages, usage=usage, usage_limits=usage_limits)
-            return repair_plan(result.output, None), planner_name
+            return _repaired(result.output, drafted), planner_name
         except Exception as error:
             last_error = error
             if _falls_back_to_the_other_model(error):
@@ -158,7 +163,13 @@ async def index_short(
         "falling back to the index fallback model", video_id=video_id, error=str(last_error)
     )
     result = await planner_fallback.run(messages, usage=usage, usage_limits=usage_limits)
-    return repair_plan(result.output, None), fallback_name
+    return _repaired(result.output, drafted), fallback_name
+
+
+def _repaired(draft: ShotPlanDraft, drafted: Callable[[ShotPlanDraft], None] | None) -> ShotPlan:
+    if drafted is not None:
+        drafted(draft)
+    return repair_plan(draft, None)
 
 
 class IndexFailed(Exception):
