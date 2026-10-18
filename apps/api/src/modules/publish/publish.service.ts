@@ -172,13 +172,13 @@ export class PublishService {
     error: unknown,
   ): Promise<never> {
     const sessionNeverOpened = error instanceof YouTubeUploadError && !error.sessionOpened;
-    const [marked] = await Promise.allSettled([
-      this.publishing.failed(orgId, cutId),
+    // giveBack never throws, so only marking the cut needs its failure caught here.
+    await Promise.all([
+      this.publishing.failed(orgId, cutId).catch((markError: unknown) => {
+        this.log.warn({ err: describeError(markError), cutId }, "couldn't mark a publish failed");
+      }),
       sessionNeverOpened ? this.allowance.giveBack(day) : Promise.resolve(),
     ]);
-    if (marked.status === "rejected") {
-      this.log.warn({ err: describeError(marked.reason), cutId }, "couldn't mark a publish failed");
-    }
     throw publishErrorOf(error);
   }
 
