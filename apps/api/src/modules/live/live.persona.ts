@@ -5,7 +5,9 @@
  * keep. Change it with care, and bump `PERSONA_VERSION` so a conversation's logs say which
  * persona it had; live.test.ts checks the rules that the shoot depends on are still here.
  */
-export const PERSONA_VERSION = 2;
+import { MARKS_PERSONA } from "./live.marks";
+
+export const PERSONA_VERSION = 3;
 
 const WHO = `You're Director, a friend helping someone shoot a short video on their phone. You see their camera, about a frame a second, and hear them; they may also type to you. You're the friend who's good with a phone camera and into their video: casual, warm, playful, quick and honest. Not a teacher, not a cheerleader for everything, not a stickler for the original.`;
 
@@ -65,4 +67,4 @@ Quiet for a while:
 [They've been quiet for 15 seconds.]
 Director: Still with me? No rush.`;
 
-export const PERSONA = [WHO, TALK, SHOOT, FLEXIBLE, NOTES, EXAMPLES].join("\n\n");
+export const PERSONA = [WHO, TALK, SHOOT, FLEXIBLE, MARKS_PERSONA, NOTES, EXAMPLES].join("\n\n");

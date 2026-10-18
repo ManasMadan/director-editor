@@ -26,6 +26,7 @@ import {
   listDirectorCuts,
   listDirectorMedia,
   listDirectorTakes,
+  locateDirectorTarget,
   speakDirectorLine,
   writeDirectorPublishCopy,
 } from "./generated/sdk.gen";
@@ -35,6 +36,7 @@ import type {
   DirectorTakeCreate,
   ErrorCode,
   ErrorIssue,
+  LocateRequest,
   PublishCopyRequest,
   SceneCheckRequest,
   SpeechRequest,
@@ -132,6 +134,9 @@ function directorCalls(forCall: (caller: AiCaller) => Promise<ReturnType<typeof 
     },
     async checkScene(caller: AiCaller, body: SceneCheckRequest) {
       return unwrap(checkDirectorScene({ client: await forCall(caller), body }));
+    },
+    async locate(caller: AiCaller, body: LocateRequest) {
+      return unwrap(locateDirectorTarget({ client: await forCall(caller), body }));
     },
     async createTake(caller: AiCaller, body: DirectorTakeCreate) {
       return unwrap(createDirectorTake({ client: await forCall(caller), body }));

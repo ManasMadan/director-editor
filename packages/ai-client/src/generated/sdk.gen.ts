@@ -4,8 +4,8 @@ import * as z from 'zod';
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CheckDirectorSceneData, CheckDirectorSceneErrors, CheckDirectorSceneResponses, ClipDirectorAttemptData, ClipDirectorAttemptErrors, ClipDirectorAttemptResponses, CreateDirectorCutData, CreateDirectorCutErrors, CreateDirectorCutResponses, CreateDirectorTakeData, CreateDirectorTakeErrors, CreateDirectorTakeResponses, DependenciesData, DependenciesErrors, DependenciesResponses, GetDirectorCutData, GetDirectorCutErrors, GetDirectorCutResponses, GetDirectorLibraryData, GetDirectorLibraryErrors, GetDirectorLibraryResponses, GetDirectorPlanData, GetDirectorPlanErrors, GetDirectorPlanResponses, IndexDirectorPlanData, IndexDirectorPlanErrors, IndexDirectorPlanResponses, ListDirectorCutsData, ListDirectorCutsErrors, ListDirectorCutsResponses, ListDirectorMediaData, ListDirectorMediaErrors, ListDirectorMediaResponses, ListDirectorTakesData, ListDirectorTakesErrors, ListDirectorTakesResponses, LiveData, LiveErrors, LiveResponses, ReadyData, ReadyErrors, ReadyResponses, SpeakDirectorLineData, SpeakDirectorLineErrors, SpeakDirectorLineResponses, WriteDirectorPublishCopyData, WriteDirectorPublishCopyErrors, WriteDirectorPublishCopyResponses } from './types.gen';
-import { zCheckDirectorSceneBody, zCheckDirectorSceneHeaders, zCheckDirectorSceneResponse, zClipDirectorAttemptBody, zClipDirectorAttemptHeaders, zClipDirectorAttemptResponse, zCreateDirectorCutBody, zCreateDirectorCutHeaders, zCreateDirectorCutResponse, zCreateDirectorTakeBody, zCreateDirectorTakeHeaders, zCreateDirectorTakeResponse, zDependenciesResponse, zGetDirectorCutHeaders, zGetDirectorCutPath, zGetDirectorCutResponse, zGetDirectorLibraryHeaders, zGetDirectorLibraryResponse, zGetDirectorPlanHeaders, zGetDirectorPlanPath, zGetDirectorPlanResponse, zIndexDirectorPlanBody, zIndexDirectorPlanHeaders, zIndexDirectorPlanResponse, zListDirectorCutsHeaders, zListDirectorCutsPath, zListDirectorCutsResponse, zListDirectorMediaHeaders, zListDirectorMediaResponse, zListDirectorTakesHeaders, zListDirectorTakesPath, zListDirectorTakesResponse, zLiveResponse, zReadyResponse, zSpeakDirectorLineBody, zSpeakDirectorLineHeaders, zSpeakDirectorLineResponse, zWriteDirectorPublishCopyBody, zWriteDirectorPublishCopyHeaders, zWriteDirectorPublishCopyResponse } from './zod.gen';
+import type { CheckDirectorSceneData, CheckDirectorSceneErrors, CheckDirectorSceneResponses, ClipDirectorAttemptData, ClipDirectorAttemptErrors, ClipDirectorAttemptResponses, CreateDirectorCutData, CreateDirectorCutErrors, CreateDirectorCutResponses, CreateDirectorTakeData, CreateDirectorTakeErrors, CreateDirectorTakeResponses, DependenciesData, DependenciesErrors, DependenciesResponses, GetDirectorCutData, GetDirectorCutErrors, GetDirectorCutResponses, GetDirectorLibraryData, GetDirectorLibraryErrors, GetDirectorLibraryResponses, GetDirectorPlanData, GetDirectorPlanErrors, GetDirectorPlanResponses, IndexDirectorPlanData, IndexDirectorPlanErrors, IndexDirectorPlanResponses, ListDirectorCutsData, ListDirectorCutsErrors, ListDirectorCutsResponses, ListDirectorMediaData, ListDirectorMediaErrors, ListDirectorMediaResponses, ListDirectorTakesData, ListDirectorTakesErrors, ListDirectorTakesResponses, LiveData, LiveErrors, LiveResponses, LocateDirectorTargetData, LocateDirectorTargetErrors, LocateDirectorTargetResponses, ReadyData, ReadyErrors, ReadyResponses, SpeakDirectorLineData, SpeakDirectorLineErrors, SpeakDirectorLineResponses, WriteDirectorPublishCopyData, WriteDirectorPublishCopyErrors, WriteDirectorPublishCopyResponses } from './types.gen';
+import { zCheckDirectorSceneBody, zCheckDirectorSceneHeaders, zCheckDirectorSceneResponse, zClipDirectorAttemptBody, zClipDirectorAttemptHeaders, zClipDirectorAttemptResponse, zCreateDirectorCutBody, zCreateDirectorCutHeaders, zCreateDirectorCutResponse, zCreateDirectorTakeBody, zCreateDirectorTakeHeaders, zCreateDirectorTakeResponse, zDependenciesResponse, zGetDirectorCutHeaders, zGetDirectorCutPath, zGetDirectorCutResponse, zGetDirectorLibraryHeaders, zGetDirectorLibraryResponse, zGetDirectorPlanHeaders, zGetDirectorPlanPath, zGetDirectorPlanResponse, zIndexDirectorPlanBody, zIndexDirectorPlanHeaders, zIndexDirectorPlanResponse, zListDirectorCutsHeaders, zListDirectorCutsPath, zListDirectorCutsResponse, zListDirectorMediaHeaders, zListDirectorMediaResponse, zListDirectorTakesHeaders, zListDirectorTakesPath, zListDirectorTakesResponse, zLiveResponse, zLocateDirectorTargetBody, zLocateDirectorTargetHeaders, zLocateDirectorTargetResponse, zReadyResponse, zSpeakDirectorLineBody, zSpeakDirectorLineHeaders, zSpeakDirectorLineResponse, zWriteDirectorPublishCopyBody, zWriteDirectorPublishCopyHeaders, zWriteDirectorPublishCopyResponse } from './zod.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -161,6 +161,27 @@ export const getDirectorLibrary = <ThrowOnError extends boolean = false>(options
     responseValidator: async (data) => await zGetDirectorLibraryResponse.parseAsync(data),
     url: '/v1/director/library',
     ...options
+});
+
+/**
+ * Locate Director Target
+ *
+ * Where something Director names is in one camera frame, for a mark on screen.
+ */
+export const locateDirectorTarget = <ThrowOnError extends boolean = false>(options: Options<LocateDirectorTargetData, ThrowOnError>): RequestResult<LocateDirectorTargetResponses, LocateDirectorTargetErrors, ThrowOnError> => (options.client ?? client).post<LocateDirectorTargetResponses, LocateDirectorTargetErrors, ThrowOnError>({
+    requestValidator: async (data) => await z.object({
+        body: zLocateDirectorTargetBody,
+        headers: zLocateDirectorTargetHeaders.optional(),
+        path: z.never().optional(),
+        query: z.never().optional()
+    }).parseAsync(data),
+    responseValidator: async (data) => await zLocateDirectorTargetResponse.parseAsync(data),
+    url: '/v1/director/locate',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
 });
 
 /**

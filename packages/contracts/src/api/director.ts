@@ -219,6 +219,23 @@ export const sceneCheckSchema = z.object({
 });
 export type SceneCheck = z.infer<typeof sceneCheckSchema>;
 
+/** What Director points at on the camera, in its own words: "the window behind you". */
+export const DIRECTOR_LOCATE_TARGET_MAX_LENGTH = 120;
+/** A mark's label: two or three plain words. */
+export const DIRECTOR_MARK_LABEL_MAX_LENGTH = 40;
+
+/**
+ * Where a thing Director named is in the frame it was looked for in: a box as fractions
+ * of that frame from its top-left, with the thing named in plain words; or not found
+ * (not in view, or Gemini wasn't sure), when nothing is drawn.
+ */
+export const locatedSchema = z.object({
+  found: z.boolean(),
+  label: z.string().min(1).max(DIRECTOR_MARK_LABEL_MAX_LENGTH),
+  box: boxSchema.nullable(),
+});
+export type Located = z.infer<typeof locatedSchema>;
+
 export const directorTakeSchema = z.object({
   id: directorTakeIdSchema,
   shotIndex: z.number().int().nonnegative(),
@@ -315,6 +332,21 @@ export const directorContract = {
       }),
     )
     .output(sceneCheckSchema),
+  /**
+   * Where something Director names is in one camera frame (the 9:16 crop the member sees,
+   * unmirrored), for a mark pinned to it on the shoot screen. A model call each time:
+   * Director's marks re-locate at most every two seconds, so this allows a few marks'
+   * worth with room to spare.
+   */
+  locate: route("POST", "/director/locate", "Find something in a camera frame")
+    .meta({ rateLimit: { name: "director-locate", points: 60, windowSeconds: 60, per: "user" } })
+    .input(
+      z.object({
+        target: z.string().trim().min(1).max(DIRECTOR_LOCATE_TARGET_MAX_LENGTH),
+        image: z.string().min(DIRECTOR_FRAME_MIN_LENGTH).max(DIRECTOR_FRAME_MAX_LENGTH),
+      }),
+    )
+    .output(locatedSchema),
   /**
    * A line in Director's own voice (Gemini's text-to-speech), for the shoot screen to play
    * when the member isn't on a live call. The same line in the same voice is spoken once

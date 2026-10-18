@@ -11,6 +11,7 @@
  */
 import type { Shot, ShotPlan } from "@repo/contracts/api";
 import type { Facing, LiveAdaptation, LiveTakeState, LiveTool } from "@repo/contracts/live";
+import { POINT_AT_DECLARATION } from "./live.marks";
 import { PERSONA } from "./live.persona";
 
 // A warm, natural voice from the Live API's prebuilt set.
@@ -223,6 +224,7 @@ const TOOL_DECLARATIONS: Record<LiveTool, object> = {
       required: ["shot"],
     },
   },
+  point_at: POINT_AT_DECLARATION,
 };
 
 const functionDeclarations = Object.entries(TOOL_DECLARATIONS).map(([name, declaration]) => ({

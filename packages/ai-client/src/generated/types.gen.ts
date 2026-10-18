@@ -474,6 +474,44 @@ export type Keypoint = {
 export type KeypointName = 'nose' | 'left_shoulder' | 'right_shoulder' | 'left_elbow' | 'right_elbow' | 'left_wrist' | 'right_wrist' | 'left_hip' | 'right_hip' | 'left_knee' | 'right_knee' | 'left_ankle' | 'right_ankle';
 
 /**
+ * LocateRequest
+ */
+export type LocateRequest = {
+    /**
+     * Image
+     *
+     * A JPEG camera frame, base64.
+     */
+    image: string;
+    /**
+     * Target
+     *
+     * What to find, in Director's words: "the window behind you".
+     */
+    target: string;
+};
+
+/**
+ * Located
+ *
+ * Where a target is in the frame it was looked for in, or that it isn't there.
+ */
+export type Located = {
+    /**
+     * As fractions of the frame from its top-left; null when not found.
+     */
+    box: Box | null;
+    /**
+     * Found
+     */
+    found: boolean;
+    /**
+     * Label
+     */
+    label: string;
+};
+
+/**
  * PhoneAngle
  */
 export type PhoneAngle = {
@@ -1040,6 +1078,41 @@ export type GetDirectorLibraryResponses = {
 };
 
 export type GetDirectorLibraryResponse = GetDirectorLibraryResponses[keyof GetDirectorLibraryResponses];
+
+export type LocateDirectorTargetData = {
+    body: LocateRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Request-Id
+         */
+        'x-request-id'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/director/locate';
+};
+
+export type LocateDirectorTargetErrors = {
+    /**
+     * An error.
+     */
+    default: ErrorResponse;
+};
+
+export type LocateDirectorTargetError = LocateDirectorTargetErrors[keyof LocateDirectorTargetErrors];
+
+export type LocateDirectorTargetResponses = {
+    /**
+     * Successful Response
+     */
+    200: Located;
+};
+
+export type LocateDirectorTargetResponse = LocateDirectorTargetResponses[keyof LocateDirectorTargetResponses];
 
 export type IndexDirectorPlanData = {
     body: DirectorPlanCreate;

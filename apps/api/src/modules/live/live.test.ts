@@ -57,6 +57,8 @@ const PERSONA_RULES = [
   'Never say "plan", "template", "tool", "session", "model" or "error"',
   "Examples of how you sound",
   "Then it's yours.",
+  "Never point at something you can't see, and never during a take",
+  "If it comes back not found, say you can't see it",
 ];
 
 const shot: Shot = {
@@ -329,7 +331,7 @@ describe("a live call", () => {
       // The instruction arrives as JSON, its quotes escaped.
       expect(text).toContain(JSON.stringify(rule).slice(1, -1));
     }
-    expect(PERSONA_VERSION).toBe(2);
+    expect(PERSONA_VERSION).toBe(3);
     const tools = setup.tools as { functionDeclarations: { name: string }[] }[];
     expect(tools[0]?.functionDeclarations.map((tool) => tool.name)).toEqual([...LIVE_TOOLS]);
     // Director speaks first: hello, and one question.
@@ -850,6 +852,77 @@ describe("Director's tool calls", () => {
     await vi.waitFor(() => expect(fake.server.clients.size).toBe(0));
     vi.advanceTimersByTime(5000);
     expect(fake.received).toHaveLength(2);
+  });
+});
+
+describe("Director's marks on the picture", () => {
+  it("hands a mark to the browser and tells Gemini whether the thing was found", async () => {
+    const { fake, browser } = await liveCall();
+    fake.send({
+      toolCall: {
+        functionCalls: [
+          {
+            id: "g1",
+            name: "point_at",
+            args: { target: " the window behind you ", label: "your window" },
+          },
+          { id: "g2", name: "point_at", args: { target: "the fridge", label: "fridge" } },
+        ],
+      },
+    });
+    expect(await browser.message(0)).toEqual({
+      type: "tool",
+      id: "tool-1",
+      call: { name: "point_at", target: "the window behind you", label: "your window" },
+    });
+    await browser.message(1);
+    browser.send({ type: "tool_result", id: "tool-1", result: "done" });
+    browser.send({ type: "tool_result", id: "tool-2", result: "not_found" });
+    expect(await fake.message(2)).toEqual(toolResponse("g1", "point_at", { result: "done" }));
+    expect(await fake.message(3)).toEqual(
+      toolResponse("g2", "point_at", {
+        result: "not_found",
+        why: expect.stringContaining("Tell them you can't see it"),
+      }),
+    );
+  });
+
+  it("waits longer for a mark than for a tap, since the browser looks first", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { fake, browser } = await liveCall();
+    fake.send({
+      toolCall: {
+        functionCalls: [{ id: "g1", name: "point_at", args: { target: "the lamp", label: "lamp" } }],
+      },
+    });
+    await browser.message(0);
+    vi.advanceTimersByTime(5000);
+    expect(fake.received).toHaveLength(2);
+    browser.send({ type: "tool_result", id: "tool-1", result: "done" });
+    expect(await fake.message(2)).toEqual(toolResponse("g1", "point_at", { result: "done" }));
+  });
+
+  it("answers at once a mark with nothing to find or a label too long", async () => {
+    const { fake, browser } = await liveCall();
+    fake.send({
+      toolCall: {
+        functionCalls: [
+          { id: "1", name: "point_at", args: { target: "the lamp" } },
+          { id: "2", name: "point_at", args: { target: "the lamp", label: "x".repeat(41) } },
+          { id: "3", name: "point_at" },
+        ],
+      },
+    });
+    for (const [at, id] of [
+      [2, "1"],
+      [3, "2"],
+      [4, "3"],
+    ] as const) {
+      expect(await fake.message(at)).toEqual(
+        toolResponse(id, "point_at", { error: expect.stringContaining("label up to 40") }),
+      );
+    }
+    expect(browser.received).toEqual([]);
   });
 });
 

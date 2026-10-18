@@ -953,6 +953,64 @@
         ],
         "type": "string"
       },
+      "LocateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "image": {
+            "description": "A JPEG camera frame, base64.",
+            "maxLength": 400000,
+            "minLength": 100,
+            "title": "Image",
+            "type": "string"
+          },
+          "target": {
+            "description": "What to find, in Director's words: \"the window behind you\".",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "image"
+        ],
+        "title": "LocateRequest",
+        "type": "object"
+      },
+      "Located": {
+        "description": "Where a target is in the frame it was looked for in, or that it isn't there.",
+        "properties": {
+          "box": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Box"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "As fractions of the frame from its top-left; null when not found."
+          },
+          "found": {
+            "title": "Found",
+            "type": "boolean"
+          },
+          "label": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "found",
+          "label",
+          "box"
+        ],
+        "title": "Located",
+        "type": "object"
+      },
       "PhoneAngle": {
         "properties": {
           "height": {
@@ -1930,6 +1988,79 @@
           }
         },
         "summary": "Get Director Library"
+      }
+    },
+    "/v1/director/locate": {
+      "post": {
+        "description": "Where something Director names is in one camera frame, for a mark on screen.",
+        "operationId": "locateDirectorTarget",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Located"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Locate Director Target"
       }
     },
     "/v1/director/plans": {
