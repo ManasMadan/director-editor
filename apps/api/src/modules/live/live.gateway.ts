@@ -116,6 +116,8 @@ export function liveUpstream(settings: {
   project: string | undefined;
   location: string;
   model: string;
+  proactiveAudio?: boolean;
+  affectiveDialog?: boolean;
   url?: string | undefined;
   auth: GoogleAuth;
 }): LiveUpstream | null {
@@ -123,7 +125,13 @@ export function liveUpstream(settings: {
     return null;
   }
   return {
-    model: { project: settings.project, location: settings.location, model: settings.model },
+    model: {
+      project: settings.project,
+      location: settings.location,
+      model: settings.model,
+      proactiveAudio: settings.proactiveAudio ?? false,
+      affectiveDialog: settings.affectiveDialog ?? false,
+    },
     url: settings.url ?? liveUrl(settings.location),
     auth: settings.auth,
   };

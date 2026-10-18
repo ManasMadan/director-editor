@@ -92,10 +92,7 @@ describe("a procedure call's activity line", () => {
     await check(0);
     await check(1);
     await check(0, () => Promise.reject(new Error("boom"))).catch(() => undefined);
-    expect([...seen]).toEqual([
-      "u-1|director.plan_opened|v1|0",
-      "u-1|director.plan_opened|v1|1",
-    ]);
+    expect([...seen]).toEqual(["u-1|director.plan_opened|v1|0", "u-1|director.plan_opened|v1|1"]);
     expect(record.mock.calls.map(([line]) => [line.target?.shotIndex, line.outcome])).toEqual([
       [0, undefined],
       [1, undefined],

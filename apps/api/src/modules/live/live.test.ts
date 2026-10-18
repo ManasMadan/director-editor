@@ -36,7 +36,7 @@ import { CLIENT_MAX_PAYLOAD_BYTES } from "./live.messages";
 import { QUIET_MS } from "./live.pacer";
 import { PERSONA, PERSONA_VERSION } from "./live.persona";
 import type { LivePicks } from "./live.picks";
-import { systemInstruction } from "./live.setup";
+import { setupMessage, systemInstruction } from "./live.setup";
 
 /**
  * What the persona must keep saying, whatever else changes in it: these are what the
@@ -2015,10 +2015,36 @@ describe("the call's configuration", () => {
     const settings = { location: "europe-west4", model: "m", auth: tokenAuth };
     expect(liveUpstream({ ...settings, project: undefined })).toBeNull();
     expect(liveUpstream({ ...settings, project: "proj" })).toEqual({
-      model: { project: "proj", location: "europe-west4", model: "m" },
+      model: {
+        project: "proj",
+        location: "europe-west4",
+        model: "m",
+        proactiveAudio: false,
+        affectiveDialog: false,
+      },
       url: "wss://europe-west4-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1.LlmBidiService/BidiGenerateContent",
       auth: tokenAuth,
     });
+  });
+
+  it("asks for proactive audio and affective dialog only when they're on", () => {
+    const plan = readyPlan.plan;
+    expect(plan).not.toBeNull();
+    if (plan) {
+      const target = { project: "p", location: "l", model: "m" };
+      const plain = setupMessage(target, plan, 0).setup;
+      expect(plain).not.toHaveProperty("proactivity");
+      expect(plain.generationConfig).not.toHaveProperty("enableAffectiveDialog");
+      const expressive = setupMessage(
+        { ...target, proactiveAudio: true, affectiveDialog: true },
+        plan,
+        0,
+      ).setup;
+      expect(expressive).toMatchObject({
+        proactivity: { proactiveAudio: true },
+        generationConfig: { enableAffectiveDialog: true, responseModalities: ["AUDIO"] },
+      });
+    }
   });
 
   it("describes a shot with nothing to say or do, and refuses one the plan doesn't have", () => {
