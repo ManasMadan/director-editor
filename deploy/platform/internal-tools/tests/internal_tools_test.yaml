@@ -39,7 +39,10 @@ tests:
           path: "spec.rules[1]"
           value:
             name: home
-            matches: [{ path: { type: Exact, value: / }, method: GET }]
+            matches:
+              - path: { type: Exact, value: / }
+                method: GET
+                headers: [{ type: Exact, name: Sec-Fetch-Mode, value: navigate }]
             filters:
               - type: RequestRedirect
                 requestRedirect: { path: { type: ReplaceFullPath, replaceFullPath: /admin/ }, statusCode: 302 }

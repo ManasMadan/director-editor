@@ -46,11 +46,14 @@ spec:
         - {{ toJson $backend }}
     {{- end }}
     {{- with $tool.home }}
-    # The bare host goes to the tool's page (GET only: an API may answer POST /).
+    # A browser opening the bare host goes to the tool's page. Only a navigation: the
+    # tool's own API may answer at / (RustFS's S3 calls, GET /?x-id=ListBuckets).
     - name: home
       matches:
         - path: { type: Exact, value: / }
           method: GET
+          headers:
+            - { type: Exact, name: Sec-Fetch-Mode, value: navigate }
       filters:
         - type: RequestRedirect
           requestRedirect:
