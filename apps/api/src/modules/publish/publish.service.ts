@@ -36,6 +36,7 @@ import { type Auth, InjectAuth } from "../../auth/auth.module";
 import { env } from "../../env";
 import { features } from "../../features";
 import { aiCaller, callAi } from "../ai";
+import { AssetsService } from "../assets";
 import { AnalyticsService } from "../analytics";
 import { DirectorService } from "../director";
 import { FilesService } from "../files";
@@ -108,6 +109,7 @@ export class PublishService {
     private readonly shorts: ShortsService,
     private readonly analytics: AnalyticsService,
     private readonly allowance: DailyAllowance,
+    private readonly assets: AssetsService,
     @InjectPinoLogger(PublishService.name) private readonly log: PinoLogger,
     @InjectActivity() private readonly activity: RecordActivity,
   ) {}
@@ -129,6 +131,13 @@ export class PublishService {
     }
     const { orgId, userId } = publisher;
     const video = await this.video(userId, cut);
+    // A Veo clip in a gap is realistic AI footage: YouTube asks for it to be declared.
+    const synthetic = await this.assets
+      .usesSyntheticMedia(userId, orgId, cut.videoId)
+      .catch(async (error: unknown) => {
+        await video.body.cancel();
+        throw error;
+      });
     const ready = await this.readyToSend(orgId, userId, cut).catch(async (error: unknown) => {
       await video.body.cancel();
       throw error;
@@ -150,6 +159,7 @@ export class PublishService {
           title: youtubeTitle(input.title),
           description: youtubeDescription(input, cut.videoId),
           privacyStatus: input.visibility,
+          containsSyntheticMedia: synthetic,
         },
         video,
       )

@@ -15,6 +15,8 @@ export interface DrawInput {
   baseId?: string;
   /** A photo of the member's to draw from. */
   reference?: File;
+  /** A gap's slot: a Veo clip instead of a still. */
+  clip?: boolean;
 }
 
 export function useDrawAssetMutation() {

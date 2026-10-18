@@ -300,3 +300,6 @@ export function gapSlots(plan: ShotPlan, clips: readonly Clip[]): GapSlot[] {
     }));
   return [...fromEdits, ...skipped].sort((a, b) => a.span.start - b.span.start);
 }
+
+/** Whether a slot id is a gap's or a skipped shot's (B-roll, which can be a Veo clip). */
+export const isGapSlot = (slotId: string) => /^(gap|shot)-\d+$/.test(slotId);

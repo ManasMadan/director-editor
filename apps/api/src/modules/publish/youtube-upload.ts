@@ -31,6 +31,8 @@ export interface YouTubeVideo {
   title: string;
   description: string;
   privacyStatus: "private" | "unlisted" | "public";
+  /** YouTube's "altered or synthetic content" flag: on when the video uses AI footage. */
+  containsSyntheticMedia?: boolean;
 }
 
 interface UploadFile {
@@ -121,7 +123,11 @@ export class YouTubeUploader {
             description: video.description,
             categoryId: PEOPLE_AND_BLOGS,
           },
-          status: { privacyStatus: video.privacyStatus, selfDeclaredMadeForKids: false },
+          status: {
+            privacyStatus: video.privacyStatus,
+            selfDeclaredMadeForKids: false,
+            containsSyntheticMedia: video.containsSyntheticMedia ?? false,
+          },
         }),
       },
       PROVIDER_TIMEOUT_MS,

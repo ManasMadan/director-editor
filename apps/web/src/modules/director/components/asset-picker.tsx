@@ -34,6 +34,7 @@ import { cn } from "@repo/ui/lib/utils";
 import { Check, CircleAlert, ImagePlus, Plus, Send, Undo2, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { type FormEvent, useId, useState } from "react";
+import { isGapSlot } from "../lib/scene";
 import { slotOrientation, slotPlacement } from "../lib/slot-preview";
 import { SlotPreview } from "./slot-preview";
 
@@ -81,7 +82,7 @@ function Tile({
   onSelect,
 }: {
   label: string;
-  image: Pick<AssetImage, "status" | "url">;
+  image: Pick<AssetImage, "status" | "url"> & { media?: AssetImage["media"] };
   selected: boolean;
   inUse: boolean;
   onSelect: () => void;
@@ -99,7 +100,10 @@ function Tile({
         selected && "ring-2 ring-primary",
       )}
     >
-      {image.status === "ready" && image.url ? (
+      {image.status === "ready" && image.url && image.media === "video" ? (
+        <video src={image.url} muted loop autoPlay playsInline className="size-full object-cover" />
+      ) : null}
+      {image.status === "ready" && image.url && image.media !== "video" ? (
         <img src={image.url} alt="" className="size-full object-cover" />
       ) : null}
       {image.status === "making" ? <GeminiLoader label={t("making")} size="sm" showLabel /> : null}
@@ -269,12 +273,15 @@ function CreateTab({
   selected,
   onSelect,
   left,
+  gap,
 }: {
   videoId: string;
   slot: AssetSlot;
   selected: Selected;
   onSelect: (selected: Selected) => void;
   left: number;
+  /** A gap's slot: it can also be a Veo clip. */
+  gap: boolean;
 }) {
   const t = useTranslations("director.picker");
   const errorMessage = useApiErrorMessage();
@@ -284,13 +291,14 @@ function CreateTab({
   const promptId = useId();
   const baseId = selected === "default" ? slot.defaultImage?.id : selected;
   const busy = draw.isPending || left <= 0;
-  const create = (event?: FormEvent) => {
+  const create = (event?: FormEvent, clip = false) => {
     event?.preventDefault();
     draw.mutate({
       videoId,
       assetId: slot.assetId,
       prompt: prompt.trim() || slot.prompt,
-      ...(reference && { reference }),
+      ...(reference && !clip && { reference }),
+      ...(clip && { clip }),
     });
   };
   const another =
@@ -323,6 +331,20 @@ function CreateTab({
         <Button type="submit" disabled={busy} className="min-h-11">
           {draw.isPending ? t("sending") : t("create")}
         </Button>
+        {gap ? (
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={busy}
+              onClick={() => create(undefined, true)}
+              className="min-h-11"
+            >
+              {t("clip")}
+            </Button>
+            <p className="text-xs text-muted-foreground">{t("clipHint")}</p>
+          </>
+        ) : null}
         <p className="text-xs text-muted-foreground">{t("left", { left: Math.max(left, 0) })}</p>
       </form>
       <Results
@@ -661,7 +683,7 @@ function PickerBody({
           <UploadTab {...props} ask={asset.ask} />
         </TabsContent>
         <TabsContent value="create" className="pt-3">
-          <CreateTab {...props} left={left} />
+          <CreateTab {...props} left={left} gap={isGapSlot(asset.id)} />
         </TabsContent>
         {stock ? (
           <TabsContent value="stock" className="pt-3">
