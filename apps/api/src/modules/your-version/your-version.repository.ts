@@ -6,8 +6,11 @@
 import { Injectable } from "@nestjs/common";
 import { EMPTY_VERSION, type YourVersion, yourVersionSchema } from "@repo/contracts/api";
 import type { OrgId, UserId, VideoId } from "@repo/contracts/ids";
-import { withTenant } from "@repo/db";
-import { type Database, InjectDatabase } from "@repo/nest-common";
+import { type Tx, withTenant } from "@repo/db";
+import { type Database, InjectDatabase, rows } from "@repo/nest-common";
+import * as z from "zod";
+
+const heldVersion = z.object({ version: yourVersionSchema });
 
 @Injectable()
 export class YourVersionRepository {
@@ -20,6 +23,27 @@ export class YourVersionRepository {
       select: { version: true },
     });
     return row ? yourVersionSchema.parse(row.version) : EMPTY_VERSION;
+  }
+
+  /**
+   * The member's version inside a transaction, its row held until the transaction ends,
+   * so nothing saves over it between this read and the transaction's own write.
+   */
+  async findHeld(tx: Tx, orgId: OrgId, userId: UserId, videoId: VideoId): Promise<YourVersion> {
+    const [held] = await rows(
+      heldVersion,
+      tx.$queryRaw`SELECT version FROM app.director_version WHERE org_id = ${orgId}::uuid AND user_id = ${userId}::uuid AND video_id = ${videoId} FOR UPDATE`,
+    );
+    return held ? held.version : EMPTY_VERSION;
+  }
+
+  /** Keeps the member's version inside a transaction. */
+  async saveIn(tx: Tx, orgId: OrgId, userId: UserId, videoId: VideoId, version: YourVersion) {
+    await tx.directorVersion.upsert({
+      where: { orgId_userId_videoId: { orgId, userId, videoId } },
+      create: { orgId, userId, videoId, version },
+      update: { version },
+    });
   }
 
   async save(
