@@ -92,20 +92,30 @@ function sayAloud(text: string, locale: string) {
 function play(url: string, text: string, failed: () => void) {
   const audio = new Audio(url);
   playing = audio;
-  // Neither fires once `silence` has paused it: a line cut off says nothing more.
-  audio.onplaying = () => setCurrent(text);
-  audio.onended = () => {
+  let started = false;
+  // Doesn't fire once `silence` has paused it: a line cut off says nothing more.
+  audio.onplaying = () => {
+    started = true;
+    setCurrent(text);
+  };
+  // The line is over: it ended, its sound broke off (an error, or its loading cut short),
+  // or the browser couldn't or wouldn't play it. One that never started is said in the
+  // browser's voice instead. A line no longer playing (another came, or Director went
+  // quiet) has nothing to make up for, and leaves what's said now alone.
+  const over = () => {
+    if (playing !== audio) {
+      return;
+    }
     playing = null;
     setCurrent(null);
-  };
-  audio.play().catch(() => {
-    // Paused before it began (another line came, or Director went quiet): nothing to make
-    // up for. Otherwise the browser couldn't or wouldn't play it.
-    if (playing === audio) {
-      playing = null;
+    if (!started) {
       failed();
     }
-  });
+  };
+  audio.onended = over;
+  audio.onerror = over;
+  audio.onabort = over;
+  audio.play().catch(over);
 }
 
 /**

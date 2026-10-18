@@ -340,12 +340,75 @@ describe("useLiveDirector", () => {
     }));
     const hook = await renderHook(
       () =>
-        useLiveDirector({ perception: quiet, speak: true, memory: FRESH, shot: shot(), index: 0 }),
+        // No steps to speak ahead: what the test sends is the only line asked for.
+        useLiveDirector({
+          perception: quiet,
+          speak: true,
+          memory: FRESH,
+          shot: shot({ steps: [] }),
+          index: 0,
+        }),
       { api },
     );
     const saidByBrowser = () => browser.mock.calls.map(([utterance]) => utterance.text);
     return { hook, asked, saidByBrowser };
   }
+
+  it("has the opening shot's steps spoken ahead as the screen opens, but not on a call", async () => {
+    const asked: string[] = [];
+    const api = standIn((os) => ({
+      director: {
+        speak: os.director.speak.handler(({ input, errors }) => {
+          asked.push(input.text);
+          // One that can't be had now is left until it's said.
+          if (input.text === "Spin.") {
+            throw errors.UPSTREAM_UNAVAILABLE({ data: { params: {} } });
+          }
+          return { url: silentWav(1), expiresAt: new Date(Date.now() + HOUR_MS) };
+        }),
+      },
+    }));
+    const steps = (...instructions: string[]) =>
+      instructions.map((instruction, index) => ({
+        atSeconds: index,
+        instruction,
+        cameraMove: "static" as const,
+      }));
+    // On a call Gemini Live talks: nothing to speak ahead.
+    const calling = await renderHook(
+      () =>
+        useLiveDirector({
+          perception: quiet,
+          speak: false,
+          memory: FRESH,
+          shot: shot({ steps: steps("Wave hello.") }),
+          index: 0,
+        }),
+      { api },
+    );
+    calling.unmount();
+    let speak = true;
+    const opened = await renderHook(
+      () =>
+        useLiveDirector({
+          perception: quiet,
+          speak,
+          memory: FRESH,
+          shot: shot({ steps: steps("Walk in.", "Turn.", "Smile.", "Spin.", "Bow.") }),
+          index: 0,
+        }),
+      { api },
+    );
+    // The first few, once, before recording reaches any of them.
+    await expect
+      .poll(() => [...asked].sort())
+      .toEqual(["Action! Walk in.", "Smile.", "Spin.", "Turn."]);
+    speak = false;
+    opened.rerender();
+    speak = true;
+    opened.rerender();
+    expect(asked).toHaveLength(4);
+  });
 
   it("says its lines in its own voice (Gemini's), not the browser's", async () => {
     // The browser plays sound once the member has touched the page.

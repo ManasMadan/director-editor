@@ -172,6 +172,22 @@ describe("Director's own voice (Gemini's)", () => {
     expect(heard).not.toContain("Wait for it");
   });
 
+  it.each(["error", "abort"])(
+    "stops saying a line whose sound breaks off midway (%s), and says it no other way",
+    async (event) => {
+      const play = vi.spyOn(HTMLMediaElement.prototype, "play");
+      say("Keep going", "en", async () => silentWav(3));
+      await expect.poll(saying).toBe("Keep going");
+      const [line] = play.mock.contexts.filter((media) => media instanceof HTMLMediaElement);
+      line?.dispatchEvent(new Event(event));
+      expect(saying()).toBeNull();
+      expect(speak).not.toHaveBeenCalled();
+      // Gone quiet, it says the next line as usual.
+      say("Now turn", "en", async () => silentWav(0.5));
+      await expect.poll(saying).toBe("Now turn");
+    },
+  );
+
   it("stops playing when Director goes quiet", async () => {
     say("Keep going", "en", async () => silentWav(3));
     await expect.poll(saying).toBe("Keep going");
