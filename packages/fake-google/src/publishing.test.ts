@@ -253,6 +253,15 @@ describe("the mock YouTube upload", () => {
     expect((await start(access_token, metadata())).status).toBe(200);
   });
 
+  it("fails the file itself while a test says so, once the session is open", async () => {
+    const { access_token } = await signIn("broken@example.com", UPLOAD_SCOPE);
+    const session = (await start(access_token, metadata())).headers.get("location") ?? "";
+    fake.breakUploads(true);
+    const put = await fetch(session, { method: "PUT", body: VIDEO });
+    fake.breakUploads(false);
+    expect(put.status).toBe(503);
+  });
+
   it("refuses metadata YouTube would, and a video that isn't the declared size", async () => {
     const { access_token } = await signIn("strict@example.com", UPLOAD_SCOPE);
     for (const body of [metadata("unlisted", "a <b>"), metadata("everyone"), {}]) {

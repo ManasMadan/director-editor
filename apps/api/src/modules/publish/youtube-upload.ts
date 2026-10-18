@@ -12,11 +12,16 @@
 import { MINUTE_MS, PROVIDER_TIMEOUT_MS } from "@repo/contracts/time";
 import * as z from "zod";
 
-/** YouTube refused the upload (`reason` is its error reason) or couldn't be reached. */
+/**
+ * YouTube refused the upload (`reason` is its error reason) or couldn't be reached.
+ * `sessionOpened` says whether YouTube had already taken the session's metadata: from
+ * then on the insert counts against the project's quota, and the video may exist.
+ */
 export class YouTubeUploadError extends Error {
   constructor(
     readonly status: number,
     readonly reason: string,
+    readonly sessionOpened = false,
   ) {
     super(`YouTube answered the upload with ${status} ${reason}`);
   }
@@ -53,17 +58,17 @@ export function uploadUrlOf(apiUrl: string) {
   return `${apiUrl.replace(/\/youtube\/v3\/?$/, "")}/upload/youtube/v3/videos`;
 }
 
-async function refusal(response: Response) {
+async function refusal(response: Response, sessionOpened: boolean) {
   const parsed = errorResponse.safeParse(await response.json().catch(() => null));
   const reason = parsed.success ? (parsed.data.error.errors[0]?.reason ?? "error") : "error";
-  return new YouTubeUploadError(response.status, reason);
+  return new YouTubeUploadError(response.status, reason, sessionOpened);
 }
 
-async function call(url: string, init: RequestInit, timeoutMs: number) {
+async function call(url: string, init: RequestInit, timeoutMs: number, sessionOpened: boolean) {
   try {
     return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
   } catch (cause) {
-    throw Object.assign(new YouTubeUploadError(503, "unreachable"), { cause });
+    throw Object.assign(new YouTubeUploadError(503, "unreachable", sessionOpened), { cause });
   }
 }
 
@@ -88,9 +93,9 @@ export class YouTubeUploader {
       body: file.body,
       duplex: "half",
     };
-    const finished = await call(session, put, UPLOAD_TIMEOUT_MS);
+    const finished = await call(session, put, UPLOAD_TIMEOUT_MS, true);
     if (!finished.ok) {
-      throw await refusal(finished);
+      throw await refusal(finished, true);
     }
     return uploadedVideo.parse(await finished.json());
   }
@@ -120,10 +125,11 @@ export class YouTubeUploader {
         }),
       },
       PROVIDER_TIMEOUT_MS,
+      false,
     );
     const session = started.headers.get("location");
     if (!started.ok || !session) {
-      throw await refusal(started);
+      throw await refusal(started, false);
     }
     return session;
   }

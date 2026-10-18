@@ -23,7 +23,13 @@ import {
 import type { DirectorCutId, OrgId, UserId } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
 import { MINUTE_S } from "@repo/contracts/time";
-import { AppError, isAppError } from "@repo/nest-common";
+import {
+  AppError,
+  describeError,
+  InjectPinoLogger,
+  isAppError,
+  PinoLogger,
+} from "@repo/nest-common";
 import * as z from "zod";
 import { type Auth, InjectAuth } from "../../auth/auth.module";
 import { env } from "../../env";
@@ -93,6 +99,7 @@ export class PublishService {
     private readonly shorts: ShortsService,
     private readonly analytics: AnalyticsService,
     private readonly allowance: DailyAllowance,
+    @InjectPinoLogger(PublishService.name) private readonly log: PinoLogger,
   ) {}
 
   /** Gemini's draft of the post, knowing the original Short as YouTube shows it. */
@@ -137,14 +144,7 @@ export class PublishService {
         },
         video,
       )
-      .catch(async (error: unknown) => {
-        // YouTube took no video: the day's place goes back with the cut's claim.
-        await Promise.all([
-          this.publishing.failed(orgId, cut.id),
-          this.allowance.giveBack(ready.day),
-        ]);
-        throw publishErrorOf(error);
-      });
+      .catch((error: unknown) => this.failed(orgId, cut.id, ready.day, error));
     const published = { youtubeVideoId: uploaded.id, visibility: uploaded.status.privacyStatus };
     await this.publishing.published(orgId, cut.id, published);
     this.analytics.record("published", {
@@ -157,6 +157,29 @@ export class PublishService {
       },
     });
     return { ...cut, publish: { status: "published", ...published } };
+  }
+
+  /**
+   * After a failed upload: the cut marked failed, and the day's place given back only
+   * when YouTube never opened the session (once it has, the insert counts against the
+   * quota, and the video may even exist). Then YouTube's own error, whatever else fails
+   * on the way: a failure to mark the cut is logged, never put in its place.
+   */
+  private async failed(
+    orgId: OrgId,
+    cutId: DirectorCutId,
+    day: Date,
+    error: unknown,
+  ): Promise<never> {
+    const sessionNeverOpened = error instanceof YouTubeUploadError && !error.sessionOpened;
+    const [marked] = await Promise.allSettled([
+      this.publishing.failed(orgId, cutId),
+      sessionNeverOpened ? this.allowance.giveBack(day) : Promise.resolve(),
+    ]);
+    if (marked.status === "rejected") {
+      this.log.warn({ err: describeError(marked.reason), cutId }, "couldn't mark a publish failed");
+    }
+    throw publishErrorOf(error);
   }
 
   /** The caller's cut, when the caller may publish at all. */
@@ -173,7 +196,8 @@ export class PublishService {
   /**
    * What sending the cut takes: the member's access token, one of the day's places
    * (PUBLISH_QUOTA_EXHAUSTED past them), and the cut claimed for this publish. Null when
-   * another publish of it is under way, the place given back.
+   * another publish of it is under way; the place goes back then, and when the claim
+   * fails outright.
    */
   private async readyToSend(orgId: OrgId, userId: UserId, cut: DirectorCut) {
     const accessToken = await this.accessToken(userId);
@@ -182,11 +206,10 @@ export class PublishService {
     // published, the cut stays "uploading", and a publish after the stale window sends it
     // again: a second copy on the member's channel. Rare enough to accept; they can
     // delete one in YouTube Studio.
-    if (!(await this.publishing.claim(orgId, userId, cut.id))) {
-      await this.allowance.giveBack(day);
-      return null;
-    }
-    return { accessToken, day };
+    const claimed = await this.allowance.keepIf(day, () =>
+      this.publishing.claim(orgId, userId, cut.id),
+    );
+    return claimed ? { accessToken, day } : null;
   }
 
   /**

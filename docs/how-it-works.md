@@ -318,6 +318,16 @@ Publishing starts from a saved video in My media and uploads only when the membe
   app's uploads may be made private), or to failed. A `published` event goes to BigQuery.
 - **Refusals.** Nothing reaches YouTube from the demo account (`PUBLISH_DEMO_DISABLED`)
   or for a video whose file isn't checked or is gone (`PUBLISH_CUT_NOT_READY`).
+- **The day's allowance.** Each upload costs a large share of the project's daily
+  YouTube Data API quota, which indexing's reads draw on too, so Director publishes at
+  most `PUBLISH_DAILY_LIMIT` (5) videos a day across every member, the day being
+  YouTube's own quota day: midnight to midnight Pacific time, daylight saving included
+  (`apps/api/src/modules/publish/quota-day.ts`). The count is a Redis key per Pacific
+  date that expires when that day ends (`daily-allowance.ts`). A place is taken just
+  before the video is claimed for upload and given back only if YouTube never opened
+  the upload session: once it has, the insert counts against the quota whatever happens
+  next. Past the allowance, or when YouTube says the project's quota or rate is spent,
+  the member sees `PUBLISH_QUOTA_EXHAUSTED`.
 
 ## Product analytics
 

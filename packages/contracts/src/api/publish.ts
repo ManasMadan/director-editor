@@ -44,9 +44,10 @@ const PUBLISH_HASHTAG_MAX_LENGTH = 40;
 /** YouTube's longest description, in UTF-8 bytes. */
 const YOUTUBE_DESCRIPTION_MAX_BYTES = 5_000;
 /**
- * Videos Director publishes a day (a UTC day), across every member: each upload costs a
- * large share of the project's daily YouTube Data API quota, which indexing's reads draw
- * on too. Past it, PUBLISH_QUOTA_EXHAUSTED until midnight UTC.
+ * Videos Director publishes a day across every member, the day as YouTube's quota counts
+ * it (midnight to midnight Pacific time): each upload costs a large share of the
+ * project's daily YouTube Data API quota, which indexing's reads draw on too. Past it,
+ * PUBLISH_QUOTA_EXHAUSTED until midnight Pacific time.
  */
 export const PUBLISH_DAILY_LIMIT = 5;
 

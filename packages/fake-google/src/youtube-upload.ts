@@ -8,8 +8,9 @@
  * Like YouTube it needs an access token whose grant includes an upload scope, refuses a
  * Google account with no channel (here, any address starting `no-channel`), checks the
  * metadata, keeps every upload private until the app has passed Google's audit
- * (`audited`), whatever privacy was asked for, and refuses every upload while the
- * project's quota is spent (`quotaSpent`).
+ * (`audited`), whatever privacy was asked for. It refuses every upload while the
+ * project's quota is spent (`quotaSpent`), and fails a session's file while it's
+ * `broken`.
  */
 import { randomBytes } from "node:crypto";
 import * as z from "zod";
@@ -77,10 +78,12 @@ export function createYouTubeUploads({
   url,
   audited,
   quotaSpent,
+  broken,
 }: {
   url: () => string;
   audited: boolean;
   quotaSpent: () => boolean;
+  broken: () => boolean;
 }) {
   const sessions = new Map<string, Session>();
   const uploads: YouTubeUpload[] = [];
@@ -131,6 +134,9 @@ export function createYouTubeUploads({
       const session = sessions.get(id);
       if (!session) {
         return refuse(404, "notFound");
+      }
+      if (broken()) {
+        return refuse(503, "backendError");
       }
       if (bytes !== session.length) {
         return refuse(400, "uploadSizeMismatch");

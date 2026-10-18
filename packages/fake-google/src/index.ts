@@ -134,12 +134,14 @@ export async function startFakeGoogle({
   const oauth = createOAuth();
   // Known once the server listens; upload sessions link back to it.
   const address = { url: "" };
-  // Whether the project's daily YouTube quota is spent: a test says so (exhaustQuota).
-  const quota = { spent: false };
+  // Whether the project's daily YouTube quota is spent, and whether YouTube fails the
+  // files it's sent: a test says so (exhaustQuota, breakUploads).
+  const trouble = { quotaSpent: false, uploadsBroken: false };
   const uploads = createYouTubeUploads({
     url: () => address.url,
     audited: youtubeAudited,
-    quotaSpent: () => quota.spent,
+    quotaSpent: () => trouble.quotaSpent,
+    broken: () => trouble.uploadsBroken,
   });
   const server = createServer((request, response) => {
     // A server's request always has its URL; node types it as maybe missing.
@@ -156,7 +158,7 @@ export async function startFakeGoogle({
       if (url.searchParams.get("key") !== apiKey) {
         return refuse(response, 400, "keyInvalid");
       }
-      if (quota.spent) {
+      if (trouble.quotaSpent) {
         return refuse(response, 403, "quotaExceeded");
       }
       const found = youtube(String(read[1]), url.searchParams);
@@ -176,7 +178,11 @@ export async function startFakeGoogle({
     uploads: uploads.uploads,
     /** Has YouTube refuse reads and uploads as over the project's quota, or stop. */
     exhaustQuota: (spent: boolean) => {
-      quota.spent = spent;
+      trouble.quotaSpent = spent;
+    },
+    /** Has YouTube fail the file of every upload (a 503) once its session is open, or stop. */
+    breakUploads: (broken: boolean) => {
+      trouble.uploadsBroken = broken;
     },
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };

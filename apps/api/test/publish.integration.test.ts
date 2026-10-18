@@ -19,6 +19,7 @@ import { S3Storage } from "@repo/nest-common";
 import { jwtVerify } from "jose";
 import pg from "pg";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { quotaDay } from "../src/modules/publish/quota-day";
 import {
   createSession,
   type Harness,
@@ -289,7 +290,7 @@ async function aCut(me: { id: string; activeOrganizationId?: string | null }, in
 const publishInput = (cutId: string) => ({ cutId, ...COPY, visibility: "public" as const });
 
 /** The day's count of videos Director sent to YouTube, as the API keeps it in Redis. */
-const todaysKey = () => `publish:uploads:${new Date().toISOString().slice(0, 10)}`;
+const todaysKey = () => `publish:uploads:${quotaDay(new Date())}`;
 const uploadsToday = async () => Number((await harness.redis.get(todaysKey())) ?? 0);
 
 /**
@@ -567,6 +568,67 @@ describe("publishing a cut", { tags: ["files"] }, () => {
     const ttl = await harness.redis.ttl(todaysKey());
     expect(ttl).toBeGreaterThan(0);
     expect(ttl).toBeLessThanOrEqual(24 * 60 * 60);
+  });
+
+  it("keeps the day's place once YouTube has opened the session, even when the file fails", async () => {
+    const { session, email, me } = await signInWithGoogle();
+    await allowYouTube(session, email);
+    const { cutId } = await aCut(me);
+    google.breakUploads(true);
+    try {
+      await expectError(session.rpc.publish.upload(publishInput(cutId)), "UPSTREAM_UNAVAILABLE");
+    } finally {
+      google.breakUploads(false);
+    }
+    // The insert counts against YouTube's quota: so it does against the day's places.
+    expect(await uploadsToday()).toBe(1);
+    const who = { org: String(me.activeOrganizationId), user: me.id };
+    expect((await cutOf(who, cutId))?.publishStatus).toBe("failed");
+  });
+
+  it("gives the day's place back when claiming the cut fails outright", async () => {
+    const { session, email, me } = await signInWithGoogle();
+    await allowYouTube(session, email);
+    const { cutId } = await aCut(me);
+    const { PublishRepository } = await import("../src/modules/publish/publish.repository");
+    vi.spyOn(harness.app.get(PublishRepository), "claim").mockRejectedValueOnce(
+      new Error("the database went away"),
+    );
+    const uploads = google.uploads.length;
+    await expectError(session.rpc.publish.upload(publishInput(cutId)), "INTERNAL");
+    expect(await uploadsToday()).toBe(0);
+    expect(google.uploads.length).toBe(uploads);
+  });
+
+  it("says what YouTube said even when marking the cut failed doesn't work", async () => {
+    const { session, email, me } = await signInWithGoogle();
+    await allowYouTube(session, email);
+    const { cutId } = await aCut(me);
+    const { PublishRepository } = await import("../src/modules/publish/publish.repository");
+    vi.spyOn(harness.app.get(PublishRepository), "failed").mockRejectedValueOnce(
+      new Error("the database went away"),
+    );
+    google.exhaustQuota(true);
+    try {
+      await expectError(session.rpc.publish.upload(publishInput(cutId)), "PUBLISH_QUOTA_EXHAUSTED");
+    } finally {
+      google.exhaustQuota(false);
+    }
+    expect(await uploadsToday()).toBe(0);
+  });
+
+  it("never fails giving a place back, whatever Redis does", async () => {
+    const { DailyAllowance } = await import("../src/modules/publish/daily-allowance");
+    const allowance = harness.app.get(DailyAllowance);
+    const day = await allowance.take();
+    expect(await uploadsToday()).toBe(1);
+    const { Redis } = await import("ioredis");
+    vi.spyOn(Redis.prototype, "multi").mockImplementationOnce(() => {
+      throw new Error("Redis went away");
+    });
+    await expect(allowance.giveBack(day)).resolves.toBeUndefined();
+    // Not given back: the count errs on the side of YouTube's quota until the day ends.
+    expect(await uploadsToday()).toBe(1);
   });
 
   it("says when YouTube's quota is spent, and gives the day's place back", async () => {

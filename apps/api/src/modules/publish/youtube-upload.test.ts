@@ -96,7 +96,7 @@ describe("the YouTube uploader", () => {
       send(response, 403, { error: { errors: [{ reason: "quotaExceeded" }] } });
     const upload = file();
     const error = await refusal(uploader().upload("token", video, upload));
-    expect(error).toMatchObject({ status: 403, reason: "quotaExceeded" });
+    expect(error).toMatchObject({ status: 403, reason: "quotaExceeded", sessionOpened: false });
     // Cancelled: nothing can read it any more.
     expect(upload.body.locked).toBe(false);
     await expect(upload.body.getReader().read()).resolves.toEqual({
@@ -125,6 +125,17 @@ describe("the YouTube uploader", () => {
     expect(await refusal(uploader().upload("token", video, file()))).toMatchObject({
       status: 400,
       reason: "uploadSizeMismatch",
+      // Past the session: the insert counts against the quota already.
+      sessionOpened: true,
+    });
+  });
+
+  it("says when the file couldn't be sent once the session was open", async () => {
+    route = (_request, response) => send(response, 200, undefined, "http://127.0.0.1:1/session");
+    expect(await refusal(uploader().upload("token", video, file()))).toMatchObject({
+      status: 503,
+      reason: "unreachable",
+      sessionOpened: true,
     });
   });
 
@@ -133,6 +144,7 @@ describe("the YouTube uploader", () => {
     expect(await refusal(closed.upload("token", video, file()))).toMatchObject({
       status: 503,
       reason: "unreachable",
+      sessionOpened: false,
     });
   });
 });
