@@ -14,7 +14,7 @@ import { cn } from "@repo/ui/lib/utils";
 import { ArrowLeft, Mic, MicOff, SendHorizontal, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { useId, useState } from "react";
 import { DirectorGate } from "@/modules/shorts";
 import { type BriefPhoto, BriefPhotos } from "../components/brief-photos";
@@ -42,7 +42,7 @@ function Header() {
 /** A mic button that says a message into `onText` instead of typing it, where it can. */
 function Dictate({ onText }: { onText: (text: string) => void }) {
   const t = useTranslations("create");
-  const dictation = useDictation(useLocale(), onText);
+  const dictation = useDictation(onText);
   if (!dictation.supported) {
     return null;
   }
