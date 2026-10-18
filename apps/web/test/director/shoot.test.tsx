@@ -337,6 +337,47 @@ describe("a shoot with Director", () => {
   });
 });
 
+describe("talking it through with Director", () => {
+  it("answers a typed line at once, and reads the member's line when asked", async () => {
+    canvasCamera();
+    const { page } = await openShoot({ shots: [walkIn, smile] });
+    await startShooting(page);
+    // Through the relay and back: the app's own part of the time to an answer.
+    const sent = performance.now();
+    await tell(page, "ok I'm going", "You said: ok I'm going");
+    expect(performance.now() - sent).toBeLessThan(1500);
+    await tell(page, "can you say my line again?", `It's: "Morning. Coffee first."`);
+  });
+
+  it("puts the member's twist on the card, says so, and keeps it for the shoot", async () => {
+    canvasCamera();
+    const { page } = await openShoot({ shots: [walkIn, smile] });
+    await startShooting(page);
+    await send(page, "what if I do this one with my grandma instead?");
+    await expect
+      .element(page.getByText(line("Ooh, I love that. Let's put it on your card.")))
+      .toBeVisible();
+    const card = page.getByRole("region", { name: "Shot 1" });
+    await expect.element(card.getByText("You and your grandma do it together")).toBeVisible();
+    await expect.element(card.getByText("changed for you")).toBeVisible();
+    // Only the row that changed says so.
+    expect(card.getByText("changed for you").elements()).toHaveLength(1);
+    await expect.element(page.getByText(line("There you go."))).toBeVisible();
+    expect((await commands.liveTurns(liveFrom))[0]?.toolResponses).toEqual([{ result: "done" }]);
+    // Their line is the original's still, and Director moves on and back with the change kept.
+    await tell(page, "say my line", `It's: "Morning. Coffee first."`);
+    await send(page, "go to shot 2");
+    await expect.element(page.getByRole("heading", { name: "Shot 2 · Smile" })).toBeVisible();
+    await send(page, "go to shot 1");
+    await expect.element(card.getByText("You and your grandma do it together")).toBeVisible();
+    await expect
+      .poll(turns)
+      .toContainEqual(
+        expect.stringContaining('- What they do: "You and your grandma do it together"'),
+      );
+  });
+});
+
 describe("leaving the shoot", () => {
   it("leaves at once with nothing at stake", async () => {
     canvasCamera();

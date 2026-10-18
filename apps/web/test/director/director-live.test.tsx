@@ -225,6 +225,45 @@ describe("Director live on the shoot screen", () => {
     expect(speakingNow(page)).toBe(true);
   });
 
+  it("shows Director's changes to a shot, none mid-take, and hands them to a fresh connection", async () => {
+    canvasCamera();
+    const { page, socket } = await shoot();
+    // Nothing changed yet: the connection hears nothing about it.
+    expect(socket.sentOf("context")).toEqual([]);
+    socket.say({
+      type: "tool",
+      id: "t1",
+      call: { name: "adapt_shot", shot: 1, where: "On the balcony", line: "Cheese!" },
+    });
+    socket.say({ type: "tool", id: "t2", call: { name: "adapt_shot", shot: 0, where: "Hall" } });
+    const card = page.getByRole("region", { name: "Shot 1" });
+    await expect.element(card.getByText("Hall", { exact: true })).toBeVisible();
+    await expect.element(card.getByText("changed for you")).toBeVisible();
+    // Mid-take, the card stays as it is.
+    await userEvent.click(page.getByRole("button", { name: "Record a take" }));
+    socket.say({ type: "tool", id: "t3", call: { name: "adapt_shot", shot: 0, where: "Out" } });
+    await expect
+      .poll(() => socket.sentOf("tool_result"))
+      .toEqual([
+        { type: "tool_result", id: "t1", result: "done" },
+        { type: "tool_result", id: "t2", result: "done" },
+        { type: "tool_result", id: "t3", result: "busy" },
+      ]);
+    await userEvent.click(page.getByRole("button", { name: "Cancel the countdown" }));
+    await expect.element(card.getByText("Hall", { exact: true })).toBeVisible();
+    // The line drops: the fresh connection hears every change before anything else.
+    socket.hangUp();
+    await expect.poll(() => FakeSocket.all.length, { timeout: 5_000 }).toBe(2);
+    FakeSocket.last.open();
+    expect(FakeSocket.last.sent[0]).toEqual({
+      type: "context",
+      adaptations: [
+        { shot: 0, where: "Hall" },
+        { shot: 1, where: "On the balcony", line: "Cheese!" },
+      ],
+    });
+  });
+
   it("answers Director's tool calls with what really happened", async () => {
     canvasCamera();
     const { page, videoId, socket } = await shoot();
