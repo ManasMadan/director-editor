@@ -35,6 +35,7 @@ from google.genai.types import (
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, BinaryContent
 from pydantic_ai.models.google import GoogleModel
+from pydantic_ai.usage import RunUsage, UsageLimits
 from redis.asyncio import Redis
 from sqlalchemy import Integer, and_, func, or_, select, type_coerce, update
 from sqlalchemy.dialects.postgresql import insert
@@ -173,9 +174,18 @@ class Drawing:
     output_tokens: int
 
 
-def _drawing(response: GenerateContentResponse) -> Drawing:
+def drawing_of(response: GenerateContentResponse) -> Drawing:
+    """The image in Nano Banana's answer, and the tokens it used: Gemini bills the
+    model's thinking as output, and Nano Banana thinks before it draws."""
     usage = response.usage_metadata
-    used = (usage.prompt_token_count or 0, usage.candidates_token_count or 0) if usage else (0, 0)
+    used = (
+        (
+            usage.prompt_token_count or 0,
+            (usage.candidates_token_count or 0) + (usage.thoughts_token_count or 0),
+        )
+        if usage
+        else (0, 0)
+    )
     parts = [
         part
         for candidate in response.candidates or []
@@ -187,6 +197,11 @@ def _drawing(response: GenerateContentResponse) -> Drawing:
         if inline and inline.data and inline.mime_type in _EXTENSIONS:
             return Drawing(inline.data, inline.mime_type, *used)
     raise NoImage("no image in the answer")
+
+
+def _count(usage: RunUsage, drawing: Drawing) -> None:
+    usage.input_tokens += drawing.input_tokens
+    usage.output_tokens += drawing.output_tokens
 
 
 class SpellCheck(BaseModel):
@@ -246,20 +261,26 @@ class Artist:
         response = await self._model.client.aio.models.generate_content(  # pyright: ignore[reportUnknownMemberType]  # its contents type names Pillow's Image, not installed
             model=self._model.model_name, contents=contents, config=config
         )
-        return _drawing(response)
+        return drawing_of(response)
 
-    async def reads_right(self, drawing: Drawing, expected: list[str]) -> bool:
-        """Whether the drawing's text reads `expected`, spelt right. True with nothing to
-        check, no checker, or a checker that fails: proofreading improves an image, it
-        never stops one being shown."""
-        if not expected or self._checker is None:
+    async def reads_right(
+        self, drawing: Drawing, expected: list[str], usage: RunUsage, *, most: int
+    ) -> bool:
+        """Whether the drawing's text reads `expected`, spelt right, spending at most
+        `most` tokens (what's left of the image's reservation), counted in `usage` with
+        the drawings. True with nothing to check, no checker, nothing left to spend, or
+        a checker that fails: proofreading improves an image, it never stops one being
+        shown."""
+        if not expected or self._checker is None or most <= 0:
             return True
         try:
             result = await self._checker.run(
                 [
                     BinaryContent(data=drawing.data, media_type=drawing.media_type),
                     "The text it should show:\n" + "\n".join(expected),
-                ]
+                ],
+                usage=usage,
+                usage_limits=UsageLimits(total_tokens_limit=most),
             )
         except Exception:
             log.exception("proofreading an image failed")
@@ -551,10 +572,14 @@ class AssetMaker:
                 )
         return jobs
 
-    async def _drawing(self, plan_id: UUID, job: _Job) -> tuple[Drawing, str, tuple[int, int]]:
+    async def _drawing(
+        self, plan_id: UUID, job: _Job, usage: RunUsage, reserved: int
+    ) -> tuple[Drawing, str]:
         """Draws the job's image, proofreads its text and draws it once more when it's
         misspelt (a misspelt result is regenerated once before it's shown); the drawing
-        kept, where it's stored, and the tokens both drawings used."""
+        kept and where it's stored. Every call's tokens go into `usage` as it's answered,
+        so a failure part way still counts what was spent; the proofreading runs on the
+        image's reservation (`reserved`), capped at what the first drawing left of it."""
         if job.storyboard is not None:
             prompt, expected, pictures = job.storyboard, [], ()
         elif job.prompt is None:
@@ -563,18 +588,19 @@ class AssetMaker:
             prompt, expected, pictures = await self._own_drawing(job)
         aspect = drawn_aspect_ratio(job.asset)
         drawing = await self._artist.draw_prompt(prompt, aspect, pictures)
-        used = (drawing.input_tokens, drawing.output_tokens)
-        if not await self._artist.reads_right(drawing, expected):
+        _count(usage, drawing)
+        left = reserved - usage.total_tokens
+        if not await self._artist.reads_right(drawing, expected, usage, most=left):
             quoted = "; ".join(f'"{text}"' for text in expected)
             respelt = f"{prompt}\nSpell every word of the text exactly as quoted: {quoted}"
             drawing = await self._artist.draw_prompt(respelt, aspect, pictures)
-            used = (used[0] + drawing.input_tokens, used[1] + drawing.output_tokens)
+            _count(usage, drawing)
         key = (
             asset_key(plan_id, job.asset.id, drawing.media_type)
             if job.prompt is None
             else candidate_key(plan_id, job.asset.id, job.row_id, drawing.media_type)
         )
-        return drawing, key, used
+        return drawing, key
 
     async def _own_drawing(self, job: _Job) -> tuple[str, list[str], tuple[Picture, ...]]:
         """A member's drawing: the prompt sent, the text it must read, and the pictures
@@ -660,9 +686,9 @@ class AssetMaker:
                 org_id, plan_id, job.row_id, job.asset.id, job.user_id, "AI_BUDGET_EXCEEDED"
             )
             return
-        used = (0, 0)
+        usage = RunUsage()
         try:
-            drawing, key, used = await self._drawing(plan_id, job)
+            drawing, key = await self._drawing(plan_id, job, usage, reservation.tokens)
             await upload_bytes(self._bucket, key, drawing.data, drawing.media_type)
         except Exception as error:
             log.exception("drawing an asset failed", plan_id=str(plan_id), asset=job.asset.id)
@@ -674,16 +700,17 @@ class AssetMaker:
                     job.asset.id,
                     job.user_id,
                     "UPSTREAM_UNAVAILABLE",
-                    used,
+                    (usage.input_tokens, usage.output_tokens),
                 )
                 return
             await self._set(org_id, job.row_id, status="pending")
             raise AssetsInterrupted(plan_id) from None
         finally:
-            await settle(reservation, *used)
+            await settle(reservation, usage.input_tokens, usage.output_tokens)
         await self._set(
             org_id, job.row_id, status="ready", object_key=key, model=self._artist.model_name
         )
+        used = (usage.input_tokens, usage.output_tokens)
         log_activity(
             "director.asset_drawn",
             target=self._target(plan_id, job.asset.id, used),

@@ -75,6 +75,8 @@ pytestmark = pytest.mark.integration
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
 IMAGE_TOKENS = 1_590
+# What proofreading a drawn image's text costs (900 in, 100 out): counted with the image.
+PROOFREAD_TOKENS = 1_000
 
 
 def asset(asset_id: str, kind: str = "image", ratio: str = "9:8") -> dict[str, object]:
@@ -130,12 +132,24 @@ ASSET_PLAN: dict[str, object] = {
 STILLS = ["chart", "card", "end-card"]
 
 
+def planning_and_proofreading(plan: dict[str, object]) -> Callable[[bytes], Reply]:
+    """Gemini as the planner (answering `plan`) and as the proofreader of the images'
+    text (reading it right), which share a model."""
+    planner = gemini_output(plan)
+    proofreader = gemini_output({"readsRight": True, "misspelt": []}, tokens=PROOFREAD_TOKENS)
+
+    def reply(body: bytes) -> Reply:
+        return (proofreader if b"You proofread the text" in body else planner)(body)
+
+    return reply
+
+
 @pytest.fixture
 def google() -> Iterator[tuple[Fake, dict[str, Callable[[bytes], Reply]]]]:
-    """Gemini (the planner and Nano Banana) and Cloud Storage's upload, on one server; a
-    test swaps what each answers with through the dict."""
+    """Gemini (the planner, the proofreader and Nano Banana) and Cloud Storage's upload,
+    on one server; a test swaps what each answers with through the dict."""
     handlers: dict[str, Callable[[bytes], Reply]] = {
-        GEMINI_PATH: gemini_output(ASSET_PLAN),
+        GEMINI_PATH: planning_and_proofreading(ASSET_PLAN),
         ASSET_PATH: gemini_image(PNG),
         GCS_UPLOAD: gcs_uploaded,
     }
@@ -264,7 +278,8 @@ def test_the_assets_job_draws_and_stores_each_image(
     assert b'"aspectRatio": "1:1"' in card
     assert b'"aspectRatio": "9:16"' in end_card
     assert b"not a likeness" in chart
-    assert usage(org, "director-asset") == IMAGE_TOKENS * len(STILLS)
+    # Each image's proofreading is counted with it.
+    assert usage(org, "director-asset") == (IMAGE_TOKENS + PROOFREAD_TOKENS) * len(STILLS)
     assert published(events) == [{"type": "director.changed"}] * len(STILLS)
     # Again: nothing left to draw, nothing drawn.
     make(client, org, plan_id)
@@ -525,8 +540,8 @@ def test_the_worker_runs_the_assets_job_and_logs_each_image_and_the_job(
                 "planId": str(plan_id),
                 "assetId": name,
                 "model": ASSET_MODEL,
-                "inputTokens": 300,
-                "outputTokens": 1_290,
+                "inputTokens": 300 + 900,
+                "outputTokens": 1_290 + 100,
             },
             user,
         )
