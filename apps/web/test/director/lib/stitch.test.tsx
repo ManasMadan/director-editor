@@ -381,6 +381,28 @@ describe("stitching the short", () => {
     expect(start).not.toHaveBeenCalled();
   });
 
+  it("stops when cancelled while the page is hidden, recording nothing", async () => {
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    const listen = vi.spyOn(document, "addEventListener");
+    const start = vi.spyOn(MediaRecorder.prototype, "start");
+    const cancel = new AbortController();
+    const rendering = stitch([{ kind: "photo", source: photo, seconds: 1 }], {
+      audio,
+      withSound: false,
+      onProgress: vi.fn(),
+      captions: CAPTIONS,
+      signal: cancel.signal,
+    });
+    // Waiting for the page to be shown again, when the member leaves.
+    await vi.waitFor(() => {
+      const watching = listen.mock.calls.filter(([type]) => type === "visibilitychange");
+      expect(watching.length).toBeGreaterThanOrEqual(3);
+    });
+    cancel.abort();
+    await expect(rendering).rejects.toThrow(expect.objectContaining({ name: "AbortError" }));
+    expect(start).not.toHaveBeenCalled();
+  });
+
   it("stops when cancelled while the page draws no frames", async () => {
     // A page the browser has stopped drawing: no frame comes after the first.
     vi.spyOn(window, "requestAnimationFrame").mockReturnValue(0);

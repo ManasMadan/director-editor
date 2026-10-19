@@ -383,16 +383,21 @@ function canvasTrack(canvas: HTMLCanvasElement) {
   return { track: required(track, "the canvas's video track"), sendFrame: () => undefined };
 }
 
-/** Resolves once the page is visible: a hidden page draws nothing. */
-function visible() {
+/**
+ * Resolves once the page is visible (a hidden page draws nothing), or as soon as `signal`
+ * cancels: a render cancelled while the page is hidden stops then, not when it's back.
+ */
+function visible(signal: AbortSignal | undefined) {
   return new Promise<void>((resolve) => {
     const check = () => {
-      if (document.visibilityState === "visible") {
+      if (document.visibilityState === "visible" || signal?.aborted) {
         document.removeEventListener("visibilitychange", check);
+        signal?.removeEventListener("abort", check);
         resolve();
       }
     };
     document.addEventListener("visibilitychange", check);
+    signal?.addEventListener("abort", check);
     check();
   });
 }
@@ -715,7 +720,8 @@ export async function stitch(segments: Segment[], options: Options): Promise<Blo
       source.buffer = await soundtrackOf(plan, audio, lag);
       source.connect(sound);
     }
-    await visible();
+    await visible(signal);
+    signal?.throwIfAborted();
     // Running already (the tap that asked for the video started it), unless the page was
     // hidden while the takes loaded, which suspends it.
     await audio.resume();
