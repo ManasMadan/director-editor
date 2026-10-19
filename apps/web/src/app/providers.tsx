@@ -4,12 +4,12 @@ import { ApiProvider } from "@repo/client";
 import type { Locale } from "@repo/i18n";
 import { Toaster } from "@repo/ui/components/sonner";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { type AbstractIntlMessages, NextIntlClientProvider } from "next-intl";
 import { ThemeProvider } from "next-themes";
 import type { ReactNode } from "react";
 import { authClient } from "@/lib/auth-client";
-import { GUEST_PATHS, HOME_PATH, matchesPath } from "@/lib/routes";
+import { GUEST_PATHS, HOME_PATH, matchesPath, onStage } from "@/lib/routes";
 
 interface ProvidersProps {
   locale: Locale;
@@ -20,16 +20,20 @@ interface ProvidersProps {
 }
 
 let switchingWorkspace = false;
-
 /** Every client-side context, mounted once by the root layout. */
 export function Providers({ locale, timeZone, messages, nonce, children }: ProvidersProps) {
   const router = useRouter();
+  // Null outside a navigation (a server render with no path): the member's theme then.
+  const pathname: string | null = usePathname();
   return (
     <ThemeProvider
       attribute="class"
       defaultTheme="system"
       enableSystem
       disableTransitionOnChange
+      // Director's own pages are always on its dark stage: their dialogs, menus and sheets
+      // are dark too, instead of a light box over a dark page.
+      forcedTheme={onStage(pathname) ? "dark" : undefined}
       {...(nonce && { nonce })}
     >
       <NextIntlClientProvider locale={locale} timeZone={timeZone} messages={messages}>

@@ -6,12 +6,12 @@ export async function SiteFooter() {
   const t = await getTranslations("legal");
   return (
     <footer className="border-t">
-      <div className="mx-auto flex w-full max-w-5xl justify-end px-4 py-6 text-sm text-muted-foreground">
+      <div className="mx-auto flex w-full max-w-5xl justify-end px-4 py-3 text-sm text-muted-foreground">
         <nav aria-label={t("nav")} className="flex gap-4">
-          <Link href="/terms" className="hover:text-foreground">
+          <Link href="/terms" className="inline-flex min-h-11 items-center hover:text-foreground">
             {t("terms")}
           </Link>
-          <Link href="/privacy" className="hover:text-foreground">
+          <Link href="/privacy" className="inline-flex min-h-11 items-center hover:text-foreground">
             {t("privacy")}
           </Link>
         </nav>

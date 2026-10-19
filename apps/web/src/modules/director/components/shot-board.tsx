@@ -42,13 +42,15 @@ function ShotHeader({ clip, progress, onSeek }: Pick<ColumnProps, "clip" | "prog
       type="button"
       onClick={() => onSeek(clip)}
       aria-label={t("playFrom", { index: clip.index + 1, title: clip.shot.title })}
-      className="sticky top-0 z-10 flex flex-col gap-1.5 bg-studio pt-1 pb-2 text-left"
+      className="group/header sticky top-0 z-10 flex min-h-11 cursor-pointer flex-col justify-end gap-1.5 bg-studio pt-1 pb-2 text-left"
     >
       <span className="flex items-baseline gap-2">
         <span className="font-mono text-xs text-studio-foreground/50 tabular-nums">
           {clip.index + 1}
         </span>
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{clip.shot.title}</span>
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold underline-offset-4 group-hover/header:underline">
+          {clip.shot.title}
+        </span>
         <span className="font-mono text-xs text-studio-foreground/50 tabular-nums">
           {t("seconds", { seconds: clip.seconds })}
         </span>
@@ -63,7 +65,11 @@ function ShotHeader({ clip, progress, onSeek }: Pick<ColumnProps, "clip" | "prog
   );
 }
 
-/** Director's note on a shot whose best take scored too low: what to fix, and a retake. */
+/**
+ * Director's note on a shot whose best take scored too low: what to fix, and a retake. The
+ * note is the playing take's, so it changes with the member's pick and never describes a
+ * take they aren't watching.
+ */
 function RetakeNote({ feedback, href }: { feedback: string | null; href: ShotPage }) {
   const t = useTranslations("director");
   return (
@@ -76,7 +82,7 @@ function RetakeNote({ feedback, href }: { feedback: string | null; href: ShotPag
       ) : null}
       <Link
         href={href}
-        className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-studio px-3 py-1.5 text-xs font-semibold text-studio-foreground"
+        className="mt-2 inline-flex min-h-11 items-center gap-1.5 rounded-full bg-studio px-4 text-sm font-semibold text-studio-foreground"
       >
         <Clapperboard className="size-3.5" aria-hidden />
         {t("review.retake")}
@@ -133,7 +139,7 @@ function TakeCard({
         "has-focus-visible:outline-2 has-focus-visible:outline-studio-foreground",
         checked
           ? "bg-studio-foreground/15 ring-2 ring-studio-foreground"
-          : "bg-studio-foreground/5 opacity-70 hover:opacity-100",
+          : "bg-studio-foreground/5 hover:bg-studio-foreground/10",
         picked && !checked && "ring-1 ring-[color-mix(in_oklch,var(--aurora-2)_70%,transparent)]",
       )}
     >
@@ -144,7 +150,13 @@ function TakeCard({
         onChange={onPick}
         className="sr-only"
       />
-      <span className="relative flex aspect-9/16 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md bg-studio-foreground/10">
+      {/* Only the picture dims on a take not playing: dimmed words would fail contrast. */}
+      <span
+        className={cn(
+          "relative flex aspect-9/16 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md bg-studio-foreground/10 transition-opacity",
+          !checked && "opacity-60",
+        )}
+      >
         {typeof state === "object" ? (
           // A blob: or data: URL, which Next's image component can't load.
           <img src={state.poster} alt="" className="size-full object-cover" />
@@ -184,7 +196,7 @@ function Stepper({
       onClick={takeId ? () => onPick(shot.index, takeId) : undefined}
       aria-disabled={!takeId}
       aria-label={label}
-      className="flex size-9 items-center justify-center rounded-full bg-studio-foreground/10 aria-disabled:opacity-30"
+      className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-studio-foreground/10 transition-colors hover:bg-studio-foreground/20 aria-disabled:cursor-default aria-disabled:opacity-30 aria-disabled:hover:bg-studio-foreground/10"
     >
       {icon}
     </button>
@@ -196,7 +208,7 @@ function Stepper({
         t("previousTake"),
         <ChevronLeft className="size-5" aria-hidden />,
       )}
-      <span className="text-xs font-medium tabular-nums" aria-live="polite">
+      <span className="text-xs font-medium whitespace-nowrap tabular-nums" aria-live="polite">
         {t("takeOf", { number: takeNumber(shot, current), count: shot.takes.length })}
       </span>
       {button(
@@ -215,7 +227,7 @@ function NotFilmed({ href }: { href: ShotPage }) {
       <p className="text-xs text-studio-foreground/70">{t("missing")}</p>
       <Link
         href={href}
-        className="rounded-full bg-record px-3 py-1.5 text-xs font-semibold text-record-foreground"
+        className="inline-flex min-h-11 items-center rounded-full bg-record px-4 text-sm font-semibold text-record-foreground transition-colors hover:bg-record/85"
       >
         {t("film")}
       </Link>
@@ -230,7 +242,7 @@ function ShotColumn({
   const t = useTranslations("director");
   const { clip, shot, media, picks, retakeHref, onPick } = props;
   const playing = clip.take?.id;
-  const directorsPick = shot.takes.find((take) => take.id === shot.pickedTakeId);
+  const playingTake = shot.takes.find((take) => take.id === playing);
   return (
     // A fieldset: the shot's takes are a choice, and the column names what it's for.
     <fieldset
@@ -238,6 +250,8 @@ function ShotColumn({
       aria-label={t("editor.clip", { index: clip.index + 1, title: clip.shot.title })}
       className={cn(
         "flex h-full min-w-0 shrink-0 snap-start flex-col gap-2 overflow-y-auto overscroll-y-contain rounded-xl px-1 ring-2 ring-transparent transition-[box-shadow] duration-300 ease-out [scrollbar-width:none]",
+        // A long shot never fills a phone's board: the next one always peeks in.
+        "max-w-[calc(100vw-4.5rem)]",
         props.highlighted && "ring-record",
       )}
       style={{ width: columnWidth(clip.seconds) }}
@@ -248,7 +262,7 @@ function ShotColumn({
         <Stepper shot={shot} picks={picks} current={playing} onPick={onPick} />
       ) : null}
       {shot.needsRetake ? (
-        <RetakeNote feedback={directorsPick?.feedback ?? null} href={retakeHref} />
+        <RetakeNote feedback={playingTake?.feedback ?? null} href={retakeHref} />
       ) : null}
       {shot.takes.length === 0 ? (
         <NotFilmed href={retakeHref} />
@@ -265,18 +279,20 @@ function ShotColumn({
               take={take}
               checked={take.id === playing}
               state={media.get(take.id)}
-              // The note above already says what Director thought of its pick.
-              showFeedback={take.id === playing && !(shot.needsRetake && take === directorsPick)}
+              // The note above already says what Director thought of the take playing.
+              showFeedback={take.id === playing && !shot.needsRetake}
               onPick={() => onPick(shot.index, take.id)}
             />
           ))}
         </div>
       )}
+      {/* Right under the takes: pinned to the column's foot, it floated loose on a tall board. */}
       {shot.takes.length > 0 && !shot.needsRetake ? (
         <Link
           href={retakeHref}
-          className="mt-auto self-start rounded-full px-1 py-1 text-xs font-semibold text-studio-foreground/70 underline-offset-4 hover:underline"
+          className="inline-flex min-h-11 shrink-0 items-center gap-1.5 self-start rounded-full px-2 text-sm font-semibold text-studio-foreground/80 underline-offset-4 hover:bg-studio-foreground/10 hover:text-studio-foreground"
         >
+          <Clapperboard className="size-4" aria-hidden />
           {t("review.retake")}
         </Link>
       ) : null}
@@ -348,7 +364,9 @@ export function ShotBoard({
     <section
       aria-label={t("board")}
       inert={locked}
-      className="transition-opacity inert:opacity-40 flex min-h-0 snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto overscroll-x-contain px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] [scrollbar-width:none]"
+      // Touch swipes the board, so the bar stays hidden there; with a mouse it's the only
+      // sign that shots past the right edge are there to scroll to.
+      className="transition-opacity inert:opacity-40 flex min-h-0 snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto overscroll-x-contain px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] [scrollbar-width:none] pointer-fine:[scrollbar-width:thin]"
     >
       {clips.map((clip) => (
         <ShotColumn

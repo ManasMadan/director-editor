@@ -2,7 +2,6 @@
 
 import { errorCode, useApiErrorMessage } from "@repo/client";
 import { useAssetSlotsQuery } from "@repo/client/api/assets/slots";
-import { useFileDownloadUrl } from "@repo/client/api/files/download-url";
 import { usePublishCopyMutation } from "@repo/client/api/publish/copy";
 import { usePublishMutation } from "@repo/client/api/publish/upload";
 import {
@@ -18,23 +17,25 @@ import {
 } from "@repo/contracts/api";
 import { required } from "@repo/contracts/objects";
 import { Button, buttonVariants } from "@repo/ui/components/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@repo/ui/components/dialog";
 import { Field, FieldDescription, FieldLabel } from "@repo/ui/components/field";
 import { GeminiLoader, GeminiShimmer } from "@repo/ui/components/gemini-loader";
 import { Input } from "@repo/ui/components/input";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@repo/ui/components/sheet";
 import { Textarea } from "@repo/ui/components/textarea";
-import { CircleAlert, CircleCheck, Upload } from "lucide-react";
+import { CircleAlert, CircleCheck, Upload, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { type FormEvent, type RefObject, useEffect, useId, useRef, useState } from "react";
 import * as z from "zod";
 import { authClient } from "@/lib/auth-client";
+import { useDownloadUrl } from "../hooks/use-download-url";
 import { hashtagsOf, hashtagsText, youtubeShortUrl } from "../lib/publish";
 
 /** What the member settled on: the post, and who may watch it. */
@@ -74,22 +75,18 @@ function unstash(cut: DirectorCut): Draft | null {
 /** The cut's video, to watch before publishing it; nothing while its link can't be had. */
 function Preview({ cut }: { cut: DirectorCut }) {
   const t = useTranslations("director.publish");
-  const downloadUrl = useFileDownloadUrl();
-  const [url, setUrl] = useState<string | null | undefined>(undefined);
-  useEffect(() => {
-    downloadUrl(cut.fileId).then(
-      (download) => setUrl(download.url),
-      () => setUrl(null),
-    );
-  }, [downloadUrl, cut.fileId]);
+  // Asked for once: a new link each render reloaded the video forever, a spinner on black.
+  const url = useDownloadUrl(cut.fileId);
   if (url === undefined) {
     return <GeminiShimmer className="mx-auto aspect-9/16 w-32 rounded-xl bg-muted" />;
   }
   // Muted to start with: it's a look at the picture, and its captions are burned in. The
-  // controls turn the sound on.
+  // controls turn the sound on. Held a frame in, so it shows the video's first picture
+  // rather than black under the player's controls.
   return url ? (
     <video
-      src={url}
+      src={`${url}#t=0.1`}
+      preload="metadata"
       controls
       muted
       playsInline
@@ -442,26 +439,32 @@ export function PublishButton({
           <Trigger cut={cut} readOnly={readOnly} onOpen={() => setOpen(true)} />
         )}
       </span>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent
-          finalFocus={focusOnClose}
-          className="max-h-[calc(100dvh-2rem)] gap-5 overflow-y-auto sm:max-w-md"
-        >
-          <DialogHeader>
-            <DialogTitle className="text-lg font-semibold">
-              {readOnly ? t("readOnly.title") : t("title")}
-            </DialogTitle>
-            <DialogDescription>
-              {readOnly ? t("readOnly.description") : t("description")}
-            </DialogDescription>
-          </DialogHeader>
+      {/* A bottom sheet with a grabber: it rises to half the screen and drags up for more. */}
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent finalFocus={focusOnClose}>
+          <SheetHeader className="flex-row items-start gap-3">
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              <SheetTitle className="text-lg font-semibold">
+                {readOnly ? t("readOnly.title") : t("title")}
+              </SheetTitle>
+              <SheetDescription>
+                {readOnly ? t("readOnly.description") : t("description")}
+              </SheetDescription>
+            </div>
+            <SheetClose
+              render={<Button variant="ghost" size="icon" className="-mt-1 size-11 shrink-0" />}
+              aria-label={t("close")}
+            >
+              <X className="size-5" aria-hidden />
+            </SheetClose>
+          </SheetHeader>
           <Preview cut={cut} />
           {open && readOnly ? <ReadOnlyPost cut={cut} /> : null}
           {open && !readOnly ? (
             <PublishBody cut={cut} resumed={resumed} onResumed={() => setResumed(null)} />
           ) : null}
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </>
   );
 }

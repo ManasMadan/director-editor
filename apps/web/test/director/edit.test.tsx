@@ -347,6 +347,15 @@ describe("the editor", { tags: ["files"] }, () => {
       .element(page.getByRole("heading", { name: "Saved to My media" }))
       .not.toBeInTheDocument();
     await expect.element(save).toBeEnabled();
+    // Back in the editor, it still says the video is saved, and where.
+    const savedNote = page.getByRole("status").filter({ hasText: "Saved to My media" });
+    await expect
+      .element(savedNote.getByRole("link", { name: "Open My media" }))
+      .toHaveAttribute("href", "/media");
+    // Until the edit changes: then the saved video is no longer this edit.
+    await userEvent.click(page.getByRole("button", { name: "Captions" }));
+    await userEvent.click(page.getByRole("button", { name: "Classic" }));
+    await expect.element(savedNote).not.toBeInTheDocument();
 
     // And in My media, under its template, ready to play.
     cleanup();
@@ -357,6 +366,10 @@ describe("the editor", { tags: ["files"] }, () => {
       .toBeVisible();
     await expect.element(media.getByText("1 video")).toBeVisible();
     await expect.element(media.getByText("Not published")).toBeVisible();
+    // Its picture is the member's own video on its first frame, not the original creator.
+    await expect
+      .poll(() => document.querySelector("video[data-poster]")?.getAttribute("src"))
+      .toMatch(new RegExp(`${cut?.fileId ?? "no file"}.*#t=0\\.1$`));
     await userEvent.click(media.getByRole("button", { name: "Play Morning routine" }));
     await expect
       .poll(() => document.querySelector("video")?.getAttribute("src"))

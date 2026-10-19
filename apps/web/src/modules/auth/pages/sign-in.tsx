@@ -5,7 +5,7 @@ import { useSystemInfoQuery } from "@repo/client/api/system/info";
 import { Button } from "@repo/ui/components/button";
 import { FieldGroup, FieldSeparator } from "@repo/ui/components/field";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -19,6 +19,37 @@ import { useFinishSignIn } from "../hooks/use-finish-sign-in";
 import { useAuthStepHref, useNextPath } from "../hooks/use-next-path";
 import { useAuthSchemas } from "../hooks/use-schemas";
 
+/**
+ * Arrived from "Try it now" (?demo=1) to a demo there is (or may be, while system.info
+ * loads): greeted as someone trying Director, not welcomed back as a member.
+ */
+function useHeading() {
+  const t = useTranslations("auth");
+  const { data: system } = useSystemInfoQuery();
+  const wanted = useSearchParams().get("demo") === "1";
+  return wanted && (!system || system.features.demoGuests || system.demo !== null)
+    ? { title: t("demoTitle"), description: t("demoDescription") }
+    : { title: t("signInTitle"), description: t("signInDescription") };
+}
+
+/** The way to an account, for whoever hasn't one. */
+function NoAccount() {
+  const t = useTranslations();
+  const stepHref = useAuthStepHref();
+  return (
+    <p className="text-center text-sm text-muted-foreground">
+      {t("auth.noAccount")}{" "}
+      {/* Padded to a thumb's height (44 px) without moving the line around it. */}
+      <Link
+        href={stepHref("/sign-up")}
+        className="-my-3 inline-block py-3 text-foreground underline underline-offset-4"
+      >
+        {t("common.signUp")}
+      </Link>
+    </p>
+  );
+}
+
 export function SignInPage() {
   const t = useTranslations();
   const router = useRouter();
@@ -26,6 +57,7 @@ export function SignInPage() {
   const stepHref = useAuthStepHref();
   const errorMessage = useAuthErrorMessage();
   const { data: system } = useSystemInfoQuery();
+  const heading = useHeading();
   const schemas = useAuthSchemas();
   const schema = z.object({ email: schemas.email, password: schemas.password });
   const form = useForm({
@@ -62,7 +94,7 @@ export function SignInPage() {
   }
 
   return (
-    <AuthCard title={t("auth.signInTitle")} description={t("auth.signInDescription")}>
+    <AuthCard {...heading}>
       <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
         <FieldGroup>
           <DemoOffer onUse={(demo) => form.reset(demo)} onSignedIn={done} />
@@ -72,6 +104,8 @@ export function SignInPage() {
               <Button
                 type="button"
                 variant="outline"
+                // Wraps on a narrow phone rather than running past its own edges.
+                className="h-auto min-h-8 py-1.5 whitespace-normal text-balance"
                 onClick={() => authClient.signIn.social({ provider: "google", callbackURL: next })}
               >
                 {t("auth.googleToPost")}
@@ -95,7 +129,7 @@ export function SignInPage() {
           />
           <Link
             href="/forgot-password"
-            className="-mt-2 text-sm underline-offset-4 hover:underline"
+            className="-my-2 inline-flex min-h-11 items-center self-start text-sm underline-offset-4 hover:underline"
           >
             {t("auth.forgotPassword")}
           </Link>
@@ -106,15 +140,7 @@ export function SignInPage() {
           <Button type="button" variant="outline" onClick={signInWithPasskey}>
             {t("auth.passkey")}
           </Button>
-          <p className="text-center text-sm text-muted-foreground">
-            {t("auth.noAccount")}{" "}
-            <Link
-              href={stepHref("/sign-up")}
-              className="text-foreground underline underline-offset-4"
-            >
-              {t("common.signUp")}
-            </Link>
-          </p>
+          <NoAccount />
         </FieldGroup>
       </form>
     </AuthCard>

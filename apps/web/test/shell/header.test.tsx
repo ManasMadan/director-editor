@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { commands, userEvent } from "vitest/browser";
+import { page as browser, commands, userEvent } from "vitest/browser";
 import { authClient } from "@/lib/auth-client";
 import { SiteHeader } from "@/modules/shell";
-import { currentUrl, renderPage } from "../render";
-import { signIn, signUp } from "../users";
+import { cleanup, currentUrl, renderPage } from "../render";
+import { auth, signIn, signUp } from "../users";
 
 describe("the site header", () => {
   it("offers sign in to visitors", async () => {
@@ -98,5 +98,58 @@ describe("the site header", () => {
           document.querySelector("[data-slot=avatar-fallback]"),
       )
       .toBeTruthy();
+  });
+
+  it("keeps the signed-in pages dark, with no theme toggle that would do nothing there", async () => {
+    await signUp();
+    localStorage.setItem("theme", "light");
+    // The library and settings, a tap apart, are in the same theme.
+    for (const url of ["/library", "/settings"]) {
+      const page = await renderPage(<SiteHeader />, { url });
+      await expect.element(page.getByRole("link", { name: "My media" })).toBeVisible();
+      await expect.poll(() => document.documentElement.classList.contains("dark")).toBe(true);
+      expect(page.getByRole("button", { name: "Toggle theme" }).query()).toBeNull();
+      cleanup();
+    }
+    // A public page keeps the member's own theme, and its toggle.
+    const home = await renderPage(<SiteHeader />, { url: "/" });
+    await expect.element(home.getByRole("button", { name: "Toggle theme" })).toBeVisible();
+    await expect.poll(() => document.documentElement.classList.contains("dark")).toBe(false);
+    localStorage.removeItem("theme");
+  });
+
+  it("tells a demo guest their demo lasts a day, not their made-up address", async () => {
+    await auth("/sign-in/guest", {});
+    const page = await renderPage(<SiteHeader />, { url: "/library" });
+    await userEvent.click(page.getByRole("button", { name: "Guest" }));
+    await expect
+      .element(page.getByText("Your demo is deleted after a day, with everything filmed in it."))
+      .toBeVisible();
+    expect(page.getByText(/@guest\.invalid/).query()).toBeNull();
+  });
+
+  it("starts with a way past itself, and fits a 360 px phone on one line", async () => {
+    await signUp();
+    await browser.viewport(360, 780);
+    try {
+      // Settings: the busiest header, with the theme toggle too.
+      const page = await renderPage(<SiteHeader />, { url: "/settings" });
+      const skip = page.getByRole("link", { name: "Skip to content" });
+      await expect.element(skip).toHaveAttribute("href", "#main");
+      const header = page.getByRole("banner").element();
+      expect(header.querySelector("a")).toBe(skip.element());
+      // The nav's links stay one line each, and nothing runs past the header's edge.
+      const media = page.getByRole("link", { name: "My media" });
+      await expect.element(media).toBeVisible();
+      expect(media.element().getBoundingClientRect().height).toBeLessThanOrEqual(44);
+      const row = header.querySelector("div");
+      expect(row?.scrollWidth).toBeLessThanOrEqual(row?.clientWidth ?? 0);
+      // The wordmark gives way to the nav, and still names the link home.
+      await expect
+        .element(page.getByRole("link", { name: "Director" }))
+        .toHaveAttribute("href", "/library");
+    } finally {
+      await browser.viewport(414, 896);
+    }
   });
 });

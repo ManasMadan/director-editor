@@ -83,9 +83,36 @@ describe("the library", () => {
     });
     await showLibrary();
     const quick = page.getByRole("link", { name: /Quick start/ });
-    await expect.element(quick).toHaveAttribute("href", "/director/22k0fZarxh8");
+    // Straight to the shoot: quick means no template page to read first.
+    await expect.element(quick).toHaveAttribute("href", "/director/22k0fZarxh8/shoot");
     await expect.element(quick).toMatchTextContent(/4 Variations of the Indian Head Nod/);
     await expect.element(quick).toMatchTextContent(/Just you, talking to the camera\./);
+    // Under the heading, before the cards to index or describe a short: above a phone's fold.
+    const index = page.getByRole("button", { name: "Index it" }).element();
+    expect(
+      quick.element().compareDocumentPosition(index) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("fits a 360 px phone, cards and all, with nothing to scroll sideways", async () => {
+    const orgId = await member();
+    await commands.fakeLibrary(orgId, {
+      templates: [
+        seed("A rather long starter title that wraps", "22k0fZarxh8"),
+        seed("Office GRWM"),
+        seed("Morning routine"),
+      ],
+    });
+    await page.viewport(360, 780);
+    try {
+      await showLibrary();
+      await expect.element(page.getByRole("link", { name: /Office GRWM/ })).toBeVisible();
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+      const field = link().element().getBoundingClientRect();
+      expect(field.right).toBeLessThanOrEqual(window.innerWidth);
+    } finally {
+      await page.viewport(414, 896);
+    }
   });
 
   it("offers no quick start while that starter isn't in the library", async () => {
@@ -170,7 +197,7 @@ describe("indexing a short of your own", () => {
 
     await userEvent.fill(link(), `https://youtu.be/${newVideoId()}`);
     await userEvent.click(page.getByRole("button", { name: "Index it" }));
-    const dialog = page.getByRole("dialog", { name: "You've used your AI credit" });
+    const dialog = page.getByRole("dialog", { name: "You've already added your own Short" });
     await expect.element(dialog).toBeVisible();
     await expect
       .element(dialog.getByRole("link", { name: "Office GRWM" }))
@@ -197,10 +224,30 @@ describe("indexing a short of your own", () => {
     await expect.poll(currentUrl).toBe(`/director/${grwm.videoId}`);
   });
 
-  it("says why a link can't be indexed", async () => {
+  it("says at once when what was pasted isn't a Shorts link, asking the API nothing", async () => {
     await member();
     await showLibrary();
-    await userEvent.fill(link(), "https://example.com/not-youtube");
+    for (const pasted of ["hello", "https://example.com/shorts/abc", "https://www.youtube.com/"]) {
+      await userEvent.fill(link(), pasted);
+      await userEvent.click(page.getByRole("button", { name: "Index it" }));
+      await expect
+        .element(page.getByRole("alert"))
+        .toHaveTextContent(
+          "That isn't a YouTube Shorts link. Copy the link from the Short's Share button and paste it here.",
+        );
+      await expect.element(page.getByRole("textbox")).toHaveAttribute("aria-invalid", "true");
+    }
+    expect(await commands.answeredRequests("/rpc/director/index")).toBe(0);
+    // Typing again clears it.
+    await userEvent.type(link(), "x");
+    expect(page.getByRole("alert").query()).toBeNull();
+  });
+
+  it("says why a link YouTube doesn't have can't be indexed", async () => {
+    await member();
+    await showLibrary();
+    // An id the mock YouTube no longer shows (removed, or made private).
+    await userEvent.fill(link(), "https://youtu.be/GoneVideo01");
     await userEvent.click(page.getByRole("button", { name: "Index it" }));
     await expect
       .element(page.getByRole("alert"))

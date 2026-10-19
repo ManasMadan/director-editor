@@ -259,7 +259,7 @@ export function TellDirector({
             type="submit"
             aria-label={t("send")}
             disabled={!text.trim() || pending}
-            className="flex size-10 items-center justify-center rounded-full disabled:opacity-30"
+            className="flex size-11 items-center justify-center rounded-full disabled:opacity-30"
           >
             <SendHorizontal className="size-5" aria-hidden />
           </button>

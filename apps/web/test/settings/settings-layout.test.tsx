@@ -29,6 +29,11 @@ describe("the settings tabs", () => {
     expect(
       page.getByRole("link", { name: "Security" }).element().getAttribute("aria-current"),
     ).toBeNull();
+    // A thumb's height (44 px) each.
+    for (const name of ["Profile", "Security"]) {
+      const box = page.getByRole("link", { name }).element().getBoundingClientRect();
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
 
     await userEvent.click(page.getByRole("link", { name: "Security" }));
     await expect.poll(currentUrl).toBe("/settings/security");

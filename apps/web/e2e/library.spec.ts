@@ -70,7 +70,7 @@ test("a second short of your own is refused, with the starters offered instead [
     .fill(`https://www.youtube.com/shorts/${PUBLIC_SHORT}`);
   await page.getByRole("button", { name: "Index it" }).click();
 
-  const dialog = page.getByRole("dialog", { name: "You've used your AI credit" });
+  const dialog = page.getByRole("dialog", { name: "You've already added your own Short" });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("link", { name: starter })).toBeVisible();
   await expectAccessible(page);

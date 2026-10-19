@@ -324,7 +324,7 @@ function Saved({
         <div className="flex w-full max-w-lg items-center gap-3">
           <DialogClose
             aria-label={t("editor.backToEdit")}
-            className="flex size-9 items-center justify-center rounded-full hover:bg-studio-foreground/10"
+            className="flex size-11 items-center justify-center rounded-full hover:bg-studio-foreground/10"
           >
             <X className="size-6" aria-hidden />
           </DialogClose>
@@ -366,6 +366,25 @@ function Saved({
   );
 }
 
+/** Under the player once the saved view is closed: the video is in My media, and the way there. */
+function SavedNote() {
+  const t = useTranslations("director.editor");
+  return (
+    <p role="status" className="flex items-center justify-center gap-1 px-4 text-sm">
+      <span className="text-studio-foreground/80">{t("saved")}</span>
+      <span aria-hidden className="text-studio-foreground/50">
+        ·
+      </span>
+      <Link
+        href="/media"
+        className="inline-flex min-h-11 items-center px-1 font-semibold underline underline-offset-4"
+      >
+        {t("openMedia")}
+      </Link>
+    </p>
+  );
+}
+
 function TopBar({
   videoId,
   title,
@@ -384,12 +403,12 @@ function TopBar({
   const t = useTranslations("director");
   const common = useTranslations("common");
   return (
-    <header className="flex items-center gap-3 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 lg:col-span-2 lg:px-6">
+    <header className="flex items-center gap-3 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 short-landscape:col-span-2 lg:col-span-2 lg:px-6">
       {/* Leaving mid-save stops it (useSaveVideo), so the way out stays open. */}
       <Link
         href={`/director/${videoId}`}
         aria-label={t("back")}
-        className="flex size-10 items-center justify-center rounded-full hover:bg-studio-foreground/10"
+        className="flex size-11 items-center justify-center rounded-full hover:bg-studio-foreground/10"
       >
         <X className="size-6" aria-hidden />
       </Link>
@@ -398,7 +417,7 @@ function TopBar({
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-full bg-studio-foreground/15 px-5 py-2 font-semibold"
+          className="min-h-11 rounded-full bg-studio-foreground/15 px-5 font-semibold"
         >
           {common("cancel")}
         </button>
@@ -407,7 +426,7 @@ function TopBar({
           type="button"
           onClick={onSave}
           disabled={!canSave}
-          className="rounded-full bg-record px-5 py-2 font-semibold text-record-foreground transition-opacity disabled:opacity-40"
+          className="min-h-11 rounded-full bg-record px-5 font-semibold text-record-foreground transition-opacity disabled:opacity-40"
         >
           {t("editor.save")}
         </button>
@@ -437,7 +456,7 @@ function IconButton({
       aria-pressed={pressed}
       aria-label={label}
       className={cn(
-        "flex size-10 items-center justify-center rounded-full transition-colors disabled:opacity-30",
+        "flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-studio-foreground/10 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent",
         pressed && "bg-studio-foreground/15",
       )}
     >
@@ -453,7 +472,7 @@ function Transport({ editor }: { editor: EditorState }) {
   const toggle = (next: Tool) => setTool(tool === next ? null : next);
   const SoundIcon = history.choices.sound ? AudioLines : VolumeX;
   return (
-    <div className="flex items-center gap-1 px-3 py-1">
+    <div className="flex flex-wrap items-center gap-1 px-3 py-1">
       <IconButton
         label={playback.playing ? t("pause") : t("play")}
         onClick={playback.playing ? playback.pause : playback.play}
@@ -464,7 +483,7 @@ function Transport({ editor }: { editor: EditorState }) {
           <Play className="size-6 fill-current" aria-hidden />
         )}
       </IconButton>
-      <p className="font-mono text-sm tabular-nums">
+      <p className="font-mono text-sm whitespace-nowrap tabular-nums">
         <span>{timecode(playback.time)}</span>
         <span className="text-studio-foreground/50"> / {timecode(total)}</span>
       </p>
@@ -748,7 +767,8 @@ function WrapCall({ ready, play }: { ready: boolean; play: () => void }) {
       <span className="-rotate-2 font-[family-name:var(--font-hand)] text-3xl">
         {t("wrap.title")}
       </span>
-      <span className="text-sm text-balance">{t("wrap.body")}</span>
+      {/* Names the button by its own label, so the two can't drift apart again. */}
+      <span className="text-sm text-balance">{t("wrap.body", { save: t("save") })}</span>
     </button>
   );
 }
@@ -777,7 +797,7 @@ function BoardPanel({
   const t = useTranslations("director");
   const { playback, history, clips, media } = editor;
   return (
-    <div className="flex h-[42dvh] min-h-64 shrink-0 flex-col gap-2 border-t border-studio-foreground/10 pt-3 lg:h-auto lg:min-h-0 lg:border-t-0 lg:border-l lg:pt-4">
+    <div className="flex h-[42dvh] min-h-64 shrink-0 flex-col gap-2 border-t border-studio-foreground/10 pt-3 short-landscape:h-auto short-landscape:min-h-0 short-landscape:border-t-0 short-landscape:border-l lg:h-auto lg:min-h-0 lg:border-t-0 lg:border-l lg:pt-4">
       {editor.left > 0 ? (
         <p className="px-4 text-xs text-studio-foreground/60">
           {t("review.left", { count: editor.left })}
@@ -874,6 +894,9 @@ function Editor({
 }) {
   const editor = useEditor(videoId, plan, shots, audio, version, owner);
   const saver = useSaveVideo(videoId, plan.title);
+  // The choices the last saved video was made from: while the edit still matches them,
+  // the editor keeps saying it's saved, after the saved view is closed too.
+  const [savedChoices, setSavedChoices] = useState<EditChoices | null>(null);
   const assetSlots = useAssetSlotsQuery(videoId).data?.slots ?? NO_SLOTS;
   const { playback, history, clips, media } = editor;
   const save = () => {
@@ -889,7 +912,9 @@ function Editor({
     });
   };
   return (
-    <div className="flex h-dvh flex-col lg:grid lg:grid-cols-[minmax(20rem,28rem)_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)]">
+    // Side by side on a laptop, and on a phone held sideways, where a stacked player
+    // shrank to a dot under the board.
+    <div className="flex h-dvh flex-col short-landscape:grid short-landscape:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] short-landscape:grid-rows-[auto_minmax(0,1fr)] lg:grid lg:grid-cols-[minmax(20rem,28rem)_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)]">
       <TopBar
         videoId={videoId}
         title={plan.title}
@@ -908,6 +933,7 @@ function Editor({
             {saver.saving.message}
           </p>
         ) : null}
+        {saver.saving.step === "idle" && savedChoices === history.choices ? <SavedNote /> : null}
         {/* Held still while the video is made: what it's made of can't change under it. */}
         <div inert={saver.busy} className={cn(saver.busy && "opacity-40")}>
           <Transport editor={editor} />
@@ -929,7 +955,14 @@ function Editor({
         slots={assetSlots}
       />
       {saver.saving.step === "saved" ? (
-        <Saved video={saver.saving.video} lines={saver.saving.lines} onClose={saver.close} />
+        <Saved
+          video={saver.saving.video}
+          lines={saver.saving.lines}
+          onClose={() => {
+            setSavedChoices(history.choices);
+            saver.close();
+          }}
+        />
       ) : null}
     </div>
   );

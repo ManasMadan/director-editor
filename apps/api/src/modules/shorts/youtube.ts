@@ -66,35 +66,6 @@ function parseDuration(value: string): number | null {
   return ((part(1) * 24 + part(2)) * 60 + part(3)) * 60 + part(4);
 }
 
-const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com"]);
-
-/**
- * The video id in a link someone pasted: youtube.com/shorts/<id>, youtube.com/watch?v=<id>,
- * youtu.be/<id>, or the bare id. Null for anything else.
- */
-export function videoIdFromLink(link: string): VideoId | null {
-  const bare = videoIdSchema.safeParse(link.trim());
-  if (bare.success) {
-    return bare.data;
-  }
-  let url: URL;
-  try {
-    url = new URL(/^https?:\/\//i.test(link.trim()) ? link.trim() : `https://${link.trim()}`);
-  } catch {
-    return null;
-  }
-  const host = url.hostname.toLowerCase();
-  const [first, second] = url.pathname.split("/").filter(Boolean);
-  let candidate: string | null | undefined = null;
-  if (host === "youtu.be") {
-    candidate = first;
-  } else if (YOUTUBE_HOSTS.has(host)) {
-    candidate = first === "shorts" || first === "embed" ? second : url.searchParams.get("v");
-  }
-  const parsed = videoIdSchema.safeParse(candidate);
-  return parsed.success ? parsed.data : null;
-}
-
 function toVideo(video: z.infer<typeof videoResource>): Video | null {
   const durationSeconds = parseDuration(video.contentDetails.duration);
   // A live stream has no duration yet: nothing to film along to.

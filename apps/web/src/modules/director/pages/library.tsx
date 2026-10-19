@@ -35,10 +35,8 @@ function Loading() {
 function Templates({ library }: { library: DirectorLibrary }) {
   const t = useTranslations("library");
   const { templates } = library;
-  const quickStart = quickStartOf(templates);
   return (
     <section aria-labelledby="library-templates" className="flex flex-col gap-4">
-      {quickStart ? <QuickStart plan={quickStart} /> : null}
       <div className="flex items-baseline justify-between gap-4">
         <h2 id="library-templates" className="text-lg font-semibold">
           {t("templates")}
@@ -74,8 +72,11 @@ function Library() {
   const seeds = (library.data?.templates ?? []).filter(
     (plan) => plan.source === "seed" && plan.status === "ready",
   );
+  const quickStart = quickStartOf(library.data?.templates ?? []);
   return (
-    <div className="grid gap-8 pt-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-12 lg:pt-10">
+    // One column that shrinks to the screen: an implicit column grew to the cards' widest
+    // content and pushed the page past a 360 px phone's edge.
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-8 pt-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-12 lg:pt-10">
       <div className="flex flex-col gap-6 lg:sticky lg:top-24 lg:self-start">
         <div className="flex flex-col gap-3">
           <h1 className="text-3xl leading-[1.05] font-semibold tracking-tight text-balance sm:text-4xl">
@@ -83,6 +84,8 @@ function Library() {
           </h1>
           <p className="max-w-prose text-studio-foreground/70">{t("intro")}</p>
         </div>
+        {/* Right under the heading: on a phone it's above the fold, before the cards. */}
+        {quickStart ? <QuickStart plan={quickStart} /> : null}
         <IndexCard
           templates={library.data?.templates ?? []}
           indexUsed={library.data?.indexUsed ?? false}

@@ -83,7 +83,9 @@ function Placeholder({ clip, state }: { clip: Clip; state: MediaState | undefine
     cut: t("editor.loadFailed"),
   }[clip.state];
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 p-6 text-center">
+    // In the top quarter of the frame: the captions are drawn around two thirds of the
+    // way down (lib/caption-draw.ts), and a long line used to land on these words.
+    <div className="absolute inset-x-0 top-0 flex h-1/4 flex-col items-center justify-end gap-1 px-6 text-center">
       <p className="text-xs text-studio-foreground/60">{clip.shot.title}</p>
       <p className="text-sm font-semibold">{message}</p>
     </div>

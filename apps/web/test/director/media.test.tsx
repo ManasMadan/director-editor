@@ -135,7 +135,12 @@ describe("My media", () => {
     // A file that isn't in storage.
     await commands.fakeDirector(videoId, { cuts: [cut(user.id, videoId)] });
     const page = await openMedia();
-    await userEvent.click(page.getByRole("button", { name: "Play My morning" }));
+    const play = page.getByRole("button", { name: "Play My morning" });
+    // No picture of the original creator stands in for the member's own video.
+    await expect.element(play).toBeVisible();
+    await expect.poll(() => document.querySelector("[data-slot='gemini-shimmer']")).toBeNull();
+    expect(play.element().querySelector("img, video")).toBeNull();
+    await userEvent.click(play);
     await expect
       .element(page.getByRole("alert"))
       .toHaveTextContent("This video couldn't be opened. Try again.");

@@ -3,6 +3,8 @@
 import { errorCode, useApiErrorMessage } from "@repo/client";
 import { useIndexShortMutation } from "@repo/client/api/director/index-short";
 import { type DirectorPlan, SHORT_URL_MAX_LENGTH } from "@repo/contracts/api";
+import type { VideoId } from "@repo/contracts/ids";
+import { videoIdFromLink } from "@repo/contracts/youtube-link";
 import { Button, buttonVariants } from "@repo/ui/components/button";
 import { GeminiLoader } from "@repo/ui/components/gemini-loader";
 import { Input } from "@repo/ui/components/input";
@@ -67,19 +69,28 @@ function LinkForm({
   pending: boolean;
   error: unknown;
   indexUsed: boolean;
-  onSubmit: (link: string) => void;
+  onSubmit: (link: string, videoId: VideoId) => void;
   inputRef: RefObject<HTMLInputElement | null>;
 }) {
   const t = useTranslations("library.index");
   const errorMessage = useApiErrorMessage();
   const [link, setLink] = useState("");
+  // Not a YouTube link at all: said here, at once, without asking the API (which would
+  // call it a video YouTube doesn't have, and count it against the hour's tries).
+  const [notALink, setNotALink] = useState(false);
   const id = useId();
+  const apiError = error ? errorMessage(error) : null;
+  const shown = notALink ? t("notALink") : apiError;
   return (
     <form
       className="flex flex-col gap-2"
       onSubmit={(event) => {
         event.preventDefault();
-        onSubmit(link);
+        const videoId = videoIdFromLink(link);
+        setNotALink(videoId === null);
+        if (videoId) {
+          onSubmit(link, videoId);
+        }
       }}
     >
       <label htmlFor={id} className="text-xs font-medium text-studio-foreground/80">
@@ -95,13 +106,16 @@ function LinkForm({
             ref={inputRef}
             id={id}
             value={link}
-            onChange={(event) => setLink(event.target.value)}
+            onChange={(event) => {
+              setLink(event.target.value);
+              setNotALink(false);
+            }}
             placeholder={t("placeholder")}
             maxLength={SHORT_URL_MAX_LENGTH}
             inputMode="url"
             autoComplete="off"
             className="h-11 rounded-xl border-studio-foreground/20 bg-studio-foreground/5 pl-9 text-studio-foreground placeholder:text-studio-foreground/45"
-            aria-invalid={error ? true : undefined}
+            aria-invalid={shown ? true : undefined}
           />
         </div>
         <Button
@@ -118,9 +132,9 @@ function LinkForm({
           <span aria-hidden>{t("checking")}</span>
         </div>
       ) : null}
-      {error ? (
+      {shown ? (
         <p role="alert" className="text-sm text-studio-error">
-          {errorMessage(error)}
+          {shown}
         </p>
       ) : null}
       {indexUsed ? <p className="text-xs text-studio-foreground/60">{t("used")}</p> : null}
@@ -156,7 +170,12 @@ export function IndexCard({
   // answer to indexing until then.
   const plan = started && [...templates, started].find((p) => p.videoId === started.videoId);
 
-  const submit = (link: string) =>
+  const submit = (link: string, videoId: VideoId) => {
+    // Already in the library and ready: it just opens, with no call that counts as a try.
+    if (templates.some((template) => template.videoId === videoId && template.status === "ready")) {
+      router.push(`/director/${videoId}`);
+      return;
+    }
     index.mutate(
       { url: link },
       {
@@ -173,6 +192,7 @@ export function IndexCard({
         },
       },
     );
+  };
 
   return (
     <section

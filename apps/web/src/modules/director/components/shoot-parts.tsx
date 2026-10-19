@@ -150,7 +150,7 @@ export function ShotCard({
       aria-label={t("label", { index: index + 1 })}
       className={cn("live-motion rounded-2xl px-3.5 py-2.5 text-sm", GLASS)}
     >
-      <h2 className="truncate text-[15px] font-semibold">
+      <h2 className="truncate text-[0.9375rem] font-semibold">
         {t("title", { index: index + 1, title: shot.title })}
       </h2>
       <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">

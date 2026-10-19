@@ -5,8 +5,9 @@ import type { DirectorShot, ServedShotPlan, Shot, StoryboardState } from "@repo/
 import { cn } from "@repo/ui/lib/utils";
 import { Camera, CircleCheck, Pause, Play, RotateCcw, Video } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { angleOf } from "../lib/library";
+import { plainPurpose } from "../lib/purpose";
 
 /** A shot as a template's page gets it: a seed's also links its storyboard and preview. */
 type ServedShot = ServedShotPlan["shots"][number];
@@ -87,6 +88,30 @@ function useShownInStrip(watching: number | null) {
 }
 
 /**
+ * Whether the strip has shots past its right edge: then that edge fades, so a strip whose
+ * tiles happen to fill the row exactly doesn't read as the whole short.
+ */
+function useMoreToTheRight(strip: RefObject<HTMLOListElement | null>) {
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    const list = strip.current;
+    if (!list) {
+      return;
+    }
+    const check = () => setMore(list.scrollLeft + list.clientWidth < list.scrollWidth - 1);
+    check();
+    const resized = new ResizeObserver(check);
+    resized.observe(list);
+    list.addEventListener("scroll", check, { passive: true });
+    return () => {
+      resized.disconnect();
+      list.removeEventListener("scroll", check);
+    };
+  }, [strip]);
+  return more;
+}
+
+/**
  * The shots as a storyboard strip, each as wide as its share of the short: tap one to
  * watch that part of the original above.
  */
@@ -101,13 +126,15 @@ export function Storyboard({
 }) {
   const t = useTranslations("director");
   const strip = useShownInStrip(watching);
+  const more = useMoreToTheRight(strip);
   return (
     // A long short's shots don't all fit a phone's width: the strip scrolls on its own,
     // each shot staying big enough to tap.
     <ol
       ref={strip}
       aria-label={t("template.storyboard")}
-      className="flex h-14 snap-x gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none]"
+      data-more={more || undefined}
+      className="flex h-14 snap-x gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] data-more:[mask-image:linear-gradient(to_right,black_80%,transparent)]"
     >
       {shots.map((shot, index) => {
         const Icon = shot.kind === "video" ? Video : Camera;
@@ -166,6 +193,16 @@ function FramingBox({ shot, className }: { shot: Shot; className: string }) {
   );
 }
 
+/**
+ * Which camera the card names. The plan has the original's, and someone talking to the
+ * back camera was being filmed by somebody else: a member on their own films that line
+ * on the selfie side, which the shoot opens on, so the card offers both.
+ */
+function cameraOf(shot: Shot): "front" | "back" | "backOrSelfie" {
+  const talking = shot.mode === "on-camera" && shot.script.length > 0;
+  return shot.camera === "back" && talking ? "backOrSelfie" : shot.camera;
+}
+
 /** How the shot is filmed: where, how it's framed, and how to hold the phone. */
 function HowTo({ shot }: { shot: Shot }) {
   const t = useTranslations("director");
@@ -188,7 +225,7 @@ function HowTo({ shot }: { shot: Shot }) {
       <dd className="flex flex-col">
         <span>{t(`shoot.height.${shot.phoneAngle.height}`)}</span>
         <span className="text-studio-foreground/65">{tilt}</span>
-        <span className="text-studio-foreground/65">{t(`camera.${shot.camera}`)}</span>
+        <span className="text-studio-foreground/65">{t(`camera.${cameraOf(shot)}`)}</span>
       </dd>
     </dl>
   );
@@ -321,7 +358,7 @@ function StoryboardCard({
           </button>
         ) : null}
       </div>
-      <figcaption className="text-[11px] leading-snug text-studio-foreground/60">
+      <figcaption className="text-[0.6875rem] leading-snug text-studio-foreground/60">
         {clip ? t("previewBy") : t("storyboardBy")}
       </figcaption>
     </figure>
@@ -371,7 +408,7 @@ export function StoryboardStateNote({ state }: { state: StoryboardState }) {
   return (
     <p
       className={cn(
-        "text-[11px] leading-tight",
+        "text-[0.6875rem] leading-tight",
         state === "drawing" ? "text-studio-foreground/70" : "text-studio-foreground/85",
       )}
     >
@@ -415,7 +452,7 @@ function ShotCard({
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <h3 className="font-semibold">{shot.title}</h3>
-          <p className="text-sm text-studio-foreground/70">{shot.purpose}</p>
+          <p className="text-sm text-studio-foreground/70">{plainPurpose(shot.purpose)}</p>
         </div>
         <span className="flex shrink-0 items-center gap-1 rounded-full bg-studio-foreground/10 px-2 py-1 text-xs font-medium">
           <Icon className="size-3.5" aria-hidden />

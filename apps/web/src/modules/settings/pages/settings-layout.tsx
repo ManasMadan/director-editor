@@ -19,7 +19,8 @@ function TabLink({ tab, pathname }: { tab: Tab; pathname: string }) {
       href={tab.href}
       aria-current={current ? "page" : undefined}
       className={cn(
-        "-mb-px border-b-2 pb-2 text-sm whitespace-nowrap",
+        // As tall as a thumb (44 px), the label sitting on the underline.
+        "-mb-px inline-flex min-h-11 items-end border-b-2 pb-2 text-sm whitespace-nowrap",
         current
           ? "border-foreground font-medium"
           : "border-transparent text-muted-foreground hover:text-foreground",

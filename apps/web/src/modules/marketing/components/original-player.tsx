@@ -43,7 +43,7 @@ export function OriginalPlayer({
           className="group absolute inset-0 grid place-items-center outline-none"
         >
           <Image src={thumbnail} alt="" fill unoptimized sizes="20rem" className="object-cover" />
-          <span className="relative grid size-16 place-items-center rounded-full bg-record text-record-foreground shadow-lg transition-transform group-hover:scale-105">
+          <span className="relative grid size-16 place-items-center rounded-full bg-record text-record-foreground shadow-lg transition-transform group-hover:scale-105 group-focus-visible:scale-105 group-focus-visible:ring-4 group-focus-visible:ring-white">
             <Play aria-hidden className="size-7 translate-x-0.5 fill-current" />
           </span>
         </button>
