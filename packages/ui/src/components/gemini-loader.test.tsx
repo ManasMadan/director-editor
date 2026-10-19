@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "../../test/render";
-import { GeminiLoader } from "./gemini-loader";
+import { GeminiLoader, GeminiShimmer } from "./gemini-loader";
 
 describe("GeminiLoader", () => {
   it("is a span inside a button, where a div isn't allowed, and still says what's loading", async () => {
@@ -22,5 +22,12 @@ describe("GeminiLoader", () => {
     await expect.element(loader).toBeInTheDocument();
     expect(loader.element().tagName).toBe("DIV");
     await expect.element(page.getByText("Loading")).toBeVisible();
+  });
+});
+
+describe("GeminiShimmer", () => {
+  it("shows what it's given under the sweep", async () => {
+    render(<GeminiShimmer>Drawing this one</GeminiShimmer>);
+    await expect.element(page.getByText("Drawing this one")).toBeVisible();
   });
 });

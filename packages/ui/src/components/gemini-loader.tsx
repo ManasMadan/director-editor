@@ -68,14 +68,19 @@ function GeminiLoader({
   );
 }
 
-/** A skeleton block with the same aurora shimmer sweeping across it, instead of a flat pulse. */
-function GeminiShimmer({ className, ...props }: React.ComponentProps<"div">) {
+/**
+ * A skeleton block with the same aurora shimmer sweeping across it, instead of a flat
+ * pulse. What it's given to show (words for something still being made) stays under the
+ * sweep, readable.
+ */
+function GeminiShimmer({ className, children, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="gemini-shimmer"
       className={cn("relative overflow-hidden rounded-md bg-muted", className)}
       {...props}
     >
+      {children}
       <span
         aria-hidden
         className="absolute inset-0 -translate-x-full bg-linear-to-r from-transparent via-[color-mix(in_oklch,var(--aurora-2)_45%,transparent)] to-transparent motion-safe:animate-[gemini-sweep_1.8s_ease-in-out_infinite]"
