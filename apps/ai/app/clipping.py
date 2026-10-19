@@ -58,6 +58,13 @@ SILENCE_FILTER = "silencedetect=noise=-35dB:d=0.3"
 # A take's longest (packages/contracts api/director), and its shortest worth keeping.
 MAX_CLIP_MS = 60_000
 MIN_CLIP_MS = 500
+# A cut is re-encoded at 30 frames a second (cut_args): the frames a take its shortest
+# holds. ffmpeg exits happily from a cut with nothing in it (marks past where the footage
+# really ends, or footage it can't decode there), so the cut is counted before it's a take.
+CUT_FPS = 30
+MIN_CLIP_FRAMES = MIN_CLIP_MS * CUT_FPS // 1000
+# ffmpeg's progress line, "frame=   75 fps=...": how many frames it has read.
+_FRAMES = re.compile(r"frame=\s*(\d+)")
 # What a take's upload may be (packages/contracts files.ts, director-take-video): the
 # encoder's caps keep a minute well under it.
 MAX_CLIP_BYTES = 15_000_000
@@ -249,7 +256,7 @@ def cut_args(footage: Path, content_type: str, span: Span, out: Path) -> list[st
         "0:a:0?",
         "-vf",
         "scale=w='min(iw,1280)':h='min(ih,1280)':force_original_aspect_ratio=decrease"
-        ":force_divisible_by=2,fps=30",
+        f":force_divisible_by=2,fps={CUT_FPS}",
         "-c:v",
         "libx264",
         "-preset",
@@ -274,6 +281,21 @@ def cut_args(footage: Path, content_type: str, span: Span, out: Path) -> list[st
         "+faststart",
         f"file:{out}",
     ]
+
+
+def count_args(take: Path) -> list[str]:
+    """Reads a cut's picture through, decoding nothing out (its frame count is in the
+    progress ffmpeg logs). An MP4 with no picture at all fails the `-map`."""
+    return [
+        *("ffmpeg", "-hide_banner", "-stats"),
+        *_input(take, "video/mp4"),
+        *("-map", "0:v:0", "-f", "null", "-"),
+    ]
+
+
+def frames_in(log_text: str) -> int:
+    """How many frames ffmpeg's progress says it read: none when it read none."""
+    return max((int(found.group(1)) for found in _FRAMES.finditer(log_text)), default=0)
 
 
 class Clipper(Protocol):
@@ -319,6 +341,11 @@ class LocalClipper:
             out = Path(tmp) / "take.mp4"
             args = cut_args(footage, request.contentType, span, out)
             await self._ffmpeg(args, "cut the take")
+            code, stderr = await self._timed(count_args(out))
+            frames = frames_in(stderr.decode(errors="replace")) if code == 0 else 0
+            if frames < MIN_CLIP_FRAMES:
+                log.warning("the cut came out empty", frames=frames, exit_code=code)
+                raise ClipFailed("the cut came out empty", retryable=False)
             video = await asyncio.to_thread(out.read_bytes)
         if len(video) > MAX_CLIP_BYTES:
             raise ClipFailed("the take came out larger than a take may be", retryable=False)

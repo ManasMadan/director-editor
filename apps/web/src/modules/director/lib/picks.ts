@@ -1,6 +1,8 @@
 /**
  * Which take of each shot goes into the video. Director picks the best-scored take (the
- * API's `pickedTakeId`); until a take is scored, the newest plays. The member's own
+ * API's `pickedTakeId`); until a take is scored, the newest plays, though never one
+ * Director couldn't review while another can: a failed take may be one with nothing in
+ * it, which can't play and would keep the video from saving. The member's own
  * choice beats it: one they made while shooting ("use the second one", the API's
  * `chosenTakeId`), and over that one they make here, with a tap on any take of the shot
  * or stepping through them in the order they filmed them. What plays is what a saved cut
@@ -26,7 +28,11 @@ function pickedTake(shot: DirectorShot, picks: Picks): DirectorTake | undefined 
   const find = (takeId: DirectorTakeId | null | undefined) =>
     shot.takes.find((take) => take.id === takeId);
   return (
-    find(picks[shot.index]) ?? find(shot.chosenTakeId) ?? find(shot.pickedTakeId) ?? shot.takes[0]
+    find(picks[shot.index]) ??
+    find(shot.chosenTakeId) ??
+    find(shot.pickedTakeId) ??
+    shot.takes.find((take) => take.status !== "failed") ??
+    shot.takes[0]
   );
 }
 
