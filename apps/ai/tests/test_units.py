@@ -360,7 +360,7 @@ def test_the_liveness_probe_passes_only_with_a_fresh_heartbeat(tmp_path: Path) -
     assert probe() == 0
 
 
-def test_a_best_part_under_a_millisecond_is_no_part() -> None:
+def test_a_best_part_under_half_a_second_is_no_part() -> None:
     from app.director import best_range
     from app.schemas import TakeReview
 
@@ -370,6 +370,10 @@ def test_a_best_part_under_a_millisecond_is_no_part() -> None:
         )
 
     assert best_range(review(1.0002, 1.0004), "video") == (None, None)
+    # The owner's takes: a tenth of a second kept is no part; half a second is one.
+    assert best_range(review(2.0, 2.1), "video") == (None, None)
+    assert best_range(review(2.0, 2.499), "video") == (None, None)
+    assert best_range(review(2.0, 2.5), "video") == (2000, 2500)
     assert best_range(review(1.0, 2.5), "video") == (1000, 2500)
     assert best_range(review(1.0, 2.5), "photo") == (None, None)
 

@@ -536,16 +536,21 @@ def located(draft: LocateDraft) -> Located:
     )
 
 
+# The shortest best part worth keeping: Gemini has kept a tenth of a second of a take,
+# a flash nobody can follow in the video (the clipper won't cut a take shorter than this
+# either, app/clipping.py MIN_CLIP_MS). Under it, the whole take is used.
+MIN_BEST_MS = 500
+
+
 def best_range(review: TakeReview, kind: str) -> tuple[int | None, int | None]:
-    """The review's best part in milliseconds; none for a photo, or for a range that
-    isn't one (it ends before it starts)."""
+    """The review's best part in milliseconds; none for a photo, or for a range too short
+    to use (under MIN_BEST_MS, or one that ends before it starts)."""
     start, end = review.bestStartSeconds, review.bestEndSeconds
     if kind != "video" or start is None or end is None:
         return None, None
-    # Compared in milliseconds, as stored: a range under a millisecond rounds to nothing,
-    # which the table's check (end after start) would refuse.
+    # Compared in milliseconds, as stored.
     start_ms, end_ms = round(start * 1000), round(min(end, MAX_SHOT_SECONDS) * 1000)
-    return (start_ms, end_ms) if end_ms > start_ms else (None, None)
+    return (start_ms, end_ms) if end_ms - start_ms >= MIN_BEST_MS else (None, None)
 
 
 @dataclass(frozen=True)
