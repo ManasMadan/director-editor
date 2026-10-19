@@ -10,6 +10,7 @@ import { ORPCError } from "@orpc/client";
 import { directorSeeds } from "@repo/contracts/director-seeds";
 import { directorTakeIdSchema } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
+import { CHAT_USAGE, startFakeGoogle } from "@repo/fake-google";
 import { TAKE_REVIEW_READ_S } from "@repo/jobs";
 import { jwtVerify } from "jose";
 import pg from "pg";
@@ -48,6 +49,10 @@ const spoken = (text: string, voice: string) =>
 let harness: Harness;
 let youtube: Server;
 let ai: Server;
+/** Vertex AI's generateContent, where the slower line asks Gemini. */
+let google: Awaited<ReturnType<typeof startFakeGoogle>>;
+/** Workspaces whose AI allowance the AI service says is spent. */
+const spentOrgs = new Set<string>();
 const youtubeCalls: URL[] = [];
 const aiCalls: { route: string; org: string; user: string; body: unknown }[] = [];
 /** The presigned read the AI service was last handed for a take. */
@@ -151,6 +156,8 @@ interface StandInPlan {
   plan?: unknown;
   /** The default images of its assets, as the AI service reports them. */
   assetImages?: unknown[];
+  /** A created plan's storyboard cards, as the AI service reports them. */
+  storyboards?: unknown[];
 }
 const plans: StandInPlan[] = [];
 const takes: {
@@ -190,6 +197,7 @@ function planOut(plan: StandInPlan) {
     audioKey: plan.audioKey,
     // Left out unless a test sets them, as an AI service from before them answers.
     ...(plan.assetImages && { assetImages: plan.assetImages }),
+    ...(plan.storyboards && { storyboards: plan.storyboards }),
     createdAt: now,
     updatedAt: now,
   };
@@ -257,6 +265,40 @@ function choicesRoute(
   return { status: 204, body: undefined };
 }
 
+/** A match cut the AI service lines up: a plain cut, whatever it's sent. */
+function matchCutRoute(route: string) {
+  return route === "POST /v1/director/match-cuts"
+    ? {
+        status: 200,
+        body: {
+          status: "not-found",
+          outgoingEndMs: 1500,
+          incomingStartMs: 0,
+          transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+          offsetBeforePx: 0,
+          offsetPx: 0,
+          scaleDiff: 0,
+          rotationDiff: 0,
+          cropPercent: 0,
+          withinTolerance: false,
+          anchor: null,
+          outgoingFrame: null,
+          incomingFrame: null,
+        },
+      }
+    : null;
+}
+
+/** The AI ledger's turns of the slower line: refused once the workspace's month is spent. */
+function chatLedgerRoute(route: string, who: { org: string }) {
+  if (route === "POST /v1/director/chat-reservations") {
+    return spentOrgs.has(who.org)
+      ? failure(429, "AI_BUDGET_EXCEEDED")
+      : { status: 201, body: { tokens: 20_000 } };
+  }
+  return route === "POST /v1/director/chat-usage" ? { status: 204, body: undefined } : null;
+}
+
 /** The AI service's Director routes, per organization, as apps/ai answers them. */
 async function aiRoute(request: IncomingMessage, response: ServerResponse) {
   const who = await caller(request);
@@ -278,7 +320,9 @@ async function aiRoute(request: IncomingMessage, response: ServerResponse) {
   const answer =
     libraryRoute(route, who, body) ??
     directorCutRoute(route, who, body) ??
-    choicesRoute(route, who, body);
+    choicesRoute(route, who, body) ??
+    chatLedgerRoute(route, who) ??
+    matchCutRoute(route);
   if (answer) {
     return send(response, answer.status, answer.body);
   }
@@ -432,15 +476,17 @@ async function listen(server: Server) {
 beforeAll(async () => {
   youtube = createServer(youtubeRoute);
   ai = createServer((request, response) => void aiRoute(request, response));
+  google = await startFakeGoogle({ apiKey: "unused", liveToken: "test-token" });
   harness = await startApi(24, {
     ...LOCAL_STORAGE,
     YOUTUBE_API_KEY: KEY,
     YOUTUBE_API_URL: await listen(youtube),
     AI_URL: await listen(ai),
     AI_SERVICE_SECRET: SECRET,
-    // The live call is on; no test here gets as far as calling Google.
+    // The live call is on; only the slower line gets as far as calling Google.
     GOOGLE_CLOUD_PROJECT: "director-test",
     GOOGLE_ACCESS_TOKEN: "test-token",
+    CHAT_API_URL: google.url,
   });
 });
 
@@ -448,6 +494,7 @@ afterAll(async () => {
   await harness?.close();
   await new Promise((resolve) => youtube?.close(resolve));
   await new Promise((resolve) => ai?.close(resolve));
+  await google?.close();
 });
 
 beforeEach(async () => {
@@ -670,6 +717,31 @@ describe("Director's library", () => {
     const listed = templates.find((each) => each.id === plan.id);
     expect(listed?.plan?.assets.map((each) => each.id)).toEqual(["chart", "card", "end-card"]);
     expect(listed?.plan?.assets.some((each) => "image" in each)).toBe(false);
+  });
+
+  it("links a plan's storyboard cards only where its own may be stored", async () => {
+    const { session, me } = await signedIn();
+    const org = String(me.activeOrganizationId);
+    const plan = readyTemplate(org, "Storyboard1", null, {
+      user: me.id,
+      plan: { ...PLAN, shots: [PLAN.shots[0], PLAN.shots[0]] },
+    });
+    plan.storyboards = [
+      {
+        shotIndex: 0,
+        status: "ready",
+        objectKey: `director-assets/${plan.id}/shot-0123456789abcdef.png`,
+      },
+      // A key the AI service answered that isn't a card of this plan's: never signed.
+      { shotIndex: 1, status: "ready", objectKey: FOREIGN_KEY },
+    ];
+    const one = await session.rpc.director.plan({ videoId: "Storyboard1" });
+    const [first, second] = one.plan?.shots ?? [];
+    expect(new URL(String(first?.storyboardUrl)).pathname).toContain(
+      `director-assets/${plan.id}/shot-0123456789abcdef.png`,
+    );
+    expect(second).not.toHaveProperty("storyboardUrl");
+    expect(JSON.stringify(one)).not.toContain("files/");
   });
 
   it("links no media for any other plan, whatever its stored plan names", async () => {
@@ -994,6 +1066,54 @@ describe("Director's shots and cuts", () => {
     );
   });
 
+  it("hands the AI service each take of a match cut with the type it's stored as", async () => {
+    const { session, me } = await signedIn();
+    readyTemplate(String(me.activeOrganizationId), "MatchCuts01");
+    const take = async (type: "video/webm" | "video/mp4") => {
+      const { file } = await session.rpc.files.createUpload({
+        purpose: "director-take-video",
+        filename: type === "video/webm" ? "take.webm" : "take.mp4",
+        contentType: type,
+        size: 1000,
+      });
+      await sql(
+        "UPDATE files.file SET status = 'ready', content_type = $2, size = 1000, ready_at = now() WHERE id = $1",
+        [file.id, type],
+      );
+      const added = await session.rpc.director.addTake({
+        videoId: "MatchCuts01",
+        shotIndex: 0,
+        kind: "video",
+        fileId: file.id,
+      });
+      // Reviewed, as the AI service would have it by now.
+      const stored = takes.find((each) => each.id === added.id);
+      if (stored) {
+        stored.score = 80;
+      }
+      return { take: added.id, file: file.id };
+    };
+    const [outgoing, incoming] = [await take("video/webm"), await take("video/mp4")];
+    const align = () =>
+      session.rpc.director.alignMatchCut({
+        videoId: "MatchCuts01",
+        anchor: "the watch",
+        outgoing: { takeId: outgoing.take, atMs: 1500 },
+        incoming: { takeId: incoming.take, atMs: 0 },
+      });
+    await align();
+    expect(aiCalls.at(-1)).toMatchObject({
+      route: "POST /v1/director/match-cuts",
+      body: {
+        outgoing: { atMs: 1500, contentType: "video/webm" },
+        incoming: { atMs: 0, contentType: "video/mp4" },
+      },
+    });
+    // A take's file that's no video (it never is): no type to read it as, so no take.
+    await sql("UPDATE files.file SET content_type = 'image/jpeg' WHERE id = $1", [incoming.file]);
+    await expectError(align(), "DIRECTOR_TAKE_NOT_FOUND");
+  });
+
   it("refuses a cut of someone else's file, or of a file that isn't a cut", async () => {
     const { session, me } = await signedIn();
     readyTemplate(String(me.activeOrganizationId), "CutsShort02");
@@ -1089,5 +1209,80 @@ describe("Director's live call", () => {
       code: 1011,
       received: [{ type: "error", code: "UPSTREAM_UNAVAILABLE" }],
     });
+  });
+});
+
+describe("Director's slower line", () => {
+  const turn = (videoId: string, text = "Can you hear me?") => ({
+    videoId,
+    shotIndex: 0,
+    turn: { kind: "said" as const, text },
+    adaptations: [],
+    recent: [],
+    answers: [],
+  });
+  const ledgerCalls = (org: string) =>
+    aiCalls.filter((call) => call.org === org && call.route.includes("/chat-"));
+
+  it("counts each turn in the AI service's ledger: reserved, then settled with what it cost", async () => {
+    const { session, me } = await signedIn();
+    const org = String(me.activeOrganizationId);
+    readyTemplate(org, "ChatShort01");
+    expect(await session.rpc.director.chat(turn("ChatShort01"))).toEqual({
+      reply: "Got it.",
+      calls: [],
+    });
+    expect(ledgerCalls(org)).toEqual([
+      expect.objectContaining({
+        route: "POST /v1/director/chat-reservations",
+        user: me.id,
+        body: { model: expect.any(String) },
+      }),
+      expect.objectContaining({
+        route: "POST /v1/director/chat-usage",
+        body: {
+          model: expect.any(String),
+          reserved: 20_000,
+          inputTokens: CHAT_USAGE.promptTokenCount,
+          outputTokens: CHAT_USAGE.totalTokenCount - CHAT_USAGE.promptTokenCount,
+        },
+      }),
+    ]);
+  });
+
+  it("settles a turn Gemini failed too, with nothing spent", async () => {
+    const { session, me } = await signedIn();
+    const org = String(me.activeOrganizationId);
+    readyTemplate(org, "ChatShort02");
+    google.chatOutage(true);
+    try {
+      await expectError(session.rpc.director.chat(turn("ChatShort02")), "UPSTREAM_UNAVAILABLE");
+    } finally {
+      google.chatOutage(false);
+    }
+    expect(ledgerCalls(org).map((call) => call.body)).toEqual([
+      { model: expect.any(String) },
+      { model: expect.any(String), reserved: 20_000, inputTokens: 0, outputTokens: 0 },
+    ]);
+  });
+
+  it("asks Gemini nothing once the workspace's allowance is spent", async () => {
+    const { session, me } = await signedIn();
+    const org = String(me.activeOrganizationId);
+    readyTemplate(org, "ChatShort03");
+    spentOrgs.add(org);
+    await expectError(session.rpc.director.chat(turn("ChatShort03")), "AI_BUDGET_EXCEEDED");
+    expect(ledgerCalls(org).map((call) => call.route)).toEqual([
+      "POST /v1/director/chat-reservations",
+    ]);
+  });
+
+  it("holds a member to about as many turns as a person can say", async () => {
+    const { session, me } = await signedIn();
+    readyTemplate(String(me.activeOrganizationId), "ChatShort04");
+    for (let i = 0; i < 10; i++) {
+      await session.rpc.director.chat(turn("ChatShort04"));
+    }
+    await expectError(session.rpc.director.chat(turn("ChatShort04")), "RATE_LIMITED");
   });
 });

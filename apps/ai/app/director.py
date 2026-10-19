@@ -67,6 +67,7 @@ from app.schemas import (
     MAX_SHOT_SECONDS,
     AlignRequest,
     Box,
+    ChatTurnUsage,
     CutPick,
     DirectorCutCreate,
     DirectorTakeCreate,
@@ -302,6 +303,7 @@ class Budgets:
     per_publish_copy: int
     per_alignment: int = 12_000
     per_revise: int = 30_000
+    per_chat_turn: int = 20_000
 
 
 def _google_provider(settings: GeminiSettings) -> GoogleProvider | GoogleCloudProvider:
@@ -1463,6 +1465,23 @@ class Director:
             await settle(reservation, usage.input_tokens, usage.output_tokens)
         return apply_revision(shots, body.version, result.output)
 
+    # ------------------------------------------------------------------- the slower line
+
+    async def reserve_chat_turn(self, org_id: UUID, user_id: UUID, model: str) -> int:
+        """Takes a turn of the slower line out of the month's allowance before apps/api asks
+        Gemini (AI_BUDGET_EXCEEDED when none is left); the tokens it took, to settle with."""
+        reservation = await self._reserve(
+            org_id, user_id, "director-chat", self._budgets.per_chat_turn, model=model
+        )
+        if reservation is None:
+            raise AppError("AI_BUDGET_EXCEEDED")
+        return reservation.tokens
+
+    async def settle_chat_turn(self, org_id: UUID, user_id: UUID, used: ChatTurnUsage) -> None:
+        """Records what a reserved turn spent, in place of what it reserved."""
+        reservation = Reservation(org_id, user_id, "director-chat", used.model, used.reserved)
+        await settle(reservation, used.inputTokens, used.outputTokens)
+
     async def _download(self, url: str) -> tuple[bytes, TakeContentType]:
         """The take's bytes and type, read from its presigned URL up to MAX_TAKE_BYTES."""
         async with self._http.stream("GET", url, timeout=TAKE_DOWNLOAD_SECONDS) as response:
@@ -1599,6 +1618,7 @@ def create_director(
             per_publish_copy=settings.director_tokens_per_publish_copy,
             per_alignment=settings.director_tokens_per_alignment,
             per_revise=settings.director_tokens_per_revise,
+            per_chat_turn=settings.director_tokens_per_chat_turn,
         ),
         queue,
         redis,

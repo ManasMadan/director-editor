@@ -682,6 +682,7 @@ export const directorContract = {
    * FILE_NOT_READY). A model call each time.
    */
   brainstorm: route("POST", "/director/created/turns", "Talk your idea through with Director")
+    .errors(errorsOf("DEMO_ACCOUNT_LOCKED"))
     .meta({
       rateLimit: { name: "director-brainstorm", points: 40, windowSeconds: HOUR_S, per: "user" },
     })
@@ -693,6 +694,7 @@ export const directorContract = {
    * a few a day (DIRECTOR_CREATE_LIMIT).
    */
   create: route("POST", "/director/created", "Describe your own")
+    .errors(errorsOf("DEMO_ACCOUNT_LOCKED"))
     .meta({
       rateLimit: { name: "director-create", points: 10, windowSeconds: HOUR_S, per: "user" },
     })
@@ -704,6 +706,7 @@ export const directorContract = {
    * indexed one; DIRECTOR_PLAN_NOT_READY before it's written). Shots are put back to back.
    */
   editPlan: route("POST", "/director/{videoId}/plan", "Change your template's shots")
+    .errors(errorsOf("DEMO_ACCOUNT_LOCKED"))
     .meta({ rateLimit: EVERYDAY_WRITES })
     .input(z.object({ videoId: videoIdSchema, plan: shotPlanSchema }))
     .output(directorPlanSchema),

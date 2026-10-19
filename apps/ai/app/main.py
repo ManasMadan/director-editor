@@ -44,6 +44,9 @@ from app.schemas import (
     BrainstormReply,
     BrainstormRequest,
     Brief,
+    ChatTurnReservation,
+    ChatTurnReservationRequest,
+    ChatTurnUsage,
     ClipRequest,
     CreatePlanRequest,
     CutPick,
@@ -318,6 +321,25 @@ async def ask_director_editor(
 ) -> EditorReply:
     """Director's answer to a request in the editor: edits, a question, or a kind no."""
     return await director.edit(caller.org_id, caller.user_id, body)
+
+
+@app.post("/v1/director/chat-reservations", operation_id="reserveDirectorChatTurn", status_code=201)
+async def reserve_director_chat_turn(
+    body: ChatTurnReservationRequest, caller: CallerDep, director: DirectorDep
+) -> ChatTurnReservation:
+    """A turn of Director's slower line, taken out of the month's allowance before apps/api
+    asks Gemini for it (it settles what the turn spent with chat-usage)."""
+    tokens = await director.reserve_chat_turn(caller.org_id, caller.user_id, body.model)
+    return ChatTurnReservation(tokens=tokens)
+
+
+@app.post("/v1/director/chat-usage", operation_id="settleDirectorChatTurn", status_code=204)
+async def settle_director_chat_turn(
+    body: ChatTurnUsage, caller: CallerDep, director: DirectorDep
+) -> Response:
+    """What a reserved turn of the slower line spent, whatever came of it."""
+    await director.settle_chat_turn(caller.org_id, caller.user_id, body)
+    return Response(status_code=204)
 
 
 @app.post("/v1/director/takes", operation_id="createDirectorTake", status_code=201)

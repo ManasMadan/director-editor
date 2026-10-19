@@ -44,16 +44,27 @@ import type {
 } from "@repo/contracts/ids";
 import { HOUR_S, MINUTE_S } from "@repo/contracts/time";
 import { TAKE_REVIEW_READ_S } from "@repo/jobs";
-import { AppError, InjectPinoLogger, PinoLogger } from "@repo/nest-common";
+import { AppError, describeError, InjectPinoLogger, PinoLogger } from "@repo/nest-common";
 import * as z from "zod";
 import { env } from "../../env";
 import { aiCaller, callAi } from "../ai";
 import { AnalyticsService } from "../analytics";
 import { FilesService } from "../files";
-import { chatUpstream, createGoogleAuth, DirectorChat } from "../live";
+import {
+  type ChatLedger,
+  type ChatSpend,
+  chatUpstream,
+  createGoogleAuth,
+  DirectorChat,
+} from "../live";
 import { RecordingService } from "../recording";
 import { ShortsService } from "../shorts";
-import { type AssetImageRow, planAssetImages, withAssetImages } from "./asset-images";
+import {
+  type AssetImageRow,
+  planAssetImages,
+  storyboardKeyAllowed,
+  withAssetImages,
+} from "./asset-images";
 import { chatTurnDetail } from "./chat-turn";
 import { seedAssetImages, seedMediaKeys, withMediaLinks, withSeedAssets } from "./seed-media";
 import { shotsOf } from "./shots";
@@ -90,6 +101,7 @@ const PURPOSE: Record<DirectorTake["kind"], UploadPurpose> = {
 };
 // What the worker stores a take as (apps/worker files processor).
 const takeContentType = z.enum(["video/webm", "video/mp4", "image/jpeg"]);
+const takeVideoType = z.enum(["video/webm", "video/mp4"]);
 
 // The AI service's JSON carries dates as strings; the contract's schemas want Dates. A
 // plan's audio comes as its stored object's key, which only this API turns into a link.
@@ -149,7 +161,7 @@ export class DirectorService {
     private readonly files: FilesService,
     private readonly recording: RecordingService,
     private readonly analytics: AnalyticsService,
-    @InjectPinoLogger(DirectorService.name) log: PinoLogger,
+    @InjectPinoLogger(DirectorService.name) private readonly log: PinoLogger,
   ) {
     this.chatLine = new DirectorChat(
       chatUpstream({
@@ -214,7 +226,7 @@ export class DirectorService {
       throw new AppError("DIRECTOR_PLAN_NOT_FOUND");
     }
     const asked = performance.now();
-    const reply = await this.chatLine.reply(plan.plan, input);
+    const reply = await this.chatLine.reply(plan.plan, input, this.chatLedger(userId, orgId));
     this.analytics.record("director_turn", {
       userId,
       videoId: input.videoId,
@@ -222,6 +234,52 @@ export class DirectorService {
       detail: chatTurnDetail(input, reply, performance.now() - asked),
     });
     return reply;
+  }
+
+  /**
+   * Where the slower line's turns are counted: the AI service's ledger, the workspace's
+   * monthly allowance every other call of Director's spends (AI_BUDGET_EXCEEDED when it's
+   * gone). A turn is reserved before it asks Gemini and settled with what Gemini said it
+   * cost, however it ends.
+   */
+  private chatLedger(userId: UserId, orgId: OrgId): ChatLedger {
+    const caller = aiCaller(userId, orgId);
+    const model = env.CHAT_MODEL;
+    return {
+      charge: async (turn) => {
+        const { tokens } = await callAi((ai) => ai.director.reserveChatTurn(caller, { model }));
+        const spent: ChatSpend = { inputTokens: 0, outputTokens: 0, counted: true };
+        try {
+          return await turn(spent);
+        } finally {
+          await this.settleChatTurn(caller, model, tokens, spent);
+        }
+      },
+    };
+  }
+
+  private async settleChatTurn(
+    caller: ReturnType<typeof aiCaller>,
+    model: string,
+    reserved: number,
+    spent: ChatSpend,
+  ) {
+    // An answer that didn't say what it cost keeps the whole reservation.
+    const inputTokens = spent.counted ? spent.inputTokens : Math.max(reserved, spent.inputTokens);
+    try {
+      await callAi((ai) =>
+        ai.director.settleChatTurn(caller, {
+          model,
+          reserved,
+          inputTokens,
+          outputTokens: spent.outputTokens,
+        }),
+      );
+    } catch (error) {
+      // The reservation stands, which errs on the allowance's side; the member's reply
+      // doesn't wait on the ledger.
+      this.log.warn({ err: describeError(error) }, "settling a slower line turn failed");
+    }
   }
 
   /**
@@ -336,13 +394,18 @@ export class DirectorService {
       if (take?.kind !== "video" || take.status !== "ready") {
         throw new AppError("DIRECTOR_TAKE_NOT_FOUND");
       }
-      const { url } = await this.files.readUrl(
+      const { file, url } = await this.files.readUrl(
         userId,
         take.fileId,
         PURPOSE.video,
         TAKE_READ_EXPIRES_S,
       );
-      return { url, atMs: side.atMs };
+      // The AI service reads it as this type and no other (a ready video take's always one).
+      const contentType = takeVideoType.safeParse(file.contentType);
+      if (!contentType.success) {
+        throw new AppError("DIRECTOR_TAKE_NOT_FOUND");
+      }
+      return { url, atMs: side.atMs, contentType: contentType.data };
     };
     const [outgoing, incoming] = await Promise.all([read(input.outgoing), read(input.incoming)]);
     return matchCutAlignmentSchema.parse(
@@ -479,7 +542,7 @@ export class DirectorService {
     const [served, signed] = await Promise.all([
       seed
         ? this.withSeedMedia(plan.videoId, shotPlan)
-        : this.withStoryboards(shotPlan, storyboards),
+        : this.withStoryboards(plan.id, shotPlan, storyboards),
       Promise.all(
         images.map(async (image) => ({
           image,
@@ -490,8 +553,12 @@ export class DirectorService {
     return { ...served, assets: withAssetImages(served.assets, signed) };
   }
 
-  /** A created plan with a link to each shot's storyboard card that's drawn. */
+  /**
+   * A created plan with a link to each shot's storyboard card that's drawn, signed only
+   * where a card of the plan's own may be stored.
+   */
   private async withStoryboards(
+    planId: string,
     shotPlan: ShotPlan,
     storyboards: readonly StoryboardRow[],
   ): Promise<ServedShotPlan> {
@@ -499,7 +566,7 @@ export class DirectorService {
     await Promise.all(
       storyboards.map(async ({ shotIndex, status, objectKey }) => {
         const url =
-          status === "ready" && objectKey
+          status === "ready" && objectKey && storyboardKeyAllowed(planId, objectKey)
             ? await this.files.objectUrl(objectKey, MEDIA_READ_EXPIRES_S)
             : null;
         if (url) {

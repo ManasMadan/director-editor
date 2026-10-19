@@ -141,6 +141,7 @@ export const assetsContract = {
    * `baseId`, edits that image of the slot by `instruction` instead.
    */
   draw: route("POST", "/director/{videoId}/assets/{assetId}/drawings", "Create an image")
+    .errors(errorsOf("DEMO_ACCOUNT_LOCKED"))
     .meta({
       rateLimit: { name: "director-drawings", points: 40, windowSeconds: HOUR_S, per: "user" },
     })
@@ -158,11 +159,13 @@ export const assetsContract = {
     .output(assetImageSchema),
   /** Adds the caller's ready `director-asset-image` upload to the slot. */
   addUpload: route("POST", "/director/{videoId}/assets/{assetId}/uploads", "Use your upload")
+    .errors(errorsOf("DEMO_ACCOUNT_LOCKED"))
     .meta({ rateLimit: EVERYDAY_WRITES })
     .input(z.object({ ...slot, fileId: fileIdSchema }))
     .output(assetImageSchema),
   /** Copies a stock photo (from `searchStock`) into the slot, with its credit. */
   addStock: route("POST", "/director/{videoId}/assets/{assetId}/stock", "Use a stock photo")
+    .errors(errorsOf("DEMO_ACCOUNT_LOCKED"))
     .meta({
       rateLimit: { name: "director-stock-copies", points: 60, windowSeconds: HOUR_S, per: "user" },
     })

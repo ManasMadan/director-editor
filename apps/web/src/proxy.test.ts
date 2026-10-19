@@ -53,6 +53,25 @@ describe("the proxy", () => {
     );
   });
 
+  it("allows Turnstile what Cloudflare documents for it, and nothing broader", () => {
+    const csp = proxy(request("/sign-in")).headers.get("content-security-policy") ?? "";
+    const directive = (name: string) =>
+      csp
+        .split("; ")
+        .find((part) => part.startsWith(`${name} `))
+        ?.split(" ")
+        .slice(1) ?? [];
+    // developers.cloudflare.com/turnstile/reference/content-security-policy: its script
+    // (here through the nonce'd loader and 'strict-dynamic', which Turnstile supports),
+    // its frame, and this origin for pre-clearance.
+    expect(directive("script-src")).toEqual(expect.arrayContaining(["'strict-dynamic'"]));
+    expect(directive("frame-src")).toContain("https://challenges.cloudflare.com");
+    expect(directive("connect-src")).toContain("'self'");
+    // The `data:` fetch a browser console reports from the challenge runs in Cloudflare's
+    // own frame, under the policy Cloudflare serves it with; this page's can't change it.
+    expect(directive("connect-src")).not.toContain("data:");
+  });
+
   it("lets development's hot reloading eval, and leaves storage out when files are off", async () => {
     const storage = String(process.env.STORAGE_ORIGIN);
     vi.stubEnv("NODE_ENV", "development");

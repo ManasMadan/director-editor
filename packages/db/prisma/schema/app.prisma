@@ -88,6 +88,9 @@ model RecordingSession {
   createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
   finishedAt   DateTime?          @map("finished_at") @db.Timestamptz(3)
+  /// When its post-session pass was queued (once it's done): apps/api at Done, or the
+  /// worker's retention for any it missed.
+  passQueuedAt DateTime?          @map("pass_queued_at") @db.Timestamptz(3)
   organization Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
   user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   plan         DirectorPlan       @relation(fields: [planId], references: [id], onDelete: Cascade)
@@ -187,6 +190,9 @@ model RecordingAttempt {
   take        DirectorTake?    @relation(fields: [takeId], references: [id], onDelete: SetNull)
 
   @@unique([sessionId, number])
+  /// One attempt per start in a part: the post-session pass adds the ones it finds with
+  /// ON CONFLICT on it, so each is added once.
+  @@unique([sessionId, partIndex, startMs])
   /// At most one attempt open at a time.
   @@unique([sessionId], map: "recording_attempt_one_open", where: raw("status = 'open'"))
   @@index([fileId])

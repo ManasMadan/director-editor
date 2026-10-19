@@ -41,6 +41,7 @@ import {
   RECORDING_TYPES,
   type RecordingType,
   recordingSliceKey,
+  SESSION_PASS_DELAY_MS,
 } from "@repo/contracts/recording";
 import { MINUTE_MS, MINUTE_S } from "@repo/contracts/time";
 import { type Tx, tenantTx } from "@repo/db";
@@ -54,11 +55,6 @@ import { endOf, expiresAt, readyAttempts, toAttempt, toPart, toSession } from ".
 
 export const RECORDING_QUEUE = Symbol("RECORDING_QUEUE");
 export const DIRECTOR_QUEUE = Symbol("DIRECTOR_QUEUE");
-/**
- * How long after Done the post-session pass starts: the shoot screen may still be sending
- * the last slices it queued, and the pass goes through what's stored when it runs.
- */
-const PASS_DELAY_MS = 2 * MINUTE_MS;
 
 // A slow connection on a phone: long enough to send a slice, no longer.
 const SLICE_UPLOAD_EXPIRES_S = 10 * MINUTE_S;
@@ -338,9 +334,9 @@ export class RecordingService {
    */
   async finish(caller: Caller, sessionId: RecordingSessionId): Promise<RecordingSession> {
     await this.find(caller, sessionId);
-    const finished = await tenantTx(this.database.write, caller.orgId, async (tx) => {
+    await tenantTx(this.database.write, caller.orgId, async (tx) => {
       if ((await this.recordings.lockSession(tx, sessionId)) !== "recording") {
-        return false;
+        return;
       }
       const open = await this.recordings.openAttempt(tx, sessionId);
       if (open) {
@@ -351,23 +347,33 @@ export class RecordingService {
         await this.recordings.resume(tx, { sessionId, ...pause }, null);
       }
       await this.recordings.finish(tx, sessionId);
-      return true;
     });
     await this.clipReady(caller, sessionId);
-    if (finished) {
-      // Gone through once: the session's id is the job's.
-      const meta = {
-        requestId: currentContext()?.requestId,
-        userId: caller.userId,
-        orgId: caller.orgId,
-      };
-      await this.director.add(
-        "session-pass",
-        { sessionId, orgId: caller.orgId },
-        { jobId: sessionId, meta, delay: PASS_DELAY_MS },
-      );
-    }
+    await this.queuePass(caller, sessionId);
     return toSession(await this.find(caller, sessionId));
+  }
+
+  /**
+   * Queues the post-session pass of a done session whose pass isn't queued yet: after the
+   * commit, so a queue that fails leaves it unqueued for the next Done, or for the
+   * worker's recording retention, to queue again. The session's id is the job's, so it
+   * goes through once.
+   */
+  private async queuePass(caller: Caller, sessionId: RecordingSessionId) {
+    if (!(await this.recordings.passDue(caller.orgId, sessionId))) {
+      return;
+    }
+    const meta = {
+      requestId: currentContext()?.requestId,
+      userId: caller.userId,
+      orgId: caller.orgId,
+    };
+    await this.director.add(
+      "session-pass",
+      { sessionId, orgId: caller.orgId },
+      { jobId: sessionId, meta, delay: SESSION_PASS_DELAY_MS },
+    );
+    await this.recordings.passQueued(caller.orgId, sessionId);
   }
 
   /**
@@ -495,6 +501,11 @@ export class RecordingService {
       throw new AppError("DIRECTOR_SHOT_NOT_FOUND");
     }
     if (input.attempt <= (await this.recordings.lastAttemptNumber(tx, input.sessionId))) {
+      throw new AppError("RECORDING_MARK_OUT_OF_ORDER");
+    }
+    // An attempt is one start in a part (the post-session pass relies on it to add each
+    // it finds once): a second start at the very same moment is out of order too.
+    if (await this.recordings.attemptStartsAt(tx, input.sessionId, input.partIndex, input.atMs)) {
       throw new AppError("RECORDING_MARK_OUT_OF_ORDER");
     }
   }

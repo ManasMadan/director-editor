@@ -323,6 +323,13 @@ Everyone shares the account, so (`apps/api/src/auth/demo.ts`, and the same for g
   renaming, leaving or deleting a workspace answer `DEMO_ACCOUNT_LOCKED` (its email and a
   password reset need codes sent to its address). It can still set its own language and
   time zone;
+- it keeps nothing of a visitor's as its own, which the next visitor would see: it
+  can't record (`recording.start`), add, draw or pick an image for a template's assets,
+  describe a template of its own (`director.brainstorm`, `create`, `editPlan`), or keep
+  or re-plan its version of a template (`yourVersion.save`, `revise`, and so what
+  Director remembers of it). Those answer `DEMO_ACCOUNT_LOCKED` (the `inPrivateOrg`
+  builder in `apps/api/src/rpc/procedures.ts`); a demo guest, whose workspace is its own,
+  can do all of them;
 - its device list shows only the device asking, never the others signed in to it;
 - while `DEMO_PASSWORD` is set, its sign-in has no per-account attempt limit, since its
   password is public; the per-address limit still applies.
@@ -334,8 +341,10 @@ workspace's names.
 It indexes a Short of its own like any account (one).
 
 Its footage lasts a day too, like a guest's: the worker's `demo-retention` task calls
-`files.purge_demo_footage()`, which deletes the account's takes and videos older than a
-day (their files, and the takes and cuts with them), and the files cleanup removes their
+`files.purge_demo_footage()`, which deletes what the account kept that's older than a
+day: its takes and videos, brief photos and asset uploads (their files, and the takes
+and cuts with them), the images it drew, uploaded or picked for a template's assets, the
+templates it described, and its versions of templates. The files cleanup removes their
 objects from storage. Its library (the seeds and its own Short) stays.
 
 ## Limits

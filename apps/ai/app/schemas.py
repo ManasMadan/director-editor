@@ -93,6 +93,8 @@ type CameraMove = Literal[
 ]
 # What a shot's take is: a clip or a photo.
 type ShotKind = Literal["video", "photo"]
+# A video take as stored: what the browser recorded, or the clipper cut.
+type TakeVideoType = Literal["video/webm", "video/mp4"]
 # What the edit uses of it: the member on camera (as every shot was before modes), only
 # their voice (a voice-over, the picture an asset or B-roll: a video take), or nothing,
 # the asset taking its place (an end card, a full-screen graphic: a photo take stands
@@ -1197,6 +1199,40 @@ MAX_TAKE_MS = MAX_SHOT_SECONDS * 1000
 MAX_ALIGN_FRAME_BASE64 = 300_000
 # The most one alignment may reserve (DIRECTOR_TOKENS_PER_ALIGNMENT's ceiling).
 MAX_ALIGN_TOKENS = 100_000
+# The most one turn of the slower line may reserve (DIRECTOR_TOKENS_PER_CHAT_TURN's
+# ceiling), and what one may report spending: far past two short requests, a bound on a
+# bug rather than on a turn.
+MAX_CHAT_TURN_TOKENS = 100_000
+MAX_CHAT_TURN_SPENT = 1_000_000
+
+
+class ChatTurnReservationRequest(BaseModel):
+    """A turn of Director's slower line about to ask Gemini. apps/api asks Gemini itself
+    (src/modules/live/live.chat.ts, where Live's persona and tools are), and counts each
+    turn here, in the same ledger as every other call."""
+
+    model_config = REQUEST
+
+    model: str = Field(min_length=1, max_length=200, description="The model the turn asks.")
+
+
+class ChatTurnReservation(BaseModel):
+    tokens: int = Field(
+        ge=1,
+        le=MAX_CHAT_TURN_TOKENS,
+        description="What the turn took out of the month's allowance, to settle with.",
+    )
+
+
+class ChatTurnUsage(BaseModel):
+    """What a reserved turn actually spent, whatever happened to it."""
+
+    model_config = REQUEST
+
+    model: str = Field(min_length=1, max_length=200)
+    reserved: int = Field(ge=1, le=MAX_CHAT_TURN_TOKENS, description="The reservation's tokens.")
+    inputTokens: int = Field(ge=0, le=MAX_CHAT_TURN_SPENT)
+    outputTokens: int = Field(ge=0, le=MAX_CHAT_TURN_SPENT)
 
 
 class MatchCutClip(BaseModel):
@@ -1210,6 +1246,10 @@ class MatchCutClip(BaseModel):
         le=MAX_TAKE_MS,
         description="Where the cut falls in the take: the outgoing clip's end, the incoming's"
         " start.",
+    )
+    # An API from before this sends none; most takes are the clipper's MP4s.
+    contentType: TakeVideoType = Field(
+        default="video/mp4", description="What the take is stored as: ffmpeg reads it as that."
     )
 
 
@@ -1366,7 +1406,7 @@ class ClipRequest(BaseModel):
 
     # A JSON string, so not strict (strict wants a UUID object, which JSON can't carry).
     attemptId: UUID = Field(strict=False, description="For the logs.")
-    contentType: Literal["video/webm", "video/mp4"]
+    contentType: TakeVideoType
     slices: list[ClipSlice] = Field(
         min_length=1, max_length=MAX_PART_SLICES, description="The part's, from its first."
     )

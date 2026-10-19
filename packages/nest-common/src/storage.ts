@@ -62,6 +62,7 @@ export interface Storage {
   read(key: string, maxBytes: number): Promise<Buffer>;
   write(key: string, body: Buffer, contentType: string): Promise<void>;
   move(from: string, to: string): Promise<void>;
+  /** Deletes the object; one that's already gone counts as deleted. */
   delete(key: string): Promise<void>;
   /**
    * A reference another Google Cloud service can read directly, with its own
@@ -346,7 +347,15 @@ export class GcsStorage implements Storage {
   }
 
   async delete(key: string) {
-    await this.file(key).delete();
+    try {
+      await this.file(key).delete();
+    } catch (error) {
+      // GCS answers 404 for an object that isn't there (S3's DeleteObject succeeds): a
+      // delete queued twice, or retried after a run that died before clearing its row.
+      if (fieldOf(error, "code") !== 404) {
+        throw error;
+      }
+    }
   }
 
   directUri(key: string) {

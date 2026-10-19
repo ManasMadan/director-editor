@@ -1,0 +1,14 @@
+-- An attempt is one start in one part of a session. The post-session pass (apps/ai
+-- app/session_recordings.py) adds the attempts it finds with ON CONFLICT on these columns,
+-- so a pass run twice (a retried job) adds each once, and one the live marks already have
+-- isn't added again. Without this index Postgres refuses that insert outright (no unique
+-- constraint matches the ON CONFLICT), and the pass never added a take. Production has no
+-- two attempts at the same start in the same part.
+--
+-- CONCURRENTLY, so the shoot screen's marks carry on while it builds. It can't run in the
+-- transaction a multi-statement file is wrapped in, so this file holds only it. It waits
+-- for transactions already writing the table to finish rather than blocking new writes,
+-- so there's no lock_timeout. A build that fails leaves an INVALID index behind: drop it
+-- and deploy again.
+-- squawk-ignore require-timeout-settings
+CREATE UNIQUE INDEX CONCURRENTLY "recording_attempt_session_id_part_index_start_ms_key" ON "app"."recording_attempt"("session_id", "part_index", "start_ms");

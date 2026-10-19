@@ -858,6 +858,79 @@
         "title": "CaptionFix",
         "type": "object"
       },
+      "ChatTurnReservation": {
+        "properties": {
+          "tokens": {
+            "description": "What the turn took out of the month's allowance, to settle with.",
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tokens"
+        ],
+        "title": "ChatTurnReservation",
+        "type": "object"
+      },
+      "ChatTurnReservationRequest": {
+        "additionalProperties": false,
+        "description": "A turn of Director's slower line about to ask Gemini. apps/api asks Gemini itself\n(src/modules/live/live.chat.ts, where Live's persona and tools are), and counts each\nturn here, in the same ledger as every other call.",
+        "properties": {
+          "model": {
+            "description": "The model the turn asks.",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Model",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model"
+        ],
+        "title": "ChatTurnReservationRequest",
+        "type": "object"
+      },
+      "ChatTurnUsage": {
+        "additionalProperties": false,
+        "description": "What a reserved turn actually spent, whatever happened to it.",
+        "properties": {
+          "inputTokens": {
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Inputtokens",
+            "type": "integer"
+          },
+          "model": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Model",
+            "type": "string"
+          },
+          "outputTokens": {
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Outputtokens",
+            "type": "integer"
+          },
+          "reserved": {
+            "description": "The reservation's tokens.",
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "Reserved",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model",
+          "reserved",
+          "inputTokens",
+          "outputTokens"
+        ],
+        "title": "ChatTurnUsage",
+        "type": "object"
+      },
       "ClipPause": {
         "additionalProperties": false,
         "description": "A stretch nothing was recorded: no take is ever cut across one.",
@@ -900,12 +973,7 @@
             "type": "string"
           },
           "contentType": {
-            "enum": [
-              "video/webm",
-              "video/mp4"
-            ],
-            "title": "Contenttype",
-            "type": "string"
+            "$ref": "#/components/schemas/TakeVideoType"
           },
           "endMs": {
             "anyOf": [
@@ -2753,6 +2821,11 @@
             "title": "Atms",
             "type": "integer"
           },
+          "contentType": {
+            "$ref": "#/components/schemas/TakeVideoType",
+            "default": "video/mp4",
+            "description": "What the take is stored as: ffmpeg reads it as that."
+          },
           "url": {
             "description": "A presigned read of the take.",
             "maxLength": 4000,
@@ -3715,6 +3788,13 @@
         "title": "TakeChoice",
         "type": "object"
       },
+      "TakeVideoType": {
+        "enum": [
+          "video/webm",
+          "video/mp4"
+        ],
+        "type": "string"
+      },
       "TargetPose": {
         "properties": {
           "description": {
@@ -4122,6 +4202,145 @@
           }
         },
         "summary": "Brainstorm Director Template"
+      }
+    },
+    "/v1/director/chat-reservations": {
+      "post": {
+        "description": "A turn of Director's slower line, taken out of the month's allowance before apps/api\nasks Gemini for it (it settles what the turn spent with chat-usage).",
+        "operationId": "reserveDirectorChatTurn",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatTurnReservationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatTurnReservation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Reserve Director Chat Turn"
+      }
+    },
+    "/v1/director/chat-usage": {
+      "post": {
+        "description": "What a reserved turn of the slower line spent, whatever came of it.",
+        "operationId": "settleDirectorChatTurn",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-request-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatTurnUsage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "An error."
+          }
+        },
+        "summary": "Settle Director Chat Turn"
       }
     },
     "/v1/director/clips": {

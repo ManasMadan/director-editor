@@ -17,7 +17,7 @@ from typing import Literal, Self
 from pydantic import AnyHttpUrl, Field, PostgresDsn, RedisDsn, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.schemas import MAX_ALIGN_TOKENS, MAX_PLAN_TOKENS
+from app.schemas import MAX_ALIGN_TOKENS, MAX_CHAT_TURN_TOKENS, MAX_PLAN_TOKENS
 
 # A URL's origin and nothing after it: the indexer's URL is also the audience of the ID
 # token the worker calls it with, which Cloud Run compares with the service's URL as is.
@@ -180,6 +180,12 @@ class Settings(GeminiSettings):
     # Lining up a match cut (app/aligning.py) shows Gemini two frames, small.
     director_tokens_per_alignment: int = Field(
         default=12_000, ge=2_000, le=MAX_ALIGN_TOKENS, alias="DIRECTOR_TOKENS_PER_ALIGNMENT"
+    )
+    # A turn of Director's slower line, which apps/api sends to Gemini Flash itself and
+    # counts here: the persona and plan, a camera frame, the last few lines said and a
+    # short spoken reply, twice when Gemini first answers with only tool calls.
+    director_tokens_per_chat_turn: int = Field(
+        default=20_000, ge=2_000, le=MAX_CHAT_TURN_TOKENS, alias="DIRECTOR_TOKENS_PER_CHAT_TURN"
     )
     # The Cloud Run aligner (app/aligner.py), where match cuts are sent to be lined up,
     # with an ID token for this URL from the metadata server. Unset: they're lined up

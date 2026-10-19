@@ -35,8 +35,19 @@ function answer(text: string | null, calls: { name: string; args: object }[] = [
     ...(text ? [{ text }] : []),
     ...calls.map((call) => ({ functionCall: call, thoughtSignature: "c2lnbmVk" })),
   ];
-  return { candidates: [{ content: { role: "model", parts } }] };
+  return { candidates: [{ content: { role: "model", parts } }], usageMetadata: CHAT_USAGE };
 }
+
+/**
+ * What every answer says it cost, as Vertex reports it: the prompt, and the answer with
+ * the model's thinking (billed as output) in the total.
+ */
+export const CHAT_USAGE = {
+  promptTokenCount: 1_200,
+  candidatesTokenCount: 30,
+  thoughtsTokenCount: 20,
+  totalTokenCount: 1_250,
+};
 
 /** generateContent's answer to `body`, or null when it isn't a request it can read. */
 export function chatAnswer(body: unknown): object | null {

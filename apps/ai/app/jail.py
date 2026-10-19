@@ -1,5 +1,5 @@
 """Starts a program with no secrets and bounded resources, for ffmpeg reading a member's
-footage (app/clipping.py):
+footage (app/clipping.py) and takes (app/aligning.py):
 
     python app/jail.py ffmpeg -i ...
 
@@ -11,8 +11,10 @@ CPU time (the caller's wall clock timeout kills it sooner when it's merely slow)
 size of any file it writes, no core dumps, and on Linux its address space.
 
 It is not a sandbox: ffmpeg still runs as the service's user, with its files and network.
-In production it runs only in the Cloud Run clipper (app/clipper.py), whose container
-holds no secrets or data at all; this keeps a local or development clipper honest.
+In production clips are cut only in the Cloud Run clipper (app/clipper.py), whose
+container holds no secrets or data at all; this keeps a local or development clipper
+honest. Match cuts are lined up in this service until a Cloud Run aligner is deployed
+(ALIGNER_URL), so there it's what keeps the service's secrets from a member's take.
 """
 
 import os

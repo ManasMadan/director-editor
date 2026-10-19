@@ -11,6 +11,7 @@ import type { AddressInfo } from "node:net";
 import type { INestApplicationContext } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { orgIdSchema, recordingAttemptIdSchema } from "@repo/contracts/ids";
+import { SESSION_PASS_DELAY_MS } from "@repo/contracts/recording";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
 import { queuePrefix, queues } from "@repo/jobs";
 import { createRedis, S3Storage, STORAGE, type Storage } from "@repo/nest-common";
@@ -200,6 +201,9 @@ async function takeRoute(
     bestEndMs: null,
     score: null,
     feedback: null,
+    reason: null,
+    chosen: false,
+    origin: "shoot",
     createdAt: new Date().toISOString(),
   });
 }
@@ -280,6 +284,12 @@ async function recorded(
   await sql(`INSERT INTO auth."user" (id, name, email, updated_at) VALUES ($1, 'U', $2, now())`, [
     user,
     `${user}@test.dev`,
+  ]);
+  // The member records in their own workspace (the trigger that deletes an attempt's take
+  // checks it's a member's of the attempt's workspace).
+  await sql("INSERT INTO auth.member (organization_id, user_id, role) VALUES ($1, $2, 'owner')", [
+    org,
+    user,
   ]);
   const [plan] = await sql<{ id: string }>(
     `INSERT INTO ai.director_plan (org_id, video_id, source, status, stage, updated_at)
@@ -680,6 +690,58 @@ describe("recording retention", () => {
     await queue.obliterate({ force: true });
     await queue.resume();
     await queue.close();
+  });
+
+  it("queues the post-session pass of every session done without one queued, idle ones included", async () => {
+    const director = new Queue("ai-director", {
+      connection: createRedis(process.env.REDIS_URL as string),
+      prefix: queuePrefix("ai-director"),
+    });
+    await director.pause();
+    // Left open, so the sweeper finishes it; Done with its pass lost; Done and queued.
+    const [idle, lost, queued] = [
+      await recorded(1, { stored: false }),
+      await recorded(1, { stored: false }),
+      await recorded(1, { stored: false }),
+    ];
+    await sql(
+      "UPDATE app.recording_session SET updated_at = now() - interval '7 hours' WHERE id = $1",
+      [idle.session],
+    );
+    await sql(
+      `UPDATE app.recording_session SET status = 'done', finished_at = now() - interval '1 hour',
+              updated_at = now() - interval '1 hour', pass_queued_at = NULL WHERE id = $1`,
+      [lost.session],
+    );
+    await sql(
+      `UPDATE app.recording_session SET status = 'done', finished_at = now() - interval '1 hour',
+              pass_queued_at = now() - interval '1 hour' WHERE id = $1`,
+      [queued.session],
+    );
+
+    const result = await maintenance.run("recording-retention");
+    expect(result.passes).toBeGreaterThanOrEqual(2);
+    for (const { session, org } of [idle, lost]) {
+      const job = await director.getJob(session);
+      expect(job?.data).toEqual({
+        meta: { orgId: org },
+        payload: { sessionId: session, orgId: org },
+      });
+      // As apps/api's are, so its last slices are in before the pass goes through them.
+      expect(job?.opts.delay).toBe(SESSION_PASS_DELAY_MS);
+    }
+    expect(await director.getJob(queued.session)).toBeUndefined();
+    const stamped = await sql<{ id: string }>(
+      "SELECT id FROM app.recording_session WHERE id = ANY($1) AND pass_queued_at IS NOT NULL",
+      [[idle.session, lost.session]],
+    );
+    expect(stamped).toHaveLength(2);
+    // Queued once: the next run finds nothing more of theirs to queue.
+    await director.obliterate({ force: true });
+    await maintenance.run("recording-retention");
+    expect(await director.getJob(lost.session)).toBeUndefined();
+    await director.resume();
+    await director.close();
   });
 
   it("finishes a session Done with its footage still to come, once it has stopped coming", async () => {

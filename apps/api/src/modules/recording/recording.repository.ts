@@ -285,6 +285,15 @@ export class RecordingRepository {
     return _max.number ?? 0;
   }
 
+  /** Whether an attempt already starts at this moment of the part (one per start). */
+  async attemptStartsAt(tx: Tx, sessionId: RecordingSessionId, partIndex: number, startMs: number) {
+    const found = await tx.recordingAttempt.findUnique({
+      where: { sessionId_partIndex_startMs: { sessionId, partIndex, startMs } },
+      select: { id: true },
+    });
+    return found !== null;
+  }
+
   startAttempt(
     tx: Tx,
     data: {
@@ -348,6 +357,21 @@ export class RecordingRepository {
     await tx.recordingSession.updateMany({
       where: { id: sessionId, status: "recording" },
       data: { status: "done", finishedAt: new Date() },
+    });
+  }
+
+  /** Whether the session is done and its post-session pass not queued yet. */
+  async passDue(orgId: OrgId, sessionId: RecordingSessionId) {
+    const due = await this.read(orgId).recordingSession.count({
+      where: { id: sessionId, status: "done", passQueuedAt: null },
+    });
+    return due > 0;
+  }
+
+  async passQueued(orgId: OrgId, sessionId: RecordingSessionId) {
+    await this.write(orgId).recordingSession.updateMany({
+      where: { id: sessionId, passQueuedAt: null },
+      data: { passQueuedAt: new Date() },
     });
   }
 

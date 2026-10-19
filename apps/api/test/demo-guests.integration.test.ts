@@ -3,6 +3,7 @@
  * guest with its own workspace and the seeded templates, for a day, with the demo's
  * restrictions; guests never share anything; and the limits per address and in all hold.
  */
+import { ORPCError } from "@orpc/client";
 import { directorSeeds } from "@repo/contracts/director-seeds";
 import { DAY_S, SECOND_MS } from "@repo/contracts/time";
 import { DATABASE, type Database } from "@repo/nest-common";
@@ -233,6 +234,43 @@ describe("what a guest can't do", () => {
 });
 
 describe("the demo's limits", () => {
+  // Director is off here, so each turn answers FEATURE_DISABLED, but only once the call's
+  // rate limits are spent: what's counted is the same.
+  const chatTurn = (session: Session) =>
+    session.rpc.director
+      .chat({
+        videoId: "dQw4w9WgXcQ",
+        shotIndex: 0,
+        turn: { kind: "said", text: "Hi" },
+        adaptations: [],
+        recent: [],
+        answers: [],
+      })
+      .then(
+        () => "answered",
+        (error: unknown) => (error instanceof ORPCError ? String(error.code) : String(error)),
+      );
+
+  it("holds a guest to fewer turns on Director's slower line than a member", async () => {
+    const session = await guest();
+    const turns: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      turns.push(await chatTurn(session));
+    }
+    expect(turns).toEqual([...Array<string>(6).fill("FEATURE_DISABLED"), "RATE_LIMITED"]);
+
+    const member = createSession(harness);
+    const email = newEmail();
+    await member.auth("/sign-up/email", { email, password: newPassword(), name: "Member" });
+    const { otp } = await takeOtp(harness, email);
+    await member.auth("/email-otp/verify-email", { email, otp });
+    const theirs: string[] = [];
+    for (let i = 0; i < 11; i++) {
+      theirs.push(await chatTurn(member));
+    }
+    expect(theirs).toEqual([...Array<string>(10).fill("FEATURE_DISABLED"), "RATE_LIMITED"]);
+  });
+
   it("lets one address make two guests an hour", async () => {
     const browser = createSession(harness);
     await guest(browser);

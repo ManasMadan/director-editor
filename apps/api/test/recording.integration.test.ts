@@ -367,6 +367,9 @@ describe("a session's parts and marks", () => {
     // before the screen was reloaded, numbered below the last, is refused.
     await mark(rpc, sessionId, "start", 4, 30_000);
     await expectError(mark(rpc, sessionId, "start", 3, 35_000), "RECORDING_MARK_OUT_OF_ORDER");
+    // One attempt per start in a part: a second start at the same moment is refused too.
+    await expectError(mark(rpc, sessionId, "start", 5, 30_000), "RECORDING_MARK_OUT_OF_ORDER");
+    expect(await mark(rpc, sessionId, "start", 5, 31_000)).toMatchObject({ number: 5 });
   });
 
   it("ends an attempt at a pause, refuses marks while paused, and takes them after a touch", async () => {
@@ -444,6 +447,36 @@ describe("a session's parts and marks", () => {
     );
     // A queue left behind still uploads.
     expect((await rpc.uploadSlice(slice(sessionId, 0, 0))).upload).not.toBeNull();
+  });
+
+  it("queues the post-session pass once Done, and again if it wasn't the first time", async () => {
+    const director = new Queue("ai-director", {
+      connection: harness.redis.duplicate(),
+      prefix: queuePrefix("ai-director"),
+    });
+    try {
+      const { rpc, sessionId, org } = await recording();
+      await rpc.finish({ sessionId });
+      expect((await director.getJob(sessionId))?.data.payload).toEqual({ sessionId, orgId: org });
+      const [stamped] = await sql<{ queued: Date | null }>(
+        "SELECT pass_queued_at AS queued FROM app.recording_session WHERE id = $1",
+        [sessionId],
+      );
+      expect(stamped?.queued).toBeInstanceOf(Date);
+
+      // Done, but its pass never made it onto the queue (Redis failed after the commit):
+      // Done again queues it, though it changes nothing else.
+      const lost = await recording();
+      await lost.rpc.finish({ sessionId: lost.sessionId });
+      await director.remove(lost.sessionId);
+      await sql("UPDATE app.recording_session SET pass_queued_at = NULL WHERE id = $1", [
+        lost.sessionId,
+      ]);
+      await lost.rpc.finish({ sessionId: lost.sessionId });
+      expect((await director.getJob(lost.sessionId))?.data.payload.sessionId).toBe(lost.sessionId);
+    } finally {
+      await director.close();
+    }
   });
 
   it("pauses and finishes a session with no attempt open in it", async () => {
@@ -535,10 +568,79 @@ describe("deleting a session", () => {
       "SELECT key FROM files.object_deletion WHERE key LIKE $1 OR key LIKE $2",
       [`recordings/${sessionId}/%`, `files/${take.file}`],
     );
+    // The part's joined copy too, in case a post-session pass left it behind.
     expect(queued.map((row) => row.key).sort()).toEqual(
-      [`files/${take.file}`, `recordings/${sessionId}/0/0`].sort(),
+      [
+        `files/${take.file}`,
+        `recordings/${sessionId}/0/0`,
+        `recordings/${sessionId}/0/whole`,
+      ].sort(),
     );
     await expectError(rpc.session({ sessionId }), "RECORDING_NOT_FOUND");
+  });
+
+  it("deletes only a take of the member's own, whatever file its attempt names", async () => {
+    const { rpc, sessionId, org } = await recording();
+    const attempt = await mark(rpc, sessionId, "start", 1, 0);
+    const other = await recording();
+    const otherAttempt = await mark(other.rpc, other.sessionId, "start", 1, 0);
+    const theirs = await takeOf(other.me, other.org, other.sessionId, otherAttempt.id);
+    const [avatar] = await sql<{ id: string }>(
+      `INSERT INTO files.file (user_id, purpose, status, filename, declared_type, declared_size, updated_at)
+       VALUES ((SELECT user_id FROM app.recording_session WHERE id = $1), 'avatar', 'ready', 'me.png',
+               'image/png', 10, now()) RETURNING id`,
+      [sessionId],
+    );
+    // A bug that pointed the attempts at someone else's take and at a file that's no take.
+    await sql("UPDATE app.recording_attempt SET file_id = $1 WHERE id = $2", [
+      theirs.file,
+      attempt.id,
+    ]);
+    const second = await mark(rpc, sessionId, "start", 2, 5_000);
+    await sql("UPDATE app.recording_attempt SET file_id = $1 WHERE id = $2", [
+      required(avatar, "a file").id,
+      second.id,
+    ]);
+    expect(await rpc.remove({ sessionId })).toEqual({ removed: true });
+
+    expect(
+      await sql("SELECT id FROM files.file WHERE id = ANY($1::uuid[])", [
+        [theirs.file, required(avatar, "a file").id],
+      ]),
+    ).toHaveLength(2);
+    expect(await sql("SELECT id FROM ai.director_take WHERE id = $1", [theirs.take])).toHaveLength(
+      1,
+    );
+    expect(org).not.toBe(other.org);
+  });
+
+  it("lets the API write only the columns ending an attempt changes", async () => {
+    const { rpc, sessionId, org } = await recording();
+    const attempt = await mark(rpc, sessionId, "start", 1, 0);
+    const client = new pg.Client({ connectionString: harness.testDb.urlFor("app_api") });
+    await client.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.org_id', $1, true)", [org]);
+      const ended = await client.query(
+        "UPDATE app.recording_attempt SET end_ms = 4000, status = 'waiting', note = 'ok', updated_at = now() WHERE id = $1",
+        [attempt.id],
+      );
+      expect(ended.rowCount).toBe(1);
+      await client.query("COMMIT");
+      for (const column of [
+        "file_id = NULL",
+        "take_id = NULL",
+        "clip_start_ms = 0",
+        "org_id = org_id",
+      ]) {
+        await expect(
+          client.query(`UPDATE app.recording_attempt SET ${column} WHERE id = $1`, [attempt.id]),
+        ).rejects.toThrow(/permission denied/);
+      }
+    } finally {
+      await client.end();
+    }
   });
 });
 

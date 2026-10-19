@@ -40,6 +40,7 @@ from app.errors import AppError
 from app.indexing import PLANNER_RETRIES, IndexFailed, Watched
 from app.queues import DirectorQueue, JobLike
 from app.schemas import (
+    ChatTurnReservation,
     DirectorCutOut,
     DirectorLibraryOut,
     DirectorPlanOut,
@@ -1525,6 +1526,55 @@ def test_a_post_with_no_budget_left_is_refused(client: TestClient) -> None:
     spend_the_month(org)
     response = publish_copy(client, org, user, cut.id)
     assert (response.status_code, error_of(response).code) == (429, "AI_BUDGET_EXCEEDED")
+
+
+# --------------------------------------------------------------------------- the slower line
+
+
+def test_a_slower_line_turn_is_reserved_then_settled_in_the_ledger(client: TestClient) -> None:
+    """apps/api asks Gemini itself for the slower line's turns, and counts each here."""
+    org, user = new_org()
+    reserved = client.post(
+        "/v1/director/chat-reservations", json={"model": "gemini-chat"}, headers=headers(org, user)
+    )
+    assert reserved.status_code == 201, reserved.text
+    tokens = ChatTurnReservation.model_validate_json(reserved.content).tokens
+    assert tokens == get_settings().director_tokens_per_chat_turn
+    assert usage(org, "director-chat") == tokens
+
+    settled = client.post(
+        "/v1/director/chat-usage",
+        json={
+            "model": "gemini-chat",
+            "reserved": tokens,
+            "inputTokens": 3_000,
+            "outputTokens": 120,
+        },
+        headers=headers(org, user),
+    )
+    assert settled.status_code == 204, settled.text
+    assert usage(org, "director-chat") == 3_120
+    assert usage_models(org, "director-chat") == {"gemini-chat"}
+
+
+def test_a_slower_line_turn_with_no_budget_left_is_refused(client: TestClient) -> None:
+    org, user = new_org()
+    spend_the_month(org)
+    response = client.post(
+        "/v1/director/chat-reservations", json={"model": "gemini-chat"}, headers=headers(org, user)
+    )
+    assert (response.status_code, error_of(response).code) == (429, "AI_BUDGET_EXCEEDED")
+
+
+def test_a_slower_line_turn_settles_no_more_than_a_turn_reserves(client: TestClient) -> None:
+    org, user = new_org()
+    response = client.post(
+        "/v1/director/chat-usage",
+        json={"model": "gemini-chat", "reserved": 10_000_000, "inputTokens": 0, "outputTokens": 0},
+        headers=headers(org, user),
+    )
+    assert response.status_code == 422, response.text
+    assert usage(org, "director-chat") == 0
 
 
 # ------------------------------------------------------------------------------ re-planning

@@ -15,6 +15,11 @@
  * them: the calls Gemini made are answered as the browser will carry them out (done, or
  * refused at once when they can't be), so it knows what it's confirming.
  *
+ * Every turn that asks Gemini is counted in the workspace's AI allowance, like any other
+ * call of Director's: `ChatLedger` reserves it before the first request and settles what
+ * the requests said they cost, however the turn ends (DirectorService keeps it in the AI
+ * service's ledger).
+ *
  * Swapping the model or the provider: `ChatUpstream` says where requests go; the request
  * and response shapes are Vertex AI's generateContent, in their JSON form.
  */
@@ -87,6 +92,7 @@ const CHAT_TIMEOUT_MS = 20 * SECOND_MS;
 const functionCall = z.object({ name: z.string(), args: z.unknown().optional() });
 // Parts are kept as they came (thought signatures included), to hand back in a second request.
 const part = z.looseObject({ text: z.string().optional(), functionCall: functionCall.optional() });
+const tokens = z.int().nonnegative().default(0);
 const generateResponse = z.object({
   candidates: z
     .array(
@@ -95,8 +101,25 @@ const generateResponse = z.object({
       }),
     )
     .default([]),
+  // What the request cost: the prompt (the frame included), and in the total the answer
+  // and the model's thinking, which is billed as output.
+  usageMetadata: z.object({ promptTokenCount: tokens, totalTokenCount: tokens }).optional(),
 });
 type Part = z.infer<typeof part>;
+
+/** What a turn spent on Gemini, over its one or two requests. */
+export interface ChatSpend {
+  inputTokens: number;
+  outputTokens: number;
+  /** False once an answer didn't say what it cost: the turn then keeps all it reserved. */
+  counted: boolean;
+}
+
+/** Where each turn that asks Gemini is counted, before it asks and after. */
+export interface ChatLedger {
+  /** Runs `turn` on a reservation, and settles what it spent whatever comes of it. */
+  charge<T>(turn: (spent: ChatSpend) => Promise<T>): Promise<T>;
+}
 
 interface Content {
   role: "user" | "model";
@@ -185,8 +208,15 @@ export class DirectorChat {
     private readonly log: LiveLog,
   ) {}
 
-  /** Director's reply to one turn on shot `input.shotIndex` of `plan`. */
-  async reply(plan: ShotPlan, input: DirectorChatInput): Promise<DirectorChatReply> {
+  /**
+   * Director's reply to one turn on shot `input.shotIndex` of `plan`, counted in `ledger`
+   * when it asks Gemini.
+   */
+  async reply(
+    plan: ShotPlan,
+    input: DirectorChatInput,
+    ledger: ChatLedger,
+  ): Promise<DirectorChatReply> {
     const upstream = this.upstream;
     if (!upstream) {
       throw new AppError("FEATURE_DISABLED", { params: { feature: "live" } });
@@ -199,10 +229,21 @@ export class DirectorChat {
     if (!turn.answer) {
       return { reply: "", calls: [] };
     }
+    return ledger.charge((spent) => this.answer(upstream, plan, input, turn.text, spent));
+  }
+
+  /** Gemini's answer to the turn, and its words for any calls it made without any. */
+  private async answer(
+    upstream: ChatUpstream,
+    plan: ShotPlan,
+    input: DirectorChatInput,
+    text: string,
+    spent: ChatSpend,
+  ): Promise<DirectorChatReply> {
     const system = `${systemInstruction(plan, input.shotIndex, versionOf(input))}\n\n${SLOWER}`;
-    const contents: Content[] = [userContent(input, turn.text)];
-    const first = await this.generate(upstream, system, contents);
-    const { text, calls: raw } = read(first);
+    const contents: Content[] = [userContent(input, text)];
+    const first = await this.generate(upstream, system, contents, spent);
+    const { text: said, calls: raw } = read(first);
     const calls: LiveToolCall[] = [];
     const responses: object[] = [];
     for (const call of raw) {
@@ -216,16 +257,21 @@ export class DirectorChat {
       const response = "call" in checked ? TOOL_RESPONSES.done : checked.response;
       responses.push({ functionResponse: { name: call.name, response } });
     }
-    if (text || raw.length === 0) {
-      return { reply: text, calls };
+    if (said || raw.length === 0) {
+      return { reply: said, calls };
     }
     // Only calls: Gemini says what it did, knowing how each went.
     contents.push({ role: "model", parts: first }, { role: "user", parts: responses });
-    const second = read(await this.generate(upstream, system, contents));
+    const second = read(await this.generate(upstream, system, contents, spent));
     return { reply: second.text, calls };
   }
 
-  private async generate(upstream: ChatUpstream, system: string, contents: Content[]) {
+  private async generate(
+    upstream: ChatUpstream,
+    system: string,
+    contents: Content[],
+    spent: ChatSpend,
+  ) {
     let response: Response;
     try {
       const token = await upstream.auth.accessToken();
@@ -252,6 +298,13 @@ export class DirectorChat {
     if (!(response.ok && parsed.success)) {
       this.log("error", { status: response.status, body }, "director chat refused");
       throw new AppError("UPSTREAM_UNAVAILABLE", { params: { service: "gemini" } });
+    }
+    const usage = parsed.data.usageMetadata;
+    if (usage) {
+      spent.inputTokens += usage.promptTokenCount;
+      spent.outputTokens += Math.max(0, usage.totalTokenCount - usage.promptTokenCount);
+    } else {
+      spent.counted = false;
     }
     return parsed.data.candidates[0]?.content.parts ?? [];
   }

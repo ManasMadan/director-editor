@@ -176,6 +176,7 @@ export const yourVersionContract = {
     .output(yourVersionSchema),
   /** Keeps the caller's version of the template, as the shoot screen has it now. */
   save: route("PUT", "/director/{videoId}/version", "Keep your version of a template")
+    .errors(errorsOf("DEMO_ACCOUNT_LOCKED"))
     .meta({ rateLimit: EVERYDAY_WRITES })
     .input(z.object({ videoId: videoIdSchema, version: yourVersionSchema }))
     .output(yourVersionSchema),
@@ -184,6 +185,7 @@ export const yourVersionContract = {
    * answers with it and a line saying what changed. The plan must be ready.
    */
   revise: route("POST", "/director/{videoId}/revisions", "Re-plan your version")
+    .errors(errorsOf("DEMO_ACCOUNT_LOCKED"))
     .meta({
       rateLimit: { name: "director-revise", points: 30, windowSeconds: HOUR_S, per: "user" },
     })

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { startFakeGoogle } from "./index";
+import { CHAT_USAGE, startFakeGoogle } from "./index";
 
 const TOKEN = "live-token";
 const PATH = "/v1/projects/p/locations/global/publishers/google/models/gemini-x:generateContent";
@@ -33,6 +33,11 @@ async function partsOf(body: unknown) {
 }
 
 describe("the slower line's generateContent", () => {
+  it("says what each answer cost, as Vertex does", async () => {
+    const response = await ask(turn("hello?"));
+    expect(await response.json()).toMatchObject({ usageMetadata: CHAT_USAGE });
+  });
+
   it("answers by what was said last", async () => {
     expect(await partsOf(turn("hello?"))).toEqual([{ text: "Got it." }]);
     expect(await partsOf(turn("[They flipped the camera.]"))).toEqual([

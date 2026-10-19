@@ -5,6 +5,7 @@ with OpenCV, with Gemini's boxes from the local Gemini API (tests/fakes.py)."""
 import asyncio
 import base64
 import math
+import socket
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
@@ -13,6 +14,7 @@ import httpx2
 import pytest
 from fastapi.testclient import TestClient
 
+from app import aligning as aligning_module
 from app.aligning import (
     FPS,
     LocalAligner,
@@ -21,11 +23,13 @@ from app.aligning import (
     aligning,
     apply,
     create_locator,
+    frame_command,
     pick_cut,
     read_frames,
     uncovered,
     within_tolerance,
 )
+from app.clipping import JAIL
 from app.director import create_google_model
 from app.errors import AppError
 from app.schemas import (
@@ -33,6 +37,7 @@ from app.schemas import (
     AlignResult,
     MatchCutAlignment,
     MatchCutTransform,
+    TakeVideoType,
     TokenUsage,
 )
 from app.settings import GeminiSettings, get_aligner_settings
@@ -257,7 +262,7 @@ def test_gemini_failing_is_upstream_unavailable_with_what_it_used(
 
 def test_a_take_that_cant_be_read_is_upstream_unavailable() -> None:
     with serve_files({}) as storage, pytest.raises(AppError) as raised:
-        asyncio.run(read_frames(f"{storage.url}/gone.mp4?sig=secret", 0, 0.5))
+        asyncio.run(read_frames(f"{storage.url}/gone.mp4?sig=secret", "video/mp4", 0, 0.5))
     assert (raised.value.code, raised.value.params) == (
         "UPSTREAM_UNAVAILABLE",
         {"service": "storage"},
@@ -267,10 +272,49 @@ def test_a_take_that_cant_be_read_is_upstream_unavailable() -> None:
 def test_frames_are_fitted_to_the_finished_frame(tmp_path: Path) -> None:
     path = tmp_path / "a.mp4"
     write_clip(path, 1, Placement(270, 480), 1.0)
-    frames = asyncio.run(read_frames(str(path), 0.5, 0.5))
+    with serve_files({"/a.mp4": ("video/mp4", path.read_bytes())}) as storage:
+        frames = asyncio.run(read_frames(f"{storage.url}/a.mp4", "video/mp4", 0.5, 0.5))
     assert len(frames) == round(0.5 * FPS)
     assert frames[0].shape == (640, 360, 3)
     assert (WIDTH, HEIGHT) == (540, 960)
+
+
+def test_ffmpeg_reads_a_take_in_the_jail_as_its_type_over_its_url_s_protocol_only() -> None:
+    """A member's take is decoded with no secrets and bounded resources (app/jail.py), as
+    the type it was stored as, never probed, and from its presigned URL's protocol alone."""
+    url = "https://storage.googleapis.com/bucket/files/1?X-Goog-Signature=abc"
+    command = frame_command(url, "video/webm", 1.0, 0.5)
+    assert command[: len(JAIL)] == JAIL
+    assert command[len(JAIL)] == "ffmpeg"
+    for flag, value in [("-protocol_whitelist", "https,tls,tcp"), ("-f", "matroska"), ("-i", url)]:
+        assert command[command.index(flag) + 1] == value
+    assert command.index("-protocol_whitelist") < command.index("-i")
+    assert command.index("-f") < command.index("-i")
+    plain = frame_command("http://127.0.0.1:9000/files/1", "video/mp4", 0, 0.5)
+    assert plain[plain.index("-protocol_whitelist") + 1] == "http,tcp"
+    assert plain[plain.index("-f") + 1] == "mov"
+
+
+def test_a_take_that_isn_t_its_type_or_isn_t_in_storage_is_never_read(tmp_path: Path) -> None:
+    path = tmp_path / "a.mp4"
+    write_clip(path, 1, Placement(270, 480), 1.0)
+    playlist = b"#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nfile:///etc/passwd\n"
+    with serve_files(
+        {"/a.mp4": ("video/mp4", path.read_bytes()), "/list.mp4": ("video/mp4", playlist)}
+    ) as storage:
+        tries: list[tuple[str, TakeVideoType]] = [
+            # An MP4 said to be a WebM: read as one, it's nothing.
+            (f"{storage.url}/a.mp4", "video/webm"),
+            # A playlist dressed as a take: never opened as one, so nothing it names is.
+            (f"{storage.url}/list.mp4", "video/mp4"),
+            # Anything but the storage's own URL.
+            (str(path), "video/mp4"),
+            (f"file:{path}", "video/mp4"),
+        ]
+        for url, content_type in tries:
+            with pytest.raises(AppError) as raised:
+                asyncio.run(read_frames(url, content_type, 0, 0.5))
+            assert raised.value.code == "UPSTREAM_UNAVAILABLE", url
 
 
 # ------------------------------------------------------------------------ the maths
@@ -443,3 +487,23 @@ def test_the_cloud_run_aligner_lines_up_a_cut_for_the_account_that_may_call_it(
         response = call(f"Bearer {identity.token(AUDIENCE)}")
     assert response.status_code == 200, response.text
     assert AlignResult.model_validate_json(response.content).alignment.status == "aligned"
+
+
+def test_a_read_given_up_on_stops_its_ffmpeg(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A read that takes too long, or that's cancelled (the other take's read failed), has
+    its ffmpeg killed, not left waiting on storage."""
+    hung = socket.create_server(("127.0.0.1", 0))
+    url = f"http://127.0.0.1:{hung.getsockname()[1]}/a.mp4"
+
+    async def give_up() -> None:
+        _ = await asyncio.wait_for(read_frames(url, "video/mp4", 0, 0.5), 1.0)
+
+    try:
+        with pytest.raises(TimeoutError):
+            asyncio.run(give_up())
+        monkeypatch.setattr(aligning_module, "FFMPEG_SECONDS", 0.2)
+        with pytest.raises(AppError) as raised:
+            asyncio.run(read_frames(url, "video/mp4", 0, 0.5))
+        assert raised.value.code == "UPSTREAM_UNAVAILABLE"
+    finally:
+        hung.close()
