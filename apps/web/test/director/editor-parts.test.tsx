@@ -582,6 +582,11 @@ describe("the edit player", () => {
     const clips = clipsFor(shots, { 1: { kind: "photo" } });
     const { page, update } = await player(clips, mediaOf(clips, { 1: "loading" }));
     await expect.element(page.getByText("Shot 1 isn't filmed yet")).toBeVisible();
+    // Above the captions, which are drawn around two thirds of the way down.
+    const frame = document.querySelector("canvas")?.getBoundingClientRect();
+    const words = page.getByText("Shot 1 isn't filmed yet").element().getBoundingClientRect();
+    expect(frame).toBeDefined();
+    expect(words.bottom).toBeLessThanOrEqual((frame?.top ?? 0) + (frame?.height ?? 0) / 4);
     update({ time: 1.6 });
     await expect.element(page.getByRole("status", { name: "Loading this take…" })).toBeVisible();
     expect(page.getByText("isn't filmed yet", { exact: false }).query()).toBeNull();

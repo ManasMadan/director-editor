@@ -193,6 +193,16 @@ function FramingBox({ shot, className }: { shot: Shot; className: string }) {
   );
 }
 
+/**
+ * Which camera the card names. The plan has the original's, and someone talking to the
+ * back camera was being filmed by somebody else: a member on their own films that line
+ * on the selfie side, which the shoot opens on, so the card offers both.
+ */
+function cameraOf(shot: Shot): "front" | "back" | "backOrSelfie" {
+  const talking = shot.mode === "on-camera" && shot.script.length > 0;
+  return shot.camera === "back" && talking ? "backOrSelfie" : shot.camera;
+}
+
 /** How the shot is filmed: where, how it's framed, and how to hold the phone. */
 function HowTo({ shot }: { shot: Shot }) {
   const t = useTranslations("director");
@@ -215,7 +225,7 @@ function HowTo({ shot }: { shot: Shot }) {
       <dd className="flex flex-col">
         <span>{t(`shoot.height.${shot.phoneAngle.height}`)}</span>
         <span className="text-studio-foreground/65">{tilt}</span>
-        <span className="text-studio-foreground/65">{t(`camera.${shot.camera}`)}</span>
+        <span className="text-studio-foreground/65">{t(`camera.${cameraOf(shot)}`)}</span>
       </dd>
     </dl>
   );
@@ -398,7 +408,7 @@ export function StoryboardStateNote({ state }: { state: StoryboardState }) {
   return (
     <p
       className={cn(
-        "text-[11px] leading-tight",
+        "text-[0.6875rem] leading-tight",
         state === "drawing" ? "text-studio-foreground/70" : "text-studio-foreground/85",
       )}
     >

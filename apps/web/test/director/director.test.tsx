@@ -92,8 +92,14 @@ describe("Director's page for a ready plan", () => {
     // The list says how each shot is filmed.
     await expect.element(page.getByText("End on a smile.", { exact: true })).toBeVisible();
     expect(page.getByText(/payoff:/).query()).toBeNull();
-    await expect.element(page.getByText("Front camera")).toBeVisible();
-    await expect.element(page.getByText("Back camera")).toBeVisible();
+    await expect.element(page.getByText("Front camera", { exact: true })).toBeVisible();
+    // A line said to the back camera was filmed by someone else: on your own, it's the
+    // selfie side.
+    await expect
+      .element(
+        page.getByText("Back camera, or the front one if you're filming yourself", { exact: true }),
+      )
+      .toBeVisible();
     await expect.element(page.getByText("1.5 s")).toBeVisible();
     await expect.element(page.getByText("Kitchen")).toBeVisible();
     // Where to stand in the picture, how to hold the phone and what to say.
@@ -509,15 +515,13 @@ describe("a seeded template's media", () => {
     // The seed's music, on a player of its own, loaded only once it's played.
     await expect.element(page.getByText("Soundtrack, made with Lyria")).toBeVisible();
     expect(await commands.answeredRequests("/music.mp3")).toBe(0);
-    const music = page.getByRole("button", { name: "Play the soundtrack" });
-    await expect.element(music).toHaveAttribute("aria-pressed", "false");
-    await userEvent.click(music);
+    // The button's name says what a tap does now.
+    await userEvent.click(page.getByRole("button", { name: "Play the soundtrack" }));
     expect(soundtrack()?.src).toContain(`seed-media/${seed.videoId}/music.mp3`);
     await expect.poll(() => soundtrack()?.paused).toBe(false);
-    await expect.element(music).toHaveAttribute("aria-pressed", "true");
-    await userEvent.click(music);
+    await userEvent.click(page.getByRole("button", { name: "Pause the soundtrack" }));
     await expect.poll(() => soundtrack()?.paused).toBe(true);
-    await expect.element(music).toHaveAttribute("aria-pressed", "false");
+    await expect.element(page.getByRole("button", { name: "Play the soundtrack" })).toBeVisible();
     // Nothing failed, so the plan was read once.
     expect(await planReads()).toBe(1);
   });
@@ -543,8 +547,7 @@ describe("a seeded template's media", () => {
     // The other shots' storyboards, the first's playing as its preview.
     const shown = pictures();
     expect(shown).toHaveLength(seed.plan.shots.length - 1);
-    const music = page.getByRole("button", { name: "Play the soundtrack" });
-    await userEvent.click(music);
+    await userEvent.click(page.getByRole("button", { name: "Play the soundtrack" }));
     await expect.poll(() => soundtrack()?.paused).toBe(false);
 
     // Links are signed to the second: a read a second later has new ones for everything.
@@ -555,7 +558,7 @@ describe("a seeded template's media", () => {
 
     // What was working keeps the link it had: nothing stops, restarts or loads again.
     expect(soundtrack()?.paused).toBe(false);
-    await expect.element(music).toHaveAttribute("aria-pressed", "true");
+    await expect.element(page.getByRole("button", { name: "Pause the soundtrack" })).toBeVisible();
     expect(videos().map((video) => [video.src, video.paused])).toEqual([[clip, false]]);
     expect(pictures()).toEqual(shown);
   });

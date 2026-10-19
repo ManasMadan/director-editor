@@ -345,8 +345,8 @@ function Soundtrack({ url, media }: { url: string | undefined; media: MediaLinks
       <button
         type="button"
         onClick={toggle}
-        aria-label={t("playSoundtrack")}
-        aria-pressed={playing}
+        // Says what a tap does now, like the sound and preview buttons on this page.
+        aria-label={playing ? t("pauseSoundtrack") : t("playSoundtrack")}
         className="flex size-11 shrink-0 items-center justify-center rounded-full bg-studio-foreground text-studio transition-transform active:scale-95"
       >
         {playing ? (

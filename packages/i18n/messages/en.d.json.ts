@@ -722,7 +722,8 @@ declare const messages: {
     "seconds": "{seconds, number, ::.#} s",
     "camera": {
       "front": "Front camera",
-      "back": "Back camera"
+      "back": "Back camera",
+      "backOrSelfie": "Back camera, or the front one if you're filming yourself"
     },
     "audio": {
       "question": "This short has speech. Will you say it yourself, or use the original audio?",
@@ -877,6 +878,7 @@ declare const messages: {
       "pausePreview": "Pause the preview of shot {index, number}",
       "soundtrack": "Soundtrack, made with Lyria",
       "playSoundtrack": "Play the soundtrack",
+      "pauseSoundtrack": "Pause the soundtrack",
       "changeShots": "Change the shots",
       "storyboardState": {
         "drawing": "Director is still drawing this shot",
