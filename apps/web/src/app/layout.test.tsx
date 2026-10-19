@@ -27,8 +27,8 @@ describe("the root layout", () => {
     request.cookies.set("locale", "en");
     request.headers.set("x-nonce", "abc123");
     const html = await render();
-    expect(html).toMatch(/<html lang="en" dir="ltr"/);
-    expect(html).toContain("--font-geist-sans");
+    // No web font's class: nothing to download before the first words show.
+    expect(html).toContain('<html lang="en" dir="ltr">');
     expect(html).toContain("<main");
     expect(html).toContain("page content");
     // The site's footer is the page's own landmark, after the main content, not inside it.

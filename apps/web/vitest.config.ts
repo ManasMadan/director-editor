@@ -93,9 +93,8 @@ export default defineConfig({
           name: "unit",
           include: ["src/**/*.test.{ts,tsx}", "*.test.ts"],
           setupFiles: ["./test/next-server.ts"],
-          // Bundled like Next does, so the aliases above and next/font's stand-in
-          // (test/next-server.ts) apply inside these packages too.
-          server: { deps: { inline: ["next-intl", "geist"] } },
+          // Bundled like Next does, so the aliases above apply inside next-intl too.
+          server: { deps: { inline: ["next-intl"] } },
           // e2e/ is Playwright's (bun run test:e2e).
           exclude: [...configDefaults.exclude, "e2e/**"],
         },
