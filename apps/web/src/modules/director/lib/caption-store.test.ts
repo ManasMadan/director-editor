@@ -51,7 +51,10 @@ describe("Director live's captions", () => {
     store.said("director", "Go!");
     store.turnOver();
     expect(texts(store)).toEqual(["you:ready?.", "director:Go!."]);
-    vi.advanceTimersByTime(ANSWERED_FOR_MS);
+    // Director busy meanwhile changes nothing of when the answered line goes.
+    vi.advanceTimersByTime(ANSWERED_FOR_MS / 2);
+    store.working("replanning");
+    vi.advanceTimersByTime(ANSWERED_FOR_MS / 2);
     expect(texts(store)).toEqual(["director:Go!."]);
     store.typed("again");
     store.withoutMember();

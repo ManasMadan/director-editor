@@ -136,7 +136,9 @@ describe("Director's edits", () => {
   it("hands the page what only it can do", () => {
     const step = apply(
       action({ op: "undo", steps: 2 }),
+      action({ op: "undo" }),
       action({ op: "redo" }),
+      action({ op: "redo", steps: 3 }),
       action({ op: "reshoot", shotIndex: 1 }),
       action({ op: "asset_request", value: "a calmer soundtrack" }),
       action({ op: "asset_request" }),
@@ -145,7 +147,9 @@ describe("Director's edits", () => {
     );
     expect(step.effects).toEqual([
       { kind: "undo", steps: 2 },
+      { kind: "undo", steps: 1 },
       { kind: "redo", steps: 1 },
+      { kind: "redo", steps: 3 },
       { kind: "reshoot", shotIndex: 1 },
       { kind: "asset", request: "a calmer soundtrack" },
       { kind: "music", level: 0.3 },

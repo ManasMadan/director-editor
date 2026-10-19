@@ -136,5 +136,7 @@ describe("the member's version of a shot", () => {
     expect(films(version, 2)).toBe(false);
     expect(nextFilmed(version, 0, 4)).toBe(3);
     expect(nextFilmed(version, 3, 4)).toBeNull();
+    // Kept in the shots' order, whichever was skipped first.
+    expect(skipped(version, 0).skipped).toEqual([0, 1]);
   });
 });
