@@ -101,24 +101,57 @@ from the top-left of the frame). Box only the anchor itself (the watch face, not
 arm). If it isn't clearly visible, say so; never guess a box."""
 
 
-class AnchorSighting(BaseModel):
+@dataclass(frozen=True)
+class AnchorSighting:
     visible: bool
-    box: Box | None = Field(description="The anchor's tight box; null when not visible.")
+    box: Box | None
 
 
-class AnchorSightings(BaseModel):
-    before: AnchorSighting = Field(description="In the last frame before the cut.")
-    after: AnchorSighting = Field(description="In the first frame after the cut.")
+@dataclass(frozen=True)
+class AnchorSightings:
+    before: AnchorSighting
+    after: AnchorSighting
+
+
+# What Gemini answers with: the box as four nullable numbers rather than a nullable
+# object, and its bounds checked here rather than in the schema, so the schema Vertex AI
+# is sent keeps to what it has always accepted from this service
+# (tests/test_output_schemas.py, EditDraft's comment in app/schemas.py).
+class AnchorSightingDraft(BaseModel):
+    visible: bool
+    x: float | None = Field(description="The box's left edge (0 to 1); null when not visible.")
+    y: float | None = Field(description="Its top edge (0 to 1).")
+    width: float | None = Field(description="Its width (0 to 1).")
+    height: float | None = Field(description="Its height (0 to 1).")
+
+
+class AnchorSightingsDraft(BaseModel):
+    before: AnchorSightingDraft = Field(description="In the last frame before the cut.")
+    after: AnchorSightingDraft = Field(description="In the first frame after the cut.")
+
+
+def sighting(draft: AnchorSightingDraft) -> AnchorSighting:
+    """Where Gemini saw the anchor. A box that isn't one (a missing edge, or one outside
+    the frame) counts as not seen: the cut stays plain rather than lined up wrong."""
+    try:
+        box = Box.model_validate(draft.model_dump(exclude={"visible"}))
+    except ValidationError:
+        box = None
+    return AnchorSighting(visible=draft.visible and box is not None, box=box)
+
+
+def sightings(draft: AnchorSightingsDraft) -> AnchorSightings:
+    return AnchorSightings(before=sighting(draft.before), after=sighting(draft.after))
 
 
 class Aligner(Protocol):
     async def align(self, request: AlignRequest) -> AlignResult: ...
 
 
-def create_locator(model: Model) -> Agent[None, AnchorSightings]:
+def create_locator(model: Model) -> Agent[None, AnchorSightingsDraft]:
     return Agent(
         model,
-        output_type=AnchorSightings,
+        output_type=AnchorSightingsDraft,
         instructions=LOCATE_INSTRUCTIONS,
         model_settings=ModelSettings(thinking="low", timeout=LOCATE_TIMEOUT_SECONDS),
         defer_model_check=True,
@@ -516,7 +549,7 @@ def within_tolerance(offset_px: float, scale_diff: float, rotation_deg: float) -
 class LocalAligner:
     """Aligns in this process: the service without ALIGNER_URL, and the Cloud Run aligner."""
 
-    def __init__(self, locator: Agent[None, AnchorSightings]) -> None:
+    def __init__(self, locator: Agent[None, AnchorSightingsDraft]) -> None:
         self._locator = locator
 
     async def align(self, request: AlignRequest) -> AlignResult:
@@ -550,7 +583,12 @@ class LocalAligner:
             ) from None
         # The OpenCV work is CPU-bound: off the event loop, so health checks still answer.
         alignment = await asyncio.to_thread(
-            align_frames, request, outgoing, incoming, seen.output, round(out_start * 1000)
+            align_frames,
+            request,
+            outgoing,
+            incoming,
+            sightings(seen.output),
+            round(out_start * 1000),
         )
         return AlignResult(
             alignment=alignment,

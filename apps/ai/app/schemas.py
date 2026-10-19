@@ -45,6 +45,7 @@ MAX_SHOT_SECONDS = 60
 MAX_SHOT_STEPS = 10
 MAX_SCRIPT_LINES = 20
 MAX_POSE_KEYPOINTS = 13
+MAX_SHOT_TITLE = 80
 # What a template needs beyond the member's own filming (packages/contracts' director.ts
 # mirrors these): at most one asset per image a video may have made (12, the image limit
 # per video), and room for a busy edit (captions, a layout, overlays, cuts).
@@ -111,7 +112,7 @@ type EditType = Literal[
 ]
 # The edits' enums are plain aliases, not `type` statements, so a schema inlines them:
 # a nullable one is then `anyOf: [{enum}, {null}]`, the shape Vertex AI has always been
-# sent, rather than a `$ref` inside an `anyOf` (tests/test_planner_schema.py).
+# sent, rather than a `$ref` inside an `anyOf` (tests/test_output_schemas.py).
 LayoutKind = Literal["full", "split", "picture-in-picture"]
 Entrance = Literal["cut", "fade", "slide", "pop", "draw"]
 Mark = Literal["circle", "underline", "arrow", "box", "highlight", "tick", "cross"]
@@ -186,7 +187,7 @@ class Shot(BaseModel):
         description="on-camera: the viewer films it; voice-over: only their voice is used; "
         "asset: nothing is filmed, an asset takes its place.",
     )
-    title: str = Field(min_length=1, max_length=80)
+    title: str = Field(min_length=1, max_length=MAX_SHOT_TITLE)
     purpose: str = Field(
         min_length=1,
         max_length=240,
@@ -336,7 +337,7 @@ class Asset(_AssetFields):
 # can't make whole. Every field is required and nullable with no default, and the box is
 # four numbers rather than a nested object, so the schema Vertex AI is sent keeps to
 # what it has always accepted from this service (`sceneLandmark`'s shape) and stays
-# small (tests/test_planner_schema.py).
+# small (tests/test_output_schemas.py).
 class EditDraft(BaseModel):
     """One edit: fill only the fields its type uses (each field names its types), null
     the rest."""
@@ -832,10 +833,11 @@ class LocateDraft(BaseModel):
         max_length=MAX_LOCATE_LABEL,
         description='What it is, in two or three plain words for the person: "your window".',
     )
-    box_2d: list[Thousandth] | None = Field(
-        min_length=4,
-        max_length=4,
-        description="[ymin, xmin, ymax, xmax] of the target, from 0 to 1000; null if not found.",
+    # Not `list[Thousandth] | None` of exactly four: Vertex AI refuses `minItems`/
+    # `maxItems` (and only ever gets a nullable plain value, tests/test_output_schemas.py),
+    # so `located` checks there are four.
+    box_2d: list[Thousandth] = Field(
+        description="[ymin, xmin, ymax, xmax] of the target, from 0 to 1000; empty if not found.",
     )
 
 
@@ -940,6 +942,73 @@ class TakeReview(BaseModel):
     # A default only so a review written before the index still reads; Gemini is asked
     # for it every time (REVIEW_INSTRUCTIONS).
     index: TakeIndex | None = None
+
+
+# The reviewer's own output type is `TakeReviewDraft`, not `TakeReview`, for the reason
+# the planner answers with `ShotPlanDraft` (the module comment): `TakeIndex`'s lists are
+# bounded, and Vertex AI answers 400 INVALID_ARGUMENT to a schema with a `maxItems` in it,
+# which would fail every review. Nor does the draft carry a default or a nullable object
+# (tests/test_output_schemas.py). The draft's text, lists and times are unbounded too, so
+# a review that runs a little long is trimmed rather than failed and paid for twice (an
+# output-validation retry sends the whole video again): `repair_review`
+# (app/take_review.py) trims and clamps a draft into a `TakeReview`. Only what can't be
+# repaired stays a constraint here: an empty feedback or reason, and the enums.
+class SpokenWordDraft(BaseModel):
+    text: str
+    startSeconds: float
+    endSeconds: float
+
+
+class TakeMomentDraft(BaseModel):
+    kind: MomentKind
+    atSeconds: float = Field(description="From the take's start.")
+    note: str = Field(description='In a few words: "big smile at the camera".')
+
+
+class TakeIndexDraft(BaseModel):
+    visible: str = Field(
+        description=(
+            "Everything visible, plainly, in at most 800 characters: the people, their"
+            " clothing and colours, the place, objects and animals in the background, what"
+            " they do, their expressions."
+        ),
+    )
+    things: list[str] = Field(
+        description=(
+            f"Each visible object, animal or prop in two or three words (at most"
+            f' {MAX_INDEX_THINGS}): "red cup".'
+        ),
+    )
+    transcript: list[SpokenWordDraft] = Field(
+        description="Every word said, with its times in seconds from the take's start."
+    )
+    moments: list[TakeMomentDraft] = Field(
+        description=f"Notable moments, at most {MAX_INDEX_MOMENTS}; empty when there are none."
+    )
+    quality: TakeQuality
+
+
+class TakeReviewDraft(BaseModel):
+    """Gemini's review of one take, as it answers (see the comment above)."""
+
+    bestStartSeconds: float | None = Field(
+        description="Where the part worth keeping starts (video); null for a photo."
+    )
+    bestEndSeconds: float | None = Field(description="Where it ends; null for a photo.")
+    score: int = Field(description="How closely the take follows the shot, from 0 to 100.")
+    feedback: str = Field(
+        min_length=1,
+        description="What worked, and the one thing to fix, in one sentence under 300 characters.",
+    )
+    reason: str = Field(
+        min_length=1,
+        description=(
+            "Why this take would or wouldn't be the one to use, in a short, specific line"
+            ' (under 160 characters) about what you saw or heard: "the cleanest delivery,'
+            ' and you held the smile".'
+        ),
+    )
+    index: TakeIndexDraft
 
 
 class DirectorTakeOut(BaseModel):
@@ -1334,6 +1403,9 @@ class ShotVersion(BaseModel):
     model_config = REQUEST
 
     shot: ShotIndex
+    # The shot's name in their version, when re-planning or adapting it moved it somewhere
+    # the original's title names no more ("Intro at your desk" for "Intro in the market").
+    title: Annotated[str, Field(min_length=1, max_length=MAX_SHOT_TITLE)] | None = None
     where: VersionRow | None = None
     action: VersionRow | None = None
     line: VersionRow | None = None
@@ -1364,6 +1436,10 @@ class RevisedShotDraft(BaseModel):
     shot: int = Field(description="The shot's number, from 1.")
     status: Literal["film", "skip", "gap"] = Field(
         description="film: they film it; skip: left out; gap: not filmed, the editor fills it."
+    )
+    title: str | None = Field(
+        description="The shot's new name when its title names something it no longer has"
+        " (the old place), or null for no change."
     )
     where: str | None = Field(description="Where they film it now, or null for no change.")
     action: str | None = Field(description="What they do now, or null for no change.")
@@ -1503,8 +1579,13 @@ class EditorDraft(BaseModel):
     heard: str = Field(max_length=MAX_EDITOR_TEXT, description="What they asked, in their words.")
     outcome: EditorOutcome
     say: str = Field(min_length=1, max_length=240, description="One or two short sentences.")
-    actions: list[EditorDraftAction] = Field(max_length=MAX_EDITOR_ACTIONS)
-    choices: list[TakeChoiceDraft] = Field(max_length=MAX_EDITOR_CHOICES)
+    # Unbounded here, for the reason TakeReviewDraft's lists are (Vertex AI refuses a
+    # `maxItems`): `reply_of` (app/editor.py) keeps the first MAX_EDITOR_ACTIONS and
+    # MAX_EDITOR_CHOICES.
+    actions: list[EditorDraftAction]
+    choices: list[TakeChoiceDraft] = Field(
+        description=f"Candidate takes, at most {MAX_EDITOR_CHOICES}, best first; usually empty."
+    )
 
 
 class EditorAction(BaseModel):

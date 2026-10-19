@@ -3491,6 +3491,19 @@
           "shot": {
             "$ref": "#/components/schemas/ShotIndex"
           },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
           "where": {
             "anyOf": [
               {

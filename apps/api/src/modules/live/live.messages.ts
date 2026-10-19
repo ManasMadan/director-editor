@@ -70,6 +70,7 @@ export const toolArgsSchemas = {
   }),
   adapt_shot: z.object({
     shot: z.number().int(),
+    title: z.string().optional(),
     where: z.string().optional(),
     action: z.string().optional(),
     line: z.string().optional(),

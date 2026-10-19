@@ -1804,6 +1804,10 @@ export type ShotVersion = {
     framing?: VersionRow | null;
     line?: VersionRow | null;
     shot: ShotIndex;
+    /**
+     * Title
+     */
+    title?: string | null;
     where?: VersionRow | null;
 };
 

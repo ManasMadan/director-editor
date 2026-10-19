@@ -6,7 +6,7 @@
  * into the answer Gemini hears at once when it can't be done. What each answer from the
  * browser means to Gemini is here too, so both lines tell it the same thing.
  */
-import type { ShotPlan } from "@repo/contracts/api";
+import { SHOT_TITLE_MAX_LENGTH, type ShotPlan } from "@repo/contracts/api";
 import {
   LIVE_ADAPTATION_MAX_LENGTH,
   LIVE_MARK_TEXT_MAX_LENGTH,
@@ -65,20 +65,22 @@ function noShot(shot: number, count: number) {
 
 /**
  * The member's version of a shot, as Gemini put it: a shot the plan has, and at least
- * one of where, what and the line, each a sentence or two (the contract's bounds).
+ * one of its title, where, what and the line, each a sentence or two (the contract's
+ * bounds).
  */
 function adaptCall(plan: ShotPlan, raw: unknown): ToolCheck {
   const args = toolArgsSchemas.adapt_shot.safeParse(raw ?? {});
   if (!args.success) {
     return { response: { error: "shot must be a whole number, the rest text" } };
   }
-  const { shot, where, action, line, framing, camera } = args.data;
+  const { shot, title, where, action, line, framing, camera } = args.data;
   const count = plan.shots.length;
   if (shot < 1 || shot > count) {
     return noShot(shot, count);
   }
   const adaptation = liveAdaptation.safeParse({
     shot: shot - 1,
+    title,
     where,
     action,
     line,
@@ -86,12 +88,14 @@ function adaptCall(plan: ShotPlan, raw: unknown): ToolCheck {
     camera,
   });
   if (!adaptation.success) {
-    const error = `each of where, action, line and framing is one to ${LIVE_ADAPTATION_MAX_LENGTH} characters`;
+    const error = `each of where, action, line and framing is one to ${LIVE_ADAPTATION_MAX_LENGTH} characters, the title one to ${SHOT_TITLE_MAX_LENGTH}`;
     return { response: { error } };
   }
   const { data } = adaptation;
-  if (!(data.where || data.action || data.line || data.framing || data.camera)) {
-    return { response: { error: "say what changed: where, action, line, framing or camera" } };
+  if (!(data.title || data.where || data.action || data.line || data.framing || data.camera)) {
+    return {
+      response: { error: "say what changed: title, where, action, line, framing or camera" },
+    };
   }
   return { call: { name: "adapt_shot", ...data } };
 }

@@ -27,7 +27,7 @@ import * as z from "zod";
 import { jobMeta, queuePrefix, queues } from "../src/queues";
 
 /** The queues Python uses. */
-const shared = ["ai-director", "recording"] as const;
+const shared = ["ai-director", "ai-review", "recording"] as const;
 
 /**
  * What Python needs of a queue's options. Strict, so an option added to one of these
@@ -49,7 +49,7 @@ const queueSetting = z.strictObject({
         .strictObject({
           type: z.string(),
           delay: z.number().int().optional(),
-          // Python's bullmq ignores it (it reads type and delay): only Node consumers jitter.
+          // Python's bullmq ignores it, so apps/ai applies it itself (app/queues.py).
           jitter: z.number().min(0).max(1).optional(),
         })
         .meta({ title: "Backoff" }),

@@ -1,5 +1,5 @@
 /** The editor's parts: its settings, the board of shots and takes, and the player. */
-import type { DirectorShot, DirectorTake, Shot } from "@repo/contracts/api";
+import type { DirectorShot, DirectorTake, Shot, YourVersion } from "@repo/contracts/api";
 import { type DirectorTakeId, directorTakeIdSchema, fileIdSchema } from "@repo/contracts/ids";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -8,11 +8,12 @@ import { BackToPicks } from "@/modules/director/components/directors-picks";
 import { EditPlayer } from "@/modules/director/components/edit-player";
 import { SoundPanel, StylePicker } from "@/modules/director/components/edit-tools";
 import { ShotBoard } from "@/modules/director/components/shot-board";
+import { VersionGaps } from "@/modules/director/components/version-gaps";
 import type { MediaState } from "@/modules/director/hooks/use-take-media";
 import { type Clip, clipsOf, editLines } from "@/modules/director/lib/edit";
 import { type Picks, pickedTakes } from "@/modules/director/lib/picks";
 import { renderPage } from "../render";
-import { photo, planShot, recordVideo } from "./support";
+import { photo, planShot, recordVideo, shotPlan } from "./support";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -104,6 +105,30 @@ describe("the editor's settings", () => {
     const page = await renderPage(<SoundPanel voice={false} on={false} onChange={vi.fn()} />);
     await expect.element(page.getByText("It's silent on purpose", { exact: false })).toBeVisible();
     expect(page.getByRole("switch").query()).toBeNull();
+  });
+
+  it("names the shots left out of the video as the member's version has them", async () => {
+    const plan = shotPlan({
+      shots: [
+        planShot({ title: "Intro in the market" }),
+        planShot({ title: "The stall" }),
+        planShot({ title: "Outro" }),
+      ],
+    });
+    const version: YourVersion = {
+      notes: [],
+      shots: [{ shot: 0, title: "Intro at your desk", where: "At your desk" }],
+      skipped: [2],
+      gaps: [0, 7],
+    };
+    const page = await renderPage(<VersionGaps plan={plan} version={version} />);
+    const list = page.getByRole("list", { name: "Shots not in your video" });
+    await expect
+      .element(list.getByText("Shot 1 · Intro at your desk: a gap, not filmed"))
+      .toBeVisible();
+    await expect.element(list.getByText("Shot 3 · Outro: skipped")).toBeVisible();
+    expect(list.getByText("Intro in the market", { exact: false }).query()).toBeNull();
+    expect(list.getByRole("listitem").elements()).toHaveLength(2);
   });
 });
 

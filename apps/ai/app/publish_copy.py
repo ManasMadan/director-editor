@@ -21,6 +21,7 @@ from app.schemas import (
     PublishCopy,
     PublishCopyDraft,
 )
+from app.text import at_a_word, shorten
 
 PUBLISH_INSTRUCTIONS = """\
 You are Director, writing the YouTube Shorts post for someone's own version of a short
@@ -52,23 +53,10 @@ def _without_brackets(text: str) -> str:
     return text.replace("<", "").replace(">", "")
 
 
-def _at_a_word(text: str, cut: str) -> str:
-    """`cut` (the start of `text`), ending at a word when there's one to end at."""
-    if cut == text:
-        return text
-    head, space, _ = cut.rpartition(" ")
-    return head.rstrip(" ,;:-") if space and head else cut
-
-
-def _shorten(text: str, limit: int) -> str:
-    """At most `limit` characters, ending at a word when there's one to end at."""
-    return _at_a_word(text, text[:limit])
-
-
 def _within_bytes(text: str, limit: int) -> str:
     """At most `limit` UTF-8 bytes, ending at a word: YouTube counts its description in
     bytes, and a character outside Latin takes two to four."""
-    return _at_a_word(text, text.encode()[: max(limit, 0)].decode(errors="ignore"))
+    return at_a_word(text, text.encode()[: max(limit, 0)].decode(errors="ignore"))
 
 
 def _title(text: str) -> str:
@@ -81,7 +69,7 @@ def _description(text: str, hashtags: list[str], credits: str) -> str:
     tags = " ".join(f"#{tag}" for tag in hashtags)
     rest = "\n\n".join(part for part in [tags, f"{credits}\n{_LONGEST_LINK}"] if part)
     room = YOUTUBE_DESCRIPTION_MAX_BYTES - len(f"\n\n{rest}".encode())
-    shorter = _shorten(_without_brackets(text).strip(), MAX_PUBLISH_DESCRIPTION)
+    shorter = shorten(_without_brackets(text).strip(), MAX_PUBLISH_DESCRIPTION)
     return _within_bytes(shorter, room)
 
 
@@ -129,12 +117,12 @@ def tidy(
     for."""
     hashtags = _hashtags(draft.hashtags)
     lines = [
-        _shorten(_without_brackets(draft.credits).strip(), ORIGINAL_CREDIT_MAX),
-        *(_shorten(_without_brackets(line).strip(), STOCK_CREDIT_MAX) for line in stock_credits),
+        shorten(_without_brackets(draft.credits).strip(), ORIGINAL_CREDIT_MAX),
+        *(shorten(_without_brackets(line).strip(), STOCK_CREDIT_MAX) for line in stock_credits),
     ]
-    credits = _shorten("\n".join(line for line in lines if line), MAX_PUBLISH_CREDITS)
+    credits = shorten("\n".join(line for line in lines if line), MAX_PUBLISH_CREDITS)
     return PublishCopy(
-        title=_shorten(_first_title(draft.title, *fallback_titles), MAX_PUBLISH_TITLE),
+        title=shorten(_first_title(draft.title, *fallback_titles), MAX_PUBLISH_TITLE),
         description=_description(draft.description, hashtags, credits),
         hashtags=hashtags,
         credits=credits,

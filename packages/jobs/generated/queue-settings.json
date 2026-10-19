@@ -16,6 +16,23 @@
       }
     }
   },
+  "ai-review": {
+    "prefix": "{ai-review}",
+    "options": {
+      "attempts": 6,
+      "backoff": {
+        "type": "exponential",
+        "delay": 15000,
+        "jitter": 0.5
+      },
+      "removeOnComplete": {
+        "age": 86400
+      },
+      "removeOnFail": {
+        "age": 604800
+      }
+    }
+  },
   "recording": {
     "prefix": "{recording}",
     "options": {

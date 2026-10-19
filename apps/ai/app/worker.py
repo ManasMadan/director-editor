@@ -1,6 +1,6 @@
-"""Background jobs for the AI service: Director's plans, their images, take reviews and
-post-session passes (queue `ai-director`, consumed when DIRECTOR_MODEL is set; until then
-its jobs wait in the queue).
+"""Background jobs for the AI service: Director's plans, their images and post-session
+passes (queue `ai-director`), and take reviews (queue `ai-review`), consumed when
+DIRECTOR_MODEL is set; until then their jobs wait in the queues.
 
 Run with `bun run worker` (apps/ai). Jobs are validated against the shared contract
 before they're processed, and restore the request id, workspace and user they were
@@ -29,6 +29,9 @@ from app.contracts.ai_director_job_name import AiDirectorJobName
 from app.contracts.ai_director_plan_job import AiDirectorPlanJob
 from app.contracts.ai_director_review_take_job import AiDirectorReviewTakeJob
 from app.contracts.ai_director_session_pass_job import AiDirectorSessionPassJob
+from app.contracts.ai_review_job_name import AiReviewJobName
+from app.contracts.ai_review_review_take_job import AiReviewReviewTakeJob
+from app.contracts.shared_queue_name import SharedQueueName
 from app.create import Creator, create_creator
 from app.db.session import close_engine, open_engine
 from app.director import Director, create_director
@@ -36,6 +39,7 @@ from app.heartbeat import beat
 from app.log import configure_logging, log
 from app.queues import (
     DIRECTOR,
+    REVIEW,
     SETTINGS,
     DirectorQueue,
     JobLike,
@@ -50,6 +54,12 @@ from app.telemetry import start_telemetry
 # A job name this version doesn't know fails the job (and BullMQ keeps it) instead of
 # being skipped as if it had run.
 DIRECTOR_JOB_NAME = TypeAdapter[AiDirectorJobName](AiDirectorJobName)
+REVIEW_JOB_NAME = TypeAdapter[AiReviewJobName](AiReviewJobName)
+# Takes reviewed at once by one worker: a roll is cut into a dozen takes together, and
+# Gemini answers a burst like that with 429s. Two at a time keeps under its rate while a
+# session's reviews still finish in a few minutes; plans and drawings, on their own
+# queue, never wait behind them.
+REVIEW_CONCURRENCY = 2
 
 type AnyJob = (
     AiDirectorPlanJob
@@ -57,6 +67,7 @@ type AnyJob = (
     | AiDirectorCreatePlanJob
     | AiDirectorReviewTakeJob
     | AiDirectorSessionPassJob
+    | AiReviewReviewTakeJob
 )
 
 
@@ -72,11 +83,16 @@ def _user(data: AnyJob) -> UUID | None:
     return UUID(data.meta.userId) if data.meta.userId else None
 
 
-async def run_job(job: JobLike, final: bool, work: Callable[[], Awaitable[None]]) -> None:
+async def run_job(
+    job: JobLike,
+    final: bool,
+    work: Callable[[], Awaitable[None]],
+    queue: SharedQueueName = DIRECTOR,
+) -> None:
     """Runs a job's work and writes its `job.finished` activity line, however it ends: the
     same line the Node workers write, for the user it ran for (bound by `_bound`)."""
     target: Target = {
-        "queue": DIRECTOR,
+        "queue": queue,
         "job": job.name,
         "jobId": job.id,
         # BullMQ's count of the runs before this one.
@@ -147,19 +163,8 @@ def director_processor(
                     ),
                 )
         elif name == "review-take":
-            take = AiDirectorReviewTakeJob.model_validate(job.data)
-            with _bound(job, take):
-                await run_job(
-                    job,
-                    final,
-                    lambda: director.review(
-                        take.payload.orgId,
-                        take.payload.takeId,
-                        str(take.payload.sourceUrl),
-                        _user(take),
-                        final=final,
-                    ),
-                )
+            # Queued by the previous release, before reviews had their own queue.
+            await _review(director, job, AiDirectorReviewTakeJob.model_validate(job.data), final)
         else:
             # The only other job: one added in packages/jobs is a type error here.
             assert_type(name, Literal["session-pass"])
@@ -174,6 +179,40 @@ def director_processor(
 
             with _bound(job, session):
                 await run_job(job, final, go_through)
+
+    return process
+
+
+async def _review(
+    director: Director,
+    job: JobLike,
+    take: AiDirectorReviewTakeJob | AiReviewReviewTakeJob,
+    final: bool,
+    queue: SharedQueueName = DIRECTOR,
+) -> None:
+    with _bound(job, take):
+        await run_job(
+            job,
+            final,
+            lambda: director.review(
+                take.payload.orgId,
+                take.payload.takeId,
+                str(take.payload.sourceUrl),
+                _user(take),
+                final=final,
+            ),
+            queue,
+        )
+
+
+def review_processor(director: Director) -> Callable[[JobLike], Awaitable[None]]:
+    """Runs one `ai-review` job; on its last attempt, a failure is final."""
+    attempts = SETTINGS[REVIEW].options.attempts
+
+    async def process(job: JobLike) -> None:
+        _ = REVIEW_JOB_NAME.validate_python(job.name)
+        final = job.attemptsMade + 1 >= attempts
+        await _review(director, job, AiReviewReviewTakeJob.model_validate(job.data), final, REVIEW)
 
     return process
 
@@ -203,17 +242,36 @@ async def main() -> None:
         if director and passing
         else None
     )
+    review_worker: RunningWorker | None = (
+        start_worker(
+            REVIEW,
+            review_processor(director),
+            str(settings.redis_url),
+            concurrency=REVIEW_CONCURRENCY,
+        )
+        if director
+        else None
+    )
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
     # The liveness probe's proof that this loop still runs (app/heartbeat.py).
     heartbeat = asyncio.create_task(beat())
-    log.info("ai worker started", queues=[DIRECTOR] if director_worker else [])
+    log.info(
+        "ai worker started",
+        queues=[
+            name
+            for name, worker in ((DIRECTOR, director_worker), (REVIEW, review_worker))
+            if worker
+        ],
+    )
     await stop.wait()
     _ = heartbeat.cancel()
     if director_worker:
         await director_worker.close()
+    if review_worker:
+        await review_worker.close()
     await director_queue.close()
     if passing:
         await passing[1].close()

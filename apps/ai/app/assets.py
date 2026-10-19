@@ -611,10 +611,10 @@ class AssetMaker:
             filmmaker.model_name,
             most=self._per_clip,
             allowance=self._monthly,
+            # A clip costs what it costs: it waits for a budget that holds a whole one.
+            least=self._per_clip,
         )
-        if reservation is None or reservation.tokens < self._per_clip:
-            if reservation is not None:
-                await settle(reservation, 0, 0)
+        if reservation is None:
             await self._fail(
                 org_id, plan_id, job.row_id, job.asset.id, job.user_id, "AI_BUDGET_EXCEEDED"
             )
@@ -653,12 +653,11 @@ class AssetMaker:
             self._artist.model_name,
             most=self._per_image,
             allowance=self._monthly,
+            # The output can't be capped at what's left, so an image waits for a budget
+            # that holds a whole one.
+            least=self._per_image,
         )
-        # The output can't be capped at what's left, so an image waits for a budget that
-        # holds a whole one; settling gives the reservation back.
-        if reservation is None or reservation.tokens < self._per_image:
-            if reservation is not None:
-                await settle(reservation, 0, 0)
+        if reservation is None:
             await self._fail(
                 org_id, plan_id, job.row_id, job.asset.id, job.user_id, "AI_BUDGET_EXCEEDED"
             )

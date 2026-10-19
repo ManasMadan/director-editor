@@ -31,6 +31,8 @@ const MEMORY_NOTE_MAX_LENGTH = 60;
 export const MEMORY_MAX_NOTES = 12;
 /** One row of a shot as the member's version has it: a sentence, not a script. */
 export const VERSION_ROW_MAX_LENGTH = 300;
+/** A shot's title in the member's version, as long as a plan's (apps/ai Shot.title). */
+export const SHOT_TITLE_MAX_LENGTH = 80;
 /** A re-planning instruction: one thing the member wants, in Director's words. */
 export const REVISE_INSTRUCTION_MAX_LENGTH = 300;
 /** Director's one-line confirmation of a re-plan. */
@@ -49,11 +51,14 @@ export const memoryNoteSchema = z.object({
 export type MemoryNote = z.infer<typeof memoryNoteSchema>;
 
 /**
- * A shot as the member's version changes it: where to be, what to do, the line, the
- * framing in words and the camera. Each is optional; one left out stays the original's.
+ * A shot as the member's version changes it: its title (when re-planning or adapting it
+ * moved it somewhere the original's title names no more), where to be, what to do, the
+ * line, the framing in words and the camera. Each is optional; one left out stays the
+ * original's.
  */
 export const shotVersionSchema = z.object({
   shot: shotIndex,
+  title: z.string().trim().min(1).max(SHOT_TITLE_MAX_LENGTH).optional(),
   where: row.optional(),
   action: row.optional(),
   line: row.optional(),
@@ -81,20 +86,22 @@ export type YourVersion = z.infer<typeof yourVersionSchema>;
 export const EMPTY_VERSION: YourVersion = { notes: [], shots: [], skipped: [], gaps: [] };
 
 /**
- * The shot as the member's version has it: their place as the scene, what they do as the
- * first step (or the pose, with no steps), their line said across the whole shot (its
- * timing was the original's), their framing in words and their camera. The shoot screen
- * shows it and Director live is briefed with it, so neither brings up the original's
- * place or setup once the member's version has replaced it.
+ * The shot as the member's version has it: their title, their place as the scene, what
+ * they do as the first step (or the pose, with no steps), their line said across the
+ * whole shot (its timing was the original's), their framing in words and their camera.
+ * The shoot screen and the editor show it, Director live is briefed with it and the AI
+ * service reviews takes against it (apps/ai app/your_version.py mirrors this), so none
+ * brings up the original's place or setup once the member's version has replaced it.
  */
 export function applyShotVersion(shot: Shot, version: ShotVersion | undefined): Shot {
   if (!version) {
     return shot;
   }
-  const { where, action, line, framing, camera } = version;
+  const { title, where, action, line, framing, camera } = version;
   const [first, ...rest] = shot.steps;
   return {
     ...shot,
+    title: title ?? shot.title,
     scene: where ?? shot.scene,
     // The original's landmark belongs to the original's place.
     sceneLandmark: where ? null : shot.sceneLandmark,

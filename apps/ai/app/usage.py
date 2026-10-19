@@ -7,6 +7,15 @@ runs can't all fit into the same remainder; the run is then capped at what was r
 After it, whatever happened (an answer, the run limit, a failure, a client that went
 away), `settle` records what the run actually used.
 
+A run's cap is only checked once the model has answered (Pydantic AI compares the
+run's total with the limit after each response), so a reservation smaller than the run
+needs doesn't stop it spending: the answer is billed, and then the run fails over the
+limit. So `reserve` hands out nothing under a floor (`least`): a quarter of the cap by
+default, since the caps (DIRECTOR_TOKENS_PER_*) are set at several times what a run
+usually uses, or the whole cap for a call whose output can't be capped (an image). Under
+the floor the caller answers AI_BUDGET_EXCEEDED rather than starting a run that would
+fail after it's paid for.
+
 The ledger is append-only for this service (it may insert, never update), so a
 reservation is a row for the reserved tokens and settling adds the difference to what
 was used; the month's sum is what counts. A run that never settles (the process died)
@@ -37,6 +46,10 @@ type Feature = Literal[
     "director-pass",
     "director-editor",
 ]
+
+
+# The share of its cap a run must be able to reserve (see the module's docstring).
+FLOOR_SHARE = 4
 
 
 @dataclass(frozen=True)
@@ -85,8 +98,11 @@ async def reserve(
     *,
     most: int,
     allowance: Allowance,
+    least: int | None = None,
 ) -> Reservation | None:
-    """Up to `most` tokens of what's left of the month's allowance; None when nothing is."""
+    """Up to `most` tokens of what's left of the month's allowance; None when less than
+    `least` is (a quarter of `most` unless the caller says)."""
+    floor = max(1, most // FLOOR_SHARE if least is None else least)
     async with tenant(org_id) as session:
         # One reservation per workspace at a time. The transaction-scoped lock is released
         # at commit, and unlike the session-scoped one it's safe behind a pooler.
@@ -96,7 +112,7 @@ async def reserve(
         )
         monthly = await _allowance_of(session, org_id, allowance)
         left = monthly - await _used_this_month(session, org_id)
-        if left <= 0:
+        if left < floor:
             return None
         reservation = Reservation(org_id, user_id, feature, model, min(most, left))
         session.add(_row(reservation, reservation.tokens, 0))

@@ -77,10 +77,13 @@ def _moved(transform: MatchCutTransform, point: tuple[float, float]) -> tuple[fl
 def _sightings(
     before: dict[str, float] | None, after: dict[str, float] | None
 ) -> dict[str, object]:
-    return {
-        "before": {"visible": before is not None, "box": before},
-        "after": {"visible": after is not None, "box": after},
-    }
+    """Gemini's answer: each box as four numbers, all null when the anchor isn't seen."""
+    nothing: dict[str, float | None] = dict.fromkeys(("x", "y", "width", "height"))
+
+    def seen(box: dict[str, float] | None) -> dict[str, object]:
+        return {"visible": box is not None, **(nothing if box is None else box)}
+
+    return {"before": seen(before), "after": seen(after)}
 
 
 def _off(box: dict[str, float], dx: float, dy: float) -> dict[str, float]:
@@ -213,6 +216,27 @@ def test_a_box_on_something_else_is_a_plain_cut(
     files = clips(outgoing, Placement(100, 150))
     elsewhere = {"x": 0.6, "y": 0.75, "width": 0.17, "height": 0.09}
     result, _ = _align(files, _sightings(output_box(outgoing, LAST), elsewhere))
+    assert result.alignment.status == "not-found"
+
+
+@pytest.mark.parametrize(
+    "box",
+    [
+        # A box with an edge missing, or one that isn't inside the frame.
+        {"x": 0.4, "y": 0.4, "width": 0.2, "height": None},
+        {"x": 0.4, "y": 1.4, "width": 0.2, "height": 0.1},
+        {"x": 0.4, "y": 0.4, "width": 0, "height": 0.1},
+    ],
+)
+def test_a_box_that_isnt_one_is_a_plain_cut(
+    clips: Callable[[Placement, Placement], dict[str, tuple[str, bytes]]],
+    box: dict[str, float | None],
+) -> None:
+    still = Placement(270, 480)
+    files = clips(still, still)
+    sightings = _sightings(output_box(still, LAST), output_box(still, 0))
+    sightings["after"] = {"visible": True, **box}
+    result, _ = _align(files, sightings)
     assert result.alignment.status == "not-found"
 
 

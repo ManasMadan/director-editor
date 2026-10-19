@@ -50,8 +50,8 @@ settles (the process died) keeps its reservation.
 
 ## The worker
 
-`app/worker.py` consumes `ai-director` (`plan`, `review-take` and `session-pass` jobs) once
-`DIRECTOR_MODEL` is set, validating each against its own generated model
+`app/worker.py` consumes `ai-director` (`plan`, `assets` and `session-pass` jobs) and
+`ai-review` (`review-take`, two at a time) once `DIRECTOR_MODEL` is set, validating each against its own generated model
 (`app/contracts/ai_director_<job>_job.py`) and binding the request id it was queued with
 to its logs. The models ignore fields they don't know, so
 a newer producer can add an optional field without an older worker rejecting the job,

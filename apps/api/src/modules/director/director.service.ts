@@ -43,6 +43,7 @@ import type {
   VideoId,
 } from "@repo/contracts/ids";
 import { HOUR_S, MINUTE_S } from "@repo/contracts/time";
+import { TAKE_REVIEW_READ_S } from "@repo/jobs";
 import { AppError, InjectPinoLogger, PinoLogger } from "@repo/nest-common";
 import * as z from "zod";
 import { env } from "../../env";
@@ -57,8 +58,9 @@ import { chatTurnDetail } from "./chat-turn";
 import { seedAssetImages, seedMediaKeys, withMediaLinks, withSeedAssets } from "./seed-media";
 import { shotsOf } from "./shots";
 
-// Long enough for the review job's retries (three, minutes apart), no longer.
-const TAKE_READ_EXPIRES_S = 30 * MINUTE_S;
+// The review job reads the take with it, maybe behind a backlog and after minutes of
+// retries (packages/jobs says how long that can take).
+const TAKE_READ_EXPIRES_S = TAKE_REVIEW_READ_S;
 // Long enough to film along to it for a while; the library is read again before then.
 const AUDIO_READ_EXPIRES_S = HOUR_S;
 // A spoken line is played again and again through a shoot; the screen asks for a fresh

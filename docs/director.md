@@ -212,7 +212,8 @@ iOS asks before a page may read the tilt: the level shows a button for that.
   ([how-it-works.md](how-it-works.md#continuous-recording)); all under row-level security. Plans are a JSON
   column validated by `ShotPlan` on the way in and out.
 - AI service: `apps/ai/app/director.py` (the three Gemini calls, their token budgets and
-  failures), queue `ai-director` (`plan`, `assets`, `review-take`, `session-pass`) in `packages/jobs`.
+  failures), queues `ai-director` (`plan`, `assets`, `session-pass`) and `ai-review` (`review-take`)
+  in `packages/jobs`.
 - Seed templates: `packages/contracts/src/director-seeds.json`, the 6 seed Shorts
   (`apps/ai/app/seeds/seeds.json`) indexed for real on Vertex AI and committed. Rebuild it
   with `bun run --filter @repo/ai seeds:build` whenever the plan schema changes (and check
