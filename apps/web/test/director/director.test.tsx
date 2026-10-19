@@ -287,7 +287,7 @@ describe("Director's page before the plan is ready", () => {
     const page = await showPlan(videoId);
     await expect.element(page.getByRole("status", { name: message })).toBeVisible();
     await expect
-      .element(page.getByText("This takes about a minute.", { exact: false }))
+      .element(page.getByText("This usually takes one to three minutes.", { exact: false }))
       .toBeVisible();
     await expect.element(page.getByRole("heading", { name: "Director" })).toBeVisible();
     await expect
