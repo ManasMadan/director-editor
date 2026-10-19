@@ -58,6 +58,121 @@ Production: https://director.mmadan.in on one GCE VM (k3s, Argo CD GitOps), GCP 
 4. **Follow-ups** in findings.md marked open: D2 (automate Cloud Run deploys), S10 migration minors, R13/R14,
    M1 ("use the second one" numbering), M3/M4 (stock errors, synthetic flag), UI1-19 (a 502 on "Talk it through").
 
+## Workflow, step by step
+
+### 0. A new machine: set up access first
+
+- Repo: `git clone https://github.com/ManasMadan/director-editor && cd director-editor && bun run setup`
+  (installs, generates, starts local Postgres/Valkey/Mailpit in Docker). `bun run doctor` checks it. `.env` is not in
+  git: get it from the owner, or set each value with `bun run env:set KEY=value` (never read or print `.env`).
+- GitHub: `gh auth login` as an account with admin on ManasMadan/director-editor. If git keeps asking for a password
+  or uses another credential store, push with the gh helper:
+  `git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push -u origin <branch>`.
+  For scripts that call git internally (`bun run promote`), set it through the environment:
+  `GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0= GIT_CONFIG_KEY_1=credential.helper GIT_CONFIG_VALUE_1='!gh auth git-credential'`.
+  Add `HUSKY=0` and `--no-verify` when a local hook blocks (hooks run tests that need local services).
+- Google Cloud: `gcloud auth login` (a project owner) and `gcloud config set project project-18e15b18-c92e-44bb-9bf`.
+  `gcloud auth configure-docker us-central1-docker.pkg.dev` for the Cloud Run image mirror. Docker with buildx.
+- Kubernetes: production's kubeconfig lives at `~/.kube/director-editor-production` on the owner's Mac; copy it (ask
+  the owner) and `export KUBECONFIG=~/.kube/director-editor-production`. The API server (6443) and SSH (22) are only
+  open to allow-listed IPs through the GCE firewall rule `director-admin`; add the new machine's public IP:
+  `gcloud compute firewall-rules update director-admin --source-ranges=<existing>,<new-ip>/32` (check the current
+  ranges with `describe` first and keep the owner's). SSH: `gcloud compute ssh director-1 --zone us-central1-a`.
+- SOPS secrets (deploy/platform/secrets): the age key is at `~/.config/director-editor/production.agekey` on the
+  owner's Mac, used as `SOPS_AGE_KEY_FILE=...`. Internal tool passwords (Argo CD, Grafana, …) are in
+  `~/.config/director-editor/internal-tools.txt` on the owner's Mac; ask the owner. Tools: argocd/grafana/jaeger/
+  prometheus/alertmanager `.director.mmadan.in` behind one shared HTTP login.
+
+### 1. Work on a branch
+
+- Branch from fresh master: `git fetch origin && git switch -c fix/mm/<context> origin/master`.
+  To continue a paused branch: `git switch -c <branch> origin/<branch>` then `git rebase origin/master`.
+- Never `git stash`, never `git worktree add` by hand (use `wt switch --create <branch>` for parallel work), never
+  commit `.claude/settings.json` (it often shows as modified; leave it unstaged, never `git commit -a`).
+- Generated files (`**/generated/**`, `openapi.json`, `apps/ai/app/contracts/`, `en.d.json.ts`) are never edited:
+  change the source and run `bun run gen`. On a rebase conflict in them, take master's copy and re-run `bun run gen`.
+- Migrations: new folder under `packages/db/prisma/migrations/` with a timestamp **after every existing one**
+  (the latest on master is `20261019060000_*`; check `ls` first), expand-only, RLS + grants, one
+  `CREATE INDEX CONCURRENTLY` per migration file. Never edit a migration that has applied in production.
+  `bun test packages/db` includes a guard against reusing a policy name on the same table.
+
+### 2. Check (fast, per the owner)
+
+`bun run lint`, `bun run check-types`, and the single test files you touched
+(`bun run --filter @repo/web test -- <file>`, `bun run --filter @repo/api test -- <file>`, Python:
+`bun run --filter @repo/ai test -- tests/<file>.py`). Skip whole suites and coverage unless asked. The machine's
+Docker services: `bun run db:up` / `bun run db:down`; a separate stack per parallel agent with
+`bun run setup --stack <n>`.
+
+### 3. Commit, push, PR, merge
+
+```sh
+git add <files>          # never -a
+git commit --no-verify -m "fix(web): the shot card shows the whole line"   # Conventional, scope = workspace, first person, no AI mentions
+HUSKY=0 git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push --no-verify -u origin <branch>
+gh pr create -R ManasMadan/director-editor --base master --head <branch> \
+  --title "fix(web): ..." --body "What changed and why, in plain prose. No headers or checklists, no AI mentions."
+gh pr merge <branch> -R ManasMadan/director-editor --squash --admin
+```
+- Before merging: `git fetch origin && git merge-tree --write-tree --name-only origin/master origin/<branch>` must
+  exit 0 (no conflicts); otherwise rebase the branch first.
+- A breaking API change needs `!` in the PR title (`feat(api)!: ...`); CI's api-compat job checks it.
+- After a squash-merge, continuing work on the same branch: `git rebase --onto origin/master <sha-that-was-merged>`
+  (drops the already-merged commits), then `push --force-with-lease`.
+- CI (GitHub Actions `ci.yml`) runs on PRs and master; every job passes on master except Coverage (see step 3 of
+  "What to do next"). Today's PRs were merged without waiting for CI, by the owner's call; prefer waiting for CI
+  when there's time (`gh pr checks <n> --watch`).
+
+### 4. Release and deploy
+
+```sh
+git fetch origin && M=$(git rev-parse origin/master)
+gh workflow run deploy.yml -R ManasMadan/director-editor --ref master        # builds + signs all images for $M
+gh run list -R ManasMadan/director-editor -w deploy.yml -L 3                  # take the workflow_dispatch run id
+gh run watch <run-id> -R ManasMadan/director-editor --exit-status
+git tag vX.Y.Z $M && git push origin vX.Y.Z                                   # release.yml publishes notes from commits
+HUSKY=0 GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0= \
+  GIT_CONFIG_KEY_1=credential.helper GIT_CONFIG_VALUE_1='!gh auth git-credential' bun run promote vX.Y.Z
+gh pr merge <promotion PR> -R ManasMadan/director-editor --squash --admin    # production moves when this merges
+```
+Then watch it land:
+```sh
+export KUBECONFIG=~/.kube/director-editor-production
+kubectl -n argocd annotate application production-root argocd.argoproj.io/refresh=normal --overwrite
+kubectl -n argocd get application production-stack -o jsonpath='{.spec.sources[0].targetRevision} {.status.operationState.phase}'
+kubectl -n director-editor get jobs --sort-by=.metadata.creationTimestamp | grep migrate | tail -1
+kubectl -n director-editor logs job/<migrate job> --tail=20
+curl -s https://director.mmadan.in/api/v1/system      # "release":"sha-<commit>" when live
+kubectl -n director-editor get pods
+kubectl -n director-editor logs deploy/director-editor-<api|worker|ai|ai-worker|web> --since=10m | grep '"level":"error"'
+```
+"OutOfSync Healthy" on production-stack is normal (known Kyverno digest drift); the operation phase must be
+`Succeeded`. Versions so far: v1.0.0 … v1.7.2; next is v1.7.3.
+
+Then redeploy Cloud Run on the same image (every release):
+```sh
+PROJECT=project-18e15b18-c92e-44bb-9bf; REGION=us-central1; COMMIT=<full sha of the release>
+IMAGE=$REGION-docker.pkg.dev/$PROJECT/director/ai:sha-$COMMIT
+docker buildx imagetools create --tag $IMAGE ghcr.io/manasmadan/director-editor/ai:sha-$COMMIT
+gcloud run deploy director-indexer --project=$PROJECT --region=$REGION --image=$IMAGE --update-env-vars=RELEASE=sha-$COMMIT --quiet
+gcloud run deploy director-clipper --project=$PROJECT --region=$REGION --image=$IMAGE --quiet
+```
+New env vars go in the service's `src/env.ts` (or `apps/ai/app/settings.py`), `.env.example`,
+`docs/environment.md`, and production values in `deploy/environments/production/stack.yaml` (secrets via SOPS).
+
+### 5. When something breaks in production
+
+- Failed migration (P3009): see "If a migration fails" above; the exact commands are in progress.md (18 Oct, v1.4.1).
+  The one-off resolve job is the migrate job's spec with args
+  `["/app/node_modules/prisma/build/index.js","migrate","resolve","--rolled-back","<migration>"]`.
+- Read-only database look: `kubectl -n director-editor exec director-editor-postgres-1 -c postgres -- psql -U postgres -d app -c "<select>"`
+  (never write without the owner's say-so). Locally, the `postgres` MCP server is read-only on the local DB.
+- A live Gemini check from production: run Python inside the ai pod (`kubectl exec ... -- sh -c 'cd /app && python ...'`);
+  it has Vertex credentials through the VM's service account (the api image has no shell).
+- Storage cleanup runs hourly in the worker (files-cleanup at :30, demo-retention at :20); its queue is
+  `files.object_deletion`. Bucket: `gs://director-media-1053522546520` (lifecycle: recordings/ 15 days, director/speech/ 90 days).
+- Rollback: promote the previous tag (`bun run promote v1.7.1`). Don't roll back past v1.6.0 (finding S9).
+
 ## The files here
 
 - `progress.md` — the chronological ledger of everything done (releases, merges, incidents, rulings).
