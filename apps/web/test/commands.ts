@@ -38,6 +38,7 @@ const startTest: BrowserCommand<[]> = async ({ page, context }) => {
   turnstileModes.set(page, "fake");
   failing.set(page, []);
   serving.set(page, []);
+  holding.set(page, new Set());
   if (!navigations.has(page)) {
     await page.route("https://challenges.cloudflare.com/turnstile/**", async (route) => {
       // Held: answered once the test picks another mode (a slow network, under control).
@@ -59,8 +60,9 @@ const startTest: BrowserCommand<[]> = async ({ page, context }) => {
         !url.pathname.startsWith("/__vitest") &&
         !url.pathname.startsWith("/@") &&
         !url.searchParams.has("sessionId"),
-      (route) => {
+      async (route) => {
         const request = route.request();
+        await heldBack(page, request.url());
         const answered = answerAsSet(page, route);
         if (answered !== null) {
           return answered;
@@ -186,6 +188,29 @@ const failedRequests: BrowserCommand<[part: string]> = ({ page }, part) =>
     .get(page)
     ?.filter((failure) => failure.part === part)
     .reduce((total, failure) => total + failure.hits, 0) ?? 0;
+
+/** Parts of URLs whose requests wait until the test lets them through (`holdRequests`). */
+const holding = new WeakMap<Page, Set<string>>();
+
+/** Resolves once no hold the test set matches `url` (a request held stays in flight). */
+async function heldBack(page: Page, url: string) {
+  while ([...(holding.get(page) ?? [])].some((part) => url.includes(part))) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+
+/**
+ * Holds the page's requests to URLs containing `part` until `releaseRequests(part)` (or
+ * the next test): a slow network, under the test's control, for what a page does while
+ * a request is on its way.
+ */
+const holdRequests: BrowserCommand<[part: string]> = ({ page }, part) => {
+  holding.get(page)?.add(part);
+};
+
+const releaseRequests: BrowserCommand<[part: string]> = ({ page }, part) => {
+  holding.get(page)?.delete(part);
+};
 
 /** The full-page navigations the page tried since the test started. */
 const hardNavigations: BrowserCommand<[]> = ({ page }) => navigations.get(page) ?? [];
@@ -683,6 +708,8 @@ export const commands = {
   requestHeaders,
   failRequests,
   failedRequests,
+  holdRequests,
+  releaseRequests,
   serveRequests,
   totp,
   startTest,
@@ -743,6 +770,8 @@ declare module "vitest/browser" {
     requestHeaders(headers: Record<string, string>): Promise<void>;
     failRequests(part: string, options?: { status?: number; body?: unknown }): Promise<void>;
     failedRequests(part: string): Promise<number>;
+    holdRequests(part: string): Promise<void>;
+    releaseRequests(part: string): Promise<void>;
     serveRequests(pattern: string, file: { contentType: string; base64: string }): Promise<void>;
     totp(secret: string): Promise<string>;
     hardNavigations(): Promise<string[]>;
