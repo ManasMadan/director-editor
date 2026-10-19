@@ -93,6 +93,9 @@ describe("the editor before it can open", () => {
     const page = await openEditor(videoId, "voice", true);
     const wrap = page.getByRole("button", { name: /That's a wrap!/ });
     await expect.element(wrap).toBeVisible();
+    // It names the button there is to tap.
+    expect(wrap.element().textContent).toMatch(/then tap Save video\.$/);
+    expect(page.getByRole("button", { name: "Save video" }).query()).not.toBeNull();
     await userEvent.click(wrap);
     await expect.element(wrap).not.toBeInTheDocument();
     // Every word Director says is Gemini's: the editor has no lines of its own to read out.
@@ -240,9 +243,15 @@ describe("the editor", { tags: ["files"] }, () => {
     await expect
       .element(page.getByRole("link", { name: "Back" }))
       .toHaveAttribute("href", `/director/${videoId}`);
-    // One shot still to film: the video can't be saved yet.
-    await expect.element(page.getByText("1 shot still to film.")).toBeVisible();
-    await expect.element(page.getByRole("button", { name: "Save video" })).toBeDisabled();
+    // One shot not filmed: the video can be saved all the same, with a gap there.
+    await expect
+      .element(
+        page.getByText(
+          "1 shot isn't filmed: it plays as a gap you can fill below, or film it now.",
+        ),
+      )
+      .toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Save video" })).toBeEnabled();
     // Director's pick plays: the better take, not the newer one.
     const walkIn = page.getByRole("group", { name: "Shot 1 · Walk in" });
     await expect.element(walkIn.getByRole("radio", { name: /Take 1/ })).toBeChecked();

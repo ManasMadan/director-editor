@@ -57,7 +57,7 @@ import { useTellDirector } from "../hooks/use-tell-director";
 import { type AudioMode, parseAudio } from "../lib/audio";
 import { type CaptionLine, webVtt } from "../lib/captions";
 import { composer, type Picture } from "../lib/compose";
-import { type Clip, clipsOf, editLines, editSeconds } from "../lib/edit";
+import { type Clip, clipsOf, editLines, editSeconds, playsAsGap } from "../lib/edit";
 import {
   applyActions,
   arrange,
@@ -98,9 +98,8 @@ function segmentsOf(
   transforms: ReadonlyMap<number, MatchCutTransform>,
 ): Segment[] {
   return clips.map((clip): Segment => {
-    // A shot the version leaves as a gap: its B-roll, or the nearest shot held
-    // (lib/compose.ts). Nothing else reaches the video unfilmed (readyToSave).
-    if (clip.state === "gap") {
+    // A gap, or a shot not filmed: its B-roll, or the nearest shot held (lib/compose.ts).
+    if (playsAsGap(clip)) {
       return { kind: "gap", seconds: clip.seconds };
     }
     const take = required(loadedTake(media, clip), "a loaded take");
@@ -557,16 +556,16 @@ function useArrangedClips(
 }
 
 /**
- * Whether the video can be made: every shot the member films is filmed, reviewed and in
- * memory, and at least one is. Only the shots their version leaves as gaps go in with no
- * take; one simply not filmed yet would become a held frame, so it's filmed first (the
- * editor says how many are left).
+ * Whether the video can be made: at least one shot filmed, none still being reviewed,
+ * and every filmed one in memory. A shot not filmed plays as a gap to fill (the member
+ * with three minutes saves what they have); the editor says so above the board, with
+ * "Film it" on the shot.
  */
 function readyToSave(clips: readonly Clip[], media: Map<DirectorTakeId, MediaState>) {
   const filmed = clips.filter((clip) => clip.state === "cut");
   return (
     filmed.length > 0 &&
-    clips.every((clip) => clip.state === "cut" || clip.state === "gap") &&
+    clips.every((clip) => clip.state !== "reviewing") &&
     filmed.every((clip) => loadedTake(media, clip))
   );
 }

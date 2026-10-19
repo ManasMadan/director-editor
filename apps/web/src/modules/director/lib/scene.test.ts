@@ -255,10 +255,12 @@ describe("gaps", () => {
     expect(sceneAt(p, clips, 13).gap).toEqual({ slotId: "shot-2", seconds: 3, length: 10 });
   });
 
-  it("leaves a shot not filmed yet out of the moments to fill: it's to be filmed", () => {
+  it("fills a shot saved without being filmed, as it does a gap", () => {
     const clips = clipsOf(p.shots, [10, 10], [], [1]);
-    expect(sceneAt(p, clips, 13).gap).toBeNull();
-    expect(gapSlots(p, clips).map((slot) => slot.slotId)).toEqual(["gap-1"]);
+    expect(sceneAt(p, clips, 13).gap).toEqual({ slotId: "shot-2", seconds: 3, length: 10 });
+    expect(gapSlots(p, clips).map((slot) => slot.slotId)).toEqual(["gap-1", "shot-2"]);
+    // A filmed shot is no moment to fill.
+    expect(gapSlots(p, clipsOf(p.shots, [10, 10])).map((slot) => slot.slotId)).toEqual(["gap-1"]);
   });
 
   it("lists every moment to fill in the edit's order", () => {

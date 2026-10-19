@@ -3,8 +3,9 @@
  * shot, laid end to end. A filmed clip plays the part of its take Gemini kept (or the
  * whole take when it kept none, or kept too little to use); a shot not filmed yet, or
  * whose take is still being reviewed, holds its place for the shot's length. A shot the
- * member's version leaves as a gap holds its place too, for B-roll to fill; one it
- * skips has no clip. The captions are the filmed shots' scripts moved to where their
+ * member's version leaves as a gap holds its place too; one it skips has no clip. A gap,
+ * and a shot still not filmed when the video is saved, play as moments for B-roll to
+ * fill (lib/scene.ts). The captions are the filmed shots' scripts moved to where their
  * clips play.
  */
 import type { DirectorTake, EditorGrade, Shot } from "@repo/contracts/api";
@@ -76,6 +77,13 @@ export function clipsOf(
   });
 }
 
+/**
+ * Whether a clip plays as a gap in the saved video: left as one by the member's version,
+ * or not filmed (the member saved without filming it, as "I've only got three minutes"
+ * asks for). Nobody says its lines, so it has no captions.
+ */
+export const playsAsGap = (clip: Clip) => clip.state === "gap" || clip.state === "missing";
+
 /** Whether every shot is filmed and reviewed, so the video can be made. */
 export const complete = (clips: readonly Clip[]) => clips.every((clip) => clip.state === "cut");
 
@@ -93,7 +101,7 @@ export function clipAt(clips: readonly Clip[], seconds: number): Clip | undefine
  */
 export function editLines(clips: readonly Clip[]): CaptionLine[] {
   return clips.flatMap((clip) => {
-    if (clip.state === "gap") {
+    if (playsAsGap(clip)) {
       return [];
     }
     const from = clip.shot.kind === "video" && clip.state === "cut" ? clip.from : 0;
