@@ -98,6 +98,28 @@ describe("stitching the short", () => {
     expect(frames.find((frame) => frame.time > 1.2)?.hue).toBe("blue");
   });
 
+  it("draws a part a match cut lined up moved and turned, and holds black before any picture", async () => {
+    const rotate = vi.spyOn(CanvasRenderingContext2D.prototype, "rotate");
+    const short = await stitch(
+      [
+        // A gap first: no picture yet, and nothing to hold.
+        { kind: "gap", seconds: 0.2 },
+        {
+          kind: "video",
+          source: clip,
+          startSeconds: 0.1,
+          endSeconds: 0.5,
+          transform: { x: 20, y: 0, scale: 1.2, rotation: 3 },
+        },
+      ],
+      { audio, withSound: false, onProgress: vi.fn(), captions: { ...CAPTIONS, style: "off" } },
+    );
+    expect(rotate).toHaveBeenCalledWith((3 * Math.PI) / 180);
+    const frames = await playedFrames(short);
+    expect(frames[0]?.hue).toBe("other");
+    expect(frames.some((frame) => frame.hue === "red")).toBe(true);
+  });
+
   it("keeps every cut's picture and sound together, sub-second parts and gaps too, with no frame held long", {
     timeout: 60_000,
   }, async () => {

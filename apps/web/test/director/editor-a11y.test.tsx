@@ -72,6 +72,11 @@ describe("the tell Director bar", () => {
     await userEvent.click(send);
     expect(onSend).toHaveBeenCalledWith({ text: "warmer please" });
     await expect.element(box).toHaveValue("");
+    // Nothing but spaces isn't a request, even sent past the disabled Send (a script, an
+    // assistive tool).
+    await userEvent.fill(box, "   ");
+    box.element().closest("form")?.requestSubmit();
+    expect(onSend).toHaveBeenCalledOnce();
   });
 });
 

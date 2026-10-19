@@ -64,6 +64,19 @@ describe("Director's page for a ready plan", () => {
     ],
   });
 
+  it("shows a template the member described by its storyboard, with no original's sound to choose", async () => {
+    const videoId = newVideoId();
+    await commands.fakeDirector(videoId, { plan: { status: "ready", source: "created", plan } });
+    const page = await showPlan(videoId);
+    await expect
+      .element(page.getByText("Director is still drawing this shot").first())
+      .toBeInTheDocument();
+    // No YouTube video behind it, and no original sound to film along to.
+    expect(document.querySelector("iframe")).toBeNull();
+    expect(page.getByRole("radio").query()).toBeNull();
+    await expect.element(page.getByRole("link", { name: "Let's shoot" })).toBeVisible();
+  });
+
   it("shows the short and what it takes, plays each shot's part, and starts filming", async () => {
     const videoId = newVideoId();
     await readyPlan(videoId, plan);
