@@ -1,13 +1,18 @@
 """The conversational editor's pure parts: what Gemini reads, and its answer as edits.
 No database, Redis or model provider."""
 
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+from pydantic import JsonValue, TypeAdapter
+
 from app.db.models import DirectorTake
 from app.editor import editor_context, ordered_takes, reply_of
-from app.schemas import EditorDraft, EditorState, Shot
+from app.schemas import EditorDraft, EditorReply, EditorState, Shot
 from tests.test_units import PLAN_DRAFT
+
+_SCHEMA = TypeAdapter(dict[str, JsonValue])
 
 SHOT_JSON = PLAN_DRAFT["shots"]
 assert isinstance(SHOT_JSON, list)
@@ -99,6 +104,39 @@ def draft(**overrides: object) -> EditorDraft:
             **overrides,
         }
     )
+
+
+def _unbounded(node: JsonValue, at: str = "") -> Iterator[str]:
+    """The paths in a JSON Schema whose value has no upper bound: a string without a
+    maxLength (an id or an enum aside), a number without a maximum, a list without a
+    maxItems."""
+    if isinstance(node, list):
+        for item in node:
+            yield from _unbounded(item, at)
+        return
+    if not isinstance(node, dict):
+        return
+    kind = node.get("type")
+    bounded = {
+        "string": "maxLength" in node or "format" in node or "enum" in node,
+        "integer": "maximum" in node or "exclusiveMaximum" in node,
+        "number": "maximum" in node or "exclusiveMaximum" in node,
+        "array": "maxItems" in node,
+    }
+    if isinstance(kind, str) and not bounded.get(kind, True):
+        yield at
+    for key, value in node.items():
+        if key in {"properties", "$defs"} and isinstance(value, dict):
+            for name, child in value.items():
+                yield from _unbounded(child, f"{at}.{name}")
+        elif key in {"items", "anyOf"}:
+            yield from _unbounded(value, at)
+
+
+def test_every_field_of_the_answer_is_bounded() -> None:
+    """The answer goes to apps/api and on to the browser: every field has its limits in
+    the OpenAPI document, the lists their most (`reply_of` keeps to them)."""
+    assert list(_unbounded(_SCHEMA.validate_python(EditorReply.model_json_schema()))) == []
 
 
 def test_takes_are_numbered_oldest_first() -> None:
