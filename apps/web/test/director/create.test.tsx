@@ -258,8 +258,52 @@ const briefPhotos = (userId: string) =>
     [userId],
   );
 
+describe("a brief's photo that isn't one", () => {
+  it("is refused before anything is sent, and the file picker opens from its button", async () => {
+    await signUp();
+    const page = await openCreate();
+    // The page is up: its photo picker is there.
+    await expect.element(page.getByRole("button", { name: "Add a photo" })).toBeVisible();
+    await userEvent.upload(
+      photoInput(),
+      new File(["%PDF"], "notes.pdf", { type: "application/pdf" }),
+    );
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent(
+        "That kind of file isn't allowed here. Use one of: image/jpeg, image/png, image/webp.",
+      );
+    expect(page.getByRole("img", { name: "Your photo 1" }).query()).toBeNull();
+    const opened = vi.spyOn(HTMLInputElement.prototype, "click").mockReturnValue(undefined);
+    await userEvent.click(page.getByRole("button", { name: "Add a photo" }));
+    expect(opened).toHaveBeenCalledOnce();
+  });
+});
+
 // Uploads go to RustFS: the files profile (`bun run test:integration:files`).
 describe("a brief's photos", { tags: ["files"] }, () => {
+  it("has room for four, and takes one out", async () => {
+    await commands.storageCors();
+    await signUp();
+    const page = await openCreate();
+    // The page is up: its photo picker is there.
+    await expect.element(page.getByRole("button", { name: "Add a photo" })).toBeVisible();
+    await userEvent.upload(
+      photoInput(),
+      ["a", "b", "c", "d", "e"].map(
+        (name) => new File([PNG], `${name}.png`, { type: "image/png" }),
+      ),
+    );
+    await expect.element(page.getByRole("img", { name: "Your photo 4" })).toBeVisible();
+    expect(page.getByRole("img", { name: "Your photo 5" }).query()).toBeNull();
+    expect(page.getByRole("button", { name: "Add a photo" }).query()).toBeNull();
+    await userEvent.click(page.getByRole("button", { name: "Remove photo 2" }));
+    await expect.element(page.getByRole("button", { name: "Add a photo" })).toBeVisible();
+    expect(page.getByRole("img", { name: "Your photo 4" }).query()).toBeNull();
+    // Only the four were uploaded, each as it was added.
+    await expect.poll(() => commands.answeredRequests("/rpc/files/completeUpload")).toBe(4);
+  });
+
   it("sends Director the photos that uploaded, and waits for the ones still being checked", async () => {
     await commands.storageCors();
     const { user, orgId } = await member();
@@ -275,13 +319,9 @@ describe("a brief's photos", { tags: ["files"] }, () => {
       .toHaveTextContent("That photo didn't upload. Remove it and try another.");
 
     await userEvent.upload(photoInput(), new File([PNG], "b.png", { type: "image/png" }));
-    let fileId = "";
-    await expect
-      .poll(async () => {
-        fileId = (await briefPhotos(user.id)).at(-1)?.id ?? "";
-        return fileId;
-      })
-      .not.toBe("");
+    // Its bytes are in storage once its upload is completed: then it's the worker's to check.
+    await expect.poll(() => commands.answeredRequests("/rpc/files/completeUpload")).toBe(1);
+    const fileId = (await briefPhotos(user.id)).at(-1)?.id ?? "";
     // Still being checked: nothing can be sent yet.
     await expect.element(page.getByRole("button", { name: "Talk it through" })).toBeDisabled();
     await commands.checkUpload(fileId);

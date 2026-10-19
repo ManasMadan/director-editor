@@ -1,10 +1,10 @@
 "use client";
 
-import { useApiErrorMessage } from "@repo/client";
 import { useBriefPhotoMutation } from "@repo/client/api/director/brief-photo";
 import { checkUpload } from "@repo/client/api/files/upload";
 import { DIRECTOR_MAX_BRIEF_PHOTOS } from "@repo/contracts/api";
 import type { FileId } from "@repo/contracts/ids";
+import { loosely } from "@repo/i18n/loosely";
 import { GeminiShimmer } from "@repo/ui/components/gemini-loader";
 import { CircleAlert, ImagePlus, X } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -66,7 +66,8 @@ type PhotosChange = (update: (photos: BriefPhoto[]) => BriefPhoto[]) => void;
  * big, otherwise shown at once and uploaded, its tile following its check.
  */
 function usePhotoAdder(onChange: PhotosChange) {
-  const errorMessage = useApiErrorMessage();
+  // A refusal before anything is sent, with the limits its message names.
+  const tAll = loosely(useTranslations());
   const upload = useBriefPhotoMutation();
   const [refused, setRefused] = useState<string | null>(null);
   const previews = useRef(new Set<string>());
@@ -83,7 +84,7 @@ function usePhotoAdder(onChange: PhotosChange) {
   const add = (file: File) => {
     const refusal = checkUpload("director-brief-photo", file);
     if (refusal) {
-      setRefused(errorMessage(refusal));
+      setRefused(tAll(`errors.${refusal.code}`, refusal.params));
       return;
     }
     const preview = URL.createObjectURL(file);
@@ -147,8 +148,13 @@ export function BriefPhotos({
         hidden
         onChange={(event) => {
           clearRefused();
-          const room = DIRECTOR_MAX_BRIEF_PHOTOS - photos.length;
-          for (const file of Array.from(event.target.files ?? []).slice(0, room)) {
+          const { files } = event.target;
+          // As many of the chosen as there's room for.
+          for (let at = photos.length; at < DIRECTOR_MAX_BRIEF_PHOTOS; at += 1) {
+            const file = files?.item(at - photos.length);
+            if (!file) {
+              break;
+            }
             add(file);
           }
           event.target.value = "";
