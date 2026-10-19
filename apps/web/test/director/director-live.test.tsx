@@ -763,15 +763,20 @@ describe("Director live's hook", () => {
     hook.current.start();
     // The line to Director doesn't wait for the permission prompt.
     await expect.poll(() => FakeSocket.all.length).toBe(1);
-    FakeSocket.last.open();
+    const socket = FakeSocket.last;
+    socket.open();
     await expect.poll(() => hook.current.state).toBe("live");
-    expect(FakeSocket.last.sentOf("audio")).toEqual([]);
-    // The member allows it: a microphone with a tone in it, as the stand-in gives.
-    asked.resolve(await navigator.mediaDevices.getUserMedia({ audio: true }));
-    await expect
-      .poll(() => FakeSocket.last.sentOf("audio").length, { timeout: 10_000 })
-      .toBeGreaterThan(0);
+    expect(socket.sentOf("audio")).toEqual([]);
+    // The member allows it: the microphone is kept as Director's, on the open line, and
+    // let go with it.
+    const microphone = await navigator.mediaDevices.getUserMedia({ audio: true });
+    asked.resolve(microphone);
+    await expect.poll(() => camera.getUserMedia.mock.calls.length).toBe(2);
+    expect(hook.current.hearing).toBe(true);
+    expect(microphone.getAudioTracks()[0]?.readyState).toBe("live");
     await hook.unmount();
+    await expect.poll(() => microphone.getAudioTracks()[0]?.readyState).toBe("ended");
+    expect(socket.readyState).toBe(FakeSocket.CLOSED);
   });
 
   it("goes without a microphone when the one it gets has no sound in it", async () => {
