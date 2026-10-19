@@ -1,12 +1,16 @@
 /** The shoot screen's small hooks: what Director remembers, and keeping the screen awake. */
+import { EMPTY_VERSION } from "@repo/contracts/api";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
+import { useCamera } from "@/modules/director/hooks/use-camera";
+import { useDirectorLive } from "@/modules/director/hooks/use-director-live";
 import { useMemory } from "@/modules/director/hooks/use-memory";
+import { useRollShoot } from "@/modules/director/hooks/use-roll-shoot";
 import { useWakeAudio, useWakeLock } from "@/modules/director/hooks/use-screen";
 import { liveAudio, restLiveAudio } from "@/modules/director/lib/live-audio";
 import { FRESH } from "@/modules/director/lib/memory";
-import { signUp } from "../users";
-import { deferred, renderHook } from "./support";
+import { api, signUp } from "../users";
+import { deferred, planShot, renderHook } from "./support";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -118,5 +122,33 @@ describe("the screen", () => {
         Object.defineProperty(Navigator.prototype, "wakeLock", wakeLock);
       }
     }
+  });
+});
+
+describe("the roll's hook", () => {
+  it("leaves the roll alone on Resume while it isn't paused, with no viewfinder", async () => {
+    await signUp();
+    const props = {
+      videoId: "abcdefghijk",
+      shot: planShot(),
+      index: 0,
+      count: 1,
+      audio: "voice" as const,
+    };
+    // Nothing shows the camera's picture, and Start shooting hasn't been tapped.
+    const hook = await renderHook(() => {
+      const camera = useCamera(false);
+      const live = useDirectorLive({
+        videoId: props.videoId,
+        shotIndex: 0,
+        video: camera.video,
+        onTool: () => undefined,
+        version: EMPTY_VERSION,
+      });
+      return useRollShoot({ props, camera, live, wanted: false });
+    });
+    hook.current.resume();
+    expect(hook.current.phase).toBe("off");
+    expect(await api.recording.sessions()).toEqual([]);
   });
 });

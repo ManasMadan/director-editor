@@ -2,6 +2,10 @@
  * The shoot as one roll, against the real API (its recordings on the local storage): the
  * top band on a phone, leaving mid-roll, and a session left behind by a closed tab.
  */
+import { IndexedDbSliceStore } from "@repo/client/api/recording/slice-store";
+import { recordingSessionIdSchema } from "@repo/contracts/ids";
+import { RECORDING_QUEUE_MAX_MS } from "@repo/contracts/recording";
+import { SECOND_MS } from "@repo/contracts/time";
 import { useSearchParams } from "next/navigation";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page as browser, commands, userEvent } from "vitest/browser";
@@ -188,11 +192,47 @@ describe("the roll", { tags: ["files"] }, () => {
     expect(session?.status).toBe("done");
   });
 
+  it("pauses by itself once five minutes of footage wait to upload, a last visit's included", async () => {
+    canvasCamera();
+    await signUp();
+    const videoId = await plannedShort(2);
+    // An earlier visit left nearly five minutes on this device, and nothing gets through.
+    const store = new IndexedDbSliceStore();
+    await store.put({
+      kind: "slice",
+      sessionId: recordingSessionIdSchema.parse(crypto.randomUUID()),
+      partIndex: 0,
+      index: 0,
+      startMs: 0,
+      durationMs: RECORDING_QUEUE_MAX_MS - SECOND_MS,
+      bytes: new Blob(["left behind"]),
+    });
+    await commands.failRequests("/rpc/recording/uploadSlice");
+    try {
+      const page = await openShoot(videoId);
+      await startRoll(page);
+      // The roll's first slice takes the queue past five minutes: no touch needed.
+      await expect
+        .element(page.getByRole("status", { name: "Paused" }), { timeout: 20_000 })
+        .toBeVisible();
+    } finally {
+      cleanup();
+      for (const item of await store.all()) {
+        await store.remove(item);
+      }
+    }
+  });
+
   it("records in a new part when the camera's picture changes size", async () => {
     canvasCamera();
     await signUp();
     const videoId = await plannedShort(2);
     const page = await openShoot(videoId);
+    // The viewfinder resizing before it shows any picture: nothing to record yet.
+    await expect.element(page.getByRole("button", { name: "Start shooting" })).toBeVisible();
+    const viewfinder = document.querySelector("video");
+    expect(viewfinder?.srcObject).toBeNull();
+    viewfinder?.dispatchEvent(new Event("resize"));
     await startRoll(page);
     const [session] = await api.recording.sessions();
     if (!session) {

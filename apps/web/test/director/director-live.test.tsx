@@ -930,5 +930,14 @@ describe("Director's marks on the roll", { tags: ["files"] }, () => {
     await expect
       .poll(() => again.sentOf("roll"))
       .toContainEqual({ type: "roll", state: "recording" });
+
+    // Dropped again while paused: back, it hears the roll is paused, not recording.
+    await userEvent.click(page.getByRole("button", { name: "Pause recording" }));
+    await expect.element(page.getByRole("status", { name: "Paused" })).toBeVisible();
+    again.hangUp();
+    await expect.poll(() => FakeSocket.all.length, { timeout: 10_000 }).toBe(3);
+    const third = FakeSocket.last;
+    third.open();
+    await expect.poll(() => third.sentOf("roll")).toEqual([{ type: "roll", state: "paused" }]);
   });
 });
