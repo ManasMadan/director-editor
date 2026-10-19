@@ -42,6 +42,8 @@ class FakeSocket {
   static readonly CLOSED = 3;
   static all: FakeSocket[] = [];
   readyState = FakeSocket.CONNECTING;
+  /** What the page has sent that hasn't gone out yet: the test backs the line up with it. */
+  bufferedAmount = 0;
   sent: Sent[] = [];
   onopen: ((event: Event) => void) | null = null;
   onmessage: ((event: MessageEvent) => void) | null = null;
@@ -873,6 +875,36 @@ describe("Director's marks on the roll", { tags: ["files"] }, () => {
     const [opened] = await api.recording.sessions();
     const attempts = opened ? (await api.recording.session({ sessionId: opened.id })).attempts : [];
     expect(attempts).toMatchObject([{ number: 1, shotIndex: 0 }]);
+
+    /** Waits as long as two of the camera's frames take to go up. */
+    const twoFrames = async () => {
+      const from = performance.now();
+      await expect.poll(() => performance.now() - from, { timeout: 5_000 }).toBeGreaterThan(2_200);
+    };
+    // The line's backed up: no frame joins the queue until it drains.
+    socket.bufferedAmount = 1024 * 1024;
+    await twoFrames();
+    const backedUp = socket.sentOf("frame").length;
+    await twoFrames();
+    expect(socket.sentOf("frame")).toHaveLength(backedUp);
+    socket.bufferedAmount = 0;
+    await expect.poll(() => socket.sentOf("frame").length).toBeGreaterThan(backedUp);
+
+    // Paused: neither the camera nor the microphone goes to Director.
+    await userEvent.click(page.getByRole("button", { name: "Pause recording" }));
+    await expect
+      .poll(() => socket.sentOf("roll"))
+      .toContainEqual({ type: "roll", state: "paused" });
+    await twoFrames();
+    const [frames, sounds] = [socket.sentOf("frame").length, socket.sentOf("audio").length];
+    await twoFrames();
+    expect(socket.sentOf("frame")).toHaveLength(frames);
+    expect(socket.sentOf("audio")).toHaveLength(sounds);
+    await userEvent.click(page.getByRole("button", { name: "Resume" }).last());
+    await expect.poll(() => socket.sentOf("frame").length).toBeGreaterThan(frames);
+    await expect
+      .element(page.getByRole("button", { name: "Pause recording" }), { timeout: 15_000 })
+      .toBeVisible();
 
     // The line drops and Director comes back by itself: it hears where the roll is.
     socket.hangUp();
