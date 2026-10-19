@@ -398,7 +398,7 @@ describe("leaving the shoot", () => {
     await expect.poll(currentUrl).toBe(`/director/${videoId}`);
   });
 
-  it("asks first during a take, keeps the take on Stay, and leaves on Leave", async () => {
+  it("asks first during a take, which carries on behind the question, and leaves on Leave", async () => {
     canvasCamera();
     const { page, videoId } = await openShoot({ shots: [walkIn, smile] });
     await startShooting(page);
@@ -410,9 +410,14 @@ describe("leaving the shoot", () => {
     await expect.element(dialog.getByText("This take isn't kept yet.")).toBeVisible();
     // Focus starts on Stay: Enter doesn't leave by accident.
     await expect.element(dialog.getByRole("button", { name: "Stay" })).toHaveFocus();
-    // The recording stopped at once: the take is safe behind the question.
+    // The take carries on behind the question: Stay mustn't leave a cut-short take.
+    expect(page.getByText("REC").query()).not.toBeNull();
     await userEvent.click(dialog.getByRole("button", { name: "Stay" }));
-    await expect.element(page.getByLabelText("Your take, on loop")).toBeVisible();
+    await expect.element(page.getByText("REC")).toBeVisible();
+    // It runs to its end as any take does.
+    await expect
+      .element(page.getByLabelText("Your take, on loop"), { timeout: 8_000 })
+      .toBeVisible();
     expect(currentUrl()).toBe(`/director/${videoId}/shoot?shot=0&audio=voice`);
     // The browser's back asks too, and asks again after Stay.
     window.history.back();
