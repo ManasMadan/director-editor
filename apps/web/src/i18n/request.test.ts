@@ -1,6 +1,7 @@
+import { bundledMessages } from "@repo/i18n";
 import { describe, expect, it } from "vitest";
 import { request } from "../../test/next-server";
-import getRequestConfig from "./request";
+import getRequestConfig, { browserMessages } from "./request";
 
 const config = () => getRequestConfig({ requestLocale: Promise.resolve(undefined) });
 
@@ -21,5 +22,16 @@ describe("the request's language and time zone", () => {
 
   it("are English without either", async () => {
     expect(await config()).toMatchObject({ locale: "en" });
+  });
+});
+
+describe("the messages the browser gets", () => {
+  it("leave out what only the server and the emails use", async () => {
+    const sent = browserMessages(await bundledMessages.load("en"));
+    expect(sent).not.toHaveProperty("email");
+    expect(sent.legal).not.toHaveProperty("privacyDoc");
+    expect(sent.legal).not.toHaveProperty("termsDoc");
+    expect(sent.legal.privacy).toBe("Privacy policy");
+    expect(sent.common.signIn).toBe("Sign in");
   });
 });

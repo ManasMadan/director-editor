@@ -3,7 +3,7 @@ import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { getLocale, getMessages, getTimeZone, getTranslations } from "next-intl/server";
 import type { ReactNode } from "react";
-import { textDirection } from "@/i18n/request";
+import { browserMessages, textDirection } from "@/i18n/request";
 import { LiveUpdates, PreferenceSync, SiteChrome, SiteFooter, SiteHeader } from "@/modules/shell";
 import { Providers } from "./providers";
 
@@ -36,7 +36,12 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     // phone on a slow line nothing to download before the first words show.
     <html lang={locale} dir={textDirection(locale)} suppressHydrationWarning>
       <body className="flex min-h-dvh flex-col font-sans antialiased">
-        <Providers locale={locale} timeZone={timeZone} messages={messages} nonce={nonce}>
+        <Providers
+          locale={locale}
+          timeZone={timeZone}
+          messages={browserMessages(messages)}
+          nonce={nonce}
+        >
           <PreferenceSync timeZone={timeZone} />
           <LiveUpdates />
           <SiteChrome header={<SiteHeader />} footer={<SiteFooter />}>

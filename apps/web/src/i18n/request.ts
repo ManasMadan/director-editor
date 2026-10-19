@@ -7,7 +7,7 @@
  * Messages load through packages/i18n; see its MessageSource seam to serve edited copy
  * from a database later.
  */
-import { bundledMessages, isLocale, negotiateLocale } from "@repo/i18n";
+import { bundledMessages, isLocale, type Messages, negotiateLocale } from "@repo/i18n";
 import { cookies, headers } from "next/headers";
 import { getRequestConfig } from "next-intl/server";
 
@@ -19,6 +19,16 @@ const RTL = new Set(["ar", "he", "fa", "ur"]);
 
 /** The `dir` of a page in `locale`. */
 export const textDirection = (locale: string) => (RTL.has(locale) ? "rtl" : "ltr");
+
+/**
+ * The messages the browser gets: all but the emails' (the notifications service sends
+ * them) and the terms' and privacy policy's own text (only the server renders it). They
+ * would otherwise travel in every page's HTML, about a third of the catalog, on every load.
+ */
+export function browserMessages({ email: _email, legal, ...rest }: Messages) {
+  const { privacyDoc: _privacy, termsDoc: _terms, ...links } = legal;
+  return { ...rest, legal: links };
+}
 
 export default getRequestConfig(async () => {
   const cookieStore = await cookies();
