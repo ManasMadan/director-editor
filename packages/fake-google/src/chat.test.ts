@@ -74,6 +74,31 @@ describe("the slower line's generateContent", () => {
     expect((await ask(turn("hi"))).status).toBe(200);
   });
 
+  it("hears nothing said in a turn that ends with a camera frame", async () => {
+    const framed = {
+      systemInstruction: system,
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: "go to shot 3" }, { inlineData: { mimeType: "image/jpeg", data: "AA" } }],
+        },
+      ],
+    };
+    expect(await partsOf(framed)).toEqual([{ text: "Got it." }]);
+  });
+
+  it("leaves out what an answer cost while told to", async () => {
+    fake.chatUncounted(true);
+    try {
+      const answer = await (await ask(turn("hello?"))).json();
+      expect(answer).not.toHaveProperty("usageMetadata");
+      expect(answer).toMatchObject({ candidates: [{ content: { parts: [{ text: "Got it." }] } }] });
+    } finally {
+      fake.chatUncounted(false);
+    }
+    expect(await (await ask(turn("hello?"))).json()).toMatchObject({ usageMetadata: CHAT_USAGE });
+  });
+
   it("starts from shot 1 when the instruction names none", async () => {
     const parts = await partsOf({
       systemInstruction: { parts: [{ text: "no shot" }] },
