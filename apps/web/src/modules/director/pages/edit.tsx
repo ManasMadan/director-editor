@@ -73,7 +73,14 @@ import { captionInk } from "../lib/ink";
 import type { MatchCutTransform } from "../lib/match-cuts";
 import { cutPicks, pickedTakes } from "../lib/picks";
 import { gapSlots } from "../lib/scene";
-import { MAX_SECONDS, renderedSeconds, type Segment, stitch } from "../lib/stitch";
+import {
+  IncompleteRender,
+  MAX_SECONDS,
+  type RenderQuality,
+  renderedSeconds,
+  type Segment,
+  stitch,
+} from "../lib/stitch";
 import { timecode } from "../lib/track";
 import {
   loadVisuals,
@@ -121,6 +128,8 @@ function segmentsOf(
 type Saving =
   | { step: "idle" }
   | { step: "rendering"; done: number }
+  /** The last frame is drawn: the recorder is still writing the video. */
+  | { step: "finishing" }
   | { step: "uploading" }
   /** With the clips that were rendered, for the saved video's captions track. */
   | { step: "saved"; video: Blob; lines: readonly CaptionLine[] }
@@ -139,36 +148,62 @@ interface SaveInput {
   transforms: ReadonlyMap<number, MatchCutTransform>;
 }
 
-/** Renders the edit in the browser, at a size a saved video may be, until `signal` cancels. */
+/**
+ * Renders the edit in the browser, at a size a saved video may be, until `signal` cancels;
+ * `report` hears how it's going. A render whose encoder fell behind (IncompleteRender) is
+ * tried once more, lighter, before it's given up on.
+ */
 async function render(
   { plan, slots, clips, media, choices, transforms }: SaveInput,
-  onProgress: (done: number) => void,
+  report: (saving: Saving) => void,
   signal: AbortSignal,
 ) {
-  // Made in the tap itself: Safari starts audio only there (see lib/stitch.ts).
+  // Made in the tap itself, and kept for the second try: Safari starts audio only in a
+  // tap (see lib/stitch.ts).
   const audio = new AudioContext();
   const resumed = audio.resume();
   const visuals = await loadVisuals(slots);
   try {
     await resumed;
     const hold = await heldPicture(clips, media);
-    return await stitch(segmentsOf(clips, media, transforms), {
-      audio,
-      withSound: choices.sound,
-      onProgress,
-      captions: {
-        lines: fixLines(editLines(clips), choices.fixes),
-        style: choices.style,
-        ink: captionInk(),
-      },
-      signal,
-      look: (ctx) => composer(ctx, plan, clips, visuals, hold),
+    const once = (quality: RenderQuality) =>
+      stitch(segmentsOf(clips, media, transforms), {
+        audio,
+        withSound: choices.sound,
+        onProgress: (done) => report({ step: "rendering", done }),
+        onFinishing: () => report({ step: "finishing" }),
+        captions: {
+          lines: fixLines(editLines(clips), choices.fixes),
+          style: choices.style,
+          ink: captionInk(),
+        },
+        signal,
+        look: (ctx) => composer(ctx, plan, clips, visuals, hold),
+        quality,
+      });
+    return await once("full").catch((error: unknown) => {
+      if (!(error instanceof IncompleteRender)) {
+        throw error;
+      }
+      report({ step: "rendering", done: 0 });
+      return once("light");
     });
   } finally {
     releaseVisuals(visuals);
     await audio.close();
   }
 }
+
+/** The video, or why there's none: it didn't come out whole, or couldn't be made here. */
+function renderedVideo(input: SaveInput, report: (saving: Saving) => void, signal: AbortSignal) {
+  return render(input, report, signal).catch((error: unknown) =>
+    error instanceof IncompleteRender ? ("renderIncomplete" as const) : ("renderFailed" as const),
+  );
+}
+
+/** How long the saved video is, gaps and all, in milliseconds: what My media shows. */
+const renderedMs = (input: SaveInput) =>
+  Math.round(renderedSeconds(segmentsOf(input.clips, input.media, input.transforms)) * SECOND_MS);
 
 /**
  * The first filmed shot's card frame: what a skipped shot at the very start holds when
@@ -212,10 +247,7 @@ function useSaveVideo(videoId: string, title: string) {
         videoId,
         title,
         picks: input.picks,
-        // What My media shows: the video as rendered, gaps and all.
-        durationMs: Math.round(
-          renderedSeconds(segmentsOf(input.clips, input.media, input.transforms)) * SECOND_MS,
-        ),
+        durationMs: renderedMs(input),
         file: new File([video], `director-${videoId}.${extension}`, { type: video.type }),
         signal,
       });
@@ -245,13 +277,12 @@ function useSaveVideo(videoId: string, title: string) {
     running.current = cancel;
     setSaving({ step: "rendering", done: 0 });
     // No progress comes after a cancel: the render stops before its next frame.
-    const onProgress = (done: number) => setSaving({ step: "rendering", done });
-    const video = await render(input, onProgress, cancel.signal).catch(() => null);
+    const video = await renderedVideo(input, setSaving, cancel.signal);
     if (cancel.signal.aborted) {
       return;
     }
-    if (!video) {
-      return fail(t("renderFailed"));
+    if (typeof video === "string") {
+      return fail(t(video));
     }
     // A short video whose picture came out busier than the bitrate allows.
     if (video.size > maxBytes) {
@@ -259,7 +290,8 @@ function useSaveVideo(videoId: string, title: string) {
     }
     await upload(input, video, cancel.signal);
   };
-  const busy = saving.step === "rendering" || saving.step === "uploading";
+  const busy =
+    saving.step === "rendering" || saving.step === "finishing" || saving.step === "uploading";
   return {
     saving,
     save,
@@ -643,6 +675,7 @@ function Stage({ editor, saving }: { editor: EditorState; saving: Saving }) {
   const { playback, history } = editor;
   const labels: Partial<Record<Saving["step"], string>> = {
     rendering: t("rendering", { done: saving.step === "rendering" ? saving.done : 0 }),
+    finishing: t("finishing"),
     uploading: t("uploading"),
   };
   const label = labels[saving.step] ?? null;

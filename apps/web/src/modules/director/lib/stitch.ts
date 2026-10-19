@@ -20,15 +20,24 @@
  * then, the clock, the sound and the recorder together, and carries on when the page is
  * back; the screen is kept on meanwhile where the browser lets it.
  *
+ * Its encoder can fall behind on a busy device, and the frames it hasn't encoded when the
+ * recorder stops are lost. So after the last frame the render waits for it to catch up
+ * ("finishing", lib/drain.ts), then checks the file: one with less picture than the edit
+ * is an IncompleteRender, never a video to save. The editor tries once more at the
+ * lighter quality, which halves the encoder's work, before saying so.
+ *
  * The takes are read from blobs (fetched through short-lived storage URLs, so the canvas
  * stays CORS-clean: a canvas that drew a cross-origin video can't be recorded).
  */
 import { uploadPurposes } from "@repo/contracts/files";
 import { required } from "@repo/contracts/objects";
+import { SECOND_MS } from "@repo/contracts/time";
 import { type CaptionInk, drawCaption } from "./caption-draw";
 import { type CaptionLine, type CaptionStyle, captionAt } from "./captions";
 import type { Composer, Picture } from "./compose";
+import { caughtUp, type Written } from "./drain";
 import { loadedVideo, recorderFormat } from "./media";
+import { lastFrameSeconds } from "./recorded";
 import {
   FPS,
   mixDown,
@@ -53,6 +62,26 @@ const AUDIO_BITS_PER_SECOND = 128_000;
 export const MAX_SECONDS =
   (uploadPurposes["director-cut-video"].maxBytes * 8) /
   (VIDEO_BITS_PER_SECOND + AUDIO_BITS_PER_SECOND);
+/**
+ * How the video is encoded: as it's saved, or lighter (540×960 at half the bitrate,
+ * about half the encoder's work) for a second try on a device whose encoder fell behind.
+ */
+export type RenderQuality = "full" | "light";
+const QUALITIES: Record<RenderQuality, { scale: number; videoBitsPerSecond: number }> = {
+  full: { scale: 1, videoBitsPerSecond: VIDEO_BITS_PER_SECOND },
+  light: { scale: 0.75, videoBitsPerSecond: VIDEO_BITS_PER_SECOND / 2 },
+};
+/** How often the recording is checked while its encoder catches up. */
+const DRAIN_CHECK_MS = 500;
+
+/**
+ * The recording came out with less picture than the edit: the encoder fell too far
+ * behind (a busy device), and what it hadn't encoded was lost. Not a video to save.
+ */
+export class IncompleteRender extends Error {
+  override name = "IncompleteRender";
+}
+
 /** How much a photo slowly zooms in over its time on screen. */
 const PHOTO_ZOOM = 0.06;
 /**
@@ -335,9 +364,12 @@ async function soundOf(audio: AudioContext, take: Blob): Promise<Float32Array | 
  * silence for photos and gaps. One take is decoded at a time, so a long video doesn't
  * hold every take's sound at once.
  */
-async function soundtrackOf(plan: RenderPlan<Segment>, audio: AudioContext) {
+async function soundtrackOf(plan: RenderPlan<Segment>, audio: AudioContext, lag: number) {
   const rate = audio.sampleRate;
-  const { length } = samplesOf(plan, { firstFrame: 0, frames: plan.frames }, rate);
+  // Silent for `lag` frames after the end, the time the last frame is held: the sound
+  // keeps flowing until the end of it has reached the recorder, and stops with the
+  // picture, so waiting for the encoder after that records no more sound.
+  const { length } = samplesOf(plan, { firstFrame: 0, frames: plan.frames + lag }, rate);
   const samples = new Float32Array(length);
   for (const placed of plan.placed) {
     const { segment } = placed;
@@ -347,9 +379,7 @@ async function soundtrackOf(plan: RenderPlan<Segment>, audio: AudioContext) {
       mixInto(samples, { ...samplesOf(plan, placed, rate), source: sound, from });
     }
   }
-  // Silence after the end, so the sound keeps flowing until the recorder stops: Chrome
-  // drops what's still on its way to the recorder once the sound stops.
-  const buffer = audio.createBuffer(1, length + rate, rate);
+  const buffer = audio.createBuffer(1, Math.max(1, length), rate);
   buffer.copyToChannel(samples, 0);
   return buffer;
 }
@@ -471,6 +501,57 @@ interface Run {
   signal: AbortSignal | undefined;
 }
 
+/** How many frames the recording holds once played through: the edit's, and the lag twice. */
+const recordedFrames = (plan: RenderPlan<Segment>, lag: number) => plan.frames + 2 * lag;
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Waits, after the last frame, until the recorder's encoder has caught up (lib/drain.ts)
+ * or for twice the video's length and ten seconds more, whichever comes first.
+ */
+async function drain(
+  written: () => Promise<Blob>,
+  frames: number,
+  fps: number,
+  signal?: AbortSignal,
+) {
+  const expected = frames / fps;
+  const started = performance.now();
+  const cap = (2 * expected + 10) * SECOND_MS;
+  const checks: Written[] = [];
+  for (;;) {
+    const last = await lastFrameSeconds(await written());
+    if (last === null) {
+      // This browser can't say how far it's got: stop now, the file is checked anyway.
+      return;
+    }
+    checks.push({ at: performance.now() - started, picture: last + 1 / fps });
+    if (
+      caughtUp(checks, expected, 1 / fps) ||
+      performance.now() - started > cap ||
+      signal?.aborted
+    ) {
+      return;
+    }
+    await delay(DRAIN_CHECK_MS);
+  }
+}
+
+/**
+ * The finished file, checked: its picture runs to the edit's last frame (`frames` of it,
+ * after the `lag` frames it starts with), or it's an IncompleteRender.
+ */
+async function checked(video: Blob, frames: number, lag: number, fps: number) {
+  const last = await lastFrameSeconds(video);
+  if (last !== null && last < (lag + frames - 2) / fps) {
+    throw new IncompleteRender(`its picture ends at ${last} s of ${(lag + frames) / fps} s`);
+  }
+  return video;
+}
+
 /**
  * Draws a frame each time the clock reaches the next one, from the moment the recorder
  * starts: frame 0 while the sound is still on its way, then the video's frames `lag`
@@ -520,10 +601,37 @@ interface Options {
    * card, painted on the edit's clock. Without it, each picture fills the frame.
    */
   look?: (ctx: CanvasRenderingContext2D) => Composer;
+  /** As it's saved, or lighter for a second try (RenderQuality). */
+  quality?: RenderQuality;
+  /** The last frame is drawn: the render waits for the recorder to finish writing. */
+  onFinishing?: () => void;
+}
+
+/** The options MediaRecorder takes, with the keyframe interval Chrome reads. */
+interface RecorderOptions extends MediaRecorderOptions {
+  videoKeyFrameIntervalDuration?: number;
+}
+
+/**
+ * The canvas the recorder records: the drawing canvas itself, or for a lighter render a
+ * smaller copy of it, drawn as each frame is sent.
+ */
+function capturedCanvas(canvas: HTMLCanvasElement, scale: number) {
+  if (scale === 1) {
+    return { captured: canvas, copy: () => undefined };
+  }
+  const small = document.createElement("canvas");
+  small.width = Math.round(OUTPUT_WIDTH * scale);
+  small.height = Math.round(OUTPUT_HEIGHT * scale);
+  const smallCtx = small.getContext("2d");
+  return {
+    captured: small,
+    copy: () => smallCtx?.drawImage(canvas, 0, 0, small.width, small.height),
+  };
 }
 
 /** The canvas the video is drawn on, the recorder recording it, and its finished file. */
-function recorderOf(withSound: boolean, audio: AudioContext) {
+function recorderOf(withSound: boolean, audio: AudioContext, quality: RenderQuality) {
   const format = recorderFormat();
   if (!format) {
     throw new Error("this browser can't record video");
@@ -536,23 +644,43 @@ function recorderOf(withSound: boolean, audio: AudioContext) {
     throw new Error("no canvas to draw on");
   }
   const sound = audio.createMediaStreamDestination();
-  const { track, sendFrame } = canvasTrack(canvas);
+  const { scale, videoBitsPerSecond } = QUALITIES[quality];
+  const { captured, copy } = capturedCanvas(canvas, scale);
+  const { track, sendFrame: send } = canvasTrack(captured);
   const tracks = [track, ...(withSound ? sound.stream.getAudioTracks() : [])];
-  const recorder = new MediaRecorder(new MediaStream(tracks), {
+  const options: RecorderOptions = {
     mimeType: format.mimeType,
-    videoBitsPerSecond: VIDEO_BITS_PER_SECOND,
+    videoBitsPerSecond,
     audioBitsPerSecond: AUDIO_BITS_PER_SECOND,
-  });
+    // A keyframe a second: the recording is written in pieces that short where Chrome
+    // honours it, so the wait after the last frame sees the encoder's progress closely.
+    videoKeyFrameIntervalDuration: SECOND_MS,
+  };
+  const recorder = new MediaRecorder(new MediaStream(tracks), options);
   const chunks: Blob[] = [];
   recorder.ondataavailable = (event) => chunks.push(event.data);
   const stopped = new Promise((resolve) => {
     recorder.onstop = resolve;
   });
+  /** What's been written so far, once the recorder has handed over what it holds. */
+  const written = () =>
+    new Promise<Blob>((resolve) => {
+      recorder.addEventListener(
+        "dataavailable",
+        () => resolve(new Blob(chunks, { type: format.uploadType })),
+        { once: true },
+      );
+      recorder.requestData();
+    });
   const file = async () => {
     await stopped;
     return new Blob(chunks, { type: format.uploadType });
   };
-  return { ctx, sound, sendFrame, recorder, file };
+  const sendFrame = () => {
+    copy();
+    send();
+  };
+  return { ctx, sound, sendFrame, recorder, written, file };
 }
 
 /**
@@ -564,7 +692,11 @@ function recorderOf(withSound: boolean, audio: AudioContext) {
  */
 export async function stitch(segments: Segment[], options: Options): Promise<Blob> {
   const { audio, withSound, onProgress, captions, signal, look } = options;
-  const { ctx, sound, sendFrame, recorder, file } = recorderOf(withSound, audio);
+  const { ctx, sound, sendFrame, recorder, written, file } = recorderOf(
+    withSound,
+    audio,
+    options.quality ?? "full",
+  );
   const plan = renderPlan(segments, lengthOf);
   signal?.throwIfAborted();
   const scratch = document.createElement("canvas");
@@ -575,9 +707,12 @@ export async function stitch(segments: Segment[], options: Options): Promise<Blo
   const source = audio.createBufferSource();
   const stopWatching = pauseWhileHidden(audio, recorder);
   const letScreenLock = keepScreenOn();
+  // The picture runs a whole number of frames behind the sound, as long as the sound
+  // takes to reach the recorder, or every cut would be heard late.
+  const lag = Math.ceil(soundDelay(audio) * plan.fps);
   try {
     if (withSound) {
-      source.buffer = await soundtrackOf(plan, audio);
+      source.buffer = await soundtrackOf(plan, audio, lag);
       source.connect(sound);
     }
     await visible();
@@ -596,8 +731,12 @@ export async function stitch(segments: Segment[], options: Options): Promise<Blo
     };
     recorder.start(1000);
     source.start();
-    const lag = Math.ceil(soundDelay(audio) * plan.fps);
     await playThrough({ plan, cued, audio, start: audio.currentTime, lag, draw, signal });
+    if (plan.frames > 0 && !signal?.aborted) {
+      options.onFinishing?.();
+      // Not paused while it waits: Chrome drops the frames still being encoded then.
+      await drain(written, recordedFrames(plan, lag), plan.fps, signal);
+    }
   } finally {
     stopWatching();
     letScreenLock();
@@ -611,5 +750,5 @@ export async function stitch(segments: Segment[], options: Options): Promise<Blo
   const video = await file();
   signal?.throwIfAborted();
   onProgress(1);
-  return video;
+  return plan.frames > 0 ? checked(video, plan.frames, lag, plan.fps) : video;
 }

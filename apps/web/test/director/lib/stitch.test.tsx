@@ -2,8 +2,10 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { CaptionInk } from "@/modules/director/lib/caption-draw";
 import { recorderFormat } from "@/modules/director/lib/media";
+import { lastFrameSeconds } from "@/modules/director/lib/recorded";
 import {
   type Captions,
+  IncompleteRender,
   OUTPUT_HEIGHT,
   OUTPUT_WIDTH,
   type Segment,
@@ -142,7 +144,8 @@ describe("stitching the short", () => {
     const pictureEnds = (frames.at(-1)?.time ?? 0) + FRAME;
     const soundEnds = samples.length / rate;
     expect(pictureEnds).toBeGreaterThanOrEqual(3);
-    expect(pictureEnds).toBeLessThan(3 + 6 * FRAME);
+    // Held at each end for as long as the sound takes to reach the recorder (a few frames).
+    expect(pictureEnds).toBeLessThan(3 + 10 * FRAME);
     expect(Math.abs(soundEnds - pictureEnds)).toBeLessThan(3 * FRAME);
     // None of the last take's sound is cut off.
     expect(runs.findLast((run) => run.tone === 880)?.end).toBeGreaterThan(lead + 3 - FRAME);
@@ -207,7 +210,7 @@ describe("stitching the short", () => {
     // on (the recorder and the clock stop a few milliseconds apart), never the time away.
     const steps = frames.slice(1).map((frame, index) => frame.time - (frames[index]?.time ?? 0));
     expect(Math.max(...steps)).toBeLessThan(5 * FRAME);
-    expect((frames.at(-1)?.time ?? 0) + FRAME).toBeLessThan(1 + 6 * FRAME);
+    expect((frames.at(-1)?.time ?? 0) + FRAME).toBeLessThan(1 + 10 * FRAME);
   });
 
   it("records where the canvas can't be asked for frames, or a take won't play", async () => {
@@ -227,6 +230,90 @@ describe("stitching the short", () => {
     vi.unstubAllGlobals();
     expect(play).toHaveBeenCalled();
     expect(await sizeOf(short)).toEqual([OUTPUT_WIDTH, OUTPUT_HEIGHT]);
+  });
+
+  it("waits for the recorder to finish writing, then gives back the whole video", async () => {
+    const written = vi.spyOn(MediaRecorder.prototype, "requestData");
+    const finishing = vi.fn();
+    const short = await stitch(
+      [{ kind: "video", source: clip, startSeconds: 0, endSeconds: 0.5 }],
+      {
+        audio,
+        withSound: false,
+        onProgress: vi.fn(),
+        onFinishing: finishing,
+        captions: CAPTIONS,
+      },
+    );
+    expect(finishing).toHaveBeenCalledOnce();
+    // It looked at what was written before stopping.
+    expect(written).toHaveBeenCalled();
+    expect(await lastFrameSeconds(short)).toBeGreaterThanOrEqual(0.5 - 2 * FRAME);
+  });
+
+  it("refuses a recording whose picture stops before the edit's end", async () => {
+    // As a recorder drops what its encoder hadn't got to when it stopped: the file, once
+    // stopped, shows its last frame a fifth of a second in.
+    let stopped = false;
+    const stop = MediaRecorder.prototype.stop;
+    vi.spyOn(MediaRecorder.prototype, "stop").mockImplementation(function (this: MediaRecorder) {
+      stopped = true;
+      stop.call(this);
+    });
+    const frameCallback = HTMLVideoElement.prototype.requestVideoFrameCallback;
+    vi.spyOn(HTMLVideoElement.prototype, "requestVideoFrameCallback").mockImplementation(function (
+      this: HTMLVideoElement,
+      callback,
+    ) {
+      return frameCallback.call(this, (now, metadata) =>
+        callback(now, stopped ? { ...metadata, mediaTime: 0.2 } : metadata),
+      );
+    });
+    await expect(
+      stitch([{ kind: "video", source: clip, startSeconds: 0, endSeconds: 0.5 }], {
+        audio,
+        withSound: false,
+        onProgress: vi.fn(),
+        captions: CAPTIONS,
+      }),
+    ).rejects.toThrow(IncompleteRender);
+  });
+
+  it("records a lighter video when asked: 540×960", async () => {
+    const short = await stitch([{ kind: "photo", source: photo, seconds: 0.3 }], {
+      audio,
+      withSound: false,
+      onProgress: vi.fn(),
+      captions: CAPTIONS,
+      quality: "light",
+    });
+    expect(await sizeOf(short)).toEqual([540, 960]);
+  });
+
+  it("stops at once, unchecked, where the browser can't say how far a recording got", async () => {
+    const frameCallback = Object.getOwnPropertyDescriptor(
+      HTMLVideoElement.prototype,
+      "requestVideoFrameCallback",
+    );
+    Reflect.deleteProperty(HTMLVideoElement.prototype, "requestVideoFrameCallback");
+    try {
+      const short = await stitch([{ kind: "photo", source: photo, seconds: 0.3 }], {
+        audio,
+        withSound: false,
+        onProgress: vi.fn(),
+        captions: CAPTIONS,
+      });
+      expect(short.size).toBeGreaterThan(0);
+      expect(await lastFrameSeconds(short)).toBeNull();
+    } finally {
+      if (frameCallback) {
+        Object.defineProperty(
+          HTMLVideoElement.prototype,
+          "requestVideoFrameCallback",
+          frameCallback,
+        );
+      }
+    }
   });
 
   it("makes an empty video of an empty edit", async () => {
