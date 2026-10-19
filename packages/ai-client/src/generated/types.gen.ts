@@ -650,6 +650,12 @@ export type CutPick = {
  */
 export type DirectorCutCreate = {
     /**
+     * Durationms
+     *
+     * How long the rendered video is, gaps and all; added up from the picks when left out.
+     */
+    durationMs?: number | null;
+    /**
      * Fileid
      */
     fileId: string;

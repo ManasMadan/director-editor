@@ -390,7 +390,12 @@ function takeOut(take: (typeof takes)[number]) {
 }
 
 function cutOut(cut: (typeof cuts)[number]) {
-  const body = cut.body as { title: string; fileId: string; picks: unknown[] };
+  const body = cut.body as {
+    title: string;
+    fileId: string;
+    picks: unknown[];
+    durationMs?: number;
+  };
   return {
     id: cut.id,
     planId: cut.plan.id,
@@ -399,7 +404,8 @@ function cutOut(cut: (typeof cuts)[number]) {
     title: body.title,
     picks: body.picks,
     fileId: body.fileId,
-    durationMs: 9000,
+    // As the AI service records it: the editor's figure, else the picks added up.
+    durationMs: body.durationMs ?? 9000,
     publishStatus: "none",
     youtubeVideoId: null,
     visibility: null,
@@ -1079,7 +1085,13 @@ describe("Director's shots and cuts", () => {
     readyTemplate(String(me.activeOrganizationId), "CutsShort01");
     const take = randomUUID();
     const file = await readyUpload(session);
-    const input = { videoId: "CutsShort01", picks: { 0: take }, fileId: file.id, title: "Mine" };
+    const input = {
+      videoId: "CutsShort01",
+      picks: { 0: take },
+      fileId: file.id,
+      title: "Mine",
+      durationMs: 14_233,
+    };
     // Not checked yet: no cut.
     await expectError(session.rpc.director.saveCut(input), "FILE_NOT_READY");
     await markReady(file.id);
@@ -1092,14 +1104,19 @@ describe("Director's shots and cuts", () => {
       title: "Mine",
       picks: { 0: take },
       fileId: file.id,
-      durationMs: 9000,
+      durationMs: 14_233,
       createdAt: expect.any(Date),
       publish: { status: "none", youtubeVideoId: null, visibility: null },
     });
     expect(aiCalls.at(-1)).toMatchObject({
       route: "POST /v1/director/cuts",
       user: me.id,
-      body: { picks: [{ shotIndex: 0, takeId: take }], fileId: file.id, title: "Mine" },
+      body: {
+        picks: [{ shotIndex: 0, takeId: take }],
+        fileId: file.id,
+        title: "Mine",
+        durationMs: 14_233,
+      },
     });
     await expect(session.rpc.director.cuts({ videoId: "CutsShort01" })).resolves.toEqual([cut]);
     await expect(session.rpc.director.media()).resolves.toEqual([cut]);

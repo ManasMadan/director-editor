@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { coverRect, MAX_SECONDS, OUTPUT_HEIGHT, OUTPUT_WIDTH, totalSeconds } from "./stitch";
+import {
+  coverRect,
+  MAX_SECONDS,
+  OUTPUT_HEIGHT,
+  OUTPUT_WIDTH,
+  renderedSeconds,
+  totalSeconds,
+} from "./stitch";
 
 describe("the stitcher's arithmetic", () => {
   it("covers the 9:16 frame with a picture of any shape, cropping its middle", () => {
@@ -28,5 +35,17 @@ describe("the stitcher's arithmetic", () => {
         { kind: "photo", source: blob, seconds: 2 },
       ]),
     ).toBe(4.5);
+  });
+
+  it("says how long the video comes out, gaps included, in whole frames", () => {
+    const blob = new Blob([]);
+    expect(
+      renderedSeconds([
+        { kind: "video", source: blob, startSeconds: 0, endSeconds: 7 },
+        { kind: "gap", seconds: 2.01 },
+        { kind: "video", source: blob, startSeconds: 1, endSeconds: 1.1 },
+      ]),
+    ).toBeCloseTo(9.1, 6);
+    expect(renderedSeconds([])).toBe(0);
   });
 });

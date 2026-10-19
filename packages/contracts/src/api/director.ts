@@ -17,7 +17,7 @@ import {
   fileIdSchema,
   videoIdSchema,
 } from "../ids";
-import { HOUR_S, MINUTE_S } from "../time";
+import { HOUR_S, MINUTE_MS, MINUTE_S } from "../time";
 import { base, EVERYDAY_WRITES, errorsOf, WORKSPACE_ERRORS } from "./base";
 
 const errors = errorsOf(
@@ -48,6 +48,11 @@ export const DIRECTOR_MAX_SHOTS = 12;
 export const DIRECTOR_RETAKE_BELOW = 60;
 /** A cut's title becomes its YouTube title, which YouTube caps at 100 characters. */
 const DIRECTOR_CUT_TITLE_MAX_LENGTH = 100;
+/**
+ * A saved video's longest, as the editor says how long it rendered: well past the
+ * longest a saved video's upload can hold at the render's bitrate (about 3 minutes).
+ */
+const DIRECTOR_CUT_MAX_MS = 10 * MINUTE_MS;
 /** A take's longest: what a 15 MB upload holds at the recorder's bitrate. */
 const DIRECTOR_MAX_SHOT_SECONDS = 60;
 /** A camera frame for a locate, base64 (a 640-pixel JPEG is 40-120 kB). */
@@ -664,6 +669,11 @@ export const directorContract = {
         picks: picksSchema.refine((picks) => Object.keys(picks).length > 0),
         fileId: fileIdSchema,
         title: z.string().trim().min(1).max(DIRECTOR_CUT_TITLE_MAX_LENGTH),
+        /**
+         * How long the video the editor rendered is, gaps and all, for My media to show.
+         * Left out (an editor from before it sent one), the AI service adds up the picks.
+         */
+        durationMs: z.number().int().positive().max(DIRECTOR_CUT_MAX_MS).optional(),
       }),
     )
     .output(directorCutSchema),

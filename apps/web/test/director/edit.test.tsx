@@ -9,7 +9,7 @@ import { fileIdSchema } from "@repo/contracts/ids";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { commands, userEvent } from "vitest/browser";
 import { EditPage, MediaPage } from "@/modules/director";
-import { stitch } from "@/modules/director/lib/stitch";
+import { IncompleteRender, stitch } from "@/modules/director/lib/stitch";
 import { cleanup, currentUrl, renderPage } from "../render";
 import { api, signUp, type User } from "../users";
 import { newVideoId, photo, planShot, readyPlan, recordVideo, shotPlan, take } from "./support";
@@ -516,6 +516,53 @@ describe("the editor", { tags: ["files"] }, () => {
       [user.id],
     );
     expect(cuts).toEqual([]);
+    await expect.element(save).toBeEnabled();
+  });
+
+  it("renders once more, lighter, when the recorder's encoder fell behind, and saves that", {
+    timeout: 60_000,
+  }, async () => {
+    await commands.storageCors();
+    webmOnly();
+    const { user, videoId } = await filmedShort();
+    const page = await openEditor(videoId, undefined);
+    const save = page.getByRole("button", { name: "Save video" });
+    await expect.element(save).toBeEnabled();
+    vi.mocked(stitch).mockRejectedValueOnce(new IncompleteRender("its picture ends early"));
+    const before = await completed();
+    const rendered = vi.mocked(stitch).mock.calls.length;
+    await userEvent.click(save);
+    await expect.poll(() => vi.mocked(stitch).mock.calls.length).toBe(rendered + 2);
+    expect(
+      vi
+        .mocked(stitch)
+        .mock.calls.slice(rendered)
+        .map(([, options]) => options.quality),
+    ).toEqual(["full", "light"]);
+    await passCut(user, before);
+    await expect
+      .element(page.getByRole("dialog", { name: "Saved to My media" }), { timeout: 20_000 })
+      .toBeVisible();
+  });
+
+  it("saves nothing, and says why, when the video doesn't come out whole twice", async () => {
+    await commands.storageCors();
+    const { user, videoId } = await filmedShort();
+    const page = await openEditor(videoId, undefined);
+    const save = page.getByRole("button", { name: "Save video" });
+    await expect.element(save).toBeEnabled();
+    vi.mocked(stitch)
+      .mockRejectedValueOnce(new IncompleteRender("its picture ends early"))
+      .mockRejectedValueOnce(new IncompleteRender("its picture ends early again"));
+    const rendered = vi.mocked(stitch).mock.calls.length;
+    await userEvent.click(save);
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent(
+        "Your video didn't come out whole, so it wasn't saved. Try again with the screen on and other apps closed.",
+      );
+    expect(vi.mocked(stitch).mock.calls.length).toBe(rendered + 2);
+    expect(await cutFiles(user)).toEqual([]);
     await expect.element(save).toBeEnabled();
   });
 

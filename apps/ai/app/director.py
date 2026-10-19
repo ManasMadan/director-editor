@@ -438,7 +438,9 @@ def _shot(plan: DirectorPlan, shot_index: int) -> Shot:
 
 def _pick_ms(pick: CutPick, shots: list[Shot], takes: Mapping[UUID, DirectorTake]) -> int:
     """How long a picked take lasts in a cut: a video take's best part once it's reviewed,
-    otherwise its shot's length (for a photo, how long it's shown). DIRECTOR_SHOT_NOT_FOUND
+    otherwise its shot's length (for a photo, how long it's shown). A best part under
+    MIN_BEST_MS, kept by a review from before that floor, counts as no best part: the
+    editor plays the whole take then. DIRECTOR_SHOT_NOT_FOUND
     for a shot the plan hasn't, DIRECTOR_TAKE_NOT_FOUND for a take that isn't the caller's
     take of that shot."""
     if pick.shotIndex >= len(shots):
@@ -447,7 +449,9 @@ def _pick_ms(pick: CutPick, shots: list[Shot], takes: Mapping[UUID, DirectorTake
     if take is None or take.shot_index != pick.shotIndex:
         raise AppError("DIRECTOR_TAKE_NOT_FOUND")
     if take.best_start_ms is not None and take.best_end_ms is not None:
-        return take.best_end_ms - take.best_start_ms
+        best = take.best_end_ms - take.best_start_ms
+        if best >= MIN_BEST_MS:
+            return best
     return round(shots[pick.shotIndex].durationSeconds * 1000)
 
 
@@ -1302,7 +1306,8 @@ class Director:
         self, org_id: UUID, user_id: UUID, body: DirectorCutCreate
     ) -> tuple[DirectorCut, DirectorPlan]:
         """Records the caller's cut of a ready plan, from takes of theirs picked one per
-        shot, and works out how long it lasts. The file was checked by apps/api."""
+        shot, with how long it lasts: as the editor rendered it (its gaps included), or
+        added up from the picks when it doesn't say. The file was checked by apps/api."""
         plan = await self.plan(org_id, body.videoId)
         shots = _ready_shots(plan)
         if len({pick.shotIndex for pick in body.picks}) != len(body.picks):
@@ -1318,7 +1323,8 @@ class Director:
                     )
                 )
             }
-            duration_ms = sum(_pick_ms(pick, shots, takes) for pick in body.picks)
+            picked_ms = sum(_pick_ms(pick, shots, takes) for pick in body.picks)
+            duration_ms = picked_ms if body.durationMs is None else body.durationMs
             cut = DirectorCut(
                 org_id=org_id,
                 plan_id=plan.id,

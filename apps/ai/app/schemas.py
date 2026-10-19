@@ -606,6 +606,9 @@ PublishStatus = Literal["none", "uploading", "published", "failed"]
 Visibility = Literal["private", "unlisted", "public"]
 # A cut's title becomes its YouTube title, which YouTube caps at 100 characters.
 MAX_CUT_TITLE = 100
+# A saved video's longest, as the editor says it rendered (packages/contracts
+# DIRECTOR_CUT_MAX_MS): well past what a saved video's upload can hold.
+MAX_CUT_MS = 10 * 60_000
 
 
 class DirectorPlanCreate(BaseModel):
@@ -1062,6 +1065,12 @@ class DirectorCutCreate(BaseModel):
     # A ready director-cut-video upload of the caller's (apps/api checked it).
     fileId: UUID = Field(strict=False)
     picks: list[CutPick] = Field(min_length=1, max_length=MAX_SHOTS)
+    durationMs: int | None = Field(
+        default=None,
+        ge=1,
+        le=MAX_CUT_MS,
+        description="How long the rendered video is, gaps and all; added up from the picks when left out.",
+    )
 
 
 class DirectorCutOut(BaseModel):

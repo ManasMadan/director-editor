@@ -666,7 +666,13 @@ describe("saving a cut", () => {
     await until(() => expect(result.current.media.data).toEqual([]));
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     const created = await tick(
-      result.current.save.mutateAsync({ videoId, picks, title: "My morning", file: video() }),
+      result.current.save.mutateAsync({
+        videoId,
+        picks,
+        title: "My morning",
+        durationMs: 14_233,
+        file: video(),
+      }),
     );
     vi.useRealTimers();
     expect(created).toMatchObject({ title: "My morning", picks });
@@ -675,7 +681,7 @@ describe("saving a cut", () => {
       `http://storage.test/uploads/${fileId}`,
       expect.objectContaining({ method: "PUT" }),
     );
-    expect(saved).toEqual([{ videoId, picks, title: "My morning", fileId }]);
+    expect(saved).toEqual([{ videoId, picks, title: "My morning", durationMs: 14_233, fileId }]);
     await until(() => expect(result.current.media.data).toEqual([created]));
   });
 
@@ -690,7 +696,14 @@ describe("saving a cut", () => {
     });
     const { result } = renderHook(() => useSaveCutMutation(), api);
     const error = await result.current
-      .mutateAsync({ videoId, picks, title: "Mine", file: video(), signal: cancel.signal })
+      .mutateAsync({
+        videoId,
+        picks,
+        title: "Mine",
+        durationMs: 1000,
+        file: video(),
+        signal: cancel.signal,
+      })
       .catch((e: unknown) => e);
     expect(error).toHaveProperty("name", "AbortError");
     expect(saved).toEqual([]);
@@ -702,7 +715,14 @@ describe("saving a cut", () => {
     const { result } = renderHook(() => useSaveCutMutation(), api);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     const saving = result.current
-      .mutateAsync({ videoId, picks, title: "Mine", file: video(), signal: cancel.signal })
+      .mutateAsync({
+        videoId,
+        picks,
+        title: "Mine",
+        durationMs: 1000,
+        file: video(),
+        signal: cancel.signal,
+      })
       .catch((e: unknown) => e);
     await vi.advanceTimersByTimeAsync(2 * SECOND_MS);
     cancel.abort();
@@ -720,7 +740,7 @@ describe("saving a cut", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     const error = await tick(
       result.current
-        .mutateAsync({ videoId, picks, title: "My morning", file: video() })
+        .mutateAsync({ videoId, picks, title: "My morning", durationMs: 1000, file: video() })
         .catch((e: unknown) => e),
     );
     vi.useRealTimers();
@@ -735,7 +755,7 @@ describe("saving a cut", () => {
     const started = Date.now();
     const error = await tick(
       result.current
-        .mutateAsync({ videoId, picks, title: "Mine", file: video() })
+        .mutateAsync({ videoId, picks, title: "Mine", durationMs: 1000, file: video() })
         .catch((e: unknown) => e),
     );
     expect(Date.now() - started).toBeGreaterThan(5 * MINUTE_MS);

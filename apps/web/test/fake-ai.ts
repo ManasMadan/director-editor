@@ -298,7 +298,11 @@ function directorRoute(
 function pickMs(found: DirectorShort, pick: { shotIndex: number; takeId: string }): number {
   const take = found.takes.find((each) => each.id === pick.takeId);
   if (typeof take?.bestStartMs === "number" && typeof take.bestEndMs === "number") {
-    return take.bestEndMs - take.bestStartMs;
+    // Under half a second is no best part (app/director.py MIN_BEST_MS).
+    const best = take.bestEndMs - take.bestStartMs;
+    if (best >= 500) {
+      return best;
+    }
   }
   const plan = found.plan?.plan as { shots: { durationSeconds: number }[] } | undefined;
   return Math.round((plan?.shots[pick.shotIndex]?.durationSeconds ?? 0) * 1000);
@@ -327,7 +331,11 @@ function cutRoute(
       title: input.title,
       picks,
       fileId: input.fileId,
-      durationMs: picks.reduce((sum, pick) => sum + pickMs(found, pick), 0),
+      // The editor's figure, else the picks added up.
+      durationMs:
+        typeof input.durationMs === "number"
+          ? input.durationMs
+          : picks.reduce((sum, pick) => sum + pickMs(found, pick), 0),
       createdAt: now(),
       publishStatus: "none",
       youtubeVideoId: null,

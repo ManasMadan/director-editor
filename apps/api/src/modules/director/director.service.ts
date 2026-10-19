@@ -484,7 +484,13 @@ export class DirectorService {
   async saveCut(
     userId: UserId,
     orgId: OrgId,
-    input: { videoId: VideoId; picks: DirectorCut["picks"]; fileId: FileId; title: string },
+    input: {
+      videoId: VideoId;
+      picks: DirectorCut["picks"];
+      fileId: FileId;
+      title: string;
+      durationMs?: number | undefined;
+    },
   ): Promise<DirectorCut> {
     await this.files.ready(userId, input.fileId, "director-cut-video");
     // First, so a cut that's saved never answers with an error: footage kept a little
@@ -495,6 +501,7 @@ export class DirectorService {
         videoId: input.videoId,
         title: input.title,
         fileId: input.fileId,
+        durationMs: input.durationMs,
         picks: Object.entries(input.picks).map(([shotIndex, takeId]) => ({
           shotIndex: Number(shotIndex),
           takeId,

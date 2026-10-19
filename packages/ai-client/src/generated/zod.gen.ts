@@ -260,6 +260,7 @@ export const zCutPick = z.object({
  * DirectorCutCreate
  */
 export const zDirectorCutCreate = z.object({
+    durationMs: z.int().gte(1).lte(600000).nullish(),
     fileId: z.uuid(),
     picks: z.array(zCutPick).min(1).max(12),
     title: z.string().min(1).max(100),

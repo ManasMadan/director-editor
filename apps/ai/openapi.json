@@ -1117,6 +1117,20 @@
       "DirectorCutCreate": {
         "additionalProperties": false,
         "properties": {
+          "durationMs": {
+            "anyOf": [
+              {
+                "maximum": 600000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How long the rendered video is, gaps and all; added up from the picks when left out.",
+            "title": "Durationms"
+          },
           "fileId": {
             "format": "uuid",
             "title": "Fileid",
