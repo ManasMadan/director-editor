@@ -1193,6 +1193,24 @@ describe("Director's shots and cuts", () => {
         incoming: { atMs: 0, contentType: "video/mp4" },
       },
     });
+    // A take that isn't reviewed yet, or isn't one of the member's, has nothing to line up.
+    const reviewing = takes.find((each) => each.id === outgoing.take);
+    if (reviewing) {
+      reviewing.score = null;
+    }
+    await expectError(align(), "DIRECTOR_TAKE_NOT_FOUND");
+    if (reviewing) {
+      reviewing.score = 80;
+    }
+    await expectError(
+      session.rpc.director.alignMatchCut({
+        videoId: "MatchCuts01",
+        anchor: "the watch",
+        outgoing: { takeId: directorTakeIdSchema.parse(randomUUID()), atMs: 0 },
+        incoming: { takeId: incoming.take, atMs: 0 },
+      }),
+      "DIRECTOR_TAKE_NOT_FOUND",
+    );
     // A take's file that's no video (it never is): no type to read it as, so no take.
     await sql("UPDATE files.file SET content_type = 'image/jpeg' WHERE id = $1", [incoming.file]);
     await expectError(align(), "DIRECTOR_TAKE_NOT_FOUND");
@@ -1348,6 +1366,37 @@ describe("Director's slower line", () => {
       { model: expect.any(String) },
       { model: expect.any(String), reserved: 20_000, inputTokens: 0, outputTokens: 0 },
     ]);
+  });
+
+  it("settles a turn whose answer didn't say what it cost with the whole reservation", async () => {
+    const { session, me } = await signedIn();
+    const org = String(me.activeOrganizationId);
+    readyTemplate(org, "ChatShort05");
+    google.chatUncounted(true);
+    try {
+      expect((await session.rpc.director.chat(turn("ChatShort05"))).reply).toBe("Got it.");
+    } finally {
+      google.chatUncounted(false);
+    }
+    expect(ledgerCalls(org).map((call) => call.body)).toEqual([
+      { model: expect.any(String) },
+      { model: expect.any(String), reserved: 20_000, inputTokens: 20_000, outputTokens: 0 },
+    ]);
+  });
+
+  it("answers DIRECTOR_PLAN_NOT_FOUND for a plan still being written, before the ledger", async () => {
+    const { session, me } = await signedIn();
+    const org = String(me.activeOrganizationId);
+    plans.unshift({
+      id: randomUUID(),
+      org,
+      user: me.id,
+      videoId: "ChatShort06",
+      status: "pending",
+      audioKey: null,
+    });
+    await expectError(session.rpc.director.chat(turn("ChatShort06")), "DIRECTOR_PLAN_NOT_FOUND");
+    expect(ledgerCalls(org)).toEqual([]);
   });
 
   it("asks Gemini nothing once the workspace's allowance is spent", async () => {

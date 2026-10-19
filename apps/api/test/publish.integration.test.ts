@@ -45,8 +45,11 @@ let google: Awaited<ReturnType<typeof startFakeGoogle>>;
 let ai: Server;
 let aiDb: pg.Pool;
 const copyAsks: unknown[] = [];
-/** The gap's B-roll the member chose, when a test gives one: a Veo clip is AI footage. */
-const chosen: { clip: boolean } = { clip: false };
+/**
+ * The gap's B-roll the member chose, when a test gives one: a Veo clip is AI footage.
+ * `unreadable`: the AI service fails to list the plan's slots.
+ */
+const chosen: { clip: boolean; unreadable: boolean } = { clip: false, unreadable: false };
 
 const storage = new S3Storage({
   bucket: LOCAL_STORAGE.S3_BUCKET,
@@ -187,7 +190,7 @@ async function aiRoute(request: IncomingMessage, response: ServerResponse) {
   }
   const assets = /^\/v1\/director\/plans\/([\w-]+)\/assets$/.exec(request.url ?? "");
   if (request.method === "GET" && assets?.[1]) {
-    return send(response, 200, assetSlots(assets[1]));
+    return chosen.unreadable ? send(response, 500, {}) : send(response, 200, assetSlots(assets[1]));
   }
   if (request.method === "POST" && request.url === "/v1/director/publish-copy") {
     copyAsks.push(body);
@@ -225,6 +228,7 @@ afterAll(async () => {
 afterEach(() => {
   vi.restoreAllMocks();
   chosen.clip = false;
+  chosen.unreadable = false;
 });
 
 type Session = ReturnType<typeof createSession>;
@@ -415,6 +419,22 @@ describe("publishing a cut", { tags: ["files"] }, () => {
     chosen.clip = true;
     await session.rpc.publish.upload(publishInput(cutId));
     expect(google.uploads.at(-1)?.status.containsSyntheticMedia).toBe(true);
+  });
+
+  it("sends nothing to YouTube when it can't tell whether the video has AI footage", async () => {
+    const { session, email, me } = await signInWithGoogle();
+    await allowYouTube(session, email);
+    const { cutId } = await aCut(me);
+    const uploads = google.uploads.length;
+    chosen.unreadable = true;
+    await expectError(session.rpc.publish.upload(publishInput(cutId)), "UPSTREAM_UNAVAILABLE");
+    expect(google.uploads.length).toBe(uploads);
+    const who = { org: String(me.activeOrganizationId), user: me.id };
+    expect((await cutOf(who, cutId))?.publishStatus).toBe("none");
+    // Once the AI service answers again, it goes.
+    chosen.unreadable = false;
+    await session.rpc.publish.upload(publishInput(cutId));
+    expect(google.uploads.length).toBe(uploads + 1);
   });
 
   it("publishes the cut to the member's channel and stores YouTube's id", async () => {

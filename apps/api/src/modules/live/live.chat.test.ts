@@ -116,6 +116,27 @@ async function recorded() {
   };
 }
 
+/** A Gemini that answers each request with the next of `answers`, as written, recording each. */
+async function scripted(answers: string[]) {
+  const bodies: unknown[] = [];
+  const server = createServer(async (request, response) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) {
+      chunks.push(z.instanceof(Buffer).parse(chunk));
+    }
+    bodies.push(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(answers[bodies.length - 1]);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = z.object({ port: z.number() }).parse(server.address());
+  return {
+    url: `http://127.0.0.1:${port}`,
+    bodies,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
+}
+
 const requestSchema = z.object({
   systemInstruction: z.object({ parts: z.array(z.object({ text: z.string() })) }),
   contents: z.array(z.object({ role: z.string(), parts: z.array(z.looseObject({})) })),
@@ -319,6 +340,68 @@ describe("Director's slower line", () => {
       expect(ledger.turns).toEqual([]);
     } finally {
       await proxy.close();
+    }
+  });
+
+  it("tells Gemini the last lines said, theirs and its own", async () => {
+    const proxy = await recorded();
+    try {
+      await chatAt(proxy.url).reply(plan, {
+        ...said("hello"),
+        recent: [
+          { who: "you", text: "Is the light ok?" },
+          { who: "director", text: "It looks great." },
+        ],
+      });
+      const [body] = proxy.bodies;
+      const sent = JSON.stringify(requestSchema.parse(body).contents);
+      expect(sent).toContain("Them: Is the light ok?");
+      expect(sent).toContain("You: It looks great.");
+    } finally {
+      await proxy.close();
+    }
+  });
+
+  it("answers a call to a tool it doesn't have as unknown, then says what it did", async () => {
+    const gemini = await scripted([
+      JSON.stringify({ candidates: [{ content: { parts: [{ functionCall: { name: "fly" } }] } }] }),
+      JSON.stringify({ candidates: [{ content: { parts: [{ text: "I can't do that one." }] } }] }),
+    ]);
+    try {
+      const reply = await chatAt(gemini.url).reply(plan, said("can you fly?"));
+      expect(reply).toEqual({ reply: "I can't do that one.", calls: [] });
+      const second = requestSchema.parse(gemini.bodies[1]);
+      expect(second.contents.at(-1)?.parts).toEqual([
+        { functionResponse: { name: "fly", response: { error: "unknown tool" } } },
+      ]);
+    } finally {
+      await gemini.close();
+    }
+  });
+
+  it("says nothing when Gemini answers with no candidates", async () => {
+    const gemini = await scripted([JSON.stringify({ candidates: [] })]);
+    try {
+      expect(await chatAt(gemini.url).reply(plan, said("hello"))).toEqual({ reply: "", calls: [] });
+    } finally {
+      await gemini.close();
+    }
+  });
+
+  it("is UPSTREAM_UNAVAILABLE, and logs it, when Gemini's answer isn't JSON", async () => {
+    const gemini = await scripted(["<html>busy</html>"]);
+    const log = vi.fn();
+    try {
+      await expect(chatAt(gemini.url, log).reply(plan, said("hello"))).rejects.toMatchObject({
+        code: "UPSTREAM_UNAVAILABLE",
+      });
+      expect(log).toHaveBeenCalledWith(
+        "error",
+        { status: 200, body: null },
+        "director chat refused",
+      );
+    } finally {
+      await gemini.close();
     }
   });
 

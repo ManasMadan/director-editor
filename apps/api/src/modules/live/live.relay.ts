@@ -785,11 +785,12 @@ export class LiveRelay {
 
   /** Tool calls a closed connection made: nobody can hear their answers now. */
   private dropCallsOn(line: Line) {
-    for (const [id, pending] of this.pending) {
-      if (pending.line === line) {
-        clearTimeout(pending.timer);
-        this.pending.delete(id);
-      }
+    // Calls are only taken on the current connection, which is the one going whenever
+    // this runs, so today they are all its; the filter keeps it right if that changes.
+    const its = [...this.pending].filter(([, pending]) => pending.line === line);
+    for (const [id, pending] of its) {
+      clearTimeout(pending.timer);
+      this.pending.delete(id);
     }
     this.pacer.toolPending(this.pending.size > 0);
   }
@@ -1073,9 +1074,9 @@ export class LiveRelay {
     // A re-plan's answer carries the new version (the browser sent it just before), so
     // Director confirms what really changed.
     const response = this.responseTo(name, result);
-    if (!line.retired && line.socket.readyState === WebSocket.OPEN) {
-      send(line, { toolResponse: { functionResponses: [{ id: geminiId, name, response }] } });
-    }
+    // A connection that has closed meanwhile drops it: ws sends nothing once a socket is
+    // closing (and one that was let go is closed as it's let go).
+    send(line, { toolResponse: { functionResponses: [{ id: geminiId, name, response }] } });
     this.pacer.toolPending(this.pending.size > 0);
     // Director carries on from the answer: held notes wait for that line to end.
     this.gate.turnGoesOn();

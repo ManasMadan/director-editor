@@ -94,6 +94,13 @@ const STATUS: Record<WireCandidate["status"], AssetImage["status"]> = {
   ready: "ready",
   failed: "failed",
 };
+// A slot's default image is served as a created one: the member didn't upload or pick it.
+const ORIGIN: Record<WireCandidate["origin"], AssetImage["origin"]> = {
+  default: "created",
+  created: "created",
+  upload: "upload",
+  stock: "stock",
+};
 
 @Injectable()
 export class AssetsService {
@@ -247,7 +254,7 @@ export class AssetsService {
     const status = image.status === "ready" && !allowed ? "failed" : STATUS[image.status];
     return {
       id: image.id,
-      origin: image.origin === "default" ? "created" : image.origin,
+      origin: ORIGIN[image.origin],
       media: mediaOf(image),
       status,
       url:

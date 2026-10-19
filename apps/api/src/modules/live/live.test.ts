@@ -24,6 +24,7 @@ import * as z from "zod";
 import type { RecordActivity } from "../../activity";
 import type { OrgCaller } from "../../rpc/procedures";
 import type { GoogleAuth } from "./google-auth";
+import { TURN_SILENT_MS } from "./live.gate";
 import {
   callEnded,
   LIVE_HEARTBEAT_MS,
@@ -558,6 +559,23 @@ describe("a live call", () => {
     expect(fake.received).toHaveLength(9);
   });
 
+  it("hangs up when a typed line can't get through to Gemini either", async () => {
+    let clock = 0;
+    const { fake, browser, log } = await liveCall({ now: () => (clock += 1000) });
+    fake.socket?.pause();
+    const sendOne = (message: object) =>
+      new Promise<void>((resolve) => browser.socket.send(JSON.stringify(message), () => resolve()));
+    // Audio fills the line; the typed line after each finds it full first.
+    for (let sent = 0; sent < 2000 && browser.socket.readyState === WebSocket.OPEN; sent++) {
+      await sendOne({ type: "audio", pcm16: "A".repeat(20_000) });
+      await sendOne({ type: "text", text: "Can you hear me?" });
+    }
+    expect(await browser.closed).toBe(1011);
+    expect(browser.received).toContainEqual({ type: "error", code: "UPSTREAM_UNAVAILABLE" });
+    expect(log).toHaveBeenCalledWith("warn", expect.anything(), "live upstream fell behind");
+    fake.socket?.terminate();
+  });
+
   it("skips camera frames while Gemini is behind, and hangs up once even the audio can't get through", async () => {
     let clock = 0;
     // Every message a second after the last, so no frame is dropped for coming too soon
@@ -594,6 +612,19 @@ describe("a live call", () => {
     expect(await browser.closed).toBe(1011);
     expect(browser.received).toEqual([{ type: "error", code: "UPSTREAM_UNAVAILABLE" }]);
     expect(log).toHaveBeenCalledWith("error", {}, "live setup never completed");
+  });
+
+  it("logs how long after the app's last note Director was interrupted, and which it was", async () => {
+    const { fake, browser, log } = await liveCall();
+    browser.send({ type: "camera", facing: "front" });
+    expect(JSON.stringify(await fake.message(2))).toContain("They flipped");
+    fake.send({ serverContent: { interrupted: true } });
+    expect(await browser.message(0)).toEqual({ type: "interrupted" });
+    expect(log).toHaveBeenCalledWith(
+      "info",
+      expect.objectContaining({ msSinceNote: 0, lastNote: ["camera"] }),
+      "live turn interrupted",
+    );
   });
 
   it("skips what it can't read from Gemini and carries on", async () => {
@@ -1576,7 +1607,35 @@ async function settled(check: () => void) {
   }
 }
 
+/** Everything the browser sent before this has been read by the API: pings are answered in order. */
+async function readUpTo(browser: Browser) {
+  const ponged = new Promise((resolve) => browser.socket.once("pong", resolve));
+  browser.socket.ping();
+  await ponged;
+}
+
 describe("quiet stretches and a noisy room", () => {
+  it("says nothing of a quiet stretch while Gemini's connection is still opening", async () => {
+    const handshake = Promise.withResolvers<void>();
+    const { call, fake } = await startApi(
+      {},
+      new FakeLiveApi({ holdHandshake: handshake.promise }),
+    );
+    const browser = call();
+    await vi.waitFor(() => expect(fake.attempts).toBe(1));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    // Flipping the camera counts as hearing them: the quiet starts from there.
+    browser.send({ type: "camera", facing: "front" });
+    await readUpTo(browser);
+    vi.advanceTimersByTime(QUIET_MS);
+    handshake.resolve();
+    await settled(() => expect(fake.received).toHaveLength(2));
+    await settledTurns();
+    expect(turnOf(fake.received[1]).text).toContain("tapped Start shooting");
+    expect(turnsWith(fake, "been quiet")).toHaveLength(0);
+    expect(turnsWith(fake, "They flipped")).toHaveLength(0);
+  });
+
   it("nudges after fifteen quiet seconds, twice a shot at most, and never during a take", async () => {
     const { fake, browser, tick } = await liveCall();
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -1780,6 +1839,30 @@ describe("moving to a fresh connection to Gemini", () => {
     const setup = (await fake.on(1, 0)) as { setup: { sessionResumption: object } };
     return { ...shoot, setup };
   }
+
+  it("lets go of notes held for a connection that went before the next was ready", async () => {
+    const { fake, browser, log } = await rotated();
+    const [first, second] = fake.connections;
+    // Director is talking on the old connection: a flip of the camera waits for it to end.
+    fake.send({ serverContent: { outputTranscription: { text: "Hold that." } } }, first?.socket);
+    await settled(() => expect(browser.received).toHaveLength(2));
+    browser.send({ type: "camera", facing: "front" });
+    await readUpTo(browser);
+    const closed = new Promise((resolve) => first?.socket.once("close", resolve));
+    first?.socket.close();
+    await closed;
+    await readUpTo(browser);
+    await settledTurns();
+    // The turn is over with nobody to tell: the note isn't kept for the next connection.
+    vi.advanceTimersByTime(TURN_SILENT_MS);
+    fake.send({ setupComplete: {} }, second?.socket);
+    await settled(() =>
+      expect(log).toHaveBeenCalledWith("info", expect.anything(), "live connection handed over"),
+    );
+    await settledTurns();
+    expect(turnsWith(fake, "They flipped")).toHaveLength(0);
+    expect(browser.socket.readyState).toBe(WebSocket.OPEN);
+  });
 
   it("resumes the conversation on a fresh connection before the old one goes, unnoticed", async () => {
     const { fake, browser, setup } = await rotated();
@@ -2018,6 +2101,50 @@ describe("starting a call", () => {
     vi.advanceTimersByTime(LIVE_HEARTBEAT_MS);
     await silent.closed;
     await vi.waitFor(() => expect(fake.server.clients.size).toBe(0));
+  });
+
+  it("keeps a call whose browser answers its pings", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const { port, fake } = await startApi();
+    const browser = new Browser(
+      new WebSocket(`ws://127.0.0.1:${port}${LIVE_PATH}?videoId=dQw4w9WgXcQ&shot=0`, {
+        headers: { origin: WEB },
+      }),
+    );
+    await fake.message(1);
+    const pinged = new Promise((resolve) => browser.socket.once("ping", resolve));
+    vi.advanceTimersByTime(LIVE_HEARTBEAT_MS);
+    await pinged;
+    // The browser answered at once; a ping of its own comes back only after the API has
+    // read everything sent before it, the answer included.
+    const ponged = new Promise((resolve) => browser.socket.once("pong", resolve));
+    browser.socket.ping();
+    await ponged;
+    vi.advanceTimersByTime(LIVE_HEARTBEAT_MS);
+    expect(browser.socket.readyState).toBe(WebSocket.OPEN);
+    browser.socket.close();
+    await browser.closed;
+  });
+
+  it("reads only the first 64 messages a browser sends before its call has started", async () => {
+    const loaded = Promise.withResolvers<DirectorPlan>();
+    const { call, fake } = await startApi({ plan: () => loaded.promise });
+    const browser = call();
+    await browser.opened;
+    for (let index = 0; index < 64; index++) {
+      browser.send({ type: "audio", pcm16: "AAAAAA==" });
+    }
+    // Past the first 64: dropped, or this message nobody can read would end the call.
+    browser.send({ type: "dance" });
+    const ponged = new Promise((resolve) => browser.socket.once("pong", resolve));
+    browser.socket.ping();
+    await ponged;
+    loaded.resolve(readyPlan);
+    expect(JSON.stringify(await fake.message(1))).toContain("They just tapped Start shooting");
+    expect(browser.socket.readyState).toBe(WebSocket.OPEN);
+    expect(browser.received).toEqual([]);
+    browser.socket.close();
+    await browser.closed;
   });
 
   it("says our side failed, and logs why, when loading the plan breaks", async () => {
@@ -2480,6 +2607,18 @@ describe("what Director must know whenever a connection starts", () => {
       answer: false,
     });
     expect(turnOf(fake.received[3]).text).toContain("tapped Start shooting");
+  });
+
+  it("restates a paused roll to a fresh connection that couldn't pick the conversation up", async () => {
+    const { fake, browser } = await liveCall();
+    browser.send({ type: "roll", state: "recording" });
+    browser.send({ type: "roll", state: "paused" });
+    await fake.message(3);
+    fake.send({ goAway: { timeLeft: "10s" } });
+    await fake.on(1, 1);
+    const fresh = JSON.stringify(fake.connections[1]?.received);
+    expect(fresh).toContain("They paused");
+    expect(fresh).not.toContain("The roll is on");
   });
 
   it("restates the roll to a fresh connection that couldn't pick the conversation up", async () => {
