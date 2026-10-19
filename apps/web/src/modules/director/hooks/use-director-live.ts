@@ -16,7 +16,7 @@ import { SECOND_MS } from "@repo/contracts/time";
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { type CaptionStore, createCaptionStore, type Working } from "../lib/caption-store";
 import { liveUrl } from "../lib/live";
-import { restLiveAudio } from "../lib/live-audio";
+import { prepareLiveAudio, restLiveAudio } from "../lib/live-audio";
 import {
   type LiveControls,
   type LiveEvents,
@@ -40,6 +40,8 @@ type LiveLine = "live" | "slower";
 /** Failures that may pass: one silent retry, a moment later, before the member is told. */
 const PASSING: readonly LiveFailure[] = ["dropped", "UPSTREAM_UNAVAILABLE", "INTERNAL"];
 const RETRY_AFTER_MS = 2 * SECOND_MS;
+/** When the audio context is made ahead of the tap (`prepareLiveAudio`, lib/live-audio.ts). */
+const PREPARE_AUDIO_AFTER_MS = SECOND_MS;
 /** Where a take is when the member's last line has been overtaken by what they did. */
 const OVERTAKING: readonly LiveTakeState[] = ["countdown", "recorded"];
 /**
@@ -120,6 +122,11 @@ function useLifetime(
     [session, setState, retry],
   );
   useEffect(() => restLiveAudio, []);
+  // A moment after the screen opens, once it has drawn: not in the "Start shooting" tap.
+  useEffect(() => {
+    const timer = window.setTimeout(prepareLiveAudio, PREPARE_AUDIO_AFTER_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
 }
 
 interface Refs {
