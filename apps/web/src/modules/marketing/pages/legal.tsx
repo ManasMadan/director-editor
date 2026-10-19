@@ -134,6 +134,10 @@ export async function LegalPage({ document }: { document: LegalDocument }) {
             date: format.dateTime(LAST_UPDATED, { dateStyle: "long", timeZone: "UTC" }),
           })}
         </p>
+        {/* Both documents open with what Director is: a demo, with no promises. */}
+        <div role="note" className="rounded-lg border border-destructive/50 bg-muted p-4">
+          {t.rich("demoNotice", markup)}
+        </div>
         <div className="flex flex-col gap-3">{intro}</div>
       </header>
       <nav aria-labelledby="contents" className="rounded-lg border p-4">
