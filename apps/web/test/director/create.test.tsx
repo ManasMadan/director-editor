@@ -99,7 +99,10 @@ describe("describing your own", () => {
     await userEvent.fill(answer, "   ");
     await expect.element(page.getByRole("button", { name: "Send" })).toBeDisabled();
     await userEvent.type(answer, "{Enter}");
+    // Nor when the form is sent past its disabled button (a script, an assistive tool).
+    (answer.element().closest("form") as HTMLFormElement).requestSubmit();
     expect(await commands.fakeBrief(orgId)).toHaveLength(1);
+    expect(talk.getByRole("listitem").elements()).toHaveLength(1);
 
     await userEvent.fill(answer, "  By the window ");
     await userEvent.type(answer, "{Enter}");
@@ -192,6 +195,17 @@ describe("describing your own", () => {
     await expect
       .element(page.getByRole("textbox", { name: "Your answer" }))
       .toHaveValue("By the window");
+  });
+
+  it("keeps nothing in the tab when it can't tell who's signed in, and still writes the shots", async () => {
+    await signUp();
+    // The session can't be read (the cookie still works): whose draft it is isn't known.
+    await commands.failRequests("/api/auth/get-session");
+    const page = await openCreate();
+    await userEvent.fill(page.getByRole("textbox", { name: "Your idea" }), "My morning coffee");
+    await userEvent.click(page.getByRole("button", { name: "Write my shots" }));
+    await expect.poll(currentUrl).toMatch(/^\/create\/[\w-]{11}$/);
+    expect(window.sessionStorage.length).toBe(0);
   });
 
   it("keeps nothing in the tab for someone signed out, and sends them to sign in", async () => {
