@@ -532,6 +532,38 @@ def test_a_read_given_up_on_stops_its_ffmpeg(monkeypatch: pytest.MonkeyPatch) ->
         hung.close()
 
 
+@pytest.mark.integration
+def test_one_take_that_can_t_be_read_stops_the_other_s_read() -> None:
+    """The two takes are read side by side: when one can't be, the cut fails at once and
+    the other's ffmpeg is stopped with it, not left reading in the service until its own
+    time runs out."""
+    hung = socket.create_server(("127.0.0.1", 0))
+
+    async def align_then_look() -> set[asyncio.Task[object]]:
+        with serve_files({}) as storage:
+            request = AlignRequest.model_validate(
+                {
+                    "anchor": "the watch on the left wrist",
+                    "outgoing": {
+                        "url": f"http://127.0.0.1:{hung.getsockname()[1]}/a.mp4",
+                        "atMs": 1500,
+                    },
+                    "incoming": {"url": f"{storage.url}/gone.mp4", "atMs": 0},
+                    "maxTokens": 12_000,
+                }
+            )
+            model = create_google_model(_gemini_settings(storage), GEMINI_MODEL)
+            with pytest.raises(AppError) as raised:
+                _ = await LocalAligner(create_locator(model)).align(request)
+        assert raised.value.code == "UPSTREAM_UNAVAILABLE"
+        return asyncio.all_tasks() - {asyncio.current_task()}
+
+    try:
+        assert asyncio.run(align_then_look()) == set()
+    finally:
+        hung.close()
+
+
 # ------------------------------------------------------------------------ the pieces
 
 # The working frame's size (app/aligning.py), smaller than the finished one.

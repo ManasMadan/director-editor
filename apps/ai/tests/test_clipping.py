@@ -5,13 +5,15 @@ Run clipper and the remote clipper that calls it. Storage is a local server answ
 presigned reads (tests/fakes.py), the metadata server and Google's certificates too."""
 
 import asyncio
+import io
 import json
 import re
 import sys
 import threading
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Buffer, Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import override
 from uuid import UUID
 
 import httpx
@@ -22,6 +24,7 @@ from pydantic import BaseModel
 from app import clipping
 from app.clipping import (
     MAX_CLIP_MS,
+    MAX_FOOTAGE_BYTES,
     Clip,
     ClipFailed,
     LocalClipper,
@@ -30,6 +33,7 @@ from app.clipping import (
     Speech,
     first_pause_after,
     looks_like,
+    save_footage,
     snap,
     speech_in,
     within_pauses,
@@ -118,6 +122,41 @@ def test_a_recording_starts_with_its_declared_type_s_signature() -> None:
     assert not looks_like(webm, "video/mp4")
     assert not looks_like(b"#EXTM3U\n#EXT-X-VERSION:3\n", "video/webm")
     assert not looks_like(b"", "video/mp4")
+
+
+class _Watched(io.BytesIO):
+    """A file that notes which thread each write came from."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.threads: list[int] = []
+
+    @override
+    def write(self, buffer: Buffer, /) -> int:
+        self.threads.append(threading.get_ident())
+        return super().write(buffer)
+
+
+async def _chunks(*chunks: bytes) -> AsyncIterator[bytes]:
+    for chunk in chunks:
+        yield chunk
+
+
+def test_footage_is_written_off_the_event_loop() -> None:
+    """A part's footage is up to 1.2 GB: written from the event loop, it would stall every
+    other request the service is answering."""
+    into = _Watched()
+    size = asyncio.run(save_footage(_chunks(b"ab", b"cd"), into, 3))
+    assert (size, into.getvalue()) == (7, b"abcd")
+    assert into.threads
+    assert threading.get_ident() not in into.threads
+
+
+def test_more_footage_than_a_part_has_is_refused_before_it_s_written() -> None:
+    into = _Watched()
+    with pytest.raises(ClipFailed) as refused:
+        _ = asyncio.run(save_footage(_chunks(b"ab", b"cd"), into, MAX_FOOTAGE_BYTES - 3))
+    assert (refused.value.retryable, into.getvalue()) == (False, b"ab")
 
 
 def test_ffmpeg_reads_the_declared_type_from_a_local_file_only() -> None:
