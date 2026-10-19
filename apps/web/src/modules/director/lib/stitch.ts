@@ -732,8 +732,10 @@ export async function stitch(segments: Segment[], options: Options): Promise<Blo
       recorder.stop();
     }
   }
-  const video = await file();
+  // Cancelled: not waiting for the recorder to finish a file nobody wants, which takes as
+  // long as its encoder is behind (seconds on a busy device).
   signal?.throwIfAborted();
+  const video = await file();
   onProgress(1);
   return plan.frames > 0 ? checked(video, plan.frames, lag, plan.fps) : video;
 }
