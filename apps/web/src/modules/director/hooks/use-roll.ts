@@ -73,9 +73,9 @@ function useRollApi(): RollApi {
 export function useRoll() {
   const uploader = useSliceUploader();
   const api = useRollApi();
-  const latest = useRef({ api, enqueue: uploader.enqueue });
+  const latest = useRef({ api, enqueue: uploader.enqueue, queued: uploader.leftover });
   useLayoutEffect(() => {
-    latest.current = { api, enqueue: uploader.enqueue };
+    latest.current = { api, enqueue: uploader.enqueue, queued: uploader.leftover };
   });
   const [, changed] = useReducer((count: number) => count + 1, 0);
   const [roll] = useState(
@@ -90,6 +90,7 @@ export function useRoll() {
           finish: (input) => latest.current.api.finish(input),
         },
         enqueue: (item) => latest.current.enqueue(item),
+        queued: () => latest.current.queued(),
         record: mediaRecorder,
         contentType: contentType(),
         now: () => performance.now(),
@@ -105,10 +106,14 @@ export function useRoll() {
     return () => window.clearInterval(timer);
   }, [phase]);
   useEffect(() => () => roll.leave(), [roll]);
-  // The page going away (a closed tab, iOS killing it in the background): what's
-  // recorded since the last slice is handed to the queue while it still can be.
+  // The page going away (a closed tab, a link elsewhere): what's recorded since the last
+  // slice is handed to the queue, and the session ends there, as leaving the screen ends
+  // it. Left open, it would stay "recording" until the member came back to this short.
   useEffect(() => {
-    const going = () => roll.flush();
+    const going = () => {
+      roll.flush();
+      roll.leave();
+    };
     window.addEventListener("pagehide", going);
     return () => window.removeEventListener("pagehide", going);
   }, [roll]);

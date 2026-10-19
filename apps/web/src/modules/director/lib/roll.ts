@@ -52,9 +52,20 @@ interface Where {
   atMs: number;
 }
 
+/**
+ * The session the API answers a start with: a new one, or the member's session of the
+ * short still recording (a tab closed before Done), with what it recorded so far.
+ */
+interface StartedSession {
+  id: RecordingSessionId;
+  recordedMs: number;
+  parts: readonly { index: number; sliceCount: number | null; uploaded: readonly number[] }[];
+  attempts: readonly { number: number }[];
+}
+
 /** The API calls the roll makes (the client's recording mutations). */
 export interface RollApi {
-  start(input: { videoId: string }): Promise<{ id: RecordingSessionId }>;
+  start(input: { videoId: string }): Promise<StartedSession>;
   addPart(input: {
     sessionId: RecordingSessionId;
     index: number;
@@ -93,6 +104,8 @@ export interface RollOptions {
    * screen pauses when the queue is full (the uploader says so).
    */
   enqueue: (item: QueuedItem) => Promise<unknown>;
+  /** What this device still holds to upload (an earlier visit's leftovers included). */
+  queued: () => Promise<readonly QueuedItem[]>;
   /** A recorder for `stream`, or null when this browser can't record it. */
   record: (
     stream: MediaStream,
@@ -160,7 +173,9 @@ export class Roll {
     }
     this.set("starting");
     try {
-      this.sessionId = (await this.options.api.start({ videoId })).id;
+      const session = await this.options.api.start({ videoId });
+      this.sessionId = session.id;
+      await this.carryOn(session);
       await this.openPart(stream, camera);
     } catch {
       // Recording couldn't start here (no recorder, or the API refused): the shoot goes
@@ -175,6 +190,40 @@ export class Roll {
       await this.flip(flipped.stream, flipped.camera);
     }
     return true;
+  }
+
+  /**
+   * A session a closed tab left recording goes on from where it was: its parts and
+   * attempts are numbered after the ones it has, the indicator counts what it recorded,
+   * and each part the tab never ended is ended now (its slices are the ones stored and
+   * the ones still on this device), so its attempts can become takes.
+   */
+  private async carryOn(session: StartedSession) {
+    this.parts = Math.max(0, ...session.parts.map((part) => part.index + 1));
+    this.attempts = Math.max(0, ...session.attempts.map((attempt) => attempt.number));
+    this.endedMs = session.recordedMs;
+    const open = session.parts.filter((part) => part.sliceCount === null);
+    if (open.length === 0) {
+      return;
+    }
+    const left = await this.options.queued().catch(() => []);
+    const mine = left.filter((item) => item.sessionId === session.id);
+    for (const part of open) {
+      const queued = mine.filter((item) => item.partIndex === part.index);
+      if (queued.some((item) => item.kind === "part-end")) {
+        continue;
+      }
+      const slices = [
+        ...part.uploaded,
+        ...queued.flatMap((item) => (item.kind === "slice" ? [item.index] : [])),
+      ];
+      await this.options.enqueue({
+        kind: "part-end",
+        sessionId: session.id,
+        partIndex: part.index,
+        sliceCount: Math.max(0, ...slices.map((index) => index + 1)),
+      });
+    }
   }
 
   /**

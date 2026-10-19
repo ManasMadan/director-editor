@@ -1,13 +1,13 @@
 /**
  * The shoot as one roll, against the real API (its recordings on the local storage): the
- * top band on a phone, and leaving mid-roll.
+ * top band on a phone, leaving mid-roll, and a session left behind by a closed tab.
  */
 import { useSearchParams } from "next/navigation";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page as browser, commands, userEvent } from "vitest/browser";
 import { ShootPage } from "@/modules/director";
-import { renderPage } from "../render";
-import { currentSession, signUp } from "../users";
+import { cleanup, renderPage } from "../render";
+import { api, currentSession, signUp } from "../users";
 import { canvasCamera, fakeRecognizer, newVideoId, planShot, shotPlan } from "./support";
 
 beforeEach(() => {
@@ -98,5 +98,34 @@ describe("the roll", { tags: ["files"] }, () => {
     await expect
       .element(page.getByRole("button", { name: /Pause recording|Resume/ }))
       .toBeVisible();
+  });
+
+  it("finishes the session when the page goes, and carries on an open one on return", async () => {
+    canvasCamera();
+    await signUp();
+    const videoId = await plannedShort(2);
+    const first = await openShoot(videoId);
+    await startRoll(first);
+    const [opened] = await api.recording.sessions();
+    expect(opened?.status).toBe("recording");
+    // The tab closes (no unmount): the session ends there.
+    window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false }));
+    await expect
+      .poll(async () => (await api.recording.sessions())[0]?.status, { timeout: 10_000 })
+      .toBe("done");
+    cleanup();
+
+    // A session a dead tab left open (no pagehide got through) is carried on, not doubled.
+    const again = await plannedShort(2);
+    const left = await api.recording.start({ videoId: again });
+    canvasCamera();
+    const page = await openShoot(again);
+    await startRoll(page);
+    const sessions = (await api.recording.sessions()).filter(
+      (session) => session.videoId === again,
+    );
+    expect(sessions.map((session) => session.id)).toEqual([left.id]);
+    const detail = await api.recording.session({ sessionId: left.id });
+    expect(detail.parts.map((part) => part.index)).toEqual([0]);
   });
 });

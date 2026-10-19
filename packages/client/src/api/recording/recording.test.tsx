@@ -233,8 +233,11 @@ describe("uploading the recording", () => {
     await result.current.enqueue(slice(0));
     await result.current.enqueue(slice(1));
     await result.current.enqueue(partEnd(2));
+    // What's kept until it's sent: the shoot screen reads it to end a dead tab's parts.
+    expect((await result.current.leftover()).length).toBeGreaterThan(0);
     await result.current.send();
     await until(() => expect(result.current.pending).toBe(0));
+    expect(await result.current.leftover()).toEqual([]);
     expect(stored).toEqual([{ path: "/recordings/0/0", body: "slice-0-0", type: "video/webm" }]);
     expect(completed).toEqual(["0/0", "0/1"]);
     expect(closed).toEqual([2]);

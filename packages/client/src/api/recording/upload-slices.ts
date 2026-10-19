@@ -144,6 +144,9 @@ class SliceUploader {
     return this.sending;
   };
 
+  /** What's still to send, in order: a dead tab's leftovers included. */
+  leftover = () => this.store.all();
+
   /** Stops sending (the shoot screen closed): what's queued stays for next time. */
   stop = () => {
     this.stopped = true;
@@ -281,5 +284,5 @@ export function useSliceUploader(store?: SliceStore) {
     return uploader.stop;
   }, [uploader]);
   const state = useSyncExternalStore(uploader.subscribe, uploader.snapshot, uploader.snapshot);
-  return { ...state, enqueue: uploader.enqueue, send: uploader.send };
+  return { ...state, enqueue: uploader.enqueue, send: uploader.send, leftover: uploader.leftover };
 }

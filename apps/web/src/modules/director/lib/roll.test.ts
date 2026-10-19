@@ -44,12 +44,18 @@ class FakeRecorder implements PartRecorder {
   }
 }
 
-function setup(overrides: Partial<RollApi> = {}, canRecord = true) {
+const FRESH = { id: SESSION, recordedMs: 0, parts: [], attempts: [] };
+
+function setup(
+  overrides: Partial<RollApi> = {},
+  canRecord = true,
+  leftQueued: QueuedItem[] | Error = [],
+) {
   let clock = 0;
   const queued: QueuedItem[] = [];
   const recorders: FakeRecorder[] = [];
   const api = {
-    start: vi.fn<RollApi["start"]>(() => Promise.resolve({ id: SESSION })),
+    start: vi.fn<RollApi["start"]>(() => Promise.resolve(FRESH)),
     addPart: vi.fn<RollApi["addPart"]>(() => Promise.resolve({})),
     pause: vi.fn<RollApi["pause"]>(() => Promise.resolve({})),
     resume: vi.fn<RollApi["resume"]>(() => Promise.resolve({})),
@@ -63,6 +69,8 @@ function setup(overrides: Partial<RollApi> = {}, canRecord = true) {
     enqueue: async (item) => {
       queued.push(item);
     },
+    queued: () =>
+      leftQueued instanceof Error ? Promise.reject(leftQueued) : Promise.resolve(leftQueued),
     record: (recorded, events) => {
       if (!canRecord) {
         return null;
@@ -263,7 +271,7 @@ describe("the roll", () => {
     const { roll, api, recorders } = setup({
       start: () =>
         new Promise((resolve) => {
-          opened = () => resolve({ id: SESSION });
+          opened = () => resolve(FRESH);
         }),
     });
     const front = new EventTarget() as MediaStream;
@@ -281,5 +289,51 @@ describe("the roll", () => {
       expect.objectContaining({ index: 1, camera: "back" }),
     );
     expect(recorders.at(-1)?.current).toBe("recording");
+  });
+
+  it("carries on a session a closed tab left open, closing the parts it never ended", async () => {
+    const left = {
+      id: SESSION,
+      recordedMs: 42_000,
+      parts: [
+        { index: 0, sliceCount: 3, uploaded: [0, 1, 2] },
+        // The tab died recording part 1: two slices stored, a third still on this device.
+        { index: 1, sliceCount: null, uploaded: [0, 1] },
+        // Part 2's end is already waiting on this device.
+        { index: 2, sliceCount: null, uploaded: [] },
+      ],
+      attempts: [{ number: 1 }, { number: 2 }],
+    };
+    const leftQueued: QueuedItem[] = [
+      {
+        kind: "slice",
+        sessionId: SESSION,
+        partIndex: 1,
+        index: 2,
+        startMs: 20_000,
+        durationMs: 4_000,
+        bytes: new Blob(["x"]),
+      },
+      { kind: "part-end", sessionId: SESSION, partIndex: 2, sliceCount: 0 },
+    ];
+    const { roll, api, queued } = setup({ start: () => Promise.resolve(left) }, true, leftQueued);
+    expect(await roll.start("abcdefghijk", stream, "front")).toBe(true);
+    expect(slices(queued)).toEqual([["end", 1, 3]]);
+    // The next part and attempt follow the ones before; the indicator counts them.
+    expect(api.addPart).toHaveBeenCalledWith(expect.objectContaining({ index: 3 }));
+    expect(roll.elapsedMs()).toBe(42_000);
+    await roll.mark("start", 0, {});
+    expect(api.mark).toHaveBeenCalledWith(expect.objectContaining({ attempt: 3, partIndex: 3 }));
+  });
+
+  it("closes the parts a tab left open even when this device's queue can't be read", async () => {
+    const left = { ...FRESH, parts: [{ index: 0, sliceCount: null, uploaded: [0] }] };
+    const { roll, queued } = setup(
+      { start: () => Promise.resolve(left) },
+      true,
+      new Error("IndexedDB gone"),
+    );
+    await roll.start("abcdefghijk", stream, "front");
+    expect(slices(queued)).toEqual([["end", 0, 1]]);
   });
 });
