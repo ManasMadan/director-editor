@@ -751,7 +751,32 @@ describe("Director live's hook", () => {
     const stream = new AudioContext().createMediaStreamDestination().stream;
     asked.resolve(stream);
     await expect.poll(() => stream.getTracks()[0]?.readyState).toBe("ended");
-    expect(FakeSocket.all).toHaveLength(0);
+    expect(FakeSocket.all.map((socket) => socket.readyState)).toEqual([FakeSocket.CLOSED]);
+  });
+
+  it("connects while the browser still asks for the microphone, and sends it once allowed", async () => {
+    const asked = deferred<MediaStream>();
+    const camera = canvasCamera();
+    camera.getUserMedia.mockReturnValueOnce(asked.promise);
+    const hook = await renderHook(() => useDirectorLive(options()));
+    await userEvent.click(document.body);
+    hook.current.start();
+    // The line to Director doesn't wait for the permission prompt.
+    await expect.poll(() => FakeSocket.all.length).toBe(1);
+    const socket = FakeSocket.last;
+    socket.open();
+    await expect.poll(() => hook.current.state).toBe("live");
+    expect(socket.sentOf("audio")).toEqual([]);
+    // The member allows it: the microphone is kept as Director's, on the open line, and
+    // let go with it.
+    const microphone = await navigator.mediaDevices.getUserMedia({ audio: true });
+    asked.resolve(microphone);
+    await expect.poll(() => camera.getUserMedia.mock.calls.length).toBe(2);
+    expect(hook.current.hearing).toBe(true);
+    expect(microphone.getAudioTracks()[0]?.readyState).toBe("live");
+    await hook.unmount();
+    await expect.poll(() => microphone.getAudioTracks()[0]?.readyState).toBe("ended");
+    expect(socket.readyState).toBe(FakeSocket.CLOSED);
   });
 
   it("goes without a microphone when the one it gets has no sound in it", async () => {

@@ -324,12 +324,15 @@ export function mountLive(fastify: FastifyInstance, options: LiveOptions) {
     try {
       const { upstream, query } = callAsked(options, url);
       target = callTarget(query);
+      const checkedFrom = options.now();
       const caller = await signedIn(options, headers);
       claim(calling, caller.userId, client);
       userId = caller.userId;
-      const plan = readyPlan(await options.plan(caller, query.videoId), query.shot);
+      const loaded = await withWarmToken(upstream, options.plan(caller, query.videoId));
+      const plan = readyPlan(loaded, query.shot);
       // Only a call that can really start is charged.
       await options.spendCallLimit(caller);
+      options.log("info", { ms: options.now() - checkedFrom }, "live call checked");
       if (client.readyState !== WebSocket.OPEN) {
         // Hung up while the plan loaded: a call that ended before it began.
         options.activity(callEnded({ code: null, startedAt: null }, target, options.now()));
@@ -370,6 +373,21 @@ export function mountLive(fastify: FastifyInstance, options: LiveOptions) {
       client.terminate();
     }
   });
+}
+
+/**
+ * The plan, with Google's token fetched alongside it rather than after: the relay's first
+ * act is to ask for that token, and after an hour's gap it's a trip to the metadata
+ * server the member would otherwise wait through. A failure here is the relay's to
+ * report, when it asks again.
+ */
+async function withWarmToken(upstream: LiveUpstream, plan: Promise<DirectorPlan>) {
+  const warm = upstream.auth.accessToken().then(
+    () => undefined,
+    () => undefined,
+  );
+  const [loaded] = await Promise.all([plan, warm]);
+  return loaded;
 }
 
 /** What the call asks for: Director live on, and a valid query, or why it can't be had. */

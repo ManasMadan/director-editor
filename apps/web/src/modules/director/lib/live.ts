@@ -84,6 +84,16 @@ function newLine(captions: Captions, who: Speaker, text: string, done: boolean):
 }
 
 /**
+ * More words on a line. Gemini's transcript carries its own spaces, except that a new
+ * sentence often starts right after the last one's full stop ("No rush.That was"): it
+ * gets a space there. Only after a lower-case word and before a capital, so "U.S." and
+ * "2.5" stay as they are.
+ */
+function joined(before: string, more: string): string {
+  return `${before}${more}`.replace(/(\p{Ll}[.!?…])(\p{Lu})/gu, "$1 $2");
+}
+
+/**
  * The captions once `who` has said `text`. Transcripts arrive a few words at a time, so
  * words carry on the last line while its speaker's turn goes on; a change of speaker, or
  * a finished line, starts a new one, under the one it answers.
@@ -91,7 +101,10 @@ function newLine(captions: Captions, who: Speaker, text: string, done: boolean):
 export function withTranscript(captions: Captions, who: Speaker, text: string): Captions {
   const last = captions.lines.at(-1);
   if (last && last.who === who && !last.done) {
-    const lines = [...captions.lines.slice(0, -1), { ...last, text: lastWords(last.text + text) }];
+    const lines = [
+      ...captions.lines.slice(0, -1),
+      { ...last, text: lastWords(joined(last.text, text)) },
+    ];
     return { ...captions, lines };
   }
   return newLine(captions, who, text, false);

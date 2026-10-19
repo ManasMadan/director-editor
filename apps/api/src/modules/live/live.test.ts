@@ -57,13 +57,12 @@ const PERSONA_RULES = [
   "never suggest something again once they've said no",
   "give one light nudge",
   "suggest typing in the box or earphones, once",
-  'Never say "plan", "template", "tool", "session", "model" or "error"',
   "Examples of how you sound",
   "Then it's yours.",
   "Never point at something you can't see, and never during a take",
   "If it comes back not found, say you can't see it",
   "When the app says the roll is on",
-  "call mark with event start",
+  "Call mark with event start, without a word",
   "you can't pause or resume anything yourself",
   "call remember with a chip",
   "never bring up something it rules out again",
@@ -74,6 +73,11 @@ const PERSONA_RULES = [
   "isn't a yes to moving on",
   "before you call replan",
   "Never skip a shot they didn't ask to skip",
+  "Your own voice never is",
+  "Never mark an end twice",
+  "If a mark comes back refused, don't call it again",
+  "Speak before you act",
+  'Never say "plan", "replan"',
 ];
 
 const shot: Shot = {
@@ -355,7 +359,7 @@ describe("a live call", () => {
       // The instruction arrives as JSON, its quotes escaped.
       expect(text).toContain(JSON.stringify(rule).slice(1, -1));
     }
-    expect(PERSONA_VERSION).toBe(5);
+    expect(PERSONA_VERSION).toBe(6);
     const tools = setup.tools as { functionDeclarations: { name: string }[] }[];
     expect(tools[0]?.functionDeclarations.map((tool) => tool.name)).toEqual([
       ...LIVE_TOOLS,
@@ -533,7 +537,7 @@ describe("a live call", () => {
     await vi.waitFor(() => expect(turnsWith(fake, "still here")).toHaveLength(1));
     expect(fake.received.filter((message) => "realtimeInput" in message)).toHaveLength(8);
     expect(browser.socket.readyState).toBe(WebSocket.OPEN);
-    expect(log).toHaveBeenCalledOnce();
+    expect(problemsIn(log)).toHaveLength(1);
     expect(log).toHaveBeenCalledWith("warn", {}, "live microphone over its allowance");
   });
 
@@ -646,7 +650,7 @@ describe("a live call", () => {
     expect(fake.attempts).toBe(1);
     next.socket.close();
     await next.closed;
-    expect(api.log).not.toHaveBeenCalled();
+    expect(problemsIn(api.log)).toEqual([]);
   });
 
   it("tells the browser and hangs up when Gemini can't be reached", async () => {
@@ -683,7 +687,7 @@ describe("a live call", () => {
     await vi.waitFor(() => expect(api.fake.attempts).toBe(2));
     next.socket.close();
     await next.closed;
-    expect(api.log).not.toHaveBeenCalled();
+    expect(problemsIn(api.log)).toEqual([]);
   });
 
   it("ends after half an hour, however many connections to Gemini that took", async () => {
@@ -1070,23 +1074,13 @@ describe("the roll", () => {
     fake.send({
       toolCall: {
         functionCalls: [
-          { id: "g1", name: "mark", args: { event: "start", line: "  Hi!  " } },
-          { id: "g2", name: "mark", args: { event: "end", note: "x".repeat(400), line: " " } },
+          { id: "g0", name: "mark", args: { event: "start" } },
           { id: "g3", name: "mark", args: { event: "middle" } },
           { id: "g4", name: "mark" },
         ],
       },
     });
-    expect(await browser.message(0)).toEqual({
-      type: "tool",
-      id: "tool-1",
-      call: { name: "mark", event: "start", line: "Hi!" },
-    });
-    expect(await browser.message(1)).toEqual({
-      type: "tool",
-      id: "tool-2",
-      call: { name: "mark", event: "end", note: "x".repeat(300) },
-    });
+    await browser.message(0);
     expect(await fake.message(3)).toEqual(
       toolResponse("g3", "mark", {
         error: 'event must be "start" or "end", line and note text',
@@ -1094,26 +1088,50 @@ describe("the roll", () => {
     );
     expect(await fake.message(4)).toMatchObject(toolResponse("g4", "mark", {}));
     browser.send({ type: "tool_result", id: "tool-1", result: "paused" });
-    browser.send({ type: "tool_result", id: "tool-2", result: "not_recording" });
     expect(await fake.message(5)).toEqual(
-      toolResponse("g1", "mark", {
+      toolResponse("g0", "mark", {
         result: "refused",
         why: "Recording is paused. Only their own tap on Resume starts it again.",
       }),
     );
-    expect(await fake.message(6)).toEqual(
+    fake.send({
+      toolCall: {
+        functionCalls: [{ id: "g1", name: "mark", args: { event: "start", line: "  Hi!  " } }],
+      },
+    });
+    expect(await browser.message(1)).toEqual({
+      type: "tool",
+      id: "tool-2",
+      call: { name: "mark", event: "start", line: "Hi!" },
+    });
+    browser.send({ type: "tool_result", id: "tool-2", result: "done" });
+    await fake.message(6);
+    fake.send({
+      toolCall: {
+        functionCalls: [
+          { id: "g2", name: "mark", args: { event: "end", note: "x".repeat(400), line: " " } },
+        ],
+      },
+    });
+    expect(await browser.message(2)).toEqual({
+      type: "tool",
+      id: "tool-3",
+      call: { name: "mark", event: "end", note: "x".repeat(300) },
+    });
+    browser.send({ type: "tool_result", id: "tool-3", result: "not_recording" });
+    expect(await fake.message(7)).toEqual(
       toolResponse("g2", "mark", { result: "refused", why: "Nothing is recording right now." }),
     );
     fake.send(turnDone);
     browser.send({ type: "roll", state: "paused" });
     browser.send({ type: "roll", state: "resumed" });
     browser.send({ type: "roll", state: "done" });
-    expect(turnOf(await fake.message(7))).toMatchObject({ answer: false });
-    expect(turnOf(await fake.message(8))).toEqual({
+    expect(turnOf(await fake.message(8))).toMatchObject({ answer: false });
+    expect(turnOf(await fake.message(9))).toEqual({
       text: "[They tapped Resume: the roll is recording again.]",
       answer: true,
     });
-    expect(turnOf(await fake.message(9)).text).toContain("They tapped Done");
+    expect(turnOf(await fake.message(10)).text).toContain("They tapped Done");
   });
 });
 
@@ -2542,3 +2560,95 @@ async function settledTurns() {
     await new Promise((resolve) => setImmediate(resolve));
   }
 }
+
+/** What Gemini was told at once about a call the browser never saw. */
+const answeredAtOnce = (fake: FakeLiveApi, id: string) =>
+  fake.received.find(
+    (message) => "toolResponse" in message && JSON.stringify(message).includes(`"id":"${id}"`),
+  );
+const toolsSeen = (browser: Browser) =>
+  browser.received.filter((message) => message.type === "tool");
+const call = (id: string, name: string, args: object) => ({
+  toolCall: { functionCalls: [{ id, name, args }] },
+});
+
+/** 100 ms of 16 kHz microphone audio at `level` (0 to 1) of full scale, as base64. */
+function microphone(level: number) {
+  const samples = new Int16Array(1600).map((_, at) =>
+    Math.round(Math.sin(at / 4) * level * 32_767),
+  );
+  return Buffer.from(samples.buffer).toString("base64");
+}
+
+describe("Director's marks on the roll, kept honest", () => {
+  it("refuses an end with no attempt open, and a start while one is, without asking the browser", async () => {
+    const { fake, browser } = await liveCall();
+    browser.send({ type: "roll", state: "recording" });
+    await fake.message(2);
+    fake.send(call("g1", "mark", { event: "start" }));
+    await browser.message(0);
+    browser.send({ type: "tool_result", id: "tool-1", result: "done" });
+    await vi.waitFor(() => expect(answeredAtOnce(fake, "g1")).toBeDefined());
+    fake.send(call("g2", "mark", { event: "start" }));
+    await vi.waitFor(() => expect(answeredAtOnce(fake, "g2")).toBeDefined());
+    expect(JSON.stringify(answeredAtOnce(fake, "g2"))).toContain("already open");
+    fake.send(call("g3", "mark", { event: "end" }));
+    await browser.message(1);
+    browser.send({ type: "tool_result", id: "tool-2", result: "done" });
+    await vi.waitFor(() => expect(answeredAtOnce(fake, "g3")).toBeDefined());
+    // The same end again: nothing is open, and Director is told to stop and talk.
+    fake.send(call("g4", "mark", { event: "end" }));
+    await vi.waitFor(() => expect(answeredAtOnce(fake, "g4")).toBeDefined());
+    expect(JSON.stringify(answeredAtOnce(fake, "g4"))).toContain("No attempt is open");
+    expect(toolsSeen(browser)).toHaveLength(2);
+  });
+
+  it("stops a tool called over and over, and logs it", async () => {
+    const { fake, browser, log } = await liveCall();
+    for (let at = 1; at <= 7; at += 1) {
+      fake.send(call(`g${at}`, "switch_camera", { to: "back" }));
+    }
+    await vi.waitFor(() => expect(answeredAtOnce(fake, "g7")).toBeDefined());
+    expect(JSON.stringify(answeredAtOnce(fake, "g7"))).toContain("over and over");
+    expect(toolsSeen(browser)).toHaveLength(5);
+    expect(log).toHaveBeenCalledWith(
+      "warn",
+      { tool: "switch_camera" },
+      "live tool called over and over",
+    );
+  });
+
+  it("never marks an attempt in a turn where Director itself is talking", async () => {
+    const { fake, browser } = await liveCall();
+    browser.send({ type: "roll", state: "recording" });
+    await fake.message(2);
+    // Director reads the line out, and marks its own reading.
+    fake.send(speech);
+    fake.send(call("g1", "mark", { event: "start" }));
+    await vi.waitFor(() => expect(answeredAtOnce(fake, "g1")).toBeDefined());
+    expect(JSON.stringify(answeredAtOnce(fake, "g1"))).toContain("your own");
+    expect(toolsSeen(browser)).toEqual([]);
+    // In a turn of its own, once the member begins, a start goes through.
+    fake.send(turnDone);
+    fake.send({ serverContent: { inputTranscription: { text: "Hello India" } } });
+    fake.send(call("g2", "mark", { event: "start" }));
+    await vi.waitFor(() => expect(toolsSeen(browser)).toHaveLength(1));
+  });
+
+  it("counts the member's voice on the microphone as heard, so a nudge never lands on it", async () => {
+    const { fake, browser, tick } = await liveCall();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    fake.send({ serverContent: { outputTranscription: { text: "So" } } });
+    await settled(() => expect(browser.received).toHaveLength(1));
+    // Quiet room noise doesn't count; the member starting to talk does, before any
+    // transcript of it arrives.
+    vi.advanceTimersByTime(QUIET_MS - 2000);
+    browser.send({ type: "audio", pcm16: microphone(0.002) });
+    vi.advanceTimersByTime(1000);
+    browser.send({ type: "audio", pcm16: microphone(0.2) });
+    await settledFrame(fake, browser, tick);
+    vi.advanceTimersByTime(2000);
+    await settledFrame(fake, browser, tick);
+    expect(turnsWith(fake, "been quiet")).toHaveLength(0);
+  });
+});

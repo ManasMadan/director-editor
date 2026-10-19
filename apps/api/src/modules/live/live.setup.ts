@@ -385,7 +385,7 @@ const TOOL_DECLARATIONS: Record<LiveTool, object> = {
   },
   mark: {
     description:
-      "While the roll records, mark where an attempt at the shot they're on starts (event start, the moment they begin) and ends (event end, the moment they finish). Never mark chat or setting up.",
+      "While the roll records, mark where their attempt at the shot they're on starts (event start, the moment they begin the shot's action or line) and ends (event end, once, when they finish). Never mark chat, setting up, \"I'm ready\", or your own voice; call it without speaking.",
     parameters: {
       type: "OBJECT",
       properties: {
@@ -398,7 +398,7 @@ const TOOL_DECLARATIONS: Record<LiveTool, object> = {
   },
   adapt_shot: {
     description:
-      "Put their own version of a shot on their screen when they change it or a constraint changes it: where they are, what they do, their line, the framing, the camera, and a new title when the old one names something it no longer has. Only what changed; one or two short sentences each.",
+      "Put their own version of a shot on their screen when they change it or a constraint changes it: where they are, what they do, their line, the framing, the camera, and a new title when the old one names something it no longer has. Only the rows this change touches, one or two short sentences each; leave every other row out (a new person in the shot doesn't change where they are or the camera).",
     parameters: {
       type: "OBJECT",
       properties: {
