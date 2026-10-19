@@ -25,6 +25,7 @@ import asyncio
 import base64
 import math
 from array import array
+from collections.abc import Awaitable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -42,6 +43,7 @@ from app.clipping import DEMUXERS, JAIL
 from app.errors import AppError
 from app.google_auth import id_token
 from app.log import log
+from app.process import read_process
 from app.schemas import (
     AlignRequest,
     AlignResult,
@@ -211,23 +213,15 @@ async def read_frames(
 ) -> list[Frame]:
     """The clip's frames from `start_seconds` for `seconds`, at FPS, each fitted to the
     9:16 working frame (covering it, cropped in the middle) as BGR pixels."""
-    # No shell: each argument reaches ffmpeg as its own argv entry, never interpreted.
-    process = await asyncio.create_subprocess_exec(
-        *frame_command(url, content_type, start_seconds, seconds),
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
+    command = frame_command(url, content_type, start_seconds, seconds)
     try:
-        stdout, stderr = await asyncio.wait_for(process.communicate(), FFMPEG_SECONDS)
-    except (TimeoutError, asyncio.CancelledError) as stopped:
-        # Given up on (too slow, or the other side's read failed): killed, never left running.
-        process.kill()
-        _ = await process.wait()
-        if isinstance(stopped, asyncio.CancelledError):
-            raise
+        # Given up on (too slow, or cancelled because the other take's read failed),
+        # ffmpeg is killed, never left running.
+        code, stdout, stderr = await asyncio.wait_for(read_process(command), FFMPEG_SECONDS)
+    except TimeoutError:
         raise AppError("UPSTREAM_UNAVAILABLE", {"service": "storage"}) from None
     size = WIDTH * HEIGHT * 3
-    if process.returncode != 0 or len(stdout) < size:
+    if code != 0 or len(stdout) < size:
         # The reason may name the presigned URL: only its last line, without it, is logged.
         reason = stderr.decode(errors="replace").replace(url, "<url>").strip().splitlines()
         log.warning("couldn't read a take's frames", reason=reason[-1] if reason else None)
@@ -235,6 +229,19 @@ async def read_frames(
     count = len(stdout) // size
     pixels = np.frombuffer(stdout[: count * size], dtype=np.uint8)
     return list(pixels.reshape(count, HEIGHT, WIDTH, 3))
+
+
+async def both[T](first: Awaitable[T], second: Awaitable[T]) -> tuple[T, T]:
+    """Both results, run side by side. When one fails the other is cancelled and waited
+    for before the failure is raised, so nothing of it is left running (`gather` alone
+    leaves it going)."""
+    tasks = (asyncio.ensure_future(first), asyncio.ensure_future(second))
+    try:
+        return await asyncio.gather(tasks[0], tasks[1])
+    finally:
+        for task in tasks:
+            _ = task.cancel()
+        _ = await asyncio.gather(*tasks, return_exceptions=True)
 
 
 def jpeg(frame: Frame) -> bytes:
@@ -586,7 +593,7 @@ class LocalAligner:
 
     async def align(self, request: AlignRequest) -> AlignResult:
         out_start = max(0.0, request.outgoing.atMs / 1000 - WINDOW_SECONDS)
-        outgoing, incoming = await asyncio.gather(
+        outgoing, incoming = await both(
             read_frames(
                 request.outgoing.url,
                 request.outgoing.contentType,

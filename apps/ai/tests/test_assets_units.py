@@ -1,17 +1,34 @@
 """Pure tests for app/assets.py's helpers: what Nano Banana is asked for, in which shape,
 which assets get a default, where each is kept, and which failures are worth a retry."""
 
+import asyncio
 from uuid import UUID
 
 import httpx
 import pytest
 from google.genai import errors as genai_errors
+from google.genai.types import (
+    Candidate,
+    Content,
+    GenerateContentResponse,
+    GenerateContentResponseUsageMetadata,
+    Part,
+)
+from pydantic_ai import Agent
+from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai.models.google import GoogleModel
+from pydantic_ai.providers.google import GoogleProvider
+from pydantic_ai.usage import RequestUsage, RunUsage
 
 from app.assets import (
     MAX_DEFAULT_ASSETS,
+    Artist,
     NoImage,
+    SpellCheck,
     asset_key,
     default_assets,
+    drawing_of,
     drawn_aspect_ratio,
     image_prompt,
     worth_retrying,
@@ -129,3 +146,63 @@ def test_only_an_outage_or_being_told_to_slow_down_is_worth_a_retry() -> None:
     assert worth_retrying(httpx.ConnectError("no route"))
     assert not worth_retrying(genai_errors.ClientError(400, {"error": {"message": "bad"}}))
     assert not worth_retrying(NoImage("words only"))
+
+
+def an_answer(*, thoughts: int | None) -> GenerateContentResponse:
+    """Nano Banana's answer: an image, its prompt's tokens, the image's and its thinking."""
+    image = Part.from_bytes(data=b"png", mime_type="image/png")
+    return GenerateContentResponse(
+        candidates=[Candidate(content=Content(role="model", parts=[image]))],
+        usage_metadata=GenerateContentResponseUsageMetadata(
+            prompt_token_count=300, candidates_token_count=1_290, thoughts_token_count=thoughts
+        ),
+    )
+
+
+def test_nano_banana_s_thinking_counts_as_output() -> None:
+    """Gemini bills thought tokens as output, and Nano Banana thinks before it draws."""
+    drawing = drawing_of(an_answer(thoughts=400))
+    assert (drawing.input_tokens, drawing.output_tokens) == (300, 1_690)
+    assert drawing_of(an_answer(thoughts=None)).output_tokens == 1_290
+
+
+def a_proofreader(*, reads_right: bool) -> Artist:
+    """An artist whose proofreader answers `reads_right`, having read 1,500 tokens and
+    written 40."""
+
+    def answer(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        return ModelResponse(
+            parts=[ToolCallPart("final_result", {"readsRight": reads_right, "misspelt": []})],
+            usage=RequestUsage(input_tokens=1_500, output_tokens=40),
+        )
+
+    model = GoogleModel("gemini-test-image", provider=GoogleProvider(api_key="test-key"))
+    checker = Agent(FunctionModel(answer), output_type=SpellCheck, defer_model_check=True)
+    return Artist(model, "gemini-test-image", checker)
+
+
+def test_the_proofreading_is_counted_with_the_drawing() -> None:
+    usage = RunUsage()
+    drawing = drawing_of(an_answer(thoughts=None))
+    artist = a_proofreader(reads_right=False)
+    assert not asyncio.run(artist.reads_right(drawing, ["12 types"], usage, most=6_000))
+    assert (usage.input_tokens, usage.output_tokens) == (1_500, 40)
+
+
+def test_proofreading_past_what_s_left_shows_the_image_unchecked_and_still_counts() -> None:
+    """The proofreading is capped at what's left of the image's reservation; the answer
+    that went past it was still paid for."""
+    usage = RunUsage()
+    drawing = drawing_of(an_answer(thoughts=None))
+    artist = a_proofreader(reads_right=False)
+    assert asyncio.run(artist.reads_right(drawing, ["12 types"], usage, most=1_000))
+    assert (usage.input_tokens, usage.output_tokens) == (1_500, 40)
+
+
+def test_no_text_or_nothing_left_to_spend_skips_the_proofreading() -> None:
+    usage = RunUsage()
+    drawing = drawing_of(an_answer(thoughts=None))
+    artist = a_proofreader(reads_right=False)
+    assert asyncio.run(artist.reads_right(drawing, [], usage, most=6_000))
+    assert asyncio.run(artist.reads_right(drawing, ["12 types"], usage, most=0))
+    assert usage.total_tokens == 0

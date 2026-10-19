@@ -27,9 +27,10 @@ import asyncio
 import re
 import sys
 import tempfile
+from collections.abc import AsyncIterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import BinaryIO, Protocol
 
 import httpx
 import structlog
@@ -70,6 +71,10 @@ _FRAMES = re.compile(r"frame=\s*(\d+)")
 MAX_CLIP_BYTES = 15_000_000
 # A part's footage at most: its 150 slices of 8 MB.
 MAX_FOOTAGE_BYTES = 150 * 8_000_000
+# Footage is written to disk in pieces this big, each in a worker thread: from the event
+# loop, a part's whole footage would stall every request the service is answering, and a
+# thread for each of the network's small chunks would cost more than the writes.
+WRITE_BYTES = 4 * 1024 * 1024
 SLICE_DOWNLOAD_SECONDS = 60.0
 # Decoding 20 minutes to reach the last attempt, and encoding one minute, on one CPU.
 FFMPEG_SECONDS = 300.0
@@ -298,6 +303,17 @@ def frames_in(log_text: str) -> int:
     return max((int(found.group(1)) for found in _FRAMES.finditer(log_text)), default=0)
 
 
+async def save_footage(chunks: AsyncIterable[bytes], into: BinaryIO, size: int) -> int:
+    """Writes `chunks` to `into`, which holds `size` bytes already, off the event loop;
+    the size after. More than a part's footage is refused before it's written."""
+    async for chunk in chunks:
+        size += len(chunk)
+        if size > MAX_FOOTAGE_BYTES:
+            raise ClipFailed("more footage than a part has", retryable=False)
+        _ = await asyncio.to_thread(into.write, chunk)
+    return size
+
+
 class Clipper(Protocol):
     async def clip(self, request: ClipRequest) -> Clip:
         """The attempt's take (ClipFailed when there's none to be had)."""
@@ -361,11 +377,8 @@ class LocalClipper:
                         "GET", piece.url, timeout=SLICE_DOWNLOAD_SECONDS
                     ) as response:
                         _ = response.raise_for_status()
-                        async for chunk in response.aiter_bytes():
-                            size += len(chunk)
-                            if size > MAX_FOOTAGE_BYTES:
-                                raise ClipFailed("more footage than a part has", retryable=False)
-                            _ = joined.write(chunk)
+                        chunks = response.aiter_bytes(chunk_size=WRITE_BYTES)
+                        size = await save_footage(chunks, joined, size)
                 except httpx.HTTPError as error:
                     # Only what went wrong: the URL is a credential (its signature).
                     log.warning(

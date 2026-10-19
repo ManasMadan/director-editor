@@ -352,9 +352,9 @@ export const zEditorCaptions = z.enum([
  * EditorChoice
  */
 export const zEditorChoice = z.object({
-    atSeconds: z.number(),
-    note: z.string(),
-    shotIndex: z.int(),
+    atSeconds: z.number().gte(0).lte(60),
+    note: z.string().max(120),
+    shotIndex: z.int().gte(0).lt(12),
     takeId: z.uuid()
 });
 
@@ -392,18 +392,18 @@ export const zEditorOp = z.enum([
  * One edit for the browser to apply, with shots by index and takes by id.
  */
 export const zEditorAction = z.object({
-    endSeconds: z.number().nullable(),
-    level: z.number().nullable(),
+    endSeconds: z.number().gte(0).lte(60).nullable(),
+    level: z.number().gte(0).lte(1).nullable(),
     op: zEditorOp,
-    otherShotIndex: z.int().nullable(),
-    position: z.int().nullable(),
-    replacement: z.string().nullable(),
-    shotIndex: z.int().nullable(),
-    startSeconds: z.number().nullable(),
-    steps: z.int().nullable(),
+    otherShotIndex: z.int().gte(0).lt(12).nullable(),
+    position: z.int().gte(0).lt(12).nullable(),
+    replacement: z.string().max(80).nullable(),
+    shotIndex: z.int().gte(0).lt(12).nullable(),
+    startSeconds: z.number().gte(0).lte(60).nullable(),
+    steps: z.int().gte(1).lte(20).nullable(),
     takeId: z.uuid().nullable(),
-    text: z.string().nullable(),
-    value: z.string().nullable()
+    text: z.string().max(80).nullable(),
+    value: z.string().max(200).nullable()
 });
 
 export const zEditorOutcome = z.enum([
@@ -419,11 +419,11 @@ export const zEditorOutcome = z.enum([
  * EditorReply
  */
 export const zEditorReply = z.object({
-    actions: z.array(zEditorAction),
-    choices: z.array(zEditorChoice),
-    heard: z.string(),
+    actions: z.array(zEditorAction).max(40),
+    choices: z.array(zEditorChoice).max(4),
+    heard: z.string().max(500),
     outcome: zEditorOutcome,
-    say: z.string()
+    say: z.string().min(1).max(240)
 });
 
 /**

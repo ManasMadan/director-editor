@@ -1647,33 +1647,38 @@ class EditorDraft(BaseModel):
     )
 
 
+# Director's answer as apps/api gets it: the draft's limits, with shots by index (from 0)
+# rather than by the number the member sees. Never Gemini's output type, so its lists may
+# carry their most: `reply_of` (app/editor.py) keeps to them.
+
+
 class EditorAction(BaseModel):
     """One edit for the browser to apply, with shots by index and takes by id."""
 
     op: EditorOp
-    shotIndex: int | None
+    shotIndex: int | None = Field(ge=0, lt=MAX_SHOTS)
     takeId: UUID | None
-    otherShotIndex: int | None
-    position: int | None
-    startSeconds: float | None
-    endSeconds: float | None
-    value: str | None
-    level: float | None
-    text: str | None
-    replacement: str | None
-    steps: int | None
+    otherShotIndex: int | None = Field(ge=0, lt=MAX_SHOTS)
+    position: int | None = Field(ge=0, lt=MAX_SHOTS)
+    startSeconds: float | None = Field(ge=0, le=MAX_SHOT_SECONDS)
+    endSeconds: float | None = Field(ge=0, le=MAX_SHOT_SECONDS)
+    value: str | None = Field(max_length=200)
+    level: float | None = Field(ge=0, le=1)
+    text: str | None = Field(max_length=80)
+    replacement: str | None = Field(max_length=80)
+    steps: int | None = Field(ge=1, le=20)
 
 
 class EditorChoice(BaseModel):
-    shotIndex: int
+    shotIndex: int = Field(ge=0, lt=MAX_SHOTS)
     takeId: UUID
-    atSeconds: float
-    note: str
+    atSeconds: float = Field(ge=0, le=MAX_SHOT_SECONDS)
+    note: str = Field(max_length=120)
 
 
 class EditorReply(BaseModel):
-    heard: str
+    heard: str = Field(max_length=MAX_EDITOR_TEXT)
     outcome: EditorOutcome
-    say: str
-    actions: list[EditorAction]
-    choices: list[EditorChoice]
+    say: str = Field(min_length=1, max_length=240)
+    actions: list[EditorAction] = Field(max_length=MAX_EDITOR_ACTIONS)
+    choices: list[EditorChoice] = Field(max_length=MAX_EDITOR_CHOICES)

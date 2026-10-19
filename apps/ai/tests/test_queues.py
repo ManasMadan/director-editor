@@ -1,7 +1,33 @@
 """How this service adds and retries its jobs (app/queues.py): with the queue's jittered
-backoff, which Python's bullmq doesn't compute itself."""
+backoff, which Python's bullmq doesn't compute itself; and that bullmq is used nowhere
+else."""
+
+import ast
+from pathlib import Path
 
 from app.queues import DIRECTOR, JITTERED, REVIEW, SETTINGS, jittered_backoff, job_options
+
+APP = Path(__file__).parent.parent / "app"
+
+
+def _imports_bullmq(path: Path) -> bool:
+    for node in ast.walk(ast.parse(path.read_text())):
+        if isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] == "bullmq":
+            return True
+        if isinstance(node, ast.Import) and any(
+            alias.name.split(".")[0] == "bullmq" for alias in node.names
+        ):
+            return True
+    return False
+
+
+def test_bullmq_is_used_from_app_queues_only() -> None:
+    """bullmq ships untyped: its calls stay behind the typed wrappers in app/queues.py, so
+    every other module adds jobs through those and needs no ignores of its own."""
+    using = sorted(
+        str(path.relative_to(APP)) for path in APP.rglob("*.py") if _imports_bullmq(path)
+    )
+    assert using == ["queues.py"]
 
 
 def test_a_review_is_added_with_the_reviews_queue_s_jittered_backoff() -> None:
