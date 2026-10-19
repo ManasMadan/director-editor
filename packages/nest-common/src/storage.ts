@@ -221,7 +221,7 @@ export class S3Storage implements Storage {
  */
 export interface GcsFile {
   getSignedUrl(
-    config: { version: "v4"; expires: Date } & (
+    config: { version: "v4"; accessibleAt: Date; expires: Date } & (
       | { action: "read"; responseDisposition?: string }
       | { action: "write"; contentType: string; extensionHeaders: Record<string, string> }
     ),
@@ -233,6 +233,17 @@ export interface GcsFile {
   save(data: Buffer, options: { contentType: string; resumable: boolean }): Promise<void>;
   rename(destination: string): Promise<unknown>;
   delete(): Promise<unknown>;
+}
+
+/**
+ * When a signed URL starts and stops working, from one reading of the clock. The client
+ * counts a URL's lifetime from its own reading when it isn't told when the URL starts, and
+ * in whole seconds, so a second ticking over between the two made a 600-second URL a
+ * 599-second one.
+ */
+function signedFor(expiresInSeconds: number) {
+  const accessibleAt = new Date();
+  return { accessibleAt, expiresAt: new Date(accessibleAt.getTime() + expiresInSeconds * 1000) };
 }
 
 export interface GcsClientLike {
@@ -276,10 +287,11 @@ export class GcsStorage implements Storage {
     contentLength,
     expiresInSeconds = 300,
   }: Parameters<Storage["presignUpload"]>[0]) {
-    const expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
+    const { accessibleAt, expiresAt } = signedFor(expiresInSeconds);
     const [url] = await this.file(key).getSignedUrl({
       version: "v4",
       action: "write",
+      accessibleAt,
       expires: expiresAt,
       contentType,
       // Signed like Content-Type, so the URL can't be reused to upload any other size
@@ -298,10 +310,11 @@ export class GcsStorage implements Storage {
     key: string,
     { filename, expiresInSeconds = 300 }: { filename?: string; expiresInSeconds?: number } = {},
   ) {
-    const expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
+    const { accessibleAt, expiresAt } = signedFor(expiresInSeconds);
     const [url] = await this.file(key).getSignedUrl({
       version: "v4",
       action: "read",
+      accessibleAt,
       expires: expiresAt,
       // Anything opened from storage downloads instead of rendering in our origin.
       ...(filename && {

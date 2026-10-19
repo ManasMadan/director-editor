@@ -168,6 +168,8 @@ describe("GcsStorage", () => {
     ]);
     const config = required(client.signedUrlConfigs[0], "the signed URL's config");
     expect(config.expires.getTime()).toBeGreaterThanOrEqual(before + 600_000);
+    // Its lifetime counted from when it starts working, so it's the whole 600 seconds.
+    expect(config.expires.getTime() - config.accessibleAt.getTime()).toBe(600_000);
     expect(upload.headers).toEqual({
       "Content-Type": "video/webm",
       "Content-Length": "1200000",
