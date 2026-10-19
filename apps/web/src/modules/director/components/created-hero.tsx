@@ -3,7 +3,7 @@
 import type { ServedShotPlan } from "@repo/contracts/api";
 import { buttonVariants } from "@repo/ui/components/button";
 import { GeminiShimmer } from "@repo/ui/components/gemini-loader";
-import { ArrowLeft, Clock, Film, PenLine, Sparkles } from "lucide-react";
+import { ArrowLeft, Clock, Film, ImageOff, PenLine, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { timecode } from "../lib/track";
@@ -37,18 +37,7 @@ export function CreatedHero({ plan, videoId }: { plan: ServedShotPlan; videoId: 
               key={index}
               className="relative aspect-9/16 overflow-hidden rounded-xl bg-studio-foreground/10"
             >
-              {shot.storyboardUrl ? (
-                <img
-                  src={shot.storyboardUrl}
-                  alt={t("template.storyboardAlt", { title: shot.title, scene: shot.scene })}
-                  className="size-full object-cover"
-                />
-              ) : (
-                <>
-                  <GeminiShimmer className="absolute inset-0 rounded-none bg-transparent" />
-                  <span className="sr-only">{t("template.noStoryboard")}</span>
-                </>
-              )}
+              <CardFace shot={shot} />
             </li>
           ))}
         </ul>
@@ -74,6 +63,38 @@ export function CreatedHero({ plan, videoId }: { plan: ServedShotPlan; videoId: 
           {t("template.changeShots")}
         </Link>
       </section>
+    </>
+  );
+}
+
+/**
+ * One card of the hero: its drawing, why it isn't coming (rather than shimmering as if it
+ * were), or a shimmer while Director draws it.
+ */
+function CardFace({ shot }: { shot: ServedShotPlan["shots"][number] }) {
+  const t = useTranslations("director.template");
+  if (shot.storyboardUrl) {
+    return (
+      <img
+        src={shot.storyboardUrl}
+        alt={t("storyboardAlt", { title: shot.title, scene: shot.scene })}
+        className="size-full object-cover"
+      />
+    );
+  }
+  const state = shot.storyboardState ?? "drawing";
+  if (state !== "drawing") {
+    return (
+      <p className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-2 text-center text-xs text-studio-foreground/85">
+        <ImageOff className="size-5" aria-hidden />
+        {t(`storyboardState.${state}`)}
+      </p>
+    );
+  }
+  return (
+    <>
+      <GeminiShimmer className="absolute inset-0 rounded-none bg-transparent" />
+      <span className="sr-only">{t("storyboardState.drawing")}</span>
     </>
   );
 }

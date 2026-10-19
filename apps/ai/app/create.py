@@ -23,6 +23,7 @@ from collections.abc import Sequence
 from uuid import UUID
 
 import httpx
+from pydantic import TypeAdapter
 from pydantic_ai import Agent, BinaryContent
 from pydantic_ai.models import Model
 from pydantic_ai.models.google import GoogleModelSettings
@@ -211,18 +212,41 @@ def retimed(plan: ShotPlan) -> ShotPlan:
     )
 
 
-def storyboards_of(plan: DirectorPlan, rows: Sequence[DirectorAsset]) -> list[StoryboardOut]:
-    """Each shot's card, by where the shot is now: the newest card drawn for its directions."""
+def storyboards_of(
+    plan: DirectorPlan, rows: Sequence[DirectorAsset], *, drawing: bool = True
+) -> list[StoryboardOut]:
+    """Each shot's card, by where the shot is now: the newest card drawn for its
+    directions, with why it failed when it did. While cards are drawn at all (`drawing`), a
+    shot of a written plan with none was never claimed: its member had made the day's
+    images when it was saved (claims happen in the transaction that saves the plan), so it
+    reads as failed for that, never as a card still on its way."""
     if plan.plan is None:
         return []
     cards = {row.asset_id: row for row in rows}
     shots = ShotPlan.model_validate(plan.plan).shots
-    found = ((index, cards.get(storyboard_id(shot))) for index, shot in enumerate(shots))
-    return [
-        StoryboardOut(shotIndex=index, status=row.status, objectKey=row.object_key)
-        for index, row in found
-        if row is not None
-    ]
+    out: list[StoryboardOut] = []
+    for index, shot in enumerate(shots):
+        row = cards.get(storyboard_id(shot))
+        if row is not None:
+            out.append(
+                StoryboardOut(
+                    shotIndex=index,
+                    status=row.status,
+                    objectKey=row.object_key,
+                    error=_ERROR.validate_python(row.error) if row.status == "failed" else None,
+                )
+            )
+        elif drawing:
+            out.append(
+                StoryboardOut(
+                    shotIndex=index, status="failed", objectKey=None, error="DIRECTOR_IMAGE_LIMIT"
+                )
+            )
+    return out
+
+
+# A failed row's code as it was stored (by app/assets.py, always one of the catalog's).
+_ERROR: TypeAdapter[ErrorCode | None] = TypeAdapter(ErrorCode | None)
 
 
 def create_lock_key(user_id: UUID) -> str:
@@ -589,7 +613,7 @@ class Creator:
                 .where(DirectorAsset.plan_id == plan.id, DirectorAsset.origin == "storyboard")
                 .order_by(DirectorAsset.id)
             )
-            return storyboards_of(plan, list(rows))
+            return storyboards_of(plan, list(rows), drawing=self._assets is not None)
 
 
 async def _take_turns(session: AsyncSession, user_id: UUID) -> None:

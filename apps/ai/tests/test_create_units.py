@@ -88,13 +88,14 @@ def test_a_storyboard_follows_its_shot_and_changes_with_its_directions() -> None
     assert "No text" in storyboard_prompt(first)
 
 
-def _row(asset_id: str, status: str, key: str | None) -> DirectorAsset:
+def _row(asset_id: str, status: str, key: str | None, error: str | None = None) -> DirectorAsset:
     return DirectorAsset(
         id=uuid.uuid4(),
         asset_id=asset_id,
         origin="storyboard",
         status=status,
         object_key=key,
+        error=error,
     )
 
 
@@ -109,8 +110,35 @@ def test_cards_are_served_by_where_their_shots_are_now() -> None:
         created_at=datetime.now(UTC),
     )
     window_card = storyboard_id(Shot.model_validate(window))
-    cards = storyboards_of(row, [_row(window_card, "ready", "director-assets/p/a.png")])
+    cards = storyboards_of(
+        row, [_row(window_card, "ready", "director-assets/p/a.png")], drawing=False
+    )
     assert [(card.shotIndex, card.status, card.objectKey) for card in cards] == [
         (1, "ready", "director-assets/p/a.png")
     ]
     assert storyboards_of(DirectorPlan(plan=None), []) == []
+
+
+def test_a_card_that_won_t_come_says_why() -> None:
+    """A card that failed says why (the allowance used up), and one never claimed (past the
+    day's images) reads as failed for that: the page tells the member rather than waiting
+    on a drawing that isn't coming."""
+    drawn, broke, never = shot(scene="By the window"), shot(scene="At the table"), shot()
+    row = DirectorPlan(
+        id=uuid.uuid4(),
+        source="created",
+        plan=a_plan(drawn, broke, never).model_dump(mode="json"),
+        created_at=datetime.now(UTC),
+    )
+    cards = storyboards_of(
+        row,
+        [
+            _row(storyboard_id(Shot.model_validate(drawn)), "pending", None),
+            _row(storyboard_id(Shot.model_validate(broke)), "failed", None, "AI_BUDGET_EXCEEDED"),
+        ],
+    )
+    assert [(card.shotIndex, card.status, card.error) for card in cards] == [
+        (0, "pending", None),
+        (1, "failed", "AI_BUDGET_EXCEEDED"),
+        (2, "failed", "DIRECTOR_IMAGE_LIMIT"),
+    ]

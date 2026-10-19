@@ -1948,6 +1948,7 @@ export type StockCredit = {
  * A created plan's storyboard card for one shot (app/create.py).
  */
 export type StoryboardOut = {
+    error?: ErrorCode | null;
     /**
      * Objectkey
      */

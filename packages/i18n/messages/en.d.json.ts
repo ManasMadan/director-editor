@@ -872,7 +872,12 @@ declare const messages: {
       "soundtrack": "Soundtrack, made with Lyria",
       "playSoundtrack": "Play the soundtrack",
       "changeShots": "Change the shots",
-      "noStoryboard": "Director is still drawing this shot"
+      "storyboardState": {
+        "drawing": "Director is still drawing this shot",
+        "noAllowance": "No drawing: today's Director allowance is used up",
+        "dailyLimit": "No drawing: you've made today's images",
+        "failed": "Director couldn't draw this shot"
+      }
     },
     "editor": {
       "version": {

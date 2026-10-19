@@ -9902,6 +9902,15 @@
                                         "previewUrl": {
                                           "type": "string",
                                           "format": "uri"
+                                        },
+                                        "storyboardState": {
+                                          "enum": [
+                                            "drawing",
+                                            "noAllowance",
+                                            "dailyLimit",
+                                            "failed"
+                                          ],
+                                          "type": "string"
                                         }
                                       },
                                       "required": [
@@ -12518,6 +12527,15 @@
                                   "previewUrl": {
                                     "type": "string",
                                     "format": "uri"
+                                  },
+                                  "storyboardState": {
+                                    "enum": [
+                                      "drawing",
+                                      "noAllowance",
+                                      "dailyLimit",
+                                      "failed"
+                                    ],
+                                    "type": "string"
                                   }
                                 },
                                 "required": [
@@ -15117,6 +15135,15 @@
                                   "previewUrl": {
                                     "type": "string",
                                     "format": "uri"
+                                  },
+                                  "storyboardState": {
+                                    "enum": [
+                                      "drawing",
+                                      "noAllowance",
+                                      "dailyLimit",
+                                      "failed"
+                                    ],
+                                    "type": "string"
                                   }
                                 },
                                 "required": [
@@ -18765,6 +18792,15 @@
                                   "previewUrl": {
                                     "type": "string",
                                     "format": "uri"
+                                  },
+                                  "storyboardState": {
+                                    "enum": [
+                                      "drawing",
+                                      "noAllowance",
+                                      "dailyLimit",
+                                      "failed"
+                                    ],
+                                    "type": "string"
                                   }
                                 },
                                 "required": [
@@ -37825,6 +37861,15 @@
                                   "previewUrl": {
                                     "type": "string",
                                     "format": "uri"
+                                  },
+                                  "storyboardState": {
+                                    "enum": [
+                                      "drawing",
+                                      "noAllowance",
+                                      "dailyLimit",
+                                      "failed"
+                                    ],
+                                    "type": "string"
                                   }
                                 },
                                 "required": [

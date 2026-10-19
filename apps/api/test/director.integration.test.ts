@@ -794,6 +794,29 @@ describe("Director's library", () => {
     expect(JSON.stringify(one)).not.toContain("files/");
   });
 
+  it("links a created plan's drawn cards and says what became of the others", async () => {
+    const { session, me } = await signedIn();
+    const org = String(me.activeOrganizationId);
+    const plan = readyTemplate(org, "CreatedOne1", null, {
+      user: me.id,
+      plan: { ...PLAN, shots: [...PLAN.shots, ...PLAN.shots] },
+    });
+    plan.storyboards = [
+      {
+        shotIndex: 0,
+        status: "ready",
+        objectKey: `director-assets/${plan.id}/shot-0123456789abcdef.png`,
+      },
+      { shotIndex: 1, status: "failed", objectKey: null, error: "AI_BUDGET_EXCEEDED" },
+    ];
+    const served = await session.rpc.director.plan({ videoId: "CreatedOne1" });
+    const [drawn, broke] = served.plan?.shots ?? [];
+    expect(new URL(String(drawn?.storyboardUrl)).pathname).toContain("shot-0123456789abcdef.png");
+    expect(drawn?.storyboardState).toBeUndefined();
+    expect(broke?.storyboardUrl).toBeUndefined();
+    expect(broke?.storyboardState).toBe("noAllowance");
+  });
+
   it("links no media for any other plan, whatever its stored plan names", async () => {
     const { session, me } = await signedIn();
     const org = String(me.activeOrganizationId);

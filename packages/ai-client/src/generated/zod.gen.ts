@@ -983,6 +983,7 @@ export const zAssetSlotsOut = z.object({
  * A created plan's storyboard card for one shot (app/create.py).
  */
 export const zStoryboardOut = z.object({
+    error: zErrorCode.nullish(),
     objectKey: z.string().max(200).nullable(),
     shotIndex: z.int().gte(0).lt(12),
     status: z.enum([

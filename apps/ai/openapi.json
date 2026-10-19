@@ -3735,6 +3735,16 @@
       "StoryboardOut": {
         "description": "A created plan's storyboard card for one shot (app/create.py).",
         "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorCode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "objectKey": {
             "anyOf": [
               {
