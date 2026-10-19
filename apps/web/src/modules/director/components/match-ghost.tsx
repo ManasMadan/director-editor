@@ -8,6 +8,7 @@ import { cn } from "@repo/ui/lib/utils";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { matchCutInto, type PlanLike } from "../lib/match-cuts";
+import { loadedVideo } from "../lib/media";
 
 /** The ghost's size: the finished frame's, halved (it's shown faint, over the camera). */
 const GHOST_WIDTH = 360;
@@ -30,15 +31,8 @@ async function lastFrame(source: string, endMs: number | null): Promise<string> 
     throw new Error(`storage answered ${response.status}`);
   }
   const url = URL.createObjectURL(await response.blob());
-  const video = document.createElement("video");
   try {
-    video.muted = true;
-    video.playsInline = true;
-    video.src = url;
-    await new Promise((resolve, reject) => {
-      video.onloadeddata = resolve;
-      video.onerror = () => reject(new Error("the take couldn't be read"));
-    });
+    const video = await loadedVideo(url);
     const end = endMs === null ? video.duration : endMs / 1000;
     video.currentTime = Math.max(0, end - BEFORE_END_SECONDS);
     await new Promise((resolve) => {

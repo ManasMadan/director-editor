@@ -9,7 +9,7 @@ import {
   type Segment,
   stitch,
 } from "@/modules/director/lib/stitch";
-import { photoOf, recordClip } from "./footage";
+import { photoOf, playedFrames, recordClip, recordToneClip, toneRuns } from "./footage";
 
 const INK: CaptionInk = {
   text: "#ffffff",
@@ -22,15 +22,20 @@ const CAPTIONS: Captions = {
   style: "pop",
   ink: INK,
 };
+const FRAME = 1 / 30;
 
 let clip: Blob;
 let photo: Blob;
 let audio: AudioContext;
 
 beforeAll(async () => {
+  // The render's clock is its AudioContext, which starts once the member has used the
+  // page (the Save they tap).
+  await userEvent.click(document.body);
+  audio = new AudioContext();
+  await audio.resume();
   clip = await recordClip(1, ["#ff0000", "#0000ff"]);
   photo = await photoOf("#00ff00");
-  audio = new AudioContext();
   return () => audio.close();
 });
 
@@ -50,6 +55,20 @@ async function sizeOf(short: Blob) {
   return [video.videoWidth, video.videoHeight];
 }
 
+/** The short's sound, decoded. */
+async function soundOf(short: Blob) {
+  const decoded = await audio.decodeAudioData(await short.arrayBuffer());
+  return { samples: decoded.getChannelData(0), rate: decoded.sampleRate };
+}
+
+/** When the picture first turns `hue` after `from` seconds. */
+const turns = (frames: { time: number; hue: string }[], hue: string, from: number) =>
+  frames.find((frame) => frame.time >= from && frame.hue === hue)?.time;
+
+/** When `tone` first sounds after `from` seconds. */
+const sounds = (runs: ReturnType<typeof toneRuns>, tone: number | null, from: number) =>
+  runs.find((run) => run.start >= from - 0.02 && run.tone === tone)?.start;
+
 describe("stitching the short", () => {
   it("plays each take's part and each photo in order, captioned, into one 9:16 video", async () => {
     const fillText = vi.spyOn(CanvasRenderingContext2D.prototype, "fillText");
@@ -57,8 +76,8 @@ describe("stitching the short", () => {
     const segments: Segment[] = [
       { kind: "video", source: clip, startSeconds: 0.1, endSeconds: 0.4 },
       { kind: "photo", source: photo, seconds: 0.3 },
-      // Past the take's end: it plays to the end and moves on.
-      { kind: "video", source: clip, startSeconds: 0.7, endSeconds: 3 },
+      // Past the take's end: its last frame holds for the rest of its part.
+      { kind: "video", source: clip, startSeconds: 0.7, endSeconds: 1.5 },
     ];
     const short = await stitch(segments, {
       audio,
@@ -78,41 +97,154 @@ describe("stitching the short", () => {
     expect(progress.at(-1)).toBe(1);
   });
 
-  it("records the takes' own sound when asked", async () => {
-    // A take plays out loud only once the member has used the page (the button they tap).
-    await userEvent.click(document.body);
-    const connect = vi.spyOn(AudioNode.prototype, "connect");
-    const source = vi.spyOn(audio, "createMediaElementSource");
-    const short = await stitch(
-      [{ kind: "video", source: clip, startSeconds: 0, endSeconds: 0.2 }],
-      {
-        audio,
-        withSound: true,
-        onProgress: vi.fn(),
-        captions: { ...CAPTIONS, style: "off" },
-      },
-    );
-    expect(source).toHaveBeenCalledOnce();
-    expect(source.mock.calls[0]?.[0].muted).toBe(false);
-    // Into the recording, not the speakers.
-    expect(connect.mock.calls.map(([to]) => to instanceof MediaStreamAudioDestinationNode)).toEqual(
-      [true],
-    );
-    expect(short.size).toBeGreaterThan(0);
+  it("keeps every cut's picture and sound together, sub-second parts and gaps too, with no frame held long", {
+    timeout: 60_000,
+  }, async () => {
+    // Like the owner's shoot: a long take, takes kept for a tenth of a second or under
+    // one, and shots left as gaps between them. Each take's picture and tone say which.
+    const red = await recordToneClip(audio, 1.2, "#ff0000", 440);
+    const blue = await recordToneClip(audio, 1, "#0000ff", 880);
+    const green = await recordToneClip(audio, 1, "#00ff00", 1320);
+    const segments: Segment[] = [
+      { kind: "video", source: red, startSeconds: 0, endSeconds: 1 },
+      { kind: "gap", seconds: 0.4 },
+      { kind: "video", source: blue, startSeconds: 0.2, endSeconds: 0.3 },
+      { kind: "gap", seconds: 0.3 },
+      { kind: "video", source: green, startSeconds: 0.1, endSeconds: 0.8 },
+      { kind: "video", source: blue, startSeconds: 0, endSeconds: 0.5 },
+    ];
+    const short = await stitch(segments, {
+      audio,
+      withSound: true,
+      onProgress: vi.fn(),
+      captions: { ...CAPTIONS, style: "off" },
+    });
+    const frames = await playedFrames(short);
+    const { samples, rate } = await soundOf(short);
+    const runs = toneRuns(samples, rate, [440, 880, 1320]);
+    // Every frame follows the one before at the frame rate: a held picture (the gaps)
+    // is repeated, not sent once and stretched.
+    const steps = frames.slice(1).map((frame, index) => frame.time - (frames[index]?.time ?? 0));
+    expect(Math.max(...steps)).toBeLessThan(0.1);
+    expect(frames[0]?.time).toBeLessThan(FRAME);
+    // Both start together: the first take's picture at once, its sound after the few
+    // milliseconds the sound takes to reach the recorder, which the picture waits out
+    // on its first frame (so `lead` is under a couple of frames).
+    const lead = sounds(runs, 440, 0) ?? Number.NaN;
+    expect(lead).toBeLessThan(2 * FRAME);
+    // The picture and the sound are as long as the edit, and as each other: the edit,
+    // then the last frame held, silent, while the end of the sound reaches the recorder.
+    const pictureEnds = (frames.at(-1)?.time ?? 0) + FRAME;
+    const soundEnds = samples.length / rate;
+    expect(pictureEnds).toBeGreaterThanOrEqual(3);
+    expect(pictureEnds).toBeLessThan(3 + 6 * FRAME);
+    expect(Math.abs(soundEnds - pictureEnds)).toBeLessThan(3 * FRAME);
+    // None of the last take's sound is cut off.
+    expect(runs.findLast((run) => run.tone === 880)?.end).toBeGreaterThan(lead + 3 - FRAME);
+
+    // Each cut lands at its place in the edit, at the same moment in the picture and
+    // in the sound; a gap holds the shot before it, silent.
+    for (const [hue, tone, at] of [
+      ["blue", 880, 1.4],
+      ["green", 1320, 1.8],
+      ["blue", 880, 2.5],
+    ] as const) {
+      const pictured = turns(frames, hue, at - 0.2) ?? Number.NaN;
+      const heard = sounds(runs, tone, at - 0.2) ?? Number.NaN;
+      expect(Math.abs(heard - lead - at)).toBeLessThan(FRAME);
+      expect(Math.abs(pictured - heard)).toBeLessThan(2 * FRAME);
+    }
+    expect(Math.abs((sounds(runs, null, 0.9) ?? Number.NaN) - lead - 1)).toBeLessThan(FRAME);
+    expect(frames.find((frame) => frame.time > 1.15 && frame.time < 1.3)?.hue).toBe("red");
   });
 
-  it("fails on a take that can't be read, letting its address go", async () => {
-    const revoke = vi.spyOn(URL, "revokeObjectURL");
-    const broken = new Blob(["not a video"], { type: "video/webm" });
-    await expect(
-      stitch([{ kind: "video", source: broken, startSeconds: 0, endSeconds: 1 }], {
+  it("waits for a hidden page, pauses while it's hidden, and carries on in step when it's back", {
+    timeout: 60_000,
+  }, async () => {
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    const listen = vi.spyOn(document, "addEventListener");
+    const start = vi.spyOn(MediaRecorder.prototype, "start");
+    const pause = vi.spyOn(MediaRecorder.prototype, "pause");
+    const resume = vi.spyOn(MediaRecorder.prototype, "resume");
+    const changed = (state: DocumentVisibilityState) => {
+      visibility.mockReturnValue(state);
+      document.dispatchEvent(new Event("visibilitychange"));
+    };
+    let hidden = false;
+    const rendering = stitch([{ kind: "video", source: clip, startSeconds: 0, endSeconds: 1 }], {
+      audio,
+      withSound: true,
+      onProgress: (done) => {
+        if (done > 0.3 && !hidden) {
+          hidden = true;
+          changed("hidden");
+        }
+      },
+      captions: { ...CAPTIONS, style: "off" },
+    });
+    // Hidden from the start: the render waits for the page (and its clock stops).
+    await vi.waitFor(() => {
+      const watching = listen.mock.calls.filter(([type]) => type === "visibilitychange");
+      expect(watching.length).toBeGreaterThanOrEqual(3);
+    });
+    changed("hidden");
+    await vi.waitFor(() => expect(audio.state).toBe("suspended"));
+    expect(start).not.toHaveBeenCalled();
+    changed("visible");
+    // Hidden mid-render: the recorder and the clock stop together, then go on.
+    await vi.waitFor(() => expect(pause).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(audio.state).toBe("suspended"));
+    changed("visible");
+    const short = await rendering;
+    expect(resume).toHaveBeenCalledOnce();
+    const frames = await playedFrames(short);
+    const steps = frames.slice(1).map((frame, index) => frame.time - (frames[index]?.time ?? 0));
+    expect(Math.max(...steps)).toBeLessThan(0.1);
+    expect((frames.at(-1)?.time ?? 0) + FRAME).toBeLessThan(1 + 6 * FRAME);
+  });
+
+  it("records where the canvas can't be asked for frames, or a take won't play", async () => {
+    vi.stubGlobal("CanvasCaptureMediaStreamTrack", undefined);
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockRejectedValue(new DOMException("not now", "NotAllowedError"));
+    const short = await stitch(
+      [{ kind: "video", source: clip, startSeconds: 0, endSeconds: 0.5 }],
+      {
         audio,
         withSound: false,
         onProgress: vi.fn(),
         captions: CAPTIONS,
-      }),
+      },
+    );
+    vi.unstubAllGlobals();
+    expect(play).toHaveBeenCalled();
+    expect(await sizeOf(short)).toEqual([OUTPUT_WIDTH, OUTPUT_HEIGHT]);
+  });
+
+  it("makes an empty video of an empty edit", async () => {
+    const short = await stitch([], {
+      audio,
+      withSound: true,
+      onProgress: vi.fn(),
+      captions: CAPTIONS,
+    });
+    expect(short.type).toBe(recorderFormat()?.uploadType);
+  });
+
+  it("fails on a take that can't be read, letting go of what it had loaded", async () => {
+    const revoke = vi.spyOn(URL, "revokeObjectURL");
+    const broken = new Blob(["not a video"], { type: "video/webm" });
+    await expect(
+      stitch(
+        [
+          { kind: "video", source: clip, startSeconds: 0, endSeconds: 1 },
+          { kind: "video", source: broken, startSeconds: 0, endSeconds: 1 },
+        ],
+        { audio, withSound: false, onProgress: vi.fn(), captions: CAPTIONS },
+      ),
     ).rejects.toThrow("a take couldn't be read");
-    expect(revoke).toHaveBeenCalledOnce();
+    expect(revoke).toHaveBeenCalledTimes(2);
   });
 
   it.each([
@@ -147,6 +279,7 @@ describe("stitching the short", () => {
 
   it("starts nothing once already cancelled", async () => {
     const draw = vi.spyOn(CanvasRenderingContext2D.prototype, "drawImage");
+    const start = vi.spyOn(MediaRecorder.prototype, "start");
     await expect(
       stitch([{ kind: "photo", source: photo, seconds: 1 }], {
         audio,
@@ -157,6 +290,7 @@ describe("stitching the short", () => {
       }),
     ).rejects.toThrow(expect.objectContaining({ name: "AbortError" }));
     expect(draw).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
   });
 
   it("fails in a browser that can't record video, or has no canvas", async () => {

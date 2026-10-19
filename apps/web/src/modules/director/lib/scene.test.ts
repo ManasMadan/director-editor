@@ -60,16 +60,23 @@ const plan = (shots: Shot[], assets: Asset[], edits: Edit[]): ShotPlan => ({
   edits,
 });
 
-/** Clips of the member's edit: each shot played for `seconds`, end to end. */
-function clipsOf(shots: Shot[], seconds: number[], missing: number[] = []): Clip[] {
+/**
+ * Clips of the member's edit: each shot played for `seconds`, end to end; the shots in
+ * `gaps` left as gaps by their version, those in `unfilmed` not filmed yet.
+ */
+function clipsOf(shots: Shot[], seconds: number[], gaps: number[] = [], unfilmed: number[] = []) {
   let at = 0;
   return shots.map((each, index) => {
     const length = seconds[index] ?? each.durationSeconds;
+    let state: Clip["state"] = gaps.includes(index) ? "gap" : "cut";
+    if (unfilmed.includes(index)) {
+      state = "missing";
+    }
     const clip: Clip = {
       index,
       shot: each,
       take: null,
-      state: missing.includes(index) ? "missing" : "cut",
+      state,
       at,
       seconds: length,
       from: 0,
@@ -246,6 +253,12 @@ describe("gaps", () => {
     expect(sceneAt(p, clips, 2).gap).toBeNull();
     expect(sceneAt(p, clips, 5).gap).toEqual({ slotId: "gap-1", seconds: 1, length: 2 });
     expect(sceneAt(p, clips, 13).gap).toEqual({ slotId: "shot-2", seconds: 3, length: 10 });
+  });
+
+  it("leaves a shot not filmed yet out of the moments to fill: it's to be filmed", () => {
+    const clips = clipsOf(p.shots, [10, 10], [], [1]);
+    expect(sceneAt(p, clips, 13).gap).toBeNull();
+    expect(gapSlots(p, clips).map((slot) => slot.slotId)).toEqual(["gap-1"]);
   });
 
   it("lists every moment to fill in the edit's order", () => {

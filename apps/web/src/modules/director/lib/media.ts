@@ -3,6 +3,7 @@
  * WebM elsewhere; both are upload types a take may have (packages/contracts files).
  */
 import type { Facing } from "@repo/contracts/live";
+import { SECOND_MS } from "@repo/contracts/time";
 import { VIEW_ASPECT, viewCrop } from "./view";
 
 /** About 1.5 Mbit/s: a 60-second take, with its sound, stays inside a take upload's 15 MB. */
@@ -74,6 +75,40 @@ export function captureFrame(
       quality,
     ),
   );
+}
+
+/** How long a video off the page may take to load before it's given up on. */
+const VIDEO_LOAD_MS = 20 * SECOND_MS;
+
+/**
+ * A video element off the page for `url`, once its first frame can be drawn: muted,
+ * inline, and told to preload, since iOS loads nothing for a video that isn't on the
+ * page otherwise, and the wait would never end. One that can't be read, or hasn't loaded
+ * after `timeoutMs`, is an error, and lets go of what it had loaded.
+ */
+export async function loadedVideo(url: string, timeoutMs = VIDEO_LOAD_MS) {
+  const video = document.createElement("video");
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = "auto";
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await new Promise((resolve, reject) => {
+      video.onloadeddata = resolve;
+      video.onerror = () => reject(new Error("the video couldn't be read"));
+      timer = setTimeout(() => reject(new Error("the video took too long to load")), timeoutMs);
+      video.src = url;
+    });
+    return video;
+  } catch (error) {
+    video.removeAttribute("src");
+    video.load();
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    video.onloadeddata = null;
+    video.onerror = null;
+  }
 }
 
 /** A blob's bytes as base64, without the `data:` prefix. */

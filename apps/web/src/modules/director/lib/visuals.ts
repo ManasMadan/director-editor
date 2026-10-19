@@ -5,7 +5,8 @@
  * so the canvas stays CORS-clean and can be recorded.
  */
 import type { AssetSlot, ServedShotPlan } from "@repo/contracts/api";
-import type { Visual } from "./compose";
+import type { Picture, Visual } from "./compose";
+import { loadedVideo } from "./media";
 
 /** What a slot shows: its link and whether it's a clip (a Veo clip, a stock video). */
 export interface SlotMedia {
@@ -36,16 +37,15 @@ export function slotMedia(
 }
 
 async function videoOf(blob: Blob): Promise<Visual> {
-  const video = document.createElement("video");
-  video.muted = true;
-  video.loop = true;
-  video.playsInline = true;
-  video.src = URL.createObjectURL(blob);
-  await new Promise((resolve, reject) => {
-    video.onloadeddata = resolve;
-    video.onerror = () => reject(new Error("a clip couldn't be read"));
-  });
-  return { kind: "video", video };
+  const url = URL.createObjectURL(blob);
+  try {
+    const video = await loadedVideo(url);
+    video.loop = true;
+    return { kind: "video", video };
+  } catch (error) {
+    URL.revokeObjectURL(url);
+    throw error;
+  }
 }
 
 /**
@@ -86,4 +86,16 @@ export function releaseVisuals(visuals: ReadonlyMap<string, Visual>) {
       URL.revokeObjectURL(visual.video.src);
     }
   }
+}
+
+/**
+ * A take's card frame (its poster: a data: or blob: URL) as a picture to draw. An image
+ * decodes it: `fetch()` can't, as the site's connect-src allows neither kind of URL
+ * (src/lib/csp.ts), while img-src allows both.
+ */
+export async function posterPicture(url: string): Promise<Picture> {
+  const image = new Image();
+  image.src = url;
+  await image.decode();
+  return { source: image, width: image.naturalWidth, height: image.naturalHeight };
 }

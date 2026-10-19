@@ -78,6 +78,7 @@ function Placeholder({ clip, state }: { clip: Clip; state: MediaState | undefine
   }
   const message = {
     missing: t("editor.notFilmed", { index: clip.index + 1 }),
+    gap: t("editor.version.gap", { index: clip.index + 1, title: clip.shot.title }),
     reviewing: t("review.reviewing"),
     cut: t("editor.loadFailed"),
   }[clip.state];

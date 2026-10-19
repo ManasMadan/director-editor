@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { captureFrame, openCamera, stopStream } from "@/modules/director/lib/media";
-import { canvasOf, hue, imageOf, pixel } from "./footage";
+import { captureFrame, loadedVideo, openCamera, stopStream } from "@/modules/director/lib/media";
+import { canvasOf, hue, imageOf, pixel, recordClip } from "./footage";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -93,5 +93,21 @@ describe("capturing a frame", () => {
     await expect(captureFrame(document.createElement("video"), 0, 0.5)).rejects.toThrow(
       "no frame to capture",
     );
+  });
+});
+
+describe("a video off the page", () => {
+  it("loads to its first frame, preloading, muted and inline", async () => {
+    const url = URL.createObjectURL(await recordClip(0.3, ["#ff0000"]));
+    const video = await loadedVideo(url);
+    expect([video.preload, video.muted, video.playsInline]).toEqual(["auto", true, true]);
+    expect(video.readyState).toBeGreaterThanOrEqual(HTMLMediaElement.HAVE_CURRENT_DATA);
+  });
+
+  it("fails when it can't be read, or doesn't load in time", async () => {
+    const broken = URL.createObjectURL(new Blob(["not a video"], { type: "video/webm" }));
+    await expect(loadedVideo(broken)).rejects.toThrow("the video couldn't be read");
+    const clip = URL.createObjectURL(await recordClip(0.3, ["#ff0000"]));
+    await expect(loadedVideo(clip, 0)).rejects.toThrow("the video took too long to load");
   });
 });
