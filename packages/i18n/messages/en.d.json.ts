@@ -28,7 +28,9 @@ declare const messages: {
     },
     "captchaFailed": "The security check couldn't load. Check your connection, allow challenges.cloudflare.com if you use a blocker, and reload.",
     "captchaStalled": "The security check didn't finish. If it shows a box, tap it, or reload the page to try again.",
-    "nav": "Main"
+    "nav": "Main",
+    "skipToContent": "Skip to content",
+    "guestNote": "Your demo is deleted after a day, with everything filmed in it."
   },
   "meta": {
     "title": "Director",
@@ -1253,7 +1255,7 @@ declare const messages: {
       "add": "Add a shot",
       "newShot": "A new shot",
       "newScene": "Anywhere with good light",
-      "save": "Save changes",
+      "invalid": "Every shot needs what happens and where before it can be saved.",
       "saving": "Saving…",
       "saved": "Saved",
       "shoot": "Looks good, let's shoot",

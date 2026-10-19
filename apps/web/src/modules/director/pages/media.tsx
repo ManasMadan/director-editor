@@ -14,6 +14,7 @@ import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { useMemo, useRef, useState } from "react";
 import { DirectorGate } from "@/modules/shorts";
 import { PublishButton } from "../components/publish-sheet";
+import { useDownloadUrl } from "../hooks/use-download-url";
 import { useObjectUrl } from "../hooks/use-object-url";
 import { webVtt } from "../lib/captions";
 import { cutsByTemplate, templateThumbnail } from "../lib/cuts";
@@ -86,7 +87,31 @@ function CutVideo({ cut, url }: { cut: DirectorCut; url: string }) {
   );
 }
 
-/** The cut's frame: the template's picture until it's tapped, then the cut itself. */
+/**
+ * The member's own video, still on its first frame: the template's thumbnail here showed
+ * the original creator on the member's video. Plain while its link loads, or if it can't.
+ */
+function CutPoster({ cut }: { cut: DirectorCut }) {
+  const url = useDownloadUrl(cut.fileId);
+  if (url === undefined) {
+    return <GeminiShimmer className="absolute inset-0 bg-studio-foreground/5" />;
+  }
+  return url ? (
+    // A frame in, not 0: some browsers paint nothing for a video held at its very start.
+    <video
+      src={`${url}#t=0.1`}
+      preload="metadata"
+      muted
+      playsInline
+      aria-hidden
+      tabIndex={-1}
+      data-poster
+      className="pointer-events-none absolute inset-0 size-full object-cover"
+    />
+  ) : null;
+}
+
+/** The cut's frame: its own first picture until it's tapped, then the cut playing. */
 function CutPlayer({ cut }: { cut: DirectorCut }) {
   const t = useTranslations("director.media");
   const downloadUrl = useFileDownloadUrl();
@@ -109,12 +134,7 @@ function CutPlayer({ cut }: { cut: DirectorCut }) {
       aria-label={t("play", { title: cut.title })}
       className="group relative size-full"
     >
-      {/* YouTube's own thumbnail: nothing for Next's optimizer to do. */}
-      <img
-        src={templateThumbnail(cut.videoId)}
-        alt=""
-        className="absolute inset-0 size-full scale-110 object-cover opacity-60 blur-[2px]"
-      />
+      <CutPoster cut={cut} />
       <span className="absolute inset-0 bg-linear-to-t from-studio/90 via-studio/20 to-transparent" />
       <span className="absolute inset-0 flex items-center justify-center">
         {playback.state === "loading" ? (

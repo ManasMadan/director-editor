@@ -9,7 +9,7 @@ import { GeminiLoader, GeminiShimmer } from "@repo/ui/components/gemini-loader";
 import { ArrowDown, ArrowLeft, ArrowUp, CircleAlert, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { DirectorGate } from "@/modules/shorts";
 import { moved, newShot, type ShotDraft, shotsValid } from "../lib/created";
 
@@ -169,22 +169,80 @@ function ShotCard({
   );
 }
 
-/** The plan's shots to change: edit, move, delete, add; then save, or go and shoot it. */
+/** How long after the last change the shots are saved: a word typed is one save, not five. */
+const AUTOSAVE_MS = 800;
+
+/**
+ * The member's changes, saved as they make them: a moment after the last one, or at once
+ * when they leave for another page. A reload or a closed tab while a change is unsaved
+ * asks first. Until a change is saved the draft shows; the saved plan otherwise, so
+ * storyboard cards drawn meanwhile show up as they land.
+ */
+function useAutosave(plan: DirectorPlan & { plan: ServedShotPlan }) {
+  const edit = useEditPlanMutation();
+  const { mutate } = edit;
+  const [draft, setDraft] = useState<ShotDraft[] | null>(null);
+  // The save the current draft still needs, for leaving before its moment comes.
+  const unsaved = useRef<(() => void) | null>(null);
+  // A draft the API refused is tried again with the next change, not every moment.
+  const refused = useRef<ShotDraft[] | null>(null);
+  const saving = edit.isPending;
+  useEffect(() => {
+    if (draft === null || !shotsValid(draft)) {
+      unsaved.current = null;
+      return;
+    }
+    const saveNow = () => {
+      unsaved.current = null;
+      mutate(
+        { videoId: plan.videoId, plan: { ...plan.plan, shots: draft } },
+        {
+          // A change made while this one was on its way stays, to be saved in turn.
+          onSuccess: () => setDraft((current) => (current === draft ? null : current)),
+          onError: () => {
+            refused.current = draft;
+          },
+        },
+      );
+    };
+    unsaved.current = saveNow;
+    // One save at a time: this runs again once the one under way has come back.
+    if (saving || refused.current === draft) {
+      return;
+    }
+    const timer = window.setTimeout(saveNow, AUTOSAVE_MS);
+    return () => window.clearTimeout(timer);
+  }, [draft, saving, mutate, plan.videoId, plan.plan]);
+  useEffect(() => () => unsaved.current?.(), []);
+  const dirty = draft !== null || saving;
+  useEffect(() => {
+    if (!dirty) {
+      return;
+    }
+    const ask = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", ask);
+    return () => window.removeEventListener("beforeunload", ask);
+  }, [dirty]);
+  return { shots: draft ?? plan.plan.shots, change: setDraft, dirty, edit };
+}
+
+/** Where the changes stand, under the shots: being saved, saved, or what stops a save. */
+function SaveState({ dirty, valid, saved }: { dirty: boolean; valid: boolean; saved: boolean }) {
+  const t = useTranslations("create.plan");
+  const words = (!valid && t("invalid")) || (dirty && t("saving")) || (saved && t("saved"));
+  return (
+    <p aria-live="polite" className="text-center text-sm text-studio-foreground/70">
+      {words || ""}
+    </p>
+  );
+}
+
+/** The plan's shots to change: edit, move, delete, add, each change saved; then shoot it. */
 function Editor({ plan }: { plan: DirectorPlan & { plan: ServedShotPlan } }) {
   const t = useTranslations("create.plan");
   const errorMessage = useApiErrorMessage();
-  const edit = useEditPlanMutation();
-  // The member's changes until they're saved; the saved plan otherwise, so storyboard
-  // cards drawn meanwhile show up as they land.
-  const [draft, setDraft] = useState<ShotDraft[] | null>(null);
-  const shots = draft ?? plan.plan.shots;
-  const dirty = draft !== null;
-  const change = (next: ShotDraft[]) => setDraft(next);
-  const save = () =>
-    edit.mutate(
-      { videoId: plan.videoId, plan: { ...plan.plan, shots } },
-      { onSuccess: () => setDraft(null) },
-    );
+  const { shots, change, dirty, edit } = useAutosave(plan);
+  const valid = shotsValid(shots);
   return (
     <div className="flex flex-col gap-4 px-4 pt-2 pb-36">
       <div className="flex flex-col gap-1">
@@ -223,17 +281,15 @@ function Editor({ plan }: { plan: DirectorPlan & { plan: ServedShotPlan } }) {
           {errorMessage(edit.error)}
         </p>
       ) : null}
-      <p aria-live="polite" className="sr-only">
-        {edit.isSuccess && !dirty ? t("saved") : ""}
-      </p>
-      <div className="fixed inset-x-0 bottom-0 z-10 bg-linear-to-t from-studio via-studio/95 to-transparent px-4 pt-10 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-        {dirty ? (
+      <div className="fixed inset-x-0 bottom-0 z-10 flex flex-col gap-2 bg-linear-to-t from-studio via-studio/95 to-transparent px-4 pt-10 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+        <SaveState dirty={dirty} valid={valid} saved={edit.isSuccess} />
+        {/* Not until every change is in: the shoot reads the saved shots. */}
+        {dirty || !valid ? (
           <Button
             className="mx-auto flex h-14 w-full max-w-lg rounded-full text-lg font-bold"
-            disabled={edit.isPending || !shotsValid(shots)}
-            onClick={save}
+            disabled
           >
-            {edit.isPending ? t("saving") : t("save")}
+            {t("shoot")}
           </Button>
         ) : (
           <Link

@@ -48,7 +48,8 @@ describe("Director's page for a ready plan", () => {
       planShot({
         kind: "photo",
         title: "The look",
-        purpose: "End on a smile.",
+        // As Gemini writes it: the beat first, which the member never sees.
+        purpose: "payoff: end on a smile.",
         camera: "front",
         scene: "Kitchen",
         durationSeconds: 1.5,
@@ -77,6 +78,9 @@ describe("Director's page for a ready plan", () => {
     expect(page.getByText("Director", { exact: true }).query()).toBeNull();
     await expect.element(page.getByRole("heading", { level: 3, name: "The look" })).toBeVisible();
     await expect.element(page.getByText("GRWM")).toBeVisible();
+    // Under the player, not over YouTube's own title and Share button at its foot.
+    const below = page.getByText("GRWM").element().getBoundingClientRect();
+    expect(below.top).toBeGreaterThanOrEqual(hero().getBoundingClientRect().bottom);
     await expect.element(page.getByText("01:15")).toBeVisible();
     await expect.element(page.getByText("2 shots", { exact: true })).toBeVisible();
     await expect.element(page.getByText("You need 2 shots: 1 video and 1 photo.")).toBeVisible();
@@ -86,7 +90,8 @@ describe("Director's page for a ready plan", () => {
     expect(heroParams().get("mute")).toBe("1");
 
     // The list says how each shot is filmed.
-    await expect.element(page.getByText("End on a smile.")).toBeVisible();
+    await expect.element(page.getByText("End on a smile.", { exact: true })).toBeVisible();
+    expect(page.getByText(/payoff:/).query()).toBeNull();
     await expect.element(page.getByText("Front camera")).toBeVisible();
     await expect.element(page.getByText("Back camera")).toBeVisible();
     await expect.element(page.getByText("1.5 s")).toBeVisible();
@@ -172,11 +177,14 @@ describe("Director's page for a ready plan", () => {
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
       expect(strip.element().scrollLeft).toBe(0);
       expect(within(11)).toBe(false);
+      // Its right edge fades while there are shots past it.
+      await expect.element(strip).toHaveAttribute("data-more", "true");
 
       // Watching a shot from its card brings it into view in the strip, and back again.
       await userEvent.click(page.getByRole("button", { name: "Watch shot 11: Shot 11" }).last());
       await expect.element(last).toHaveAttribute("aria-pressed", "true");
       await expect.poll(() => within(11)).toBe(true);
+      await expect.element(strip).not.toHaveAttribute("data-more");
       // Still big enough to tap.
       expect(last.element().getBoundingClientRect().width).toBeGreaterThanOrEqual(36);
       await userEvent.click(page.getByRole("button", { name: "Watch shot 1: Shot 1" }).last());

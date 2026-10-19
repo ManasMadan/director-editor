@@ -74,7 +74,9 @@ function Library() {
   );
   const quickStart = quickStartOf(library.data?.templates ?? []);
   return (
-    <div className="grid gap-8 pt-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-12 lg:pt-10">
+    // One column that shrinks to the screen: an implicit column grew to the cards' widest
+    // content and pushed the page past a 360 px phone's edge.
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-8 pt-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-12 lg:pt-10">
       <div className="flex flex-col gap-6 lg:sticky lg:top-24 lg:self-start">
         <div className="flex flex-col gap-3">
           <h1 className="text-3xl leading-[1.05] font-semibold tracking-tight text-balance sm:text-4xl">

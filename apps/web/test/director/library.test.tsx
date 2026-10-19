@@ -94,6 +94,27 @@ describe("the library", () => {
     ).toBeTruthy();
   });
 
+  it("fits a 360 px phone, cards and all, with nothing to scroll sideways", async () => {
+    const orgId = await member();
+    await commands.fakeLibrary(orgId, {
+      templates: [
+        seed("A rather long starter title that wraps", "22k0fZarxh8"),
+        seed("Office GRWM"),
+        seed("Morning routine"),
+      ],
+    });
+    await page.viewport(360, 780);
+    try {
+      await showLibrary();
+      await expect.element(page.getByRole("link", { name: /Office GRWM/ })).toBeVisible();
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+      const field = link().element().getBoundingClientRect();
+      expect(field.right).toBeLessThanOrEqual(window.innerWidth);
+    } finally {
+      await page.viewport(414, 896);
+    }
+  });
+
   it("offers no quick start while that starter isn't in the library", async () => {
     const orgId = await member();
     await commands.fakeLibrary(orgId, { templates: [seed("Office GRWM")] });

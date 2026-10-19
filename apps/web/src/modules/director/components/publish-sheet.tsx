@@ -2,7 +2,6 @@
 
 import { errorCode, useApiErrorMessage } from "@repo/client";
 import { useAssetSlotsQuery } from "@repo/client/api/assets/slots";
-import { useFileDownloadUrl } from "@repo/client/api/files/download-url";
 import { usePublishCopyMutation } from "@repo/client/api/publish/copy";
 import { usePublishMutation } from "@repo/client/api/publish/upload";
 import {
@@ -35,6 +34,7 @@ import { useTranslations } from "next-intl";
 import { type FormEvent, type RefObject, useEffect, useId, useRef, useState } from "react";
 import * as z from "zod";
 import { authClient } from "@/lib/auth-client";
+import { useDownloadUrl } from "../hooks/use-download-url";
 import { hashtagsOf, hashtagsText, youtubeShortUrl } from "../lib/publish";
 
 /** What the member settled on: the post, and who may watch it. */
@@ -74,22 +74,18 @@ function unstash(cut: DirectorCut): Draft | null {
 /** The cut's video, to watch before publishing it; nothing while its link can't be had. */
 function Preview({ cut }: { cut: DirectorCut }) {
   const t = useTranslations("director.publish");
-  const downloadUrl = useFileDownloadUrl();
-  const [url, setUrl] = useState<string | null | undefined>(undefined);
-  useEffect(() => {
-    downloadUrl(cut.fileId).then(
-      (download) => setUrl(download.url),
-      () => setUrl(null),
-    );
-  }, [downloadUrl, cut.fileId]);
+  // Asked for once: a new link each render reloaded the video forever, a spinner on black.
+  const url = useDownloadUrl(cut.fileId);
   if (url === undefined) {
     return <GeminiShimmer className="mx-auto aspect-9/16 w-32 rounded-xl bg-muted" />;
   }
   // Muted to start with: it's a look at the picture, and its captions are burned in. The
-  // controls turn the sound on.
+  // controls turn the sound on. Held a frame in, so it shows the video's first picture
+  // rather than black under the player's controls.
   return url ? (
     <video
-      src={url}
+      src={`${url}#t=0.1`}
+      preload="metadata"
       controls
       muted
       playsInline

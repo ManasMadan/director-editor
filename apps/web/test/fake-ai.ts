@@ -267,6 +267,17 @@ function directorRoute(
   if (assets?.[1]) {
     return { status: 200, body: short(assets[1]).assets ?? NO_ASSETS };
   }
+  // The member's changes to a plan they described, kept as the short's plan: read back
+  // with the plan route, a test sees what the page saved.
+  if (route === "PUT /v1/director/created") {
+    const videoId = String(input.videoId);
+    const found = short(videoId).plan;
+    if (!found) {
+      return notFound("DIRECTOR_PLAN_NOT_FOUND");
+    }
+    found.plan = input.plan;
+    return { status: 200, body: planBody(videoId, found) };
+  }
   const takes = /^GET \/v1\/director\/plans\/([\w-]{11})\/takes$/.exec(route);
   if (takes?.[1]) {
     return { status: 200, body: short(takes[1]).takes };

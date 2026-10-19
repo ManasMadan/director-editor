@@ -18,7 +18,13 @@ import { authClient } from "@/lib/auth-client";
 
 interface UserMenuProps {
   className?: string;
-  user: { name: string; email: string; image?: string | null | undefined };
+  user: {
+    name: string;
+    email: string;
+    image?: string | null | undefined;
+    /** Set for a demo guest: when it's deleted. Its address is a made-up one. */
+    guestUntil?: Date | null | undefined;
+  };
 }
 
 export function UserMenu({ user, className }: UserMenuProps) {
@@ -55,7 +61,10 @@ export function UserMenu({ user, className }: UserMenuProps) {
         <DropdownMenuGroup>
           <DropdownMenuLabel>
             <div className="font-medium">{user.name}</div>
-            <div className="text-xs text-muted-foreground">{user.email}</div>
+            {/* A guest's address means nothing to them; what matters is that it's for a day. */}
+            <div className="text-xs text-muted-foreground">
+              {user.guestUntil ? t("guestNote") : user.email}
+            </div>
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />

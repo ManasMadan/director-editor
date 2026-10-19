@@ -366,6 +366,10 @@ describe("the editor", { tags: ["files"] }, () => {
       .toBeVisible();
     await expect.element(media.getByText("1 video")).toBeVisible();
     await expect.element(media.getByText("Not published")).toBeVisible();
+    // Its picture is the member's own video on its first frame, not the original creator.
+    await expect
+      .poll(() => document.querySelector("video[data-poster]")?.getAttribute("src"))
+      .toMatch(new RegExp(`${cut?.fileId ?? "no file"}.*#t=0\\.1$`));
     await userEvent.click(media.getByRole("button", { name: "Play Morning routine" }));
     await expect
       .poll(() => document.querySelector("video")?.getAttribute("src"))
