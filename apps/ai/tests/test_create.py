@@ -367,6 +367,31 @@ def test_gemini_down_while_writing_is_tried_again_until_the_last_attempt(
     assert (failed.status, failed.error) == ("failed", "DIRECTOR_CREATE_FAILED")
 
 
+def test_a_created_plan_is_never_left_being_written_after_its_last_attempt(
+    client: TestClient,
+    gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]],
+    storage: Fake,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Something the writing doesn't expect (the ledger unreachable as it settles): retried
+    while attempts are left, and the plan failed on the last, never "writing" for good."""
+    org, user = new_org()
+    plan = created_plan(client, org, user, storage)
+    gemini[1][GEMINI_PATH] = gemini_output(WRITTEN)
+
+    async def unreachable(*_args: object) -> None:
+        raise ConnectionError("the database went away")
+
+    monkeypatch.setattr("app.create.settle", unreachable)
+    with pytest.raises(ConnectionError):
+        on_app_loop(client, lambda: creator().write(org, plan.id, [], user, final=False))
+    assert plan_of(client, org, user, plan.videoId).status == "analyzing"
+    with pytest.raises(ConnectionError):
+        on_app_loop(client, lambda: creator().write(org, plan.id, [], user))
+    failed = plan_of(client, org, user, plan.videoId)
+    assert (failed.status, failed.error) == ("failed", "DIRECTOR_CREATE_FAILED")
+
+
 def test_the_worker_writes_a_described_template(
     client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]], storage: Fake
 ) -> None:

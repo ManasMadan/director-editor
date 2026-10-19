@@ -402,6 +402,30 @@ class Creator:
         brief = await self._start_writing(org_id, plan_id)
         if brief is None:
             return
+        try:
+            await self._write(org_id, plan_id, brief, photo_urls, user_id, began, final=final)
+        except CreateInterrupted:
+            raise
+        except Exception as error:
+            # Anything the writing itself doesn't handle (the database or Redis between its
+            # steps): retried, and on the last attempt the plan fails rather than being
+            # "written" for good.
+            log.exception("writing a created plan failed", error=type(error).__name__)
+            if final:
+                await self._fail(org_id, plan_id, "DIRECTOR_CREATE_FAILED")
+            raise
+
+    async def _write(
+        self,
+        org_id: UUID,
+        plan_id: UUID,
+        brief: Brief,
+        photo_urls: Sequence[str],
+        user_id: UUID | None,
+        began: float,
+        *,
+        final: bool,
+    ) -> None:
         reservation = await reserve(
             org_id,
             user_id,
