@@ -705,7 +705,7 @@ declare const messages: {
     "progress": {
       "pending": "Director is getting ready…",
       "analyzing": "Director is watching the short…",
-      "hint": "This takes about a minute."
+      "hint": "This usually takes one to three minutes."
     },
     "retry": "Try again",
     "needs": "You need {shots, plural, one {# shot} other {# shots}}: {videos, plural, =0 {no videos} one {# video} other {# videos}} and {photos, plural, =0 {no photos} one {# photo} other {# photos}}.",
@@ -872,7 +872,12 @@ declare const messages: {
       "soundtrack": "Soundtrack, made with Lyria",
       "playSoundtrack": "Play the soundtrack",
       "changeShots": "Change the shots",
-      "noStoryboard": "Director is still drawing this shot"
+      "storyboardState": {
+        "drawing": "Director is still drawing this shot",
+        "noAllowance": "No drawing: today's Director allowance is used up",
+        "dailyLimit": "No drawing: you've made today's images",
+        "failed": "Director couldn't draw this shot"
+      }
     },
     "editor": {
       "version": {
@@ -1182,7 +1187,9 @@ declare const messages: {
       "writing": "Writing the shot list",
       "ready": "Ready to shoot",
       "failed": "This Short couldn't be indexed",
-      "hint": "This takes about a minute. You can leave this page, it keeps going.",
+      "hint": "This usually takes one to three minutes. You can leave this page, it keeps going.",
+      "stillWorking": "Still working: {elapsed} so far",
+      "longer": "Taking longer than usual, but still going: {elapsed} so far",
       "steps": {
         "queued": "Queued",
         "watching": "Watching",

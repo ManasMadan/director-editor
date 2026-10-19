@@ -1,7 +1,7 @@
 "use client";
 
 import { takeInProgress } from "@repo/client/api/director/latest";
-import type { DirectorShot, ServedShotPlan, Shot } from "@repo/contracts/api";
+import type { DirectorShot, ServedShotPlan, Shot, StoryboardState } from "@repo/contracts/api";
 import { cn } from "@repo/ui/lib/utils";
 import { Camera, CircleCheck, Pause, Play, RotateCcw, Video } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -330,7 +330,8 @@ function StoryboardCard({
 
 /**
  * Where the shot is filmed, at a glance: a seed's storyboard card while its link works,
- * else the framing sketch on its own (a member's own short has no media).
+ * else the framing sketch on its own (a member's own short has no media). A created
+ * plan's card that isn't drawn says so under the sketch: still drawing, or why not.
  */
 function ShotPicture({
   shot,
@@ -357,7 +358,25 @@ function ShotPicture({
       onPlaying={onPlaying}
     />
   ) : (
-    <FramingBox shot={shot} className="w-16" />
+    <div className="flex w-16 shrink-0 flex-col gap-1">
+      <FramingBox shot={shot} className="w-16" />
+      {shot.storyboardState ? <StoryboardStateNote state={shot.storyboardState} /> : null}
+    </div>
+  );
+}
+
+/** What became of a created plan's card that has no drawing to show. */
+export function StoryboardStateNote({ state }: { state: StoryboardState }) {
+  const t = useTranslations("director.template.storyboardState");
+  return (
+    <p
+      className={cn(
+        "text-[11px] leading-tight",
+        state === "drawing" ? "text-studio-foreground/70" : "text-studio-foreground/85",
+      )}
+    >
+      {t(state)}
+    </p>
   );
 }
 

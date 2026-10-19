@@ -321,7 +321,18 @@ export type ShotPlan = z.infer<typeof shotPlanSchema>;
 // asset's default image is coming along (a seed's are made with its media). A plan names
 // no storage path itself.
 const mediaUrl = z.url().optional();
-const servedShotSchema = shotSchema.extend({ storyboardUrl: mediaUrl, previewUrl: mediaUrl });
+/**
+ * A created plan's storyboard card when there's no drawing to link: still being drawn, or
+ * not coming, and why (the workspace's AI allowance used up, the member's images for the
+ * day made, or the drawing failing), so the page says so instead of waiting on it.
+ */
+const STORYBOARD_STATES = ["drawing", "noAllowance", "dailyLimit", "failed"] as const;
+export type StoryboardState = (typeof STORYBOARD_STATES)[number];
+const servedShotSchema = shotSchema.extend({
+  storyboardUrl: mediaUrl,
+  previewUrl: mediaUrl,
+  storyboardState: z.enum(STORYBOARD_STATES).optional(),
+});
 const servedAssetSchema = assetSchema.extend({
   /**
    * Its default image, drawn right after indexing: `making` until it's there, then a

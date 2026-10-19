@@ -40,6 +40,8 @@ from app.errors import AppError
 from app.indexing import PLANNER_RETRIES, IndexFailed, Watched
 from app.queues import DirectorQueue, JobLike
 from app.schemas import (
+    AlignRequest,
+    AlignResult,
     ChatTurnReservation,
     DirectorCutOut,
     DirectorLibraryOut,
@@ -2122,10 +2124,15 @@ def test_a_file_added_twice_is_one_take(client: TestClient) -> None:
         "sourceUrl": "http://storage/clip.mp4",
     }
     first = client.post("/v1/director/takes", json=take, headers=headers(org, user))
+    # Its review lost on the way to the queue (Valkey unreachable a moment): adding the
+    # file again, as the caller's retry does, queues the review it's still waiting for.
+    key = f"{{ai-review}}:ai-review:{first.json()['id']}"
+    assert redis_client().delete(key) == 1
     again = client.post("/v1/director/takes", json=take, headers=headers(org, user))
     assert (first.status_code, again.status_code) == (201, 201)
     assert first.json() == again.json()
     assert len(takes_of(client, org, user)) == 1
+    assert stored_job(key)[b"name"] == b"review-take"
     # The file is that member's take: anyone else adding it finds no take of theirs.
     teammate = uuid4()
     with migrator() as db:
@@ -2370,6 +2377,31 @@ def test_a_take_is_never_left_reviewing_after_its_last_attempt(
             on_app_loop(client, lambda: director().review(org, take.id, url, user))
     [failed] = takes_of(client, org, user)
     assert (failed.status, failed.error) == ("failed", "DIRECTOR_REVIEW_FAILED")
+
+
+class _BrokenAligner:
+    """An aligner that fails after Gemini may have answered (OpenCV on frames it can't
+    read): what the run used is unknown."""
+
+    async def align(self, request: AlignRequest) -> AlignResult:
+        raise ValueError(f"no frames to line up for {request.anchor}")
+
+
+def test_an_alignment_that_fails_unexpectedly_counts_its_whole_reservation(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Gemini may have answered before it failed: the run's usage is unknown, so the whole
+    reservation counts, never nothing."""
+    org, user = new_org()
+    monkeypatch.setattr(director(), "_aligner", _BrokenAligner())
+    clip = {"url": "https://storage.test/a.mp4", "atMs": 1_000}
+    with pytest.raises(ValueError, match="no frames"):
+        _ = client.post(
+            "/v1/director/match-cuts",
+            json={"anchor": "the watch", "outgoing": clip, "incoming": {**clip, "atMs": 0}},
+            headers=headers(org, user),
+        )
+    assert usage(org, "director-align") == 12_000
 
 
 def test_a_review_for_a_take_that_s_gone_does_nothing(client: TestClient) -> None:

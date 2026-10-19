@@ -175,7 +175,7 @@ def director_processor(
             passing = session_pass
 
             async def go_through() -> None:
-                _ = await passing.run(session.payload.orgId, session.payload.sessionId)
+                _ = await passing.run(session.payload.orgId, session.payload.sessionId, final=final)
 
             with _bound(job, session):
                 await run_job(job, final, go_through)

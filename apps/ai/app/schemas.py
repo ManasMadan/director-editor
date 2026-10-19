@@ -17,6 +17,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.contracts.error_response import ErrorCode
+
 # For every request model (see above).
 REQUEST = ConfigDict(strict=True, extra="forbid")
 
@@ -709,6 +711,10 @@ class StoryboardOut(BaseModel):
     shotIndex: int = Field(ge=0, lt=MAX_SHOTS)
     status: AssetImageStatus
     objectKey: str | None = Field(max_length=200)
+    # Why a failed card has no drawing, so the page can say so rather than wait for it:
+    # AI_BUDGET_EXCEEDED (the workspace's allowance used up), DIRECTOR_IMAGE_LIMIT (never
+    # drawn: the member had made the day's images), or the drawing's own failure.
+    error: ErrorCode | None = None
 
 
 class DirectorPlanOut(BaseModel):
@@ -1069,7 +1075,7 @@ class DirectorCutCreate(BaseModel):
         default=None,
         ge=1,
         le=MAX_CUT_MS,
-        description="How long the rendered video is, gaps and all; added up from the picks when left out.",
+        description="The rendered video's length, gaps and all; summed from the picks if unset.",
     )
 
 

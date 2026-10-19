@@ -271,6 +271,34 @@ def test_the_assets_job_draws_and_stores_each_image(
     assert len(drawings(google[0])) == len(STILLS)
 
 
+def test_an_image_another_job_is_drawing_is_never_drawn_twice(
+    client: TestClient, google: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    """Every picker drawing and every created plan queues a job for the whole plan: two
+    can list the same rows. A row another job claimed a moment ago is left to it; one
+    claimed long ago by a job that died is drawn again."""
+    org, user = new_org()
+    plan_id = indexed(client, org, user)
+    busy, abandoned = STILLS[0], STILLS[1]
+    _ = as_org(
+        org,
+        "UPDATE ai.director_asset SET status = 'generating', updated_at = now()"
+        " WHERE plan_id = %s AND asset_id = %s",
+        (plan_id, busy),
+    )
+    _ = as_org(
+        org,
+        "UPDATE ai.director_asset SET status = 'generating',"
+        " updated_at = now() - interval '1 hour' WHERE plan_id = %s AND asset_id = %s",
+        (plan_id, abandoned),
+    )
+    make(client, org, plan_id)
+    statuses = {name: status for name, status, _, _ in images(org, plan_id)}
+    assert statuses[busy] == "generating"
+    assert {name for name, status in statuses.items() if status == "ready"} == set(STILLS) - {busy}
+    assert len(drawings(google[0])) == len(STILLS) - 1
+
+
 def test_a_plan_gets_at_most_five_default_images(
     client: TestClient, google: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
 ) -> None:

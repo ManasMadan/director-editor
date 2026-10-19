@@ -50,7 +50,7 @@ function Indexing({ plan, onAnother }: { plan: DirectorPlan; onAnother: () => vo
       </div>
     );
   }
-  return <IndexProgress step={step} className="py-2" />;
+  return <IndexProgress step={step} since={plan.updatedAt} className="py-2" />;
 }
 
 /**

@@ -272,6 +272,28 @@ def test_created_templates_have_their_own_limit_apart_from_the_indexed_short(
     assert {plan.source for plan in library.templates} == {"created"}
 
 
+def test_a_plan_whose_writing_can_t_be_queued_fails_and_doesn_t_count(
+    client: TestClient, storage: Fake, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The queue unreachable as the plan is made: nothing would ever write it, so it fails
+    at once (a failed plan never counts against the day) and the member is told to try
+    again, rather than a plan waiting forever that uses up one of the day's."""
+    org, user = new_org()
+
+    async def unreachable(*_args: object, **_kwargs: object) -> None:
+        raise ConnectionError("the queue went away")
+
+    monkeypatch.setattr("app.queues.DirectorQueue.add_create", unreachable)
+    refused = create(client, org, user, brief(storage))
+    assert (refused.status_code, error_of(refused).code) == (502, "UPSTREAM_UNAVAILABLE")
+    response = client.get("/v1/director/library", headers=headers(org, user))
+    [plan] = DirectorLibraryOut.model_validate_json(response.content).templates
+    assert plan.status == "failed"
+    monkeypatch.undo()
+    for _ in range(CREATE_PER_DAY):
+        assert create(client, org, user, brief(storage)).status_code == 201
+
+
 def test_the_member_edits_their_shots_and_they_are_put_back_to_back(
     client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]], storage: Fake
 ) -> None:
@@ -363,6 +385,31 @@ def test_gemini_down_while_writing_is_tried_again_until_the_last_attempt(
     # Left being written, for the retry.
     assert plan_of(client, org, user, plan.videoId).status == "analyzing"
     on_app_loop(client, lambda: creator().write(org, plan.id, [], user, final=True))
+    failed = plan_of(client, org, user, plan.videoId)
+    assert (failed.status, failed.error) == ("failed", "DIRECTOR_CREATE_FAILED")
+
+
+def test_a_created_plan_is_never_left_being_written_after_its_last_attempt(
+    client: TestClient,
+    gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]],
+    storage: Fake,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Something the writing doesn't expect (the ledger unreachable as it settles): retried
+    while attempts are left, and the plan failed on the last, never "writing" for good."""
+    org, user = new_org()
+    plan = created_plan(client, org, user, storage)
+    gemini[1][GEMINI_PATH] = gemini_output(WRITTEN)
+
+    async def unreachable(*_args: object) -> None:
+        raise ConnectionError("the database went away")
+
+    monkeypatch.setattr("app.create.settle", unreachable)
+    with pytest.raises(ConnectionError):
+        on_app_loop(client, lambda: creator().write(org, plan.id, [], user, final=False))
+    assert plan_of(client, org, user, plan.videoId).status == "analyzing"
+    with pytest.raises(ConnectionError):
+        on_app_loop(client, lambda: creator().write(org, plan.id, [], user))
     failed = plan_of(client, org, user, plan.videoId)
     assert (failed.status, failed.error) == ("failed", "DIRECTOR_CREATE_FAILED")
 

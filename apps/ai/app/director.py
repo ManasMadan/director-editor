@@ -1026,8 +1026,11 @@ class Director:
         if take is None:
             # The file is someone else's take: apps/api only hands over the caller's own.
             raise AppError("DIRECTOR_TAKE_NOT_FOUND")
-        if made is None:
+        if made is None and take.status != "pending":
             return take
+        # Queued for a take just made, and again for one still waiting for its review: its
+        # add may have been lost on the way to the queue (the caller retries the whole
+        # add), and the job id is the take's, so a review already queued isn't run twice.
         await self._queue.add_review(
             take.id, org_id, body.sourceUrl, request_id=request_id, user_id=user_id
         )
@@ -1419,7 +1422,9 @@ class Director:
         )
         if reservation is None:
             raise AppError("AI_BUDGET_EXCEEDED")
-        used = TokenUsage(inputTokens=0, outputTokens=0)
+        # Unknown until the run says: a failure past Gemini's answer (OpenCV on frames it
+        # can't read) counts the whole reservation, as an index whose usage is unknown does.
+        used = TokenUsage(inputTokens=reservation.tokens, outputTokens=0)
         try:
             result = await self._aligner.align(
                 AlignRequest(
@@ -1661,7 +1666,7 @@ def create_asset_maker(settings: Settings, redis: Redis) -> AssetMaker | None:
                     settings.veo_location,
                 ),
             )
-            if settings.veo_model
+            if settings.veo_enabled
             else None
         ),
         per_clip=settings.director_tokens_per_clip,

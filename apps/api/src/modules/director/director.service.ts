@@ -78,6 +78,7 @@ import {
 import { chatTurnDetail } from "./chat-turn";
 import { seedAssetImages, seedMediaKeys, withMediaLinks, withSeedAssets } from "./seed-media";
 import { shotsOf } from "./shots";
+import { storyboardState } from "./storyboards";
 
 // The review job reads the take with it, maybe behind a backlog and after minutes of
 // retries (packages/jobs says how long that can take).
@@ -129,13 +130,15 @@ const wirePlan = directorPlanSchema.omit({ audio: true, plan: true }).extend({
       }),
     )
     .default([]),
-  // A created plan's storyboard cards, by shot; none for any other plan.
+  // A created plan's storyboard cards, by shot; none for any other plan. An AI service
+  // from before card errors reports none.
   storyboards: z
     .array(
       z.object({
         shotIndex: z.number().int(),
         status: z.enum(["pending", "generating", "ready", "failed"]),
         objectKey: z.string().nullable(),
+        error: z.string().nullable().default(null),
       }),
     )
     .default([]),
@@ -619,7 +622,8 @@ export class DirectorService {
 
   /**
    * A created plan with a link to each shot's storyboard card that's drawn, signed only
-   * where a card of the plan's own may be stored.
+   * where a card of the plan's own may be stored, and the state of each that isn't
+   * (still drawing, or why it isn't coming).
    */
   private async withStoryboards(
     planId: string,
@@ -638,11 +642,16 @@ export class DirectorService {
         }
       }),
     );
+    const states = new Map(storyboards.map((card) => [card.shotIndex, storyboardState(card)]));
     return {
       ...shotPlan,
       shots: shotPlan.shots.map((shot, index) => {
         const storyboardUrl = links.get(index);
-        return storyboardUrl ? { ...shot, storyboardUrl } : shot;
+        if (storyboardUrl) {
+          return { ...shot, storyboardUrl };
+        }
+        const storyboardState = states.get(index);
+        return storyboardState ? { ...shot, storyboardState } : shot;
       }),
     };
   }

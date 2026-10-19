@@ -117,3 +117,32 @@ def test_the_pass_adds_an_attempt_once_however_often_it_runs(client: TestClient)
     assert len(queued.clips) == 2
     on_app_loop(client, lambda: recordings.done(session_id))
     assert joined.removed == [f"recordings/{session_id}/0/whole"]
+
+
+def test_an_attempt_the_pass_added_but_never_queued_is_queued_on_the_next_run(
+    client: TestClient,
+) -> None:
+    """A run of the pass that added an attempt and then failed before queuing it (the
+    queue unreachable a moment): the next run sees it among the known attempts, so it isn't
+    added again, and it would never be cut. It's queued then; the queue's job id is the
+    attempt's, so one queued already isn't cut twice."""
+    org, user = new_org()
+    session_id = done_session(org, user)
+    attempts: dict[tuple[str, str], UUID] = {}
+    for number, (status, origin) in enumerate(
+        [("clipped", "shoot"), ("clipping", "pass"), ("clipped", "pass")], start=1
+    ):
+        [(attempt_id,)] = as_org(
+            org,
+            """INSERT INTO app.recording_attempt (org_id, session_id, number, shot_index,
+                 part_index, start_ms, end_ms, status, origin, updated_at)
+               VALUES (%s, %s, %s, 0, 0, %s, %s, %s, %s, now()) RETURNING id""",
+            (org, session_id, number, number * 2_000, number * 2_000 + 1_500, status, origin),
+        )
+        assert isinstance(attempt_id, UUID)
+        attempts[status, origin] = attempt_id
+    queued = Queued()
+    footage = on_app_loop(client, lambda: DbRecordings(Joined(), queued).footage(org, session_id))
+    assert footage is not None
+    assert len(footage.known) == 3
+    assert queued.clips == [attempts["clipping", "pass"]]

@@ -511,7 +511,7 @@ function NotReady({
   return step === "failed" ? (
     <Failed plan={plan} />
   ) : (
-    <IndexProgress step={step} className="p-10" />
+    <IndexProgress step={step} since={plan.updatedAt} className="p-10" />
   );
 }
 

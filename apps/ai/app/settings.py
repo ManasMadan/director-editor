@@ -152,10 +152,13 @@ class Settings(GeminiSettings):
     director_tokens_per_revise: int = Field(
         default=30_000, ge=2_000, alias="DIRECTOR_TOKENS_PER_REVISE"
     )
-    # Veo clips for the gaps of a member's video (app/clips.py), by its short name; empty
-    # turns clips off (a gap's Create tab then draws stills). Each clip is counted against
-    # the workspace's allowance as this many tokens, standing for its price by the second.
-    veo_model: str = Field(default="veo-3.1-lite-generate-001", alias="VEO_MODEL")
+    # Veo clips for the gaps of a member's video (app/clips.py), by its short name. Each
+    # clip is counted against the workspace's allowance as this many tokens, standing for
+    # its price by the second. VEO_ENABLED=false turns clips off (a gap's Create tab then
+    # draws stills): an empty VEO_MODEL can't, since an empty setting reads as unset here
+    # (env_ignore_empty), so as the default model.
+    veo_enabled: bool = Field(default=True, alias="VEO_ENABLED")
+    veo_model: str = Field(default="veo-3.1-lite-generate-001", min_length=1, alias="VEO_MODEL")
     # Where Veo is served from on Vertex (not "global", where the Gemini models are).
     veo_location: str = Field(default="us-central1", min_length=1, alias="VEO_LOCATION")
     director_tokens_per_clip: int = Field(

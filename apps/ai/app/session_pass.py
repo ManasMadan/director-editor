@@ -20,20 +20,30 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 from uuid import UUID
 
+from google.genai.types import MediaResolution
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, VideoUrl
 from pydantic_ai.models import Model
-from pydantic_ai.settings import ModelSettings
+from pydantic_ai.models.google import GoogleModelSettings
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from app.errors import AppError
+from app.indexing import retryable
 from app.log import log
 from app.schemas import MAX_SHOT_SECONDS, REASON_MAX_LENGTH, ShotPlan
 from app.usage import Reservation
 
-# Ten minutes of footage at low media resolution is roughly 60 to 100 thousand tokens
-# (the spec's cost table); this leaves room for the plan, the log and the answer.
-PASS_TOKENS = 150_000
+# The footage is watched at low media resolution: a frame a second at about 70 tokens,
+# and the sound at 32 a second, so about a hundred a second, with room to spare. The
+# plan, the live marks, the thinking and the answer come on top. A run is billed before
+# its cap is checked (app/usage.py), so the reservation is sized from the footage's
+# length and reserved whole: a fixed guess that a long session runs over is a pass paid
+# for and then failed.
+PASS_TOKENS_PER_SECOND = 120
+PASS_OVERHEAD_TOKENS = 40_000
+# The most one pass may spend: about 50 minutes of footage. A longer session is left as
+# the live marks made it, before anything is spent.
+PASS_MAX_TOKENS = 400_000
 # The whole recording is watched unattended; a long call is fine, an endless one isn't.
 PASS_TIMEOUT_SECONDS = 300.0
 # A found stretch overlapping a marked attempt by at least this share of the shorter of
@@ -274,6 +284,12 @@ def pass_prompt(footage: SessionFootage) -> list[str | VideoUrl]:
     return prompt
 
 
+def pass_tokens(footage_ms: int) -> int:
+    """What a pass over this much footage may spend (see PASS_TOKENS_PER_SECOND)."""
+    return footage_ms * PASS_TOKENS_PER_SECOND // 1000 + PASS_OVERHEAD_TOKENS
+
+
+# Reserves exactly this many tokens, or nothing (the pass needs the whole of it).
 type Reserve = Callable[[UUID, UUID | None, int], Awaitable[Reservation | None]]
 type Settle = Callable[[Reservation, int, int], Awaitable[None]]
 # Tells the workspace's open screens that its takes changed.
@@ -290,12 +306,20 @@ class GeminiWatcher:
             model,
             output_type=PassFindings,
             instructions=RECORDING_INSTRUCTIONS,
-            model_settings=ModelSettings(thinking="medium", timeout=PASS_TIMEOUT_SECONDS),
+            model_settings=GoogleModelSettings(
+                thinking="medium",
+                timeout=PASS_TIMEOUT_SECONDS,
+                google_video_resolution=MediaResolution.MEDIA_RESOLUTION_LOW,
+            ),
             defer_model_check=True,
         )
 
     async def watch(self, org_id: UUID, footage: SessionFootage) -> list[FoundAttempt]:
-        reservation = await self._reserve(org_id, footage.user_id, PASS_TOKENS)
+        needed = pass_tokens(sum(part.duration_ms for part in footage.parts))
+        if needed > PASS_MAX_TOKENS:
+            log.warning("a session too long for the pass", tokens=needed)
+            return []
+        reservation = await self._reserve(org_id, footage.user_id, needed)
         if reservation is None:
             raise AppError("AI_BUDGET_EXCEEDED")
         usage = RunUsage()
@@ -321,16 +345,17 @@ class SessionPass:
         self._sink = sink
         self._changed = changed
 
-    async def run(self, org_id: UUID, session_id: UUID) -> tuple[int, int]:
+    async def run(self, org_id: UUID, session_id: UUID, *, final: bool = True) -> tuple[int, int]:
         """Goes through the session; returns how many attempts it added and re-cut. A
-        session with nothing to go through, or a workspace out of allowance, is left as
-        the live marks made it: the editor works from those either way."""
+        session with nothing to go through, a workspace out of allowance, or a watch that
+        failed for good is left as the live marks made it: the editor works from those
+        either way. An outage is raised for the job to retry, until its `final` attempt."""
         try:
-            return await self._go_through(org_id, session_id)
+            return await self._go_through(org_id, session_id, final)
         finally:
             await self._source.done(session_id)
 
-    async def _go_through(self, org_id: UUID, session_id: UUID) -> tuple[int, int]:
+    async def _go_through(self, org_id: UUID, session_id: UUID, final: bool) -> tuple[int, int]:
         footage = await self._source.footage(org_id, session_id)
         if footage is None or not footage.parts:
             return 0, 0
@@ -338,6 +363,16 @@ class SessionPass:
             found = await self._watcher.watch(org_id, footage)
         except AppError as error:
             log.warning("post-session pass skipped", session_id=str(session_id), code=error.code)
+            return 0, 0
+        except Exception as error:
+            # A refusal or an answer over its cap is the same next time: not retried.
+            if retryable(error) and not final:
+                raise
+            log.warning(
+                "post-session pass failed",
+                session_id=str(session_id),
+                error=type(error).__name__,
+            )
             return 0, 0
         new, moved = reconcile(found, footage)
         for attempt in new:
