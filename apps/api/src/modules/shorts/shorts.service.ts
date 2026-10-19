@@ -6,7 +6,7 @@
  */
 import { Injectable } from "@nestjs/common";
 import { SHORT_MAX_SECONDS } from "@repo/contracts/api";
-import type { VideoId } from "@repo/contracts/ids";
+import { type VideoId, videoIdFromLink } from "@repo/contracts/ids";
 import { HOUR_S } from "@repo/contracts/time";
 import { AppError, CacheService, InjectRedis, type Redis } from "@repo/nest-common";
 import type * as z from "zod";
@@ -15,7 +15,6 @@ import {
   type Credit,
   creditSchema,
   type Video,
-  videoIdFromLink,
   videoSchema,
   YouTube,
   YouTubeError,

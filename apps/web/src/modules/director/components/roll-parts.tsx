@@ -99,7 +99,7 @@ export function PausedVeil({ onResume }: { onResume: () => void }) {
   }, [onResume]);
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-studio/60 p-8 text-center backdrop-grayscale">
-      <p className="max-w-xs text-[15px] font-semibold">{t("pausedBody")}</p>
+      <p className="max-w-xs text-[0.9375rem] font-semibold">{t("pausedBody")}</p>
       <button
         type="button"
         onClick={onResume}

@@ -348,7 +348,7 @@ function StoryboardCard({
           </button>
         ) : null}
       </div>
-      <figcaption className="text-[11px] leading-snug text-studio-foreground/60">
+      <figcaption className="text-[0.6875rem] leading-snug text-studio-foreground/60">
         {clip ? t("previewBy") : t("storyboardBy")}
       </figcaption>
     </figure>

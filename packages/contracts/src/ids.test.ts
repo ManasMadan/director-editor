@@ -1,5 +1,34 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { type OrgId, orgIdSchema, type TodoId, type UserId, userIdSchema } from "./ids";
+import {
+  type OrgId,
+  orgIdSchema,
+  type TodoId,
+  type UserId,
+  userIdSchema,
+  videoIdFromLink,
+} from "./ids";
+
+describe("a pasted link", () => {
+  it.each([
+    ["dQw4w9WgXcQ", "dQw4w9WgXcQ"],
+    ["  https://www.youtube.com/shorts/dQw4w9WgXcQ  ", "dQw4w9WgXcQ"],
+    ["HTTPS://M.YOUTUBE.COM/embed/dQw4w9WgXcQ", "dQw4w9WgXcQ"],
+    ["youtube.com/watch?v=dQw4w9WgXcQ&t=10", "dQw4w9WgXcQ"],
+    ["http://youtu.be/dQw4w9WgXcQ?si=abc", "dQw4w9WgXcQ"],
+  ])("finds the video in %s", (link, expected) => {
+    expect(videoIdFromLink(link)).toBe(expected);
+  });
+
+  it.each([
+    ["not a link at all"],
+    ["https://example.com/watch?v=dQw4w9WgXcQ"],
+    ["https://www.youtube.com/watch"],
+    ["https://youtu.be/"],
+    ["https://www.youtube.com/shorts/too-short"],
+  ])("finds nothing in %s", (link) => {
+    expect(videoIdFromLink(link)).toBeNull();
+  });
+});
 
 describe("branded ids", () => {
   // The type checker runs these: without the brands every id is a plain string and

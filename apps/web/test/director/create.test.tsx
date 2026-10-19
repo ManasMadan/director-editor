@@ -1,18 +1,42 @@
 /**
- * Describing a template of your own: the brief survives a reload, and a turn Director
- * couldn't answer is taken back so the talk never has two of the member's in a row.
+ * Describing a template of your own: the brief survives a reload, a turn Director
+ * couldn't answer is taken back so the talk never has two of the member's in a row, and
+ * the talk with Director stays in view while it thinks.
  */
-import { afterEach, describe, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { commands, userEvent } from "vitest/browser";
 import { CreatePage } from "@/modules/director";
 import { cleanup, renderPage } from "../render";
 import { signUp } from "../users";
 
 afterEach(() => {
   window.sessionStorage.clear();
+  vi.restoreAllMocks();
 });
 
 const openCreate = () => renderPage(<CreatePage />, { url: "/create" });
+
+/** Director's next turn, as the API answers it. */
+const answers = (reply: string) =>
+  commands.failRequests("/rpc/director/brainstorm", {
+    status: 200,
+    body: { json: { reply, ready: false, questionsLeft: 2 } },
+  });
+
+/** Whether a status named `name` was ever shown, from now on. */
+function watchFor(name: string) {
+  let seen = false;
+  const observer = new MutationObserver(() => {
+    seen ||= [...document.querySelectorAll("[role=status]")].some(
+      (status) => status.getAttribute("aria-label") === name && status.textContent?.includes(name),
+    );
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  return () => {
+    observer.disconnect();
+    return seen;
+  };
+}
 
 describe("describing your own", () => {
   it("keeps the idea and the talk in this tab, for the member who wrote them", async () => {
@@ -56,5 +80,25 @@ describe("describing your own", () => {
     // Only Director's question is left in the talk.
     expect(talk.getByRole("listitem").elements()).toHaveLength(1);
     await expect.element(answer).toHaveValue("By the window");
+  });
+});
+
+describe("talking an idea through", () => {
+  it("says Director is thinking from the first question, and keeps the talk in view", async () => {
+    await signUp();
+    await answers("Hands only, or you on camera too?");
+    const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView");
+    const page = await openCreate();
+    await userEvent.fill(page.getByLabelText("Your idea"), "My morning coffee, no talking");
+    const seen = watchFor("Director is thinking…");
+    await userEvent.click(page.getByRole("button", { name: "Talk it through" }));
+    await expect
+      .element(page.getByText("Hands only, or you on camera too?", { exact: false }))
+      .toBeVisible();
+    // Words with the loader, not a greyed button alone, while the first question comes.
+    expect(seen()).toBe(true);
+    // The question and the answer field under it are brought into view.
+    await expect.poll(() => scroll.mock.calls.length).toBeGreaterThan(0);
+    await expect.element(page.getByLabelText("Your answer")).toBeVisible();
   });
 });

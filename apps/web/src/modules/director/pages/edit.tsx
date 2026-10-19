@@ -403,7 +403,7 @@ function TopBar({
   const t = useTranslations("director");
   const common = useTranslations("common");
   return (
-    <header className="flex items-center gap-3 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 lg:col-span-2 lg:px-6">
+    <header className="flex items-center gap-3 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 short-landscape:col-span-2 lg:col-span-2 lg:px-6">
       {/* Leaving mid-save stops it (useSaveVideo), so the way out stays open. */}
       <Link
         href={`/director/${videoId}`}
@@ -456,7 +456,7 @@ function IconButton({
       aria-pressed={pressed}
       aria-label={label}
       className={cn(
-        "flex size-11 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-30",
+        "flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-studio-foreground/10 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent",
         pressed && "bg-studio-foreground/15",
       )}
     >
@@ -472,7 +472,7 @@ function Transport({ editor }: { editor: EditorState }) {
   const toggle = (next: Tool) => setTool(tool === next ? null : next);
   const SoundIcon = history.choices.sound ? AudioLines : VolumeX;
   return (
-    <div className="flex items-center gap-1 px-3 py-1">
+    <div className="flex flex-wrap items-center gap-1 px-3 py-1">
       <IconButton
         label={playback.playing ? t("pause") : t("play")}
         onClick={playback.playing ? playback.pause : playback.play}
@@ -483,7 +483,7 @@ function Transport({ editor }: { editor: EditorState }) {
           <Play className="size-6 fill-current" aria-hidden />
         )}
       </IconButton>
-      <p className="font-mono text-sm tabular-nums">
+      <p className="font-mono text-sm whitespace-nowrap tabular-nums">
         <span>{timecode(playback.time)}</span>
         <span className="text-studio-foreground/50"> / {timecode(total)}</span>
       </p>
@@ -797,7 +797,7 @@ function BoardPanel({
   const t = useTranslations("director");
   const { playback, history, clips, media } = editor;
   return (
-    <div className="flex h-[42dvh] min-h-64 shrink-0 flex-col gap-2 border-t border-studio-foreground/10 pt-3 lg:h-auto lg:min-h-0 lg:border-t-0 lg:border-l lg:pt-4">
+    <div className="flex h-[42dvh] min-h-64 shrink-0 flex-col gap-2 border-t border-studio-foreground/10 pt-3 short-landscape:h-auto short-landscape:min-h-0 short-landscape:border-t-0 short-landscape:border-l lg:h-auto lg:min-h-0 lg:border-t-0 lg:border-l lg:pt-4">
       {editor.left > 0 ? (
         <p className="px-4 text-xs text-studio-foreground/60">
           {t("review.left", { count: editor.left })}
@@ -912,7 +912,9 @@ function Editor({
     });
   };
   return (
-    <div className="flex h-dvh flex-col lg:grid lg:grid-cols-[minmax(20rem,28rem)_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)]">
+    // Side by side on a laptop, and on a phone held sideways, where a stacked player
+    // shrank to a dot under the board.
+    <div className="flex h-dvh flex-col short-landscape:grid short-landscape:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] short-landscape:grid-rows-[auto_minmax(0,1fr)] lg:grid lg:grid-cols-[minmax(20rem,28rem)_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)]">
       <TopBar
         videoId={videoId}
         title={plan.title}

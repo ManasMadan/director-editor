@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { page as browser, commands, userEvent } from "vitest/browser";
 import { authClient } from "@/lib/auth-client";
 import { SiteHeader } from "@/modules/shell";
-import { currentUrl, renderPage } from "../render";
+import { cleanup, currentUrl, renderPage } from "../render";
 import { auth, signIn, signUp } from "../users";
 
 describe("the site header", () => {
@@ -100,6 +100,20 @@ describe("the site header", () => {
       .toBeTruthy();
   });
 
+  it("keeps Director's pages dark, with no theme toggle that would do nothing there", async () => {
+    await signUp();
+    localStorage.setItem("theme", "light");
+    const library = await renderPage(<SiteHeader />, { url: "/library" });
+    await expect.element(library.getByRole("link", { name: "My media" })).toBeVisible();
+    await expect.poll(() => document.documentElement.classList.contains("dark")).toBe(true);
+    expect(library.getByRole("button", { name: "Toggle theme" }).query()).toBeNull();
+    cleanup();
+    const settings = await renderPage(<SiteHeader />, { url: "/settings" });
+    await expect.element(settings.getByRole("button", { name: "Toggle theme" })).toBeVisible();
+    await expect.poll(() => document.documentElement.classList.contains("dark")).toBe(false);
+    localStorage.removeItem("theme");
+  });
+
   it("tells a demo guest their demo lasts a day, not their made-up address", async () => {
     await auth("/sign-in/guest", {});
     const page = await renderPage(<SiteHeader />, { url: "/library" });
@@ -114,7 +128,8 @@ describe("the site header", () => {
     await signUp();
     await browser.viewport(360, 780);
     try {
-      const page = await renderPage(<SiteHeader />, { url: "/library" });
+      // Settings: the busiest header, with the theme toggle too.
+      const page = await renderPage(<SiteHeader />, { url: "/settings" });
       const skip = page.getByRole("link", { name: "Skip to content" });
       await expect.element(skip).toHaveAttribute("href", "#main");
       const header = page.getByRole("banner").element();

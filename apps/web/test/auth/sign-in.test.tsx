@@ -186,6 +186,13 @@ describe("sign in", () => {
     await expect
       .element(page.getByTestId("captcha"))
       .toHaveAttribute("data-appearance", "interaction-only");
+    // In the page's own theme, not a light box whatever the page.
+    await expect
+      .element(page.getByTestId("captcha"))
+      .toHaveAttribute(
+        "data-theme",
+        document.documentElement.classList.contains("dark") ? "dark" : "light",
+      );
     const start = card.getByRole("button", { name: "Use the demo" });
     await expect.element(start).toBeEnabled();
     await userEvent.click(start);
@@ -295,9 +302,23 @@ describe("sign in", () => {
     await expect.element(card.getByText(DEMO.password)).toBeVisible();
     await expect.element(page.getByLabelText("Email")).toHaveValue("");
 
-    await userEvent.click(card.getByRole("button", { name: "Use demo account" }));
-    await expect.element(page.getByLabelText("Email")).toHaveValue(DEMO.email);
-    await expect.element(page.getByLabelText("Password")).toHaveValue(DEMO.password);
+    // Its email on a line of its own, whole: side by side with its label it broke mid-word.
+    const email = card.getByText(DEMO.email).element().getBoundingClientRect();
+    expect(email.height).toBeLessThan(30);
+  });
+
+  it("signs in to the shared demo account in one tap", async () => {
+    // The account the API keeps for the demo, made here as a member would be.
+    await signUp({ email: DEMO.email, password: DEMO.password, name: "Director Demo" });
+    await signOut();
+    await serveSystemInfo((info) => {
+      info.features.demoGuests = false;
+    });
+    const page = await renderPage(<SignInPage />, { url: "/sign-in?next=/media" });
+    const card = page.getByRole("region", { name: "Try Director with the demo account" });
+    await userEvent.click(card.getByRole("button", { name: "Sign in to the demo" }));
+    await expect.poll(currentUrl).toBe("/media");
+    expect((await currentSession()).user.email).toBe(DEMO.email);
   });
 
   it("fills the form with the shared demo account from ?demo=1 when guests are off", async () => {

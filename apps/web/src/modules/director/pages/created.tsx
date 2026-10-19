@@ -4,12 +4,14 @@ import { errorCode, useApiErrorMessage } from "@repo/client";
 import { useEditPlanMutation } from "@repo/client/api/director/edit-plan";
 import { useDirectorPlanQuery } from "@repo/client/api/director/plan";
 import { DIRECTOR_MAX_SHOTS, type DirectorPlan, type ServedShotPlan } from "@repo/contracts/api";
+import { videoIdSchema } from "@repo/contracts/ids";
 import { Button, buttonVariants } from "@repo/ui/components/button";
 import { GeminiLoader, GeminiShimmer } from "@repo/ui/components/gemini-loader";
 import { ArrowDown, ArrowLeft, ArrowUp, CircleAlert, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useEffect, useId, useRef, useState } from "react";
+import { toast } from "sonner";
 import { DirectorGate } from "@/modules/shorts";
 import { moved, newShot, type ShotDraft, shotsValid } from "../lib/created";
 
@@ -114,7 +116,13 @@ function ShotCard({
             className="size-full object-cover"
           />
         ) : (
-          <GeminiShimmer className="absolute inset-0 rounded-none bg-transparent" />
+          // Said, not just shimmered: an empty gradient read as a broken picture.
+          <>
+            <GeminiShimmer className="absolute inset-0 rounded-none bg-transparent" />
+            <span className="absolute inset-x-1 bottom-1.5 text-center text-[0.65rem] leading-tight text-studio-foreground/80">
+              {t("drawing")}
+            </span>
+          </>
         )}
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-2">
@@ -143,29 +151,79 @@ function ShotCard({
           maxLength={SCENE_MAX_LENGTH}
           rows={2}
           onChange={(event) => onChange({ ...shot, scene: event.target.value })}
-          className="rounded-xl border border-studio-foreground/20 bg-studio p-3 text-sm"
+          // Grows with what's in it, where the browser can: two rows cut a long place mid-word.
+          className="field-sizing-content min-h-18 rounded-xl border border-studio-foreground/20 bg-studio p-3 text-sm"
         />
-        <label htmlFor={`${id}-seconds`} className="text-xs text-studio-foreground/70">
-          {t("seconds")}
-        </label>
-        <input
+        <SecondsField
           id={`${id}-seconds`}
-          type="number"
-          inputMode="decimal"
-          min={SHOT_MIN_SECONDS}
-          max={SHOT_MAX_SECONDS}
-          step={0.5}
-          value={shot.durationSeconds}
-          onChange={(event) => {
-            const seconds = Number(event.target.value);
-            if (seconds >= SHOT_MIN_SECONDS && seconds <= SHOT_MAX_SECONDS) {
-              onChange({ ...shot, durationSeconds: seconds });
-            }
-          }}
-          className="h-11 w-24 rounded-xl border border-studio-foreground/20 bg-studio px-3 text-sm"
+          seconds={shot.durationSeconds}
+          onChange={(durationSeconds) => onChange({ ...shot, durationSeconds })}
         />
       </div>
     </li>
+  );
+}
+
+/**
+ * A shot's length: what the member types stays in the field, and one out of range says
+ * the range instead of snapping back without a word. Only a length in range is kept.
+ */
+function SecondsField({
+  id,
+  seconds,
+  onChange,
+}: {
+  id: string;
+  seconds: number;
+  onChange: (seconds: number) => void;
+}) {
+  const t = useTranslations("create.plan");
+  const [typed, setTyped] = useState(String(seconds));
+  // A card shows another shot once shots move or go: its length replaces what was typed
+  // (React's update-while-rendering), unless it's the length being typed ("5." is 5).
+  const [shown, setShown] = useState(seconds);
+  if (seconds !== shown) {
+    setShown(seconds);
+    if (seconds !== Number(typed)) {
+      setTyped(String(seconds));
+    }
+  }
+  const value = Number(typed);
+  const inRange = typed.trim() !== "" && value >= SHOT_MIN_SECONDS && value <= SHOT_MAX_SECONDS;
+  return (
+    <>
+      <label htmlFor={id} className="text-xs text-studio-foreground/70">
+        {t("seconds")}
+      </label>
+      <input
+        id={id}
+        type="number"
+        inputMode="decimal"
+        min={SHOT_MIN_SECONDS}
+        max={SHOT_MAX_SECONDS}
+        step={0.5}
+        value={typed}
+        aria-invalid={!inRange}
+        aria-describedby={inRange ? undefined : `${id}-range`}
+        onChange={(event) => {
+          setTyped(event.target.value);
+          const next = Number(event.target.value);
+          if (
+            event.target.value.trim() !== "" &&
+            next >= SHOT_MIN_SECONDS &&
+            next <= SHOT_MAX_SECONDS
+          ) {
+            onChange(next);
+          }
+        }}
+        className="h-11 w-24 rounded-xl border border-studio-foreground/20 bg-studio px-3 text-sm aria-invalid:border-studio-error"
+      />
+      {inRange ? null : (
+        <p id={`${id}-range`} className="text-xs text-studio-error">
+          {t("secondsRange", { min: SHOT_MIN_SECONDS, max: SHOT_MAX_SECONDS, saved: seconds })}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -243,8 +301,16 @@ function Editor({ plan }: { plan: DirectorPlan & { plan: ServedShotPlan } }) {
   const errorMessage = useApiErrorMessage();
   const { shots, change, dirty, edit } = useAutosave(plan);
   const valid = shotsValid(shots);
+  // A shot deleted by mistake comes back from the toast, text and all.
+  const remove = (index: number) => {
+    change(shots.filter((_, at) => at !== index));
+    toast(t("removed", { index: index + 1 }), {
+      action: { label: t("undo"), onClick: () => change(shots) },
+    });
+  };
   return (
-    <div className="flex flex-col gap-4 px-4 pt-2 pb-36">
+    // Whatever takes focus scrolls clear of the bar fixed at the foot of the screen.
+    <div className="group/editor flex flex-col gap-4 px-4 pt-2 pb-44 [&_:is(input,textarea,button)]:scroll-mb-48">
       <div className="flex flex-col gap-1">
         <h2 className="text-2xl font-semibold tracking-tight">{plan.plan.title}</h2>
         <p className="text-sm text-studio-foreground/70">{plan.plan.summary}</p>
@@ -260,7 +326,7 @@ function Editor({ plan }: { plan: DirectorPlan & { plan: ServedShotPlan } }) {
             count={shots.length}
             onChange={(next) => change(shots.map((each, at) => (at === index ? next : each)))}
             onMove={(by) => change(moved(shots, index, by))}
-            onRemove={() => change(shots.filter((_, at) => at !== index))}
+            onRemove={() => remove(index)}
           />
         ))}
       </ol>
@@ -281,26 +347,48 @@ function Editor({ plan }: { plan: DirectorPlan & { plan: ServedShotPlan } }) {
           {errorMessage(edit.error)}
         </p>
       ) : null}
-      <div className="fixed inset-x-0 bottom-0 z-10 flex flex-col gap-2 bg-linear-to-t from-studio via-studio/95 to-transparent px-4 pt-10 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-        <SaveState dirty={dirty} valid={valid} saved={edit.isSuccess} />
-        {/* Not until every change is in: the shoot reads the saved shots. */}
-        {dirty || !valid ? (
-          <Button
-            className="mx-auto flex h-14 w-full max-w-lg rounded-full text-lg font-bold"
-            disabled
-          >
-            {t("shoot")}
-          </Button>
-        ) : (
-          <Link
-            href={`/director/${plan.videoId}`}
-            className="mx-auto flex w-full max-w-lg items-center justify-center gap-2.5 rounded-full bg-record py-4 text-lg font-bold text-record-foreground shadow-xl"
-          >
-            <span className="size-3.5 rounded-full bg-record-foreground" aria-hidden />
-            {t("shoot")}
-          </Link>
-        )}
-      </div>
+      <ShootBar videoId={plan.videoId} dirty={dirty} valid={valid} saved={edit.isSuccess} />
+    </div>
+  );
+}
+
+/**
+ * The bar at the foot of the screen: where the changes stand, and on to the shoot once
+ * they're all saved. On a phone it steps aside while a field has focus, so the keyboard
+ * and the bar together don't leave a sliver of page to type in.
+ */
+function ShootBar({
+  videoId,
+  dirty,
+  valid,
+  saved,
+}: {
+  videoId: string;
+  dirty: boolean;
+  valid: boolean;
+  saved: boolean;
+}) {
+  const t = useTranslations("create.plan");
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-10 flex flex-col gap-2 bg-linear-to-t from-studio via-studio/95 to-transparent px-4 pt-10 pb-[max(1.25rem,env(safe-area-inset-bottom))] pointer-coarse:group-has-[:is(input,textarea):focus]/editor:hidden">
+      <SaveState dirty={dirty} valid={valid} saved={saved} />
+      {/* Not until every change is in: the shoot reads the saved shots. */}
+      {dirty || !valid ? (
+        <Button
+          className="mx-auto flex h-14 w-full max-w-lg rounded-full text-lg font-bold"
+          disabled
+        >
+          {t("shoot")}
+        </Button>
+      ) : (
+        <Link
+          href={`/director/${videoId}`}
+          className="mx-auto flex w-full max-w-lg items-center justify-center gap-2.5 rounded-full bg-record py-4 text-lg font-bold text-record-foreground shadow-xl"
+        >
+          <span className="size-3.5 rounded-full bg-record-foreground" aria-hidden />
+          {t("shoot")}
+        </Link>
+      )}
     </div>
   );
 }
@@ -338,11 +426,36 @@ function Waiting({ plan, error }: { plan: DirectorPlan | undefined; error: unkno
   );
 }
 
+/**
+ * Not a template the member described: a starter or an indexed Short (whose shots are the
+ * original's, not theirs to rewrite), or a link that can't be a template at all.
+ */
+function NotDescribed({ videoId }: { videoId: string | null }) {
+  const t = useTranslations("create.plan");
+  return (
+    <div className="flex flex-col items-center gap-4 p-8 text-center">
+      <p role="alert" className="max-w-sm text-sm text-studio-foreground/80">
+        {videoId ? t("notDescribed") : t("notFound")}
+      </p>
+      <Link
+        href={videoId ? `/director/${videoId}` : "/create"}
+        className={buttonVariants({ variant: "secondary" })}
+      >
+        {videoId ? t("openTemplate") : t("again")}
+      </Link>
+    </div>
+  );
+}
+
 function Created({ videoId }: { videoId: string }) {
   const plan = useDirectorPlanQuery(videoId);
   const current = plan.data;
   if (current?.status === "ready" && current.plan) {
-    return <Editor plan={{ ...current, plan: current.plan }} />;
+    return current.source === "created" ? (
+      <Editor plan={{ ...current, plan: current.plan }} />
+    ) : (
+      <NotDescribed videoId={videoId} />
+    );
   }
   return <Waiting plan={current} error={plan.error} />;
 }
@@ -353,7 +466,12 @@ export function CreatedPage({ videoId }: { videoId: string }) {
     <DirectorGate>
       <div className="mx-auto max-w-lg">
         <Header />
-        <Created videoId={videoId} />
+        {/* A link whose id can't be a template's: said plainly, without asking the API. */}
+        {videoIdSchema.safeParse(videoId).success ? (
+          <Created videoId={videoId} />
+        ) : (
+          <NotDescribed videoId={null} />
+        )}
       </div>
     </DirectorGate>
   );

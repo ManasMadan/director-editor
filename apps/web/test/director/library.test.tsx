@@ -197,7 +197,7 @@ describe("indexing a short of your own", () => {
 
     await userEvent.fill(link(), `https://youtu.be/${newVideoId()}`);
     await userEvent.click(page.getByRole("button", { name: "Index it" }));
-    const dialog = page.getByRole("dialog", { name: "You've used your AI credit" });
+    const dialog = page.getByRole("dialog", { name: "You've already added your own Short" });
     await expect.element(dialog).toBeVisible();
     await expect
       .element(dialog.getByRole("link", { name: "Office GRWM" }))
@@ -224,10 +224,30 @@ describe("indexing a short of your own", () => {
     await expect.poll(currentUrl).toBe(`/director/${grwm.videoId}`);
   });
 
-  it("says why a link can't be indexed", async () => {
+  it("says at once when what was pasted isn't a Shorts link, asking the API nothing", async () => {
     await member();
     await showLibrary();
-    await userEvent.fill(link(), "https://example.com/not-youtube");
+    for (const pasted of ["hello", "https://example.com/shorts/abc", "https://www.youtube.com/"]) {
+      await userEvent.fill(link(), pasted);
+      await userEvent.click(page.getByRole("button", { name: "Index it" }));
+      await expect
+        .element(page.getByRole("alert"))
+        .toHaveTextContent(
+          "That isn't a YouTube Shorts link. Copy the link from the Short's Share button and paste it here.",
+        );
+      await expect.element(page.getByRole("textbox")).toHaveAttribute("aria-invalid", "true");
+    }
+    expect(await commands.answeredRequests("/rpc/director/index")).toBe(0);
+    // Typing again clears it.
+    await userEvent.type(link(), "x");
+    expect(page.getByRole("alert").query()).toBeNull();
+  });
+
+  it("says why a link YouTube doesn't have can't be indexed", async () => {
+    await member();
+    await showLibrary();
+    // An id the mock YouTube no longer shows (removed, or made private).
+    await userEvent.fill(link(), "https://youtu.be/GoneVideo01");
     await userEvent.click(page.getByRole("button", { name: "Index it" }));
     await expect
       .element(page.getByRole("alert"))

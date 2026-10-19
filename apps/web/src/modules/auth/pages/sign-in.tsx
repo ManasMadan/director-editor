@@ -100,6 +100,8 @@ export function SignInPage() {
               <Button
                 type="button"
                 variant="outline"
+                // Wraps on a narrow phone rather than running past its own edges.
+                className="h-auto min-h-8 py-1.5 whitespace-normal text-balance"
                 onClick={() => authClient.signIn.social({ provider: "google", callbackURL: next })}
               >
                 {t("auth.googleToPost")}

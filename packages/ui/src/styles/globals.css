@@ -23,6 +23,22 @@
   body {
     @apply bg-background text-foreground;
   }
+  /*
+   * On a touch screen every button (and link drawn as one, which carries the button's
+   * `group/button` class), field and tab is at least 44 px tall, an icon button 44 px
+   * wide too (Apple's 44 pt, near Material's 48 dp): the components' compact sizes suit a
+   * mouse, not a thumb. Kept here rather than in each component, so the components stay
+   * as shadcn ships them and a mouse keeps the compact sizes.
+   */
+  @media (pointer: coarse) {
+    :where(.group\/button, [data-slot="input"], [data-slot="select-trigger"]),
+    :where([data-slot="tabs-trigger"]) {
+      min-height: 44px;
+    }
+    :where(.group\/button):has(> svg:only-child) {
+      min-width: 44px;
+    }
+  }
 }
 
 /*

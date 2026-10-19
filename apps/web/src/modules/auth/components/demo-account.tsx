@@ -44,7 +44,9 @@ export function DemoOffer({ onUse, onSignedIn }: DemoProps) {
   if (system?.features.demoGuests) {
     return <GuestOffer shared={shared} wanted={wanted} onUse={onUse} onSignedIn={onSignedIn} />;
   }
-  return shared ? <SharedOffer demo={shared} wanted={wanted} onUse={onUse} /> : null;
+  return shared ? (
+    <SharedOffer demo={shared} wanted={wanted} onUse={onUse} onSignedIn={onSignedIn} />
+  ) : null;
 }
 
 /**
@@ -117,7 +119,7 @@ function GuestOffer({
         ready={captcha.ready}
         error={guest.state === "failed" ? errorMessage(guest.error) : null}
         onStart={() => void start()}
-        onUse={onUse}
+        onSignedIn={onSignedIn}
       />
       {captcha.widget}
     </div>
@@ -131,8 +133,8 @@ function GuestCard({
   ready,
   error,
   onStart,
-  onUse,
-}: Pick<DemoProps, "onUse"> & {
+  onSignedIn,
+}: Pick<DemoProps, "onSignedIn"> & {
   guest: GuestState;
   shared: DemoAccount | null;
   ready: boolean;
@@ -151,7 +153,7 @@ function GuestCard({
         <p role="alert" className="text-sm">
           {t("auth.demo.fallback")}
         </p>
-        <DemoAccountCard demo={shared} onUse={() => onUse(shared)} />
+        <DemoAccountCard demo={shared} onSignedIn={onSignedIn} />
       </>
     );
   }
@@ -177,7 +179,8 @@ function SharedOffer({
   demo,
   wanted,
   onUse,
-}: Pick<DemoProps, "onUse"> & { demo: DemoAccount; wanted: boolean }) {
+  onSignedIn,
+}: DemoProps & { demo: DemoAccount; wanted: boolean }) {
   // Once: a later refetch of system.info mustn't overwrite what the person typed since.
   const filled = useRef(false);
   useEffect(() => {
@@ -186,25 +189,49 @@ function SharedOffer({
       onUse(demo);
     }
   }, [wanted, demo, onUse]);
-  return <DemoAccountCard demo={demo} onUse={() => onUse(demo)} />;
+  return <DemoAccountCard demo={demo} onSignedIn={onSignedIn} />;
 }
 
-/** The demo account's email and password in plain sight, and a button that uses them. */
-function DemoAccountCard({ demo, onUse }: { demo: DemoAccount; onUse: () => void }) {
+/**
+ * The demo account's email and password in plain sight, and a button that signs in with
+ * them in one tap (they're in the form too, for whoever would rather press Sign in).
+ */
+function DemoAccountCard({ demo, onSignedIn }: { demo: DemoAccount; onSignedIn: () => void }) {
   const t = useTranslations();
+  const errorMessage = useAuthErrorMessage();
+  const [state, setState] = useState<{ busy: boolean; error: unknown }>({
+    busy: false,
+    error: null,
+  });
+  const signIn = async () => {
+    setState({ busy: true, error: null });
+    const { error } = await authClient.signIn.email(demo);
+    if (!error) {
+      onSignedIn();
+      return;
+    }
+    setState({ busy: false, error });
+  };
   return (
     <DemoCard
       title={t("auth.demo.title")}
       description={t("auth.demo.description")}
       action={t("auth.demo.use")}
-      onAction={onUse}
+      disabled={state.busy}
+      onAction={() => void signIn()}
     >
-      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+      {/* Each value on a line of its own: side by side, the email broke mid-word on a phone. */}
+      <dl className="flex flex-col gap-1 text-sm">
         <dt className="text-muted-foreground">{t("common.email")}</dt>
-        <dd className="break-all font-mono">{demo.email}</dd>
+        <dd className="font-mono [overflow-wrap:anywhere]">{demo.email}</dd>
         <dt className="text-muted-foreground">{t("common.password")}</dt>
-        <dd className="break-all font-mono">{demo.password}</dd>
+        <dd className="font-mono [overflow-wrap:anywhere]">{demo.password}</dd>
       </dl>
+      {state.error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {errorMessage(state.error)}
+        </p>
+      ) : null}
     </DemoCard>
   );
 }

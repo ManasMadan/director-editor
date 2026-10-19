@@ -4,6 +4,7 @@ import { errorCode, useApiErrorMessage } from "@repo/client";
 import { useDirectorPlanQuery } from "@repo/client/api/director/plan";
 import { useDirectorShotsQuery } from "@repo/client/api/director/shots";
 import type { DirectorPlan, ServedShotPlan, Shot, ShotPlan } from "@repo/contracts/api";
+import { videoIdSchema } from "@repo/contracts/ids";
 import { MINUTE_MS } from "@repo/contracts/time";
 import { Button, buttonVariants } from "@repo/ui/components/button";
 import { GeminiLoader } from "@repo/ui/components/gemini-loader";
@@ -24,7 +25,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DirectorGate, type EmbedOptions, sendCommand, YouTubeEmbed } from "@/modules/shorts";
 import { CreatedHero } from "../components/created-hero";
 import { IndexProgress } from "../components/index-progress";
@@ -84,15 +85,15 @@ function AudioChoice({
   return (
     <fieldset className="flex flex-col gap-2">
       <legend className="mb-2 text-sm text-studio-foreground/80">{t("question")}</legend>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {(["voice", "original"] as const).map((mode) => (
           <label
             key={mode}
             className={cn(
-              "flex flex-1 cursor-pointer items-center justify-center gap-2 min-h-11 rounded-full px-4 text-sm font-semibold transition-colors has-focus-visible:ring-2 has-focus-visible:ring-studio-foreground/60",
+              "flex min-h-11 flex-1 cursor-pointer items-center justify-center gap-2 rounded-full px-4 text-sm font-semibold whitespace-nowrap transition-colors has-focus-visible:ring-2 has-focus-visible:ring-studio-foreground/60",
               value === mode
                 ? "bg-studio-foreground text-studio"
-                : "bg-studio-foreground/10 text-studio-foreground",
+                : "bg-studio-foreground/10 text-studio-foreground hover:bg-studio-foreground/15",
             )}
           >
             <input
@@ -219,6 +220,8 @@ function Hero({
           videoId={videoId}
           title={plan.title}
           options={heroOptions(shot, true)}
+          // It takes no taps: the strip, the shot cards and the sound button drive it.
+          focusable={false}
           className="pointer-events-none aspect-9/16 h-[min(68dvh,calc(100vw*16/9))]"
         />
       </section>
@@ -397,52 +400,94 @@ function Ready({
     scrollToPlayer();
   };
   return (
-    <>
-      {plan.source === "created" ? (
-        <CreatedHero plan={plan.plan} videoId={plan.videoId} />
-      ) : (
-        <Hero
-          plan={plan.plan}
-          videoId={plan.videoId}
-          watching={watching}
-          onWatchAll={() => setWatching(null)}
-        />
-      )}
-      <div className="flex flex-col gap-6 px-4 pt-2 pb-36">
-        <p className="text-sm text-studio-foreground/70">{plan.plan.summary}</p>
-        <WhatYouNeed videoId={plan.videoId} plan={plan.plan} />
-        <Soundtrack url={plan.plan.musicUrl} media={media} />
-        <section className="flex flex-col gap-2">
-          <p className="font-semibold">
-            {t("needs", { shots: shots.length, videos, photos: shots.length - videos })}
-          </p>
-          <Storyboard shots={shots} watching={watching} onWatch={watch} />
-        </section>
-        {/* A template the member described has no original sound to film along to. */}
-        {plan.source === "created" ? null : (
-          <Sound plan={plan} value={chosen} onChange={setChosen} />
-        )}
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold text-studio-foreground/80">{t("inOrder")}</h2>
-          <ShotList
-            shots={shots}
-            takes={taken.data}
+    // On a laptop, and a phone held sideways, the short sits beside what it takes rather
+    // than above it in a phone-wide column.
+    <div className="lg:grid lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:items-start lg:gap-8 short-landscape:grid short-landscape:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] short-landscape:items-start">
+      <div className="lg:sticky lg:top-0 short-landscape:sticky short-landscape:top-0">
+        {plan.source === "created" ? (
+          <CreatedHero plan={plan.plan} videoId={plan.videoId} />
+        ) : (
+          <Hero
+            plan={plan.plan}
+            videoId={plan.videoId}
             watching={watching}
-            onWatch={watch}
-            media={media}
+            onWatchAll={() => setWatching(null)}
           />
-        </section>
+        )}
       </div>
-      <div className="fixed inset-x-0 bottom-0 z-10 bg-linear-to-t from-studio via-studio/95 to-transparent px-4 pt-10 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-        <Link
-          href={`/director/${plan.videoId}/shoot?shot=${next.index}&audio=${audio}`}
-          className="mx-auto flex w-full max-w-lg items-center justify-center gap-2.5 rounded-full bg-record py-4 text-lg font-bold text-record-foreground shadow-xl transition-transform active:scale-[0.98]"
-        >
-          <span className="size-3.5 rounded-full bg-record-foreground" aria-hidden />
-          {next.started ? t("template.continue") : t("template.use")}
-        </Link>
+      <div>
+        {/* First after the short in reading order, wherever it's drawn: the page's one
+            action is a Tab or two away, not after every shot card. */}
+        <ShootLink
+          videoId={plan.videoId}
+          shot={next.index}
+          audio={audio}
+          label={next.started ? t("template.continue") : t("template.use")}
+        />
+        <Details>
+          <p className="text-sm text-studio-foreground/70">{plan.plan.summary}</p>
+          <WhatYouNeed videoId={plan.videoId} plan={plan.plan} />
+          <Soundtrack url={plan.plan.musicUrl} media={media} />
+          <section className="flex flex-col gap-2">
+            <p className="font-semibold">
+              {t("needs", { shots: shots.length, videos, photos: shots.length - videos })}
+            </p>
+            <Storyboard shots={shots} watching={watching} onWatch={watch} />
+          </section>
+          {/* A template the member described has no original sound to film along to. */}
+          {plan.source === "created" ? null : (
+            <Sound plan={plan} value={chosen} onChange={setChosen} />
+          )}
+          <section className="flex flex-col gap-3">
+            <h2 className="text-sm font-semibold text-studio-foreground/80">{t("inOrder")}</h2>
+            <ShotList
+              shots={shots}
+              takes={taken.data}
+              watching={watching}
+              onWatch={watch}
+              media={media}
+            />
+          </section>
+        </Details>
       </div>
-    </>
+    </div>
+  );
+}
+
+/** What the template takes, under the short (beside it on a wide screen). */
+function Details({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-6 px-4 pt-2 pb-36 lg:pb-12 short-landscape:pb-12">
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The page's action: on a phone, fixed at the foot of the screen; beside the short on a
+ * wide screen (or a phone held sideways), in the column's flow at its top.
+ */
+function ShootLink({
+  videoId,
+  shot,
+  audio,
+  label,
+}: {
+  videoId: string;
+  shot: number;
+  audio: AudioMode;
+  label: string;
+}) {
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-10 bg-linear-to-t from-studio via-studio/95 to-transparent px-4 pt-10 pb-[max(1.25rem,env(safe-area-inset-bottom))] lg:static lg:bg-none lg:pt-4 lg:pb-2 short-landscape:static short-landscape:bg-none short-landscape:pt-3 short-landscape:pb-1">
+      <Link
+        href={`/director/${videoId}/shoot?shot=${shot}&audio=${audio}`}
+        className="mx-auto flex w-full max-w-lg items-center justify-center gap-2.5 rounded-full bg-record py-4 text-lg font-bold text-record-foreground shadow-xl transition-[transform,background-color] hover:bg-record/90 active:scale-[0.98] short-landscape:py-3"
+      >
+        <span className="size-3.5 rounded-full bg-record-foreground" aria-hidden />
+        {label}
+      </Link>
+    </div>
   );
 }
 
@@ -536,12 +581,32 @@ function Plan({ videoId }: { videoId: string }) {
   );
 }
 
+/**
+ * A link whose id can't be a Short's (mistyped, or cut short when it was shared): said in
+ * plain words, with the way back, rather than the form error the API's check would give
+ * and a "Try again" that could never work.
+ */
+function NotAShort() {
+  const t = useTranslations("director.template");
+  return (
+    <>
+      <Header />
+      <div className="flex flex-col items-center gap-4 p-8 text-center">
+        <p role="alert" className="text-sm text-studio-foreground/80">
+          {t("notAShort")}
+        </p>
+        <ToLibrary />
+      </div>
+    </>
+  );
+}
+
 /** A template's page: the original, its storyboard, how each shot is filmed, and the button to start. */
 export function DirectorPage({ videoId }: { videoId: string }) {
   return (
     <DirectorGate>
-      <div className="mx-auto max-w-lg">
-        <Plan videoId={videoId} />
+      <div className="mx-auto max-w-lg lg:max-w-5xl short-landscape:max-w-none">
+        {videoIdSchema.safeParse(videoId).success ? <Plan videoId={videoId} /> : <NotAShort />}
       </div>
     </DirectorGate>
   );

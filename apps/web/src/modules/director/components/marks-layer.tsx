@@ -92,7 +92,7 @@ function MarkBox({
     >
       <span
         className={cn(
-          "absolute max-w-[min(16rem,80vw)] truncate rounded-full bg-black/75 px-3 py-1 text-[15px] leading-5 font-semibold text-white",
+          "absolute max-w-[min(16rem,80vw)] truncate rounded-full bg-black/75 px-3 py-1 text-[0.9375rem] leading-5 font-semibold text-white",
           LABEL_PLACES[side],
           towardsRight ? "left-0" : "right-0",
         )}

@@ -8,7 +8,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { authClient } from "@/lib/auth-client";
-import { HOME_PATH, matchesPath } from "@/lib/routes";
+import { HOME_PATH, matchesPath, onStage } from "@/lib/routes";
 import { ThemeToggle } from "./theme-toggle";
 import { UserMenu } from "./user-menu";
 
@@ -27,7 +27,8 @@ function Nav() {
   // Null outside a navigation (a server render with no path): nothing is current then.
   const pathname: string | null = usePathname();
   return (
-    <nav aria-label={t("nav")}>
+    // Scrolls on its own rather than pushing the page sideways at a large text size.
+    <nav aria-label={t("nav")} className="min-w-0 overflow-x-auto [scrollbar-width:none]">
       <ul className="flex items-center gap-0.5 sm:gap-1">
         {NAV.map(({ href, label }) => {
           const active = pathname !== null && matchesPath(pathname, [href]);
@@ -61,6 +62,7 @@ function Nav() {
 export function SiteHeader() {
   const t = useTranslations("common");
   const { data: session, isPending } = authClient.useSession();
+  const pathname: string | null = usePathname();
 
   return (
     <header className="sticky top-0 z-30 border-b border-studio-foreground/10 bg-studio/95 text-studio-foreground backdrop-blur">
@@ -85,7 +87,8 @@ export function SiteHeader() {
         </Link>
         {session ? <Nav /> : null}
         <div className="ml-auto flex items-center gap-1">
-          <ThemeToggle className={ON_BAR} />
+          {/* Director's own pages stay dark whatever the theme: a toggle there would do nothing. */}
+          {onStage(pathname) ? null : <ThemeToggle className={ON_BAR} />}
           {isPending && !session ? (
             <GeminiShimmer className="h-8 w-20 rounded-full bg-studio-foreground/10" />
           ) : null}

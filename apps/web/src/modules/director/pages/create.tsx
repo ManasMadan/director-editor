@@ -15,7 +15,7 @@ import { ArrowLeft, Mic, MicOff, SendHorizontal, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import * as z from "zod";
 import { authClient } from "@/lib/auth-client";
 import { DirectorGate } from "@/modules/shorts";
@@ -110,7 +110,7 @@ function Conversation({ messages, thinking }: { messages: BriefTurn[]; thinking:
           </li>
         ))}
       </ol>
-      {thinking ? <GeminiLoader label={t("thinking")} size="sm" /> : null}
+      {thinking ? <GeminiLoader label={t("thinking")} showLabel size="sm" /> : null}
     </section>
   );
 }
@@ -262,21 +262,27 @@ function Create({ owner }: { owner: string | null }) {
   // Room for an answer and Director's reply to it.
   const canAnswer = messages.length > 0 && messages.length < DIRECTOR_MAX_BRIEF_TURNS - 1;
   const error = brainstorm.error ?? create.error;
+  const end = useFollowTalk(messages.length);
   return (
-    <div className="flex flex-col gap-6 px-4 pt-2 pb-36">
+    // Whatever takes focus scrolls clear of the bar fixed at the foot of the screen.
+    <div className="group/create flex flex-col gap-6 px-4 pt-2 pb-36 [&_:is(input,textarea,button)]:scroll-mb-40">
       <h2 className="text-2xl font-semibold tracking-tight">{t("heading")}</h2>
       <Idea text={text} setText={setText} />
       <BriefPhotos photos={photos} onChange={setPhotos} />
       {messages.length === 0 ? (
-        <Button
-          variant="secondary"
-          className="h-11 self-start rounded-full px-5"
-          disabled={!text.trim() || busy}
-          onClick={() => talk([])}
-        >
-          <Sparkles className="size-4" aria-hidden />
-          {t("talk")}
-        </Button>
+        <div className="flex flex-col items-start gap-3">
+          <Button
+            variant="secondary"
+            className="h-11 rounded-full px-5"
+            disabled={!text.trim() || busy}
+            onClick={() => talk([])}
+          >
+            <Sparkles className="size-4" aria-hidden />
+            {t("talk")}
+          </Button>
+          {/* The first question takes a few seconds too: said, not a greyed button alone. */}
+          {brainstorm.isPending ? <GeminiLoader label={t("thinking")} showLabel size="sm" /> : null}
+        </div>
       ) : (
         <Conversation messages={messages} thinking={brainstorm.isPending} />
       )}
@@ -293,6 +299,7 @@ function Create({ owner }: { owner: string | null }) {
           {errorMessage(error)}
         </p>
       ) : null}
+      <div ref={end} aria-hidden className="scroll-mb-40" />
       <WriteBar
         disabled={!text.trim() || busy}
         writing={create.isPending}
@@ -309,7 +316,10 @@ function Create({ owner }: { owner: string | null }) {
   );
 }
 
-/** "Write my shots", held at the bottom of the screen. */
+/**
+ * "Write my shots", fixed at the foot of the screen. On a phone it steps aside while a
+ * field has focus, so the keyboard and the bar together don't leave a sliver to type in.
+ */
 function WriteBar({
   disabled,
   writing,
@@ -321,7 +331,7 @@ function WriteBar({
 }) {
   const t = useTranslations("create");
   return (
-    <div className="fixed inset-x-0 bottom-0 z-10 bg-linear-to-t from-studio via-studio/95 to-transparent px-4 pt-10 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+    <div className="fixed inset-x-0 bottom-0 z-10 bg-linear-to-t from-studio via-studio/95 to-transparent px-4 pt-10 pb-[max(1.25rem,env(safe-area-inset-bottom))] pointer-coarse:group-has-[:is(input,textarea):focus]/create:hidden">
       <Button
         className="mx-auto flex h-14 w-full max-w-lg rounded-full bg-record text-lg font-bold text-record-foreground hover:bg-record/90"
         disabled={disabled}
@@ -331,6 +341,22 @@ function WriteBar({
       </Button>
     </div>
   );
+}
+
+/**
+ * Keeps the newest turn and the answer field in view as the talk grows, clear of the bar
+ * at the foot of the screen: a reply used to push the field under it.
+ */
+function useFollowTalk(turns: number) {
+  const end = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (turns === 0) {
+      return;
+    }
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    end.current?.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
+  }, [turns]);
+  return end;
 }
 
 /**

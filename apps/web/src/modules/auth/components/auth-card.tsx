@@ -21,7 +21,10 @@ export function AuthCard({
     <div className="mx-auto mt-8 w-full max-w-sm">
       <Card>
         <CardHeader>
-          <CardTitle>{title}</CardTitle>
+          {/* The page's one top heading: the card is all an auth page has. */}
+          <CardTitle role="heading" aria-level={1}>
+            {title}
+          </CardTitle>
           <CardDescription>{description}</CardDescription>
         </CardHeader>
         <CardContent>{children}</CardContent>

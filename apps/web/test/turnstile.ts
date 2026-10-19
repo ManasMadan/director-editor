@@ -3,7 +3,7 @@
  * renders a widget that passes at once with Cloudflare's test token, which the API with
  * captcha on accepts (its secret is Cloudflare's always-pass test key). Tests make a
  * widget's token expire or fail with `turnstile.expire()` and `turnstile.fail()`. The
- * widget's element says how it was asked to show itself (`data-appearance`). With
+ * widget's element says how it was asked to show itself (`data-appearance`, `data-theme`). With
  * `window.turnstileSilent` set, a new widget never hands over a token (Cloudflare not
  * answering).
  */
@@ -17,6 +17,7 @@ export const FAKE_TURNSTILE = `window.turnstile = (() => {
       widgets.set(id, options);
       element.dataset.widget = id;
       element.dataset.appearance = options.appearance ?? "always";
+      element.dataset.theme = options.theme ?? "auto";
       if (!window.turnstileSilent) {
         pass(id);
       }

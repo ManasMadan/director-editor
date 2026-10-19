@@ -39,3 +39,10 @@ export const GUEST_PATHS = [
 
 export const matchesPath = (pathname: string, prefixes: string[]) =>
   prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+
+/**
+ * Whether a page is one of Director's own (studio or immersive), on its dark stage whatever
+ * the member's theme. Null outside a navigation (a server render with no path): no.
+ */
+export const onStage = (pathname: string | null) =>
+  pathname !== null && matchesPath(pathname, [...STUDIO_PATHS, ...IMMERSIVE_PATHS]);

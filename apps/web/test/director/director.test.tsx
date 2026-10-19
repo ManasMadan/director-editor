@@ -343,6 +343,22 @@ describe("Director's page before the plan is ready", () => {
     expect(await commands.answeredRequests("/rpc/director/index")).toBe(0);
   });
 
+  it("says plainly that a mistyped link isn't a Short, with no Try again that can't work", async () => {
+    const before = await commands.answeredRequests("/rpc/director/plan");
+    const page = await showPlan("doesnotexist1");
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent(
+        "That link isn't to a Short Director can open. Check it, or pick one from your library.",
+      );
+    await expect
+      .element(page.getByRole("link", { name: "Go to the library" }))
+      .toHaveAttribute("href", "/library");
+    expect(page.getByRole("button", { name: "Try again" }).query()).toBeNull();
+    expect(page.getByText("Some fields need attention.").query()).toBeNull();
+    expect(await commands.answeredRequests("/rpc/director/plan")).toBe(before);
+  });
+
   it("says when the plan can't be read, and reads it again without indexing", async () => {
     const videoId = newVideoId();
     await commands.failRequests("/rpc/director/plan", { status: 502 });

@@ -91,7 +91,7 @@ function Line({ line, older, level }: { line: Caption; older: boolean; level: ()
         <DirectorOrb level={level} className="mt-0.5 size-7" />
         <p
           className={cn(
-            "text-[15px] leading-snug font-semibold text-balance transition-colors duration-300",
+            "text-[0.9375rem] leading-snug font-semibold text-balance transition-colors duration-300",
             older && "text-studio-foreground/80",
           )}
         >

@@ -7,7 +7,7 @@ import type { AddressInfo } from "node:net";
 import { type VideoId, videoIdSchema } from "@repo/contracts/ids";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import * as z from "zod";
-import { videoIdFromLink, YouTube, YouTubeError } from "./youtube";
+import { YouTube, YouTubeError } from "./youtube";
 
 type Route = (url: URL, response: ServerResponse) => void;
 
@@ -135,27 +135,5 @@ describe("a call that fails", () => {
   it("fails loudly when an answer isn't in YouTube's format", async () => {
     route = (_url, response) => send(response, 200, { items: [{ id: "Short000001" }] });
     await expect(youtube().video(id("Short000001"))).rejects.toBeInstanceOf(z.ZodError);
-  });
-});
-
-describe("a pasted link", () => {
-  it.each([
-    ["dQw4w9WgXcQ", "dQw4w9WgXcQ"],
-    ["  https://www.youtube.com/shorts/dQw4w9WgXcQ  ", "dQw4w9WgXcQ"],
-    ["HTTPS://M.YOUTUBE.COM/embed/dQw4w9WgXcQ", "dQw4w9WgXcQ"],
-    ["youtube.com/watch?v=dQw4w9WgXcQ&t=10", "dQw4w9WgXcQ"],
-    ["http://youtu.be/dQw4w9WgXcQ?si=abc", "dQw4w9WgXcQ"],
-  ])("finds the video in %s", (link, expected) => {
-    expect(videoIdFromLink(link)).toBe(expected);
-  });
-
-  it.each([
-    ["not a link at all"],
-    ["https://example.com/watch?v=dQw4w9WgXcQ"],
-    ["https://www.youtube.com/watch"],
-    ["https://youtu.be/"],
-    ["https://www.youtube.com/shorts/too-short"],
-  ])("finds nothing in %s", (link) => {
-    expect(videoIdFromLink(link)).toBeNull();
   });
 });

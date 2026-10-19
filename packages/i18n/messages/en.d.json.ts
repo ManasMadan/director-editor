@@ -189,7 +189,7 @@ declare const messages: {
     "demo": {
       "title": "Try Director with the demo account",
       "description": "Everyone trying Director shares it, so publishing and account changes are off.",
-      "use": "Use demo account",
+      "use": "Sign in to the demo",
       "loading": "Getting the demo account…",
       "signingIn": "Opening the demo…",
       "guestTitle": "Just looking? Use the demo.",
@@ -855,6 +855,7 @@ declare const messages: {
       "unmute": "Unmute",
       "backToLibrary": "Back to the library",
       "toLibrary": "Go to the library",
+      "notAShort": "That link isn't to a Short Director can open. Check it, or pick one from your library.",
       "audioFailed": "The original audio couldn't be fetched, so your mic will be used.",
       "failedHelp": "A Short that couldn't be indexed doesn't use up your own. Try another link from the library.",
       "scene": "Where",
@@ -1017,6 +1018,7 @@ declare const messages: {
     },
     "publish": {
       "open": "Publish",
+      "close": "Close",
       "watch": "Watch on YouTube",
       "title": "Publish to YouTube Shorts",
       "description": "Director wrote a post for your video. Change anything you like, then send it to your channel.",
@@ -1183,7 +1185,8 @@ declare const messages: {
       "submit": "Index it",
       "checking": "Checking the link…",
       "open": "See the shots",
-      "another": "Try another link"
+      "another": "Try another link",
+      "notALink": "That isn't a YouTube Shorts link. Copy the link from the Short's Share button and paste it here."
     },
     "stage": {
       "label": "Indexing progress",
@@ -1204,7 +1207,7 @@ declare const messages: {
       "writingCreated": "Director is writing your shots"
     },
     "credit": {
-      "title": "You've used your AI credit",
+      "title": "You've already added your own Short",
       "body": "Each account can index one Short of its own, and yours is already in your library.",
       "seeds": "These starter templates are ready to shoot right now:",
       "close": "Got it"
@@ -1261,6 +1264,13 @@ declare const messages: {
       "shoot": "Looks good, let's shoot",
       "failedHelp": "Nothing was used up. Try describing it again.",
       "again": "Describe it again",
+      "notDescribed": "Only a template you described has shots you can change here. This one is filmed as it is.",
+      "notFound": "That link isn't to a template you described. Check it, or describe a new one.",
+      "openTemplate": "Open the template",
+      "secondsRange": "Between {min, number} and {max, number} seconds. It stays at {saved, number} until then.",
+      "removed": "Shot {index, number} deleted",
+      "undo": "Undo",
+      "drawing": "Drawing…",
       "notYours": "Only the person who described this one can change its shots.",
       "storyboardAlt": "Storyboard for shot {index, number}"
     }

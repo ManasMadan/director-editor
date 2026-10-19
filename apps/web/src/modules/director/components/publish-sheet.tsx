@@ -17,18 +17,19 @@ import {
 } from "@repo/contracts/api";
 import { required } from "@repo/contracts/objects";
 import { Button, buttonVariants } from "@repo/ui/components/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@repo/ui/components/dialog";
 import { Field, FieldDescription, FieldLabel } from "@repo/ui/components/field";
 import { GeminiLoader, GeminiShimmer } from "@repo/ui/components/gemini-loader";
 import { Input } from "@repo/ui/components/input";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@repo/ui/components/sheet";
 import { Textarea } from "@repo/ui/components/textarea";
-import { CircleAlert, CircleCheck, Upload } from "lucide-react";
+import { CircleAlert, CircleCheck, Upload, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { type FormEvent, type RefObject, useEffect, useId, useRef, useState } from "react";
@@ -438,26 +439,32 @@ export function PublishButton({
           <Trigger cut={cut} readOnly={readOnly} onOpen={() => setOpen(true)} />
         )}
       </span>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent
-          finalFocus={focusOnClose}
-          className="max-h-[calc(100dvh-2rem)] gap-5 overflow-y-auto sm:max-w-md"
-        >
-          <DialogHeader>
-            <DialogTitle className="text-lg font-semibold">
-              {readOnly ? t("readOnly.title") : t("title")}
-            </DialogTitle>
-            <DialogDescription>
-              {readOnly ? t("readOnly.description") : t("description")}
-            </DialogDescription>
-          </DialogHeader>
+      {/* A bottom sheet with a grabber: it rises to half the screen and drags up for more. */}
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent finalFocus={focusOnClose}>
+          <SheetHeader className="flex-row items-start gap-3">
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              <SheetTitle className="text-lg font-semibold">
+                {readOnly ? t("readOnly.title") : t("title")}
+              </SheetTitle>
+              <SheetDescription>
+                {readOnly ? t("readOnly.description") : t("description")}
+              </SheetDescription>
+            </div>
+            <SheetClose
+              render={<Button variant="ghost" size="icon" className="-mt-1 size-11 shrink-0" />}
+              aria-label={t("close")}
+            >
+              <X className="size-5" aria-hidden />
+            </SheetClose>
+          </SheetHeader>
           <Preview cut={cut} />
           {open && readOnly ? <ReadOnlyPost cut={cut} /> : null}
           {open && !readOnly ? (
             <PublishBody cut={cut} resumed={resumed} onResumed={() => setResumed(null)} />
           ) : null}
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </>
   );
 }

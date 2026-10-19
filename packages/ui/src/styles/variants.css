@@ -4,3 +4,9 @@
  */
 @custom-variant dark (&:where(.dark, .dark *));
 @custom-variant light (&:not(:where(.dark, .dark *)));
+
+/*
+ * A phone held sideways: wide but too short to stack a player over anything. Pages that
+ * stack on a phone go side by side here, as they do on a laptop.
+ */
+@custom-variant short-landscape (@media (orientation: landscape) and (max-height: 540px));

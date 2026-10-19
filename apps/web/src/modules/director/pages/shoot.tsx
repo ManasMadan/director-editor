@@ -140,7 +140,7 @@ function StartCard({
         <h1 id="shoot-intro" className="text-xl font-bold">
           {t("intro.title")}
         </h1>
-        <p className="mt-2 text-[15px] leading-snug text-studio-foreground/85">
+        <p className="mt-2 text-[0.9375rem] leading-snug text-studio-foreground/85">
           {t(introOf(first, roll))}
         </p>
         {leftover > 0 ? (
@@ -294,7 +294,7 @@ function TellBox({ live }: { live: DirectorLive }) {
         disabled={!here}
         maxLength={2000}
         enterKeyHint="send"
-        className="min-h-11 min-w-0 flex-1 bg-transparent text-[16px] placeholder:text-studio-foreground/60 focus:outline-none disabled:opacity-60"
+        className="min-h-11 min-w-0 flex-1 bg-transparent text-base placeholder:text-studio-foreground/60 focus:outline-none disabled:opacity-60"
       />
       <button
         type="submit"
@@ -410,7 +410,10 @@ function RecordingFoot({ shot, studio, voice }: { shot: Shot; studio: Studio; vo
         <Teleprompter script={shot.script} seconds={studio.seconds} />
       ) : (
         <p
-          className={cn("rounded-2xl px-3.5 py-2.5 text-[15px] font-semibold empty:hidden", GLASS)}
+          className={cn(
+            "rounded-2xl px-3.5 py-2.5 text-[0.9375rem] font-semibold empty:hidden",
+            GLASS,
+          )}
         >
           {step?.instruction}
         </p>

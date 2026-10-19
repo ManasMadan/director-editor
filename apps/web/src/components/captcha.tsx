@@ -15,6 +15,7 @@
 import { useSystemInfoQuery } from "@repo/client/api/system/info";
 import { SECOND_MS } from "@repo/contracts/time";
 import { useLocale, useTranslations } from "next-intl";
+import { useTheme } from "next-themes";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
 interface TurnstileApi {
@@ -100,6 +101,9 @@ function CaptchaAlert({ failed }: { failed: boolean }) {
   );
 }
 
+/** The page's own theme for the widget, not the system's: a light box on a dark card stood out. */
+const useWidgetTheme = () => (useTheme().resolvedTheme === "dark" ? "dark" : "light");
+
 /**
  * `interactionOnly` keeps the widget out of sight unless Cloudflare wants the person to
  * do something (Turnstile's `appearance: "interaction-only"`): for one-tap flows like the
@@ -111,11 +115,11 @@ export function useCaptcha({ interactionOnly = false, alert = true } = {}): Capt
   const { data: system } = useSystemInfoQuery();
   const siteKey = system?.captchaSiteKey ?? null;
   const locale = useLocale();
+  const theme = useWidgetTheme();
   const container = useRef<HTMLDivElement>(null);
   const widgetId = useRef<string | undefined>(undefined);
   const [token, setToken] = useState<string | null>(null);
-  // The script never arrived (blocked or offline): not the same as a widget that loaded
-  // and is waiting on the person or on Cloudflare, which mustn't be called unloaded.
+  // The script never arrived, unlike a widget that loaded and waits on the person.
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -135,6 +139,7 @@ export function useCaptcha({ interactionOnly = false, alert = true } = {}): Capt
         widgetId.current = api.render(element, {
           sitekey: siteKey,
           language: locale,
+          theme,
           ...(interactionOnly && { appearance: "interaction-only" }),
           callback: (value: string) => setToken(value),
           "expired-callback": () => setToken(null),
@@ -155,7 +160,7 @@ export function useCaptcha({ interactionOnly = false, alert = true } = {}): Capt
       }
       widgetId.current = undefined;
     };
-  }, [siteKey, locale, interactionOnly]);
+  }, [siteKey, locale, theme, interactionOnly]);
 
   const timedOut = useWaitedTooLong(siteKey !== null && token === null);
   const unavailable = siteKey !== null && (failed || timedOut);
