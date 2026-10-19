@@ -6,8 +6,9 @@
  */
 import { Injectable } from "@nestjs/common";
 import { SHORT_MAX_SECONDS } from "@repo/contracts/api";
-import { type VideoId, videoIdFromLink } from "@repo/contracts/ids";
+import type { VideoId } from "@repo/contracts/ids";
 import { HOUR_S } from "@repo/contracts/time";
+import { videoIdFromLink } from "@repo/contracts/youtube-link";
 import { AppError, CacheService, InjectRedis, type Redis } from "@repo/nest-common";
 import type * as z from "zod";
 import { env } from "../../env";
@@ -33,16 +34,16 @@ export class ShortsService {
     this.cache = new CacheService(redis, "shorts");
   }
 
-  /**
-   * The short a pasted link points at, when Director can film it: DIRECTOR_VIDEO_UNAVAILABLE
-   * when the link isn't a YouTube video or YouTube won't show it (private, removed),
-   * DIRECTOR_TOO_LONG past SHORT_MAX_SECONDS.
-   */
   /** The video a pasted link names, without asking YouTube; null when it names none. */
   videoIdOf(link: string): VideoId | null {
     return videoIdFromLink(link);
   }
 
+  /**
+   * The short a pasted link points at, when Director can film it: DIRECTOR_VIDEO_UNAVAILABLE
+   * when the link isn't a YouTube video or YouTube won't show it (private, removed),
+   * DIRECTOR_TOO_LONG past SHORT_MAX_SECONDS.
+   */
   async filmable(link: string): Promise<Video> {
     const videoId = videoIdFromLink(link);
     const video = videoId ? await this.video(videoId) : null;

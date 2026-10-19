@@ -3,7 +3,8 @@
 import { errorCode, useApiErrorMessage } from "@repo/client";
 import { useIndexShortMutation } from "@repo/client/api/director/index-short";
 import { type DirectorPlan, SHORT_URL_MAX_LENGTH } from "@repo/contracts/api";
-import { type VideoId, videoIdFromLink } from "@repo/contracts/ids";
+import type { VideoId } from "@repo/contracts/ids";
+import { videoIdFromLink } from "@repo/contracts/youtube-link";
 import { Button, buttonVariants } from "@repo/ui/components/button";
 import { GeminiLoader } from "@repo/ui/components/gemini-loader";
 import { Input } from "@repo/ui/components/input";
