@@ -601,16 +601,27 @@ function NotAShort() {
   );
 }
 
+/**
+ * Asks for the plan beside the gate's check that Director is on, not after it: on a
+ * phone's slow line each wait in turn is a round trip before the page shows.
+ */
+function AskForPlan({ videoId }: { videoId: string }) {
+  useDirectorPlanQuery(videoId);
+  return null;
+}
+
 /** A template's page: the original, its storyboard, how each shot is filmed, and the button to start. */
 export function DirectorPage({ videoId }: { videoId: string }) {
-  // Asked for beside the gate's check that Director is on, not after it: on a phone's
-  // slow line each wait in turn is a round trip before the page shows.
-  useDirectorPlanQuery(videoId);
+  // A link whose id can't be a Short's is said plainly, without asking the API.
+  const short = videoIdSchema.safeParse(videoId).success;
   return (
-    <DirectorGate>
-      <div className="mx-auto max-w-lg lg:max-w-5xl short-landscape:max-w-none">
-        {videoIdSchema.safeParse(videoId).success ? <Plan videoId={videoId} /> : <NotAShort />}
-      </div>
-    </DirectorGate>
+    <>
+      {short ? <AskForPlan videoId={videoId} /> : null}
+      <DirectorGate>
+        <div className="mx-auto max-w-lg lg:max-w-5xl short-landscape:max-w-none">
+          {short ? <Plan videoId={videoId} /> : <NotAShort />}
+        </div>
+      </DirectorGate>
+    </>
   );
 }
