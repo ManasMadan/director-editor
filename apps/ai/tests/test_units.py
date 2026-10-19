@@ -465,7 +465,7 @@ async def test_a_drafted_callback_that_raises_is_not_retried_as_the_planner_fail
 def test_veo_clips_are_on_unless_turned_off() -> None:
     """VEO_MODEL can't be emptied to turn clips off (an empty setting is read as unset, so
     as its default): VEO_ENABLED does it."""
-    redis = Redis.from_url("redis://localhost:6379")  # pyright: ignore[reportUnknownMemberType]  # untyped options
+    redis = Redis()
     on = create_asset_maker(
         _settings(GOOGLE_API_KEY="test-key", GOOGLE_VERTEX="false", MEDIA_BUCKET="media"), redis
     )

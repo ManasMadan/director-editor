@@ -652,7 +652,7 @@ export type DirectorCutCreate = {
     /**
      * Durationms
      *
-     * How long the rendered video is, gaps and all; added up from the picks when left out.
+     * The rendered video's length, gaps and all; summed from the picks if unset.
      */
     durationMs?: number | null;
     /**

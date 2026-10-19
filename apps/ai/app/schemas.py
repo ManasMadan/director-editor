@@ -1075,7 +1075,7 @@ class DirectorCutCreate(BaseModel):
         default=None,
         ge=1,
         le=MAX_CUT_MS,
-        description="How long the rendered video is, gaps and all; added up from the picks when left out.",
+        description="The rendered video's length, gaps and all; summed from the picks if unset.",
     )
 
 
