@@ -201,6 +201,17 @@ describe("sign in", () => {
     expect(sent?.["x-captcha-response"]).toBe("XXXX.DUMMY.TOKEN.XXXX");
   });
 
+  it("draws the widget dark on a page in the dark theme", async () => {
+    await serveSystemInfo(withCaptcha);
+    localStorage.setItem("theme", "dark");
+    try {
+      const page = await renderPage(<SignInPage />, { url: "/sign-in" });
+      await expect.element(page.getByTestId("captcha")).toHaveAttribute("data-theme", "dark");
+    } finally {
+      localStorage.removeItem("theme");
+    }
+  });
+
   it("stops waiting for a token that never comes, and says why", { timeout: 20_000 }, async () => {
     // No shared account to fall back on, this time: the card stays, and says what's wrong.
     await serveSystemInfo((info) => {
@@ -319,6 +330,22 @@ describe("sign in", () => {
     await userEvent.click(card.getByRole("button", { name: "Sign in to the demo" }));
     await expect.poll(currentUrl).toBe("/media");
     expect((await currentSession()).user.email).toBe(DEMO.email);
+  });
+
+  it("says why the shared demo account didn't sign in, and lets it be tried again", async () => {
+    await serveSystemInfo((info) => {
+      info.features.demoGuests = false;
+    });
+    await commands.failRequests("/api/auth/sign-in/email", { status: 429 });
+    const page = await renderPage(<SignInPage />, { url: "/sign-in?next=/media" });
+    const card = page.getByRole("region", { name: "Try Director with the demo account" });
+    const signIn = card.getByRole("button", { name: "Sign in to the demo" });
+    await userEvent.click(signIn);
+    await expect
+      .element(card.getByRole("alert"))
+      .toHaveTextContent("Too many attempts. Wait a minute and try again.");
+    await expect.element(signIn).toBeEnabled();
+    expect(currentUrl()).toBe("/sign-in?next=/media");
   });
 
   it("fills the form with the shared demo account from ?demo=1 when guests are off", async () => {

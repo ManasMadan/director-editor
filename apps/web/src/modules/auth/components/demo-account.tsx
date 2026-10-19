@@ -67,7 +67,6 @@ function DemoRoom() {
           description={t("auth.demo.guestDescription")}
           action={t("auth.demo.start")}
           disabled
-          onAction={() => undefined}
         />
       </div>
       <GeminiShimmer className="absolute inset-0 rounded-lg" />
@@ -274,7 +273,8 @@ function DemoCard({
   title: string;
   description: string;
   action: string;
-  onAction: () => void;
+  /** None for the card's room, drawn unseen and disabled while the demo isn't known. */
+  onAction?: () => void;
   /** Until the button can do anything (the captcha has no token yet). */
   disabled?: boolean;
   children?: ReactNode;
