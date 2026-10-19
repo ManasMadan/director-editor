@@ -14,9 +14,12 @@ import { type PartRecorder, Roll, type RollApi, type RollOptions } from "../lib/
 /** How often the indicator's time moves on while the roll records. */
 const TICK_MS = 500;
 
-/** The browser's recorder for a part, or null when it can't record this stream. */
+/**
+ * The browser's recorder for a part, or null when it can't record this stream. Only
+ * asked where the browser has a MediaRecorder: without one the roll is off (shoot.tsx).
+ */
 const mediaRecorder: RollOptions["record"] = (stream, events) => {
-  const format = typeof MediaRecorder === "undefined" ? null : recorderFormat();
+  const format = recorderFormat();
   if (!format) {
     return null;
   }

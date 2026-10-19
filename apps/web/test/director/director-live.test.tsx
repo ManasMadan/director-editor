@@ -17,7 +17,7 @@ import { ShootPage } from "@/modules/director";
 import { DirectorOrb } from "@/modules/director/components/director-captions";
 import { useDirectorLive } from "@/modules/director/hooks/use-director-live";
 import { cleanup, currentUrl, renderPage } from "../render";
-import { signUp } from "../users";
+import { api, currentSession, signUp } from "../users";
 import {
   cameraVideo,
   canvasCamera,
@@ -824,5 +824,63 @@ describe("Director's orb", () => {
     await renderPage(<DirectorOrb level={level} className="size-6" />);
     await cleanup();
     expect(level).not.toHaveBeenCalled();
+  });
+});
+
+// The roll records to RustFS: the files profile (`bun run test:integration:files`).
+describe("Director's marks on the roll", { tags: ["files"] }, () => {
+  it("marks each attempt as Director calls it, with its line and note", async () => {
+    canvasCamera();
+    await signUp();
+    const videoId = newVideoId();
+    const { session } = await currentSession();
+    // A recording session belongs to its plan: a row in the database as well.
+    const [row] = await commands.sql<{ id: string }>(
+      `INSERT INTO ai.director_plan (org_id, video_id, source, status, stage, updated_at)
+       VALUES ($1, $2, 'seed', 'ready', 'ready', now()) RETURNING id::text`,
+      [session.activeOrganizationId, videoId],
+    );
+    await commands.fakeDirector(videoId, {
+      plan: { id: row?.id, status: "ready", plan: shotPlan({ shots: [walk, smile] }) },
+    });
+    const page = await renderPage(<ShootRoute videoId={videoId} />, {
+      url: `/director/${videoId}/shoot?shot=0&audio=voice`,
+    });
+    await userEvent.click(page.getByRole("button", { name: "Start shooting" }));
+    await expect.poll(() => FakeSocket.all.length).toBe(1);
+    const socket = FakeSocket.last;
+    socket.open();
+    await expect
+      .element(page.getByRole("button", { name: "Pause recording" }), { timeout: 15_000 })
+      .toBeVisible();
+    // Director hears that the roll is recording, whichever came up first.
+    await expect
+      .poll(() => socket.sentOf("roll"))
+      .toContainEqual({ type: "roll", state: "recording" });
+
+    socket.say({
+      type: "tool",
+      id: "m1",
+      call: { name: "mark", event: "start", line: "Hi there!" },
+    });
+    await expect
+      .poll(() => socket.sentOf("tool_result"))
+      .toContainEqual({ type: "tool_result", id: "m1", result: "done" });
+    socket.say({ type: "tool", id: "m2", call: { name: "mark", event: "end", note: "Lovely" } });
+    await expect
+      .poll(() => socket.sentOf("tool_result"))
+      .toContainEqual({ type: "tool_result", id: "m2", result: "done" });
+    const [opened] = await api.recording.sessions();
+    const attempts = opened ? (await api.recording.session({ sessionId: opened.id })).attempts : [];
+    expect(attempts).toMatchObject([{ number: 1, shotIndex: 0 }]);
+
+    // The line drops and Director comes back by itself: it hears where the roll is.
+    socket.hangUp();
+    await expect.poll(() => FakeSocket.all.length, { timeout: 10_000 }).toBe(2);
+    const again = FakeSocket.last;
+    again.open();
+    await expect
+      .poll(() => again.sentOf("roll"))
+      .toContainEqual({ type: "roll", state: "recording" });
   });
 });

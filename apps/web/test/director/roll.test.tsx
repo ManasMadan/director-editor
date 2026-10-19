@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page as browser, commands, userEvent } from "vitest/browser";
 import { ShootPage } from "@/modules/director";
-import { cleanup, renderPage } from "../render";
+import { cleanup, currentUrl, renderPage } from "../render";
 import { api, currentSession, signUp } from "../users";
 import { canvasCamera, fakeRecognizer, newVideoId, planShot, shotPlan } from "./support";
 
@@ -100,6 +100,94 @@ describe("the roll", { tags: ["files"] }, () => {
       .toBeVisible();
   });
 
+  it("pauses and resumes, pauses when the page is hidden, and goes to a shot from the strip", async () => {
+    canvasCamera();
+    await signUp();
+    const videoId = await plannedShort(2);
+    const page = await openShoot(videoId);
+    await startRoll(page);
+    await userEvent.click(page.getByRole("button", { name: "Pause recording" }));
+    await expect.element(page.getByRole("status", { name: "Paused" })).toBeVisible();
+    // Resume, from the veil over the picture.
+    await userEvent.click(page.getByRole("button", { name: "Resume" }).last());
+    await expect
+      .element(page.getByRole("button", { name: "Pause recording" }), { timeout: 15_000 })
+      .toBeVisible();
+
+    // The phone locked, or another app came up: the roll pauses as the button does.
+    const hidden = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    document.dispatchEvent(new Event("visibilitychange"));
+    await expect.element(page.getByRole("status", { name: "Paused" })).toBeVisible();
+    // Hidden again while paused: nothing more to pause.
+    document.dispatchEvent(new Event("visibilitychange"));
+    await expect.element(page.getByRole("status", { name: "Paused" })).toBeVisible();
+    hidden.mockRestore();
+    // Back on the page: it stays paused until the member's touch.
+    document.dispatchEvent(new Event("visibilitychange"));
+    await expect.element(page.getByRole("status", { name: "Paused" })).toBeVisible();
+
+    await userEvent.click(page.getByRole("button", { name: /^Shot 2:/ }));
+    await expect.poll(currentUrl).toBe(`/director/${videoId}/shoot?shot=1&audio=voice`);
+  });
+
+  it("shoots a take at a time where the browser can't record the roll", async () => {
+    // A recorder that says it records MP4, then won't start on the camera.
+    class Refusing {
+      static isTypeSupported() {
+        return true;
+      }
+      constructor() {
+        throw new DOMException("The camera can't be recorded.", "NotSupportedError");
+      }
+    }
+    // One that records none of the types a roll is recorded in.
+    class NoFormats {
+      static isTypeSupported() {
+        return false;
+      }
+      readonly mimeType = "";
+    }
+    for (const recorder of [Refusing, NoFormats, undefined]) {
+      canvasCamera();
+      await signUp();
+      const videoId = await plannedShort(2);
+      vi.stubGlobal("MediaRecorder", recorder);
+      const page = await openShoot(videoId);
+      await userEvent.click(page.getByRole("button", { name: "Start shooting" }));
+      if (recorder) {
+        // The roll got as far as its first part, which wouldn't record.
+        await expect
+          .poll(async () => {
+            const [session] = await api.recording.sessions();
+            return session ? (await api.recording.session({ sessionId: session.id })).parts : [];
+          })
+          .toHaveLength(1);
+      }
+      // No roll: the shutter, one take at a time.
+      await expect
+        .element(page.getByRole("button", { name: "Record a take" }), { timeout: 15_000 })
+        .toBeVisible();
+      expect(page.getByRole("button", { name: "Pause recording" }).query()).toBeNull();
+      cleanup();
+      vi.unstubAllGlobals();
+      fakeRecognizer();
+    }
+  });
+
+  it("opens the editor after Done, once the footage is up", async () => {
+    canvasCamera();
+    await signUp();
+    const videoId = await plannedShort(2);
+    const page = await openShoot(videoId);
+    await startRoll(page);
+    await userEvent.click(page.getByRole("button", { name: "Done" }));
+    await expect
+      .poll(currentUrl, { timeout: 20_000 })
+      .toBe(`/director/${videoId}/edit?audio=voice&wrap=1`);
+    const [session] = await api.recording.sessions();
+    expect(session?.status).toBe("done");
+  });
+
   it("records in a new part when the camera's picture changes size", async () => {
     canvasCamera();
     await signUp();
@@ -142,6 +230,13 @@ describe("the roll", { tags: ["files"] }, () => {
     // A session a dead tab left open (no pagehide got through) is carried on, not doubled.
     const again = await plannedShort(2);
     const left = await api.recording.start({ videoId: again });
+    // It was recording its first part when the tab died: that part was never ended.
+    await api.recording.addPart({
+      sessionId: left.id,
+      index: 0,
+      camera: "front",
+      contentType: "video/webm",
+    });
     canvasCamera();
     const page = await openShoot(again);
     await startRoll(page);
@@ -149,7 +244,17 @@ describe("the roll", { tags: ["files"] }, () => {
       (session) => session.videoId === again,
     );
     expect(sessions.map((session) => session.id)).toEqual([left.id]);
-    const detail = await api.recording.session({ sessionId: left.id });
-    expect(detail.parts.map((part) => part.index)).toEqual([0]);
+    // The part it left is ended, and this visit records in the next.
+    await expect
+      .poll(async () =>
+        (await api.recording.session({ sessionId: left.id })).parts.map((part) => [
+          part.index,
+          part.sliceCount,
+        ]),
+      )
+      .toEqual([
+        [0, 0],
+        [1, null],
+      ]);
   });
 });

@@ -4,8 +4,14 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { PausedVeil, SavingFootage, UploadNotice } from "@/modules/director/components/roll-parts";
-import { currentUrl, renderPage } from "../render";
+import {
+  PausedVeil,
+  RecIndicator,
+  RollProgress,
+  SavingFootage,
+  UploadNotice,
+} from "@/modules/director/components/roll-parts";
+import { cleanup, currentUrl, renderPage } from "../render";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -92,5 +98,46 @@ describe("the paused veil", () => {
     expect(onResume).toHaveBeenCalledTimes(1);
     await userEvent.click(page.getByRole("button", { name: "Resume" }));
     expect(onResume).toHaveBeenCalledTimes(2);
+    // Space sent to the window itself (no element has it), and any other key.
+    window.dispatchEvent(new KeyboardEvent("keydown", { code: "Space" }));
+    window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyR" }));
+    expect(onResume).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("the roll's indicator", () => {
+  it("shows the time recorded with pause, and says paused with Resume", async () => {
+    const onPause = vi.fn();
+    const onResume = vi.fn();
+    const recording = await renderPage(
+      <RecIndicator elapsedMs={192_000} paused={false} onPause={onPause} onResume={onResume} />,
+    );
+    await expect.element(recording.getByRole("status", { name: "Recording, 03:12" })).toBeVisible();
+    await userEvent.click(recording.getByRole("button", { name: "Pause recording" }));
+    expect(onPause).toHaveBeenCalledOnce();
+    cleanup();
+    const paused = await renderPage(
+      <RecIndicator elapsedMs={192_000} paused onPause={onPause} onResume={onResume} />,
+    );
+    await expect.element(paused.getByRole("status", { name: "Paused" })).toBeVisible();
+    await userEvent.click(paused.getByRole("button", { name: "Resume" }));
+    expect(onResume).toHaveBeenCalledOnce();
+  });
+});
+
+describe("the progress strip", () => {
+  it("marks each shot, lights the one on screen, and goes to the one tapped", async () => {
+    const onGo = vi.fn();
+    const page = await renderPage(
+      <RollProgress index={1} states={["take", "tried", "todo"]} onGo={onGo} />,
+    );
+    await expect
+      .element(page.getByRole("button", { name: "Shot 2: attempted. Go there" }))
+      .toHaveAttribute("aria-current", "step");
+    expect(
+      page.getByRole("button", { name: "Shot 1: has a take. Go there" }).element(),
+    ).not.toHaveAttribute("aria-current");
+    await userEvent.click(page.getByRole("button", { name: "Shot 3: to do. Go there" }));
+    expect(onGo).toHaveBeenCalledWith(2);
   });
 });
