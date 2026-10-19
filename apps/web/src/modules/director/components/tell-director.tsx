@@ -10,6 +10,7 @@ import { useTranslations } from "next-intl";
 import { type FormEvent, useRef, useState } from "react";
 import type { MediaState } from "../hooks/use-take-media";
 import type { Spoken } from "../hooks/use-tell-director";
+import { base64Of } from "../lib/media";
 import { takeNumber } from "../lib/picks";
 
 const SPOKEN_TYPES = ["audio/webm", "audio/mp4", "audio/ogg"] as const;
@@ -17,18 +18,6 @@ const SPOKEN_TYPES = ["audio/webm", "audio/mp4", "audio/ogg"] as const;
 /** The recording type this browser makes, as the API names it (codecs dropped). */
 function spokenType(recorder: MediaRecorder): Spoken["audioType"] | null {
   return SPOKEN_TYPES.find((type) => recorder.mimeType.startsWith(type)) ?? null;
-}
-
-function base64Of(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const url = typeof reader.result === "string" ? reader.result : "";
-      resolve(url.slice(url.indexOf(",") + 1));
-    };
-    reader.onerror = () => reject(reader.error ?? new Error("the recording couldn't be read"));
-    reader.readAsDataURL(blob);
-  });
 }
 
 /**
@@ -49,7 +38,7 @@ function useVoice(onSpoken: (spoken: Spoken) => void) {
     const recording = new MediaRecorder(stream);
     const chunks: Blob[] = [];
     recording.ondataavailable = (event) => chunks.push(event.data);
-    recording.onstop = () => {
+    recording.onstop = async () => {
       for (const track of stream.getTracks()) {
         track.stop();
       }
@@ -59,10 +48,8 @@ function useVoice(onSpoken: (spoken: Spoken) => void) {
         setFailed(true);
         return;
       }
-      void base64Of(new Blob(chunks, { type: recording.mimeType })).then(
-        (audio) => onSpoken({ audio, audioType }),
-        () => setFailed(true),
-      );
+      const audio = await base64Of(new Blob(chunks, { type: recording.mimeType }));
+      onSpoken({ audio, audioType });
     };
     recorder.current = recording;
     recording.start();
