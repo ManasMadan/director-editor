@@ -636,6 +636,22 @@ describe("Director's slower line", () => {
     await expect.element(page.getByText("Inside, by a window")).toBeVisible();
   });
 
+  it("ends when the slower line is off too, and says Director isn't available", async () => {
+    // The API answers the slower line's first turn: off on this deployment.
+    await commands.failRequests("/rpc/director/chat", {
+      status: 403,
+      body: {
+        json: { defined: true, code: "FEATURE_DISABLED", status: 403, message: "Off.", data: {} },
+      },
+    });
+    vi.stubGlobal("SpeechRecognition", FakeRecognition);
+    canvasCamera();
+    const { page, socket } = await shoot();
+    socket.hangUp("FEATURE_DISABLED");
+    await expect.element(page.getByText("Director isn't available right now.")).toBeVisible();
+    expect(page.getByRole("status").getByText("Slower line").query()).toBeNull();
+  });
+
   it("goes back to the slower line when Live still can't be had", async () => {
     const { page } = await slower();
     await userEvent.click(page.getByRole("button", { name: "Reconnect" }));
