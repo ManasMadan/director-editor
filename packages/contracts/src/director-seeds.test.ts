@@ -80,6 +80,50 @@ describe("Director's seeded templates", () => {
     }
   });
 
+  it("take a default image only for an asset the plan has, at its own key", () => {
+    const chart = {
+      id: "chart",
+      kind: "image",
+      title: "The chart",
+      role: "Under the speaker",
+      description: "A chart.",
+      prompt: "A chart.",
+      sourceStartSeconds: 0,
+      sourceEndSeconds: 1,
+      defaultSource: "create",
+      personalisable: false,
+      ask: null,
+      secondScreen: false,
+      reference: {
+        subject: "A chart",
+        composition: "Centred",
+        style: "Flat",
+        palette: "Black and white",
+        blackAndWhite: true,
+        aspectRatio: "1:1",
+        text: [],
+        mood: "Calm",
+      },
+    };
+    const withAssets = (assets: Record<string, string>) => [
+      { ...first, plan: { ...first.plan, assets: [chart] }, media: { ...media, assets } },
+      ...committed.slice(1),
+    ];
+    expect(
+      directorSeedsSchema.safeParse(withAssets({ chart: `${base}/asset-chart.png` })).success,
+    ).toBe(true);
+    expect(
+      directorSeedsSchema.safeParse(withAssets({ chart: `${base}/asset-chart.jpg` })).success,
+    ).toBe(true);
+    for (const refused of [
+      { chart: `${base}/asset-logo.png` },
+      // An asset the plan doesn't have.
+      { logo: `${base}/asset-logo.png` },
+    ]) {
+      expect(directorSeedsSchema.safeParse(withAssets(refused)).success).toBe(false);
+    }
+  });
+
   it("check every media key against the rule the AI service's scripts check it with", () => {
     // director-seed-media.json is read by apps/ai/scripts/build_seeds.py too, so the
     // file's writers and its reader agree on what a key may be.
