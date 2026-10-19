@@ -39,7 +39,11 @@ function NoAccount() {
   return (
     <p className="text-center text-sm text-muted-foreground">
       {t("auth.noAccount")}{" "}
-      <Link href={stepHref("/sign-up")} className="text-foreground underline underline-offset-4">
+      {/* Padded to a thumb's height (44 px) without moving the line around it. */}
+      <Link
+        href={stepHref("/sign-up")}
+        className="-my-3 inline-block py-3 text-foreground underline underline-offset-4"
+      >
         {t("common.signUp")}
       </Link>
     </p>
@@ -125,7 +129,7 @@ export function SignInPage() {
           />
           <Link
             href="/forgot-password"
-            className="-mt-2 text-sm underline-offset-4 hover:underline"
+            className="-my-2 inline-flex min-h-11 items-center self-start text-sm underline-offset-4 hover:underline"
           >
             {t("auth.forgotPassword")}
           </Link>

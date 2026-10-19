@@ -100,16 +100,20 @@ describe("the site header", () => {
       .toBeTruthy();
   });
 
-  it("keeps Director's pages dark, with no theme toggle that would do nothing there", async () => {
+  it("keeps the signed-in pages dark, with no theme toggle that would do nothing there", async () => {
     await signUp();
     localStorage.setItem("theme", "light");
-    const library = await renderPage(<SiteHeader />, { url: "/library" });
-    await expect.element(library.getByRole("link", { name: "My media" })).toBeVisible();
-    await expect.poll(() => document.documentElement.classList.contains("dark")).toBe(true);
-    expect(library.getByRole("button", { name: "Toggle theme" }).query()).toBeNull();
-    cleanup();
-    const settings = await renderPage(<SiteHeader />, { url: "/settings" });
-    await expect.element(settings.getByRole("button", { name: "Toggle theme" })).toBeVisible();
+    // The library and settings, a tap apart, are in the same theme.
+    for (const url of ["/library", "/settings"]) {
+      const page = await renderPage(<SiteHeader />, { url });
+      await expect.element(page.getByRole("link", { name: "My media" })).toBeVisible();
+      await expect.poll(() => document.documentElement.classList.contains("dark")).toBe(true);
+      expect(page.getByRole("button", { name: "Toggle theme" }).query()).toBeNull();
+      cleanup();
+    }
+    // A public page keeps the member's own theme, and its toggle.
+    const home = await renderPage(<SiteHeader />, { url: "/" });
+    await expect.element(home.getByRole("button", { name: "Toggle theme" })).toBeVisible();
     await expect.poll(() => document.documentElement.classList.contains("dark")).toBe(false);
     localStorage.removeItem("theme");
   });

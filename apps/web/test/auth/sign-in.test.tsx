@@ -354,6 +354,11 @@ describe("sign in", () => {
     await expect
       .element(page.getByRole("link", { name: "Create account" }))
       .toHaveAttribute("href", "/sign-up?next=%2Fsettings");
+    // Each is a thumb's height (44 px) to tap, though drawn as text.
+    for (const name of ["Create account", "Forgot password?"]) {
+      const box = page.getByRole("link", { name }).element().getBoundingClientRect();
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
     await userEvent.click(page.getByRole("link", { name: "Forgot password?" }));
     await expect.poll(currentUrl).toBe("/forgot-password");
   });

@@ -82,7 +82,8 @@ export function SignUpPage() {
             {t("auth.haveAccount")}{" "}
             <Link
               href={stepHref("/sign-in")}
-              className="text-foreground underline underline-offset-4"
+              // Padded to a thumb's height (44 px) without moving the line around it.
+              className="-my-3 inline-block py-3 text-foreground underline underline-offset-4"
             >
               {t("common.signIn")}
             </Link>

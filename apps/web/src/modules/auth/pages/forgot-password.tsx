@@ -53,7 +53,10 @@ export function ForgotPasswordPage() {
           <Button type="submit" disabled={form.formState.isSubmitting || !captcha.ready}>
             {t("auth.sendCode")}
           </Button>
-          <Link href="/sign-in" className="text-center text-sm underline underline-offset-4">
+          <Link
+            href="/sign-in"
+            className="inline-flex min-h-11 items-center justify-center text-sm underline underline-offset-4"
+          >
             {t("auth.backToSignIn")}
           </Link>
         </FieldGroup>

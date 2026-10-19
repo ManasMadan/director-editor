@@ -41,8 +41,10 @@ export const matchesPath = (pathname: string, prefixes: string[]) =>
   prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 
 /**
- * Whether a page is one of Director's own (studio or immersive), on its dark stage whatever
- * the member's theme. Null outside a navigation (a server render with no path): no.
+ * Whether a page is one of the signed-in app's (Director's studio and immersive pages, and
+ * settings), dark whatever the member's theme: one theme from the library to settings
+ * rather than a flip on every other tap. Null outside a navigation (a server render with
+ * no path): no.
  */
 export const onStage = (pathname: string | null) =>
-  pathname !== null && matchesPath(pathname, [...STUDIO_PATHS, ...IMMERSIVE_PATHS]);
+  pathname !== null && matchesPath(pathname, APP_PATHS);
