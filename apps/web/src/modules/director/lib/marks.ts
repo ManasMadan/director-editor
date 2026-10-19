@@ -90,13 +90,22 @@ export function visibleShare(rect: Rect, element: Size): number {
   return (width * height) / (rect.width * rect.height);
 }
 
+/**
+ * The bytes of `array`, read by offset. A typed array's index reads as possibly undefined
+ * to the type checker; every offset read here is in range, and a DataView's reads say so
+ * (one out of range throws instead of reading as a made-up 0).
+ */
+const bytesOf = (array: Uint8Array | Uint8ClampedArray) =>
+  new DataView(array.buffer, array.byteOffset, array.byteLength);
+
 /** An RGBA image's pixels as luminance, one byte each. */
 export function luminance(rgba: Uint8ClampedArray): Uint8Array {
+  const pixels = bytesOf(rgba);
   const grey = new Uint8Array(rgba.length / 4);
   for (let at = 0; at < grey.length; at += 1) {
-    const red = rgba[at * 4] ?? 0;
-    const green = rgba[at * 4 + 1] ?? 0;
-    const blue = rgba[at * 4 + 2] ?? 0;
+    const red = pixels.getUint8(at * 4);
+    const green = pixels.getUint8(at * 4 + 1);
+    const blue = pixels.getUint8(at * 4 + 2);
     grey[at] = (red * 77 + green * 150 + blue * 29) >> 8;
   }
   return grey;
@@ -107,12 +116,14 @@ export function luminance(rgba: Uint8ClampedArray): Uint8Array {
  * of the sample (the margin a move could bring in from outside is left out).
  */
 function difference(previous: Uint8Array, next: Uint8Array, dx: number, dy: number): number {
+  const after = bytesOf(next);
+  const earlier = bytesOf(previous);
   let total = 0;
   let count = 0;
   for (let y = SAMPLE_REACH; y < SAMPLE_HEIGHT - SAMPLE_REACH; y += 1) {
     for (let x = SAMPLE_REACH; x < SAMPLE_WIDTH - SAMPLE_REACH; x += 1) {
-      const now = next[y * SAMPLE_WIDTH + x] ?? 0;
-      const before = previous[(y - dy) * SAMPLE_WIDTH + (x - dx)] ?? 0;
+      const now = after.getUint8(y * SAMPLE_WIDTH + x);
+      const before = earlier.getUint8((y - dy) * SAMPLE_WIDTH + (x - dx));
       total += Math.abs(now - before);
       count += 1;
     }
