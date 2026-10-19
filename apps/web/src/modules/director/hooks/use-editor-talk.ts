@@ -19,8 +19,7 @@ export interface TalkingEditor {
   showShot: (shotIndex: number) => void;
 }
 
-function repeat(effect: EditorEffect, once: () => void) {
-  const steps = "steps" in effect ? effect.steps : 1;
+function repeat(steps: number, once: () => void) {
   for (let step = 0; step < steps; step++) {
     once();
   }
@@ -40,18 +39,22 @@ export function useEditorTalk(videoId: string, audio: AudioMode, editor: Talking
   useLayoutEffect(() => {
     latest.current = editor;
   });
-  const effects: Record<EditorEffect["kind"], (effect: EditorEffect) => void> = {
-    undo: (effect) => repeat(effect, latest.current.history.undo),
-    redo: (effect) => repeat(effect, latest.current.history.redo),
-    reshoot: (effect) => {
-      if (effect.kind === "reshoot") {
+  const run = (effect: EditorEffect) => {
+    switch (effect.kind) {
+      case "undo":
+        repeat(effect.steps, latest.current.history.undo);
+        return;
+      case "redo":
+        repeat(effect.steps, latest.current.history.redo);
+        return;
+      case "reshoot":
         router.push(shotPage(videoId, effect.shotIndex, audio, true));
-      }
-    },
-    // The asset picker and the soundtrack join here: Director has already said what it
-    // would make; until they're in the editor, nothing more happens.
-    asset: () => undefined,
-    music: () => undefined,
+        return;
+      default:
+        // The asset picker and the soundtrack join here: Director has already said what
+        // it would make; until they're in the editor, nothing more happens.
+        return;
+    }
   };
   return useTellDirector(videoIdSchema.parse(videoId), (reply) => {
     const { history, byShot, setReply, showShot } = latest.current;
@@ -65,7 +68,7 @@ export function useEditorTalk(videoId: string, audio: AudioMode, editor: Talking
       history.change(step.choices);
     }
     for (const effect of step.effects) {
-      effects[effect.kind](effect);
+      run(effect);
     }
     const first = step.shots[0];
     if (first !== undefined) {
