@@ -781,6 +781,10 @@ class IndexResult(BaseModel):
     model: str = Field(min_length=1, max_length=200, description="The model that wrote it.")
     audio: AudioCapture
     usage: TokenUsage = Field(description="What the run used, for the worker to count.")
+    # The release of the code that wrote it (RELEASE), so the worker can tell a Cloud Run
+    # indexer left on an older release (it's deployed by hand): one from before assets
+    # answered plans without them. None from an indexer older than this field.
+    release: str | None = None
 
 
 # A line Director says aloud (packages/contracts' DIRECTOR_SPEECH_MAX_LENGTH): a guide, a

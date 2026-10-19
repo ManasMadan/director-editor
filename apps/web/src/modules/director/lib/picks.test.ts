@@ -72,6 +72,16 @@ describe("the take each shot plays", () => {
     expect(played.has(2)).toBe(false);
   });
 
+  it("is never a newest take Director couldn't review while another can play", () => {
+    // A take whose review failed may hold nothing to play (an empty cut), which would
+    // keep the video from saving: the newest one that didn't fail plays instead.
+    const failed = { ...take(6, 3), status: "failed" as const, error: "DIRECTOR_REVIEW_FAILED" };
+    const waiting = take(5, 3);
+    expect(pickedTakes([shot(3, [waiting, failed])], {}).get(3)).toBe(waiting);
+    // Only failed takes: the newest still shows, for the member to retake.
+    expect(pickedTakes([shot(3, [failed])], {}).get(3)).toBe(failed);
+  });
+
   it("is the member's own pick over Director's, unless that take isn't the shot's", () => {
     expect(pickedTakes(shots, { 0: a2.id }).get(0)).toBe(a2);
     expect(pickedTakes(shots, { 0: b1.id }).get(0)).toBe(a1);

@@ -351,7 +351,8 @@ def test_one_attempt_is_cut_at_a_time(storage: tuple[Fake, list[ClipSlice]]) -> 
         if "-y" in args:
             # The take a cut writes (finding speech writes nothing, and finds none).
             _ = await asyncio.to_thread(Path(args[-1].removeprefix("file:")).write_bytes, b"mp4")
-        return 0, b""
+        # Counting the cut's frames: two seconds' worth.
+        return 0, b"frame=   60 fps=0.0" if "-stats" in args else b""
 
     async def run() -> list[Clip]:
         async with httpx.AsyncClient() as http:
@@ -428,6 +429,24 @@ def test_what_can_t_be_cut_fails_for_good(storage: tuple[Fake, list[ClipSlice]])
     with pytest.raises(ClipFailed) as unreadable:
         _ = asyncio.run(run())
     assert not unreadable.value.retryable
+
+
+@pytest.mark.integration
+def test_a_cut_with_nothing_in_it_fails_rather_than_becoming_an_empty_take(
+    recording: bytes,
+) -> None:
+    """The slices say there's more footage than was recorded (the recorder dropped some),
+    and the marks fall past where it really ends: ffmpeg exits happily with an MP4 that
+    holds no picture. That's no take: an empty one fails its review and blocks Save."""
+    with serve_files(_pieces(recording)) as served:
+        claimed = [
+            ClipSlice(url=f"{served.url}/s/{index}", startMs=index * 8_000, durationMs=8_000)
+            for index in range(3)
+        ]
+        with pytest.raises(ClipFailed) as empty:
+            _ = _clip(_request(claimed, 16_000, 20_000))
+    assert not empty.value.retryable
+    assert str(empty.value) == "the cut came out empty"
 
 
 @pytest.mark.integration

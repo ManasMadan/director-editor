@@ -911,6 +911,7 @@
       "title": "What you'll need",
       "presence": {
         "on-camera": "You, talking to the camera",
+        "on-camera-silent": "You on camera, without talking",
         "voice-only": "Just your voice: you're not on camera",
         "on-camera-and-voice": "You on camera, and your voice over pictures",
         "nobody": "Nobody on camera: just the things you film"

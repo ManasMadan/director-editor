@@ -144,7 +144,11 @@ or key file. Production's ai worker sets `INDEXER_URL` to it
 worker itself, the same way.
 
 It isn't deployed by Argo CD; run these by hand (or from a release checklist) with
-`gcloud` signed in as a project owner. The variables, once per shell:
+`gcloud` signed in as a project owner, on every release: it answers with the release it
+runs (`RELEASE`), and a worker on another release logs "the Cloud Run indexer runs
+another release", stops using it and writes plans itself until it's deployed again. An
+indexer left on an older release otherwise writes plans the way that release did (one
+from before assets writes plans without asset slots). The variables, once per shell:
 
 ```sh
 PROJECT=project-18e15b18-c92e-44bb-9bf

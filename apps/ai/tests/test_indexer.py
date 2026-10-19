@@ -38,6 +38,18 @@ from tests.fakes import (
 from tests.support import body, error_of
 from tests.test_director import PLAN, VIDEO
 
+# The commit the indexer's image was built from, and the worker's too.
+RELEASE = "sha-test"
+
+
+class _NoFallback:
+    """The worker's own indexing, which a test whose indexer runs the worker's release
+    never needs."""
+
+    async def index(self, request: IndexRequest, *, watched: Callable[[], object]) -> IndexResult:
+        raise AssertionError(f"indexed {request.planId} here, not on the indexer")
+
+
 pytestmark = pytest.mark.integration
 
 AUDIENCE = "https://director-indexer.test"
@@ -73,6 +85,7 @@ def _env(gemini: Fake, identity: Identity, audience: str) -> dict[str, str]:
         "GOOGLE_BASE_URL": gemini.url,
         "GOOGLE_VERTEX": "false",
         "MEDIA_BUCKET": "",
+        "RELEASE": RELEASE,
     }
 
 
@@ -138,6 +151,8 @@ def test_the_indexer_writes_the_plan_for_the_account_that_may_call_it(
     # No MEDIA_BUCKET: the audio isn't captured, and the plan doesn't wait for it.
     assert (result.audio.status, result.audio.objectKey) == ("none", None)
     assert (result.usage.inputTokens, result.usage.outputTokens) == (900, 100)
+    # Which release wrote it, for the worker to tell an indexer left on an older one.
+    assert result.release == RELEASE
     [(path, sent)] = gemini[0].received
     assert path == GEMINI_PATH
     assert b'"file_uri": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"' in sent
@@ -275,7 +290,7 @@ async def test_on_cloud_run_the_indexer_reaches_vertex_with_its_own_service_acco
     monkeypatch.setenv("GCE_METADATA_HOST", identity.host)
     with _running_indexer(env) as url:
         async with httpx.AsyncClient() as http:
-            result = await RemoteIndexer(url, http).index(
+            result = await RemoteIndexer(url, http, release=RELEASE, fallback=_NoFallback()).index(
                 IndexRequest.model_validate(_request()), watched=_nothing
             )
     assert result.model == GEMINI_MODEL

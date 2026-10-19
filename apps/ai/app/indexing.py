@@ -264,13 +264,45 @@ class RemoteIndexer:
 
     Stage timing: the indexer can't reach this worker's realtime channel, so `watched`
     (the plan's `writing` stage) is called only once its answer arrives, just before the
-    plan is saved; `watching` covers the whole remote run, the audio capture included."""
+    plan is saved; `watching` covers the whole remote run, the audio capture included.
 
-    def __init__(self, url: str, http: httpx.AsyncClient) -> None:
+    The indexer is deployed by hand, so it can be left on an older release than this
+    worker, writing plans the way that release did (one from before assets wrote none).
+    It says which release it runs: one that isn't this worker's is used no more, and the
+    plan is written here instead (`fallback`), with an error in the log until the indexer
+    is deployed again (docs/deploy.md, "The Cloud Run indexer")."""
+
+    def __init__(
+        self, url: str, http: httpx.AsyncClient, *, release: str, fallback: Indexer
+    ) -> None:
         self._url = url
         self._http = http
+        self._release = release
+        self._fallback = fallback
+        self._stale = False
 
     async def index(self, request: IndexRequest, *, watched: Watched) -> IndexResult:
+        if self._stale:
+            return await self._fallback.index(request, watched=watched)
+        result = await self._remote(request)
+        if result.release == self._release:
+            await watched()
+            return result
+        log.error(
+            "the Cloud Run indexer runs another release: indexing here instead",
+            indexer=result.release,
+            worker=self._release,
+        )
+        self._stale = True
+        local = await self._fallback.index(request, watched=watched)
+        # Both runs were paid for.
+        used = TokenUsage(
+            inputTokens=local.usage.inputTokens + result.usage.inputTokens,
+            outputTokens=local.usage.outputTokens + result.usage.outputTokens,
+        )
+        return local.model_copy(update={"usage": used})
+
+    async def _remote(self, request: IndexRequest) -> IndexResult:
         unknown = _all_reserved(request)
         try:
             token = await id_token(self._url)
@@ -301,7 +333,6 @@ class RemoteIndexer:
             raise IndexFailed(
                 "DIRECTOR_ANALYSIS_FAILED", retryable=False, usage=unknown, cause=str(error)
             ) from error
-        await watched()
         return result
 
 

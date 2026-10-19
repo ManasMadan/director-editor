@@ -99,7 +99,7 @@ async def index(body: IndexRequest) -> IndexResult:
         orgId=str(body.orgId), planId=str(body.planId), videoId=body.videoId
     )
     try:
-        return await services().indexer.index(body, watched=_nothing_to_announce)
+        result = await services().indexer.index(body, watched=_nothing_to_announce)
     except IndexFailed as failure:
         used = {
             "inputTokens": failure.usage.inputTokens,
@@ -108,6 +108,7 @@ async def index(body: IndexRequest) -> IndexResult:
         if failure.retryable:
             raise AppError("UPSTREAM_UNAVAILABLE", {"service": "gemini", **used}) from None
         raise AppError(failure.code, used) from None
+    return result.model_copy(update={"release": services().settings.release})
 
 
 async def _nothing_to_announce() -> None:
