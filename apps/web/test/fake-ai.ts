@@ -278,6 +278,14 @@ function directorRoute(
     found.plan = input.plan;
     return { status: 200, body: planBody(videoId, found) };
   }
+  // The slower line's turns, counted against the workspace's allowance by the real
+  // service: here every turn has room, and what it spent is taken as said.
+  if (route === "POST /v1/director/chat-reservations") {
+    return { status: 201, body: { tokens: 100_000 } };
+  }
+  if (route === "POST /v1/director/chat-usage") {
+    return { status: 204 };
+  }
   const takes = /^GET \/v1\/director\/plans\/([\w-]{11})\/takes$/.exec(route);
   if (takes?.[1]) {
     return { status: 200, body: short(takes[1]).takes };

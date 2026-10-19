@@ -1379,12 +1379,15 @@ def test_a_cut_keeps_its_picks_and_how_long_they_last(
     )
     assert second.durationMs == 4_000
     # A take an older review kept a tenth of a second of plays whole in the editor, so it
-    # lasts its shot's length here too.
-    with migrator() as db:
-        db.execute(
-            "UPDATE ai.director_take SET best_start_ms = 1000, best_end_ms = 1100 WHERE id = %s",
-            (unreviewed.id,),
-        )
+    # lasts its shot's length here too. (Scoped to the workspace: row-level security
+    # applies to the migrator too, and an unscoped update changes no row.)
+    changed = as_org(
+        org,
+        "UPDATE ai.director_take SET best_start_ms = 1000, best_end_ms = 1100 WHERE id = %s"
+        " RETURNING id",
+        (unreviewed.id,),
+    )
+    assert changed == [(unreviewed.id,)]
     flash = DirectorCutOut.model_validate_json(
         save_cut(client, org, user, [(0, unreviewed.id)]).content
     )
@@ -2133,6 +2136,20 @@ def test_a_file_added_twice_is_one_take(client: TestClient) -> None:
     assert first.json() == again.json()
     assert len(takes_of(client, org, user)) == 1
     assert stored_job(key)[b"name"] == b"review-take"
+    # Once it's reviewed, adding it again answers the take as it is and queues nothing.
+    made = DirectorTakeOut.model_validate_json(first.content)
+    assert redis_client().delete(key) == 1
+    reviewed = as_org(
+        org,
+        "UPDATE ai.director_take SET status = 'ready' WHERE id = %s RETURNING id",
+        (made.id,),
+    )
+    assert reviewed == [(made.id,)]
+    later = client.post("/v1/director/takes", json=take, headers=headers(org, user))
+    assert later.status_code == 201
+    kept = DirectorTakeOut.model_validate_json(later.content)
+    assert (kept.id, kept.status) == (made.id, "ready")
+    assert stored_job(key) == {}
     # The file is that member's take: anyone else adding it finds no take of theirs.
     teammate = uuid4()
     with migrator() as db:
@@ -2264,6 +2281,21 @@ def test_a_review_gemini_can_t_give_fails_for_a_retry(
         with pytest.raises(ReviewInterrupted):
             on_app_loop(client, lambda: director().review(org, take.id, f"{files.url}/t", user))
     assert takes_of(client, org, user)[0].error == "DIRECTOR_REVIEW_FAILED"
+
+
+def test_a_review_gemini_refuses_fails_at_once_without_a_retry(
+    client: TestClient, gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    """A refusal won't change on a second try: the take fails on its first attempt."""
+    org, user = new_org()
+    _ = ready_plan(client, org, user)
+    gemini[1][GEMINI_PATH] = gemini_error(400, "INVALID_ARGUMENT")
+    with serve_files({"/t": ("video/mp4", b"\x00\x00\x00\x18ftypmp42")}) as files:
+        take = add_take(client, org, user, f"{files.url}/t", content_type="video/mp4")
+        url = f"{files.url}/t"
+        on_app_loop(client, lambda: director().review(org, take.id, url, user, final=False))
+    failed = takes_of(client, org, user)[0]
+    assert (failed.status, failed.error) == ("failed", "DIRECTOR_REVIEW_FAILED")
 
 
 def test_a_review_over_its_token_cap_or_the_budget_fails_without_retrying(

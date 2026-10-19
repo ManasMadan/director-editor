@@ -163,3 +163,26 @@ def test_a_clip_waits_for_a_whole_clip_s_worth_of_allowance(
 
     assert clip_of(org, plan_id)[1:] == ("failed", None, "AI_BUDGET_EXCEEDED")
     assert START not in [path for path, _ in google[0].received[asked:]]
+
+
+def test_a_clip_another_job_is_making_is_never_made_twice(
+    client: TestClient, google: Google
+) -> None:
+    """Two jobs can list the same clip: one claimed a moment ago is left to the job that
+    claimed it, since a Veo clip made twice is billed twice."""
+    org, plan_id = ask_for_a_clip(client)
+    claimed = as_org(
+        org,
+        "UPDATE ai.director_asset SET status = 'generating', updated_at = now()"
+        " WHERE plan_id = %s AND asset_id = %s RETURNING id",
+        (plan_id, GAP),
+    )
+    assert len(claimed) == 1
+    asked = len(google[0].received)
+    stills = usage(org, "director-asset")
+
+    make(client, org, plan_id)
+
+    assert clip_of(org, plan_id)[1:] == ("generating", None, None)
+    assert START not in [path for path, _ in google[0].received[asked:]]
+    assert usage(org, "director-asset") == stills

@@ -160,6 +160,31 @@ describe("stitching the short", () => {
     expect(frames.find((frame) => frame.time > 1.15 && frame.time < 1.3)?.hue).toBe("red");
   });
 
+  it("keeps the picture with the sound however slow the speakers are", {
+    timeout: 60_000,
+  }, async () => {
+    // Bluetooth headphones: a fifth of a second to the speakers, none of it on the way
+    // to the recorder, which takes the sound from the context directly.
+    vi.spyOn(AudioContext.prototype, "outputLatency", "get").mockReturnValue(0.2);
+    const red = await recordToneClip(audio, 1, "#ff0000", 440);
+    const blue = await recordToneClip(audio, 1, "#0000ff", 880);
+    const short = await stitch(
+      [
+        { kind: "video", source: red, startSeconds: 0, endSeconds: 0.8 },
+        { kind: "video", source: blue, startSeconds: 0, endSeconds: 0.8 },
+      ],
+      { audio, withSound: true, onProgress: vi.fn(), captions: { ...CAPTIONS, style: "off" } },
+    );
+    const frames = await playedFrames(short);
+    const { samples, rate } = await soundOf(short);
+    const runs = toneRuns(samples, rate, [440, 880]);
+    const pictured = turns(frames, "blue", 0.6) ?? Number.NaN;
+    const heard = sounds(runs, 880, 0.6) ?? Number.NaN;
+    expect(Math.abs(pictured - heard)).toBeLessThan(2 * FRAME);
+    // And it isn't held back at the end by the speakers' delay either.
+    expect((frames.at(-1)?.time ?? 0) + FRAME).toBeLessThan(1.6 + 4 * FRAME);
+  });
+
   it("waits for a hidden page, pauses while it's hidden, and carries on in step when it's back", {
     timeout: 60_000,
   }, async () => {
@@ -379,6 +404,44 @@ describe("stitching the short", () => {
     ).rejects.toThrow(expect.objectContaining({ name: "AbortError" }));
     expect(draw).not.toHaveBeenCalled();
     expect(start).not.toHaveBeenCalled();
+  });
+
+  it("stops when cancelled while the page is hidden, recording nothing", async () => {
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    const listen = vi.spyOn(document, "addEventListener");
+    const start = vi.spyOn(MediaRecorder.prototype, "start");
+    const cancel = new AbortController();
+    const rendering = stitch([{ kind: "photo", source: photo, seconds: 1 }], {
+      audio,
+      withSound: false,
+      onProgress: vi.fn(),
+      captions: CAPTIONS,
+      signal: cancel.signal,
+    });
+    // Waiting for the page to be shown again, when the member leaves.
+    await vi.waitFor(() => {
+      const watching = listen.mock.calls.filter(([type]) => type === "visibilitychange");
+      expect(watching.length).toBeGreaterThanOrEqual(3);
+    });
+    cancel.abort();
+    await expect(rendering).rejects.toThrow(expect.objectContaining({ name: "AbortError" }));
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it("stops when cancelled while the page draws no frames", async () => {
+    // A page the browser has stopped drawing: no frame comes after the first.
+    vi.spyOn(window, "requestAnimationFrame").mockReturnValue(0);
+    const forget = vi.spyOn(window, "cancelAnimationFrame");
+    const cancel = new AbortController();
+    const rendering = stitch([{ kind: "photo", source: photo, seconds: 1 }], {
+      audio,
+      withSound: false,
+      onProgress: () => setTimeout(() => cancel.abort(), 50),
+      captions: CAPTIONS,
+      signal: cancel.signal,
+    });
+    await expect(rendering).rejects.toThrow(expect.objectContaining({ name: "AbortError" }));
+    expect(forget).toHaveBeenCalledWith(0);
   });
 
   it("fails in a browser that can't record video, or has no canvas", async () => {

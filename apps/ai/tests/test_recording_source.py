@@ -4,7 +4,7 @@ pass adds, queued to be cut once, and the joined copies removed; Cloud Storage's
 compose and delete against the local stand-in (tests/fakes.py)."""
 
 import asyncio
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from urllib.parse import quote
 from uuid import UUID, uuid4
 
@@ -14,10 +14,34 @@ from pydantic import BaseModel, TypeAdapter
 
 from app.queues import ClipQueue
 from app.session_pass import NewAttempt, PartFootage, Refinement
-from app.session_recordings import COMPOSE_MOST, DbRecordings, GcsJoiner, slice_key
-from tests.fakes import MEDIA_BUCKET, Reply, serve
-from tests.support import REDIS_URL, as_org, migrator, new_org, on_app_loop, stored_job
-from tests.test_director import VIDEO, insert_plan
+from app.session_recordings import (
+    COMPOSE_MOST,
+    DbRecordings,
+    GcsJoiner,
+    create_session_pass,
+    slice_key,
+)
+from app.settings import get_settings
+from tests.fakes import (
+    GEMINI_MODEL,
+    MEDIA_BUCKET,
+    VERTEX_PROJECT,
+    Reply,
+    gemini_output,
+    serve,
+    vertex_path,
+)
+from tests.support import (
+    REDIS_URL,
+    as_org,
+    migrator,
+    new_org,
+    on_app_loop,
+    published,
+    stored_job,
+    subscribe,
+)
+from tests.test_director import VIDEO, insert_plan, usage
 
 pytestmark = pytest.mark.integration
 
@@ -231,3 +255,64 @@ def test_an_attempt_the_pass_found_is_queued_to_be_cut_once_by_its_id(
         "meta": {"orgId": str(org), "userId": str(user)},
         "payload": {"attemptId": str(attempt), "orgId": str(org)},
     }
+
+
+def test_the_pass_the_worker_builds_spends_the_month_and_says_what_it_added(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The pass as the worker makes it (create_session_pass): the footage joined in the
+    bucket, Gemini's watch reserved whole out of the workspace's month and settled at what
+    it used, what it found queued to be cut, and the workspace told something changed."""
+    org, user = new_org()
+    plan_id = insert_plan(org, VIDEO)
+    session, _ = recorded(org, user, plan_id)
+    compose, composed = _composed(f"recordings/{session}/0/whole")
+    # A second take of shot 2, twelve seconds in, where nothing was marked live.
+    finding = {
+        "part": 0,
+        "shot": 2,
+        "startSeconds": 12.0,
+        "endSeconds": 15.5,
+        "line": None,
+        "score": 80,
+        "reason": "The cleanest delivery.",
+        "rehearsal": False,
+    }
+    handlers: dict[str, Callable[[bytes], Reply]] = {
+        compose: lambda _body: composed,
+        vertex_path("global", GEMINI_MODEL, "generateContent"): gemini_output(
+            {"attempts": [finding]}, tokens=5_000
+        ),
+    }
+    events = subscribe(f"realtime:org:{org}")
+    with serve(handlers) as fake:
+        monkeypatch.setenv("STORAGE_EMULATOR_HOST", fake.url)
+        for key, value in {
+            "DIRECTOR_MODEL": GEMINI_MODEL,
+            "INDEX_MODEL": GEMINI_MODEL,
+            "GOOGLE_VERTEX": "true",
+            "GOOGLE_API_KEY": "test-key",
+            "GOOGLE_CLOUD_PROJECT": VERTEX_PROJECT,
+            "GOOGLE_BASE_URL": fake.url,
+            "MEDIA_BUCKET": MEDIA_BUCKET,
+        }.items():
+            monkeypatch.setenv(key, value)
+        get_settings.cache_clear()
+        from app.main import services
+
+        built = create_session_pass(get_settings(), services().redis)
+        assert built is not None
+        the_pass, clips = built
+        assert on_app_loop(client, lambda: the_pass.run(org, session)) == (1, 0)
+        on_app_loop(client, clips.close)
+    rows = as_org(
+        org,
+        """SELECT id, shot_index, start_ms, end_ms, origin FROM app.recording_attempt
+           WHERE session_id = %s AND origin = 'pass'""",
+        (session,),
+    )
+    [(attempt, shot_index, start_ms, end_ms, origin)] = rows
+    assert (shot_index, start_ms, end_ms, origin) == (1, 12_000, 15_500, "pass")
+    assert stored_job(f"{{recording}}:recording:{attempt}")[b"name"] == b"clip"
+    assert usage(org, "director-pass") == 5_000
+    assert published(events) == [{"type": "director.changed"}]

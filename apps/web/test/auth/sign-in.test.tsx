@@ -3,7 +3,15 @@ import { commands, userEvent } from "vitest/browser";
 import { SignInPage } from "@/modules/auth";
 import { DEMO } from "../demo";
 import { cleanup, currentUrl, renderPage, router } from "../render";
-import { auth, currentSession, enableTwoFactor, newUser, signOut, signUp } from "../users";
+import {
+  auth,
+  currentSession,
+  demoAccount,
+  enableTwoFactor,
+  newUser,
+  signOut,
+  signUp,
+} from "../users";
 
 /** system.info as the full API answers it, changed to an environment it isn't running as. */
 interface SystemInfo {
@@ -308,8 +316,8 @@ describe("sign in", () => {
   });
 
   it("signs in to the shared demo account in one tap", async () => {
-    // The account the API keeps for the demo, made here as a member would be.
-    await signUp({ email: DEMO.email, password: DEMO.password, name: "Director Demo" });
+    // The account the API keeps for the demo, made as a member would be (or already made).
+    await demoAccount();
     await signOut();
     await serveSystemInfo((info) => {
       info.features.demoGuests = false;

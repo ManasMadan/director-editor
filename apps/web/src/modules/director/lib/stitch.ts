@@ -383,16 +383,21 @@ function canvasTrack(canvas: HTMLCanvasElement) {
   return { track: required(track, "the canvas's video track"), sendFrame: () => undefined };
 }
 
-/** Resolves once the page is visible: a hidden page draws nothing. */
-function visible() {
+/**
+ * Resolves once the page is visible (a hidden page draws nothing), or as soon as `signal`
+ * cancels: a render cancelled while the page is hidden stops then, not when it's back.
+ */
+function visible(signal: AbortSignal | undefined) {
   return new Promise<void>((resolve) => {
     const check = () => {
-      if (document.visibilityState === "visible") {
+      if (document.visibilityState === "visible" || signal?.aborted) {
         document.removeEventListener("visibilitychange", check);
+        signal?.removeEventListener("abort", check);
         resolve();
       }
     };
     document.addEventListener("visibilitychange", check);
+    signal?.addEventListener("abort", check);
     check();
   });
 }
@@ -425,13 +430,33 @@ function pauseWhileHidden(audio: AudioContext, recorder: MediaRecorder) {
  * How long the sound the AudioContext plays now takes to reach the recorder, which
  * starts both tracks when it starts. A frame reaches it as it's drawn, so the picture's
  * clock runs this much behind the sound's, or every cut would be heard late.
+ *
+ * Only the context's own processing delay: the recorder takes the sound from a stream
+ * node, never through the speakers, so the output device's latency (`outputLatency`,
+ * a fifth of a second with Bluetooth headphones) isn't on its way. Counted in, it held
+ * the picture back that much, and the saved video's picture ran late behind its sound.
  */
 function soundDelay(audio: AudioContext) {
-  return audio.baseLatency + (audio.outputLatency || 0);
+  return audio.baseLatency;
 }
 
-function nextFrame() {
-  return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+/**
+ * Resolves on the next frame, or as soon as `signal` cancels: a page the browser has
+ * stopped drawing (hidden, or a frame it throttles) would otherwise keep a cancelled
+ * render waiting for a frame that doesn't come.
+ */
+function nextFrame(signal: AbortSignal | undefined) {
+  return new Promise<void>((resolve) => {
+    const cancelled = () => {
+      cancelAnimationFrame(frame);
+      resolve();
+    };
+    const frame = requestAnimationFrame(() => {
+      signal?.removeEventListener("abort", cancelled);
+      resolve();
+    });
+    signal?.addEventListener("abort", cancelled, { once: true });
+  });
 }
 
 /** Paints each frame of the video; returns where its captions sit (undefined: the default). */
@@ -566,7 +591,7 @@ async function playThrough({ plan, cued, audio, start, lag, draw, signal }: Run)
       draw(frame, index, (frame - placed.firstFrame) / plan.fps);
       drawn = tick;
     }
-    await nextFrame();
+    await nextFrame(signal);
   }
   cued[showing]?.end();
 }
@@ -700,7 +725,8 @@ export async function stitch(segments: Segment[], options: Options): Promise<Blo
       source.buffer = await soundtrackOf(plan, audio, lag);
       source.connect(sound);
     }
-    await visible();
+    await visible(signal);
+    signal?.throwIfAborted();
     // Running already (the tap that asked for the video started it), unless the page was
     // hidden while the takes loaded, which suspends it.
     await audio.resume();
@@ -732,8 +758,10 @@ export async function stitch(segments: Segment[], options: Options): Promise<Blo
       recorder.stop();
     }
   }
-  const video = await file();
+  // Cancelled: not waiting for the recorder to finish a file nobody wants, which takes as
+  // long as its encoder is behind (seconds on a busy device).
   signal?.throwIfAborted();
+  const video = await file();
   onProgress(1);
   return plan.frames > 0 ? checked(video, plan.frames, lag, plan.fps) : video;
 }

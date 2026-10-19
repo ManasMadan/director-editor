@@ -217,7 +217,8 @@ def test_a_match_cut_is_lined_up_and_counted(
     client: TestClient, gemini: Gemini, takes: Fake
 ) -> None:
     org, user = new_org()
-    seen = {"visible": True, "box": output_box(STILL, LAST)}
+    # Gemini answers with the box as four numbers beside `visible` (AnchorSightingDraft).
+    seen = {"visible": True, **output_box(STILL, LAST)}
     gemini[1][GEMINI_PATH] = gemini_output({"before": seen, "after": seen}, tokens=1_200)
 
     response = _align(client, org, user, takes)

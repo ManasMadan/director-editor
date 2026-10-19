@@ -115,11 +115,12 @@ describe("Director's seeded templates", () => {
     expect(
       directorSeedsSchema.safeParse(withAssets({ chart: `${base}/asset-chart.jpg` })).success,
     ).toBe(true);
-    for (const refused of [
+    const refusals: Record<string, string>[] = [
       { chart: `${base}/asset-logo.png` },
       // An asset the plan doesn't have.
       { logo: `${base}/asset-logo.png` },
-    ]) {
+    ];
+    for (const refused of refusals) {
       expect(directorSeedsSchema.safeParse(withAssets(refused)).success).toBe(false);
     }
   });

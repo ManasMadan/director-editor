@@ -49,6 +49,7 @@ import {
   createRateLimiter,
   describeError,
   InjectPinoLogger,
+  isAppError,
   PinoLogger,
   type RateLimiter,
   REDIS,
@@ -244,7 +245,7 @@ export class DirectorService {
       const plan = await this.toPlan(await this.planRow(userId, orgId, videoId), { media: false });
       return plan.status === "failed" ? null : plan;
     } catch (error) {
-      if (error instanceof AppError && error.code === "DIRECTOR_PLAN_NOT_FOUND") {
+      if (isAppError(error) && error.code === "DIRECTOR_PLAN_NOT_FOUND") {
         return null;
       }
       throw error;

@@ -1051,10 +1051,6 @@ function Edit({
 
 /** The editor: the member's takes shot by shot, Director's picks, and saving the video. */
 export function EditPage(props: { videoId: string; audio: string | undefined; wrap: boolean }) {
-  // Asked for beside the gate's check that Director is on, not after it: on a phone's
-  // slow line each wait in turn is a round trip before the page shows.
-  useDirectorPlanQuery(props.videoId);
-  useYourVersionQuery(props.videoId);
   return (
     <DirectorGate>
       <Edit {...props} />

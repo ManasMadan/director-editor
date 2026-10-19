@@ -259,9 +259,6 @@ function Media() {
 /** My media: every video the member saved, under the Short it was made from. */
 export function MediaPage() {
   const t = useTranslations("director.media");
-  // Asked for beside the gate's check that Director is on, not after it: on a phone's
-  // slow line each wait in turn is a round trip before the page shows.
-  useDirectorMediaQuery();
   return (
     <DirectorGate>
       {/* On the studio stage, under the site header (STUDIO_PATHS), like the library. */}
