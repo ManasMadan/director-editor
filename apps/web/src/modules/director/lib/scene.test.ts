@@ -241,6 +241,156 @@ describe("what the saved video shows", () => {
   });
 });
 
+describe("the frame's layout, edge by edge", () => {
+  const layout = (overrides: Partial<Extract<Edit, { type: "layout" }>>): Edit => ({
+    type: "layout",
+    ...timed,
+    layout: "split",
+    assetId: "chart",
+    cameraOn: null,
+    cameraShare: null,
+    box: null,
+    inset: null,
+    ...overrides,
+  });
+  const one = (
+    edits: Edit[],
+    assets = [asset("chart", "text-card", 0, 10)],
+    mode?: Shot["mode"],
+  ) => {
+    const p = plan([shot(0, 10, mode)], assets, edits);
+    return sceneAt(p, clipsOf(p.shots, [10]), 1);
+  };
+
+  it("splits in half when the plan doesn't say how, and fits words whole", () => {
+    const scene = one([layout({})]);
+    expect(scene.camera).toEqual({ x: 0, y: 0, width: 1, height: 0.5 });
+    expect(scene.asset).toMatchObject({ box: { y: 0.5, height: 0.5 }, fit: "contain" });
+  });
+
+  it("gives the asset the frame in a full layout that names one, else the camera", () => {
+    expect(one([layout({ layout: "full" })])).toMatchObject({
+      camera: null,
+      asset: { assetId: "chart", box: { x: 0, y: 0, width: 1, height: 1 } },
+    });
+    expect(one([layout({ layout: "full", assetId: null })])).toMatchObject({
+      camera: { width: 1, height: 1 },
+      asset: null,
+    });
+    // Picture-in-picture with no box to put it in: the full frame.
+    expect(one([layout({ layout: "picture-in-picture" })]).camera).toBeNull();
+  });
+
+  it("insets the member's picture in the asset for picture-in-picture of the camera", () => {
+    const box = { x: 0.05, y: 0.05, width: 0.3, height: 0.2 };
+    expect(one([layout({ layout: "picture-in-picture", box, inset: "camera" })])).toMatchObject({
+      camera: box,
+      asset: { box: { width: 1, height: 1 } },
+    });
+  });
+
+  it("crops an asset the plan doesn't list, and grades the assets alone when it says so", () => {
+    const scene = one(
+      [
+        layout({ assetId: "unlisted" }),
+        { type: "grade", ...timed, grade: "vivid", target: "assets" },
+      ],
+      [],
+    );
+    expect(scene.asset?.fit).toBe("cover");
+    expect(scene.cameraFilter).toBeNull();
+    expect(scene.assetFilter).toBe("saturate(1.5)");
+  });
+
+  it("shows a voice-over's layout asset full frame, and the camera when it has no asset", () => {
+    expect(one([layout({})], undefined, "voice-over")).toMatchObject({
+      camera: null,
+      asset: { assetId: "chart", box: { width: 1, height: 1 } },
+    });
+    // Footage of the original (B-roll) isn't the shot's picture: the camera stays.
+    expect(one([], [asset("street", "broll", 0, 10)], "voice-over").camera).toEqual({
+      x: 0,
+      y: 0,
+      width: 1,
+      height: 1,
+    });
+  });
+
+  it("puts captions at a split's seam with the camera below, and in their place otherwise", () => {
+    const captions = (position: "between-halves" | "top"): Edit => ({
+      type: "text",
+      ...timed,
+      style: "captions",
+      text: null,
+      position,
+      captionStyle: null,
+      color: null,
+      highlightColor: null,
+    });
+    expect(
+      one([layout({ cameraOn: "bottom", cameraShare: 0.4 }), captions("between-halves")]).captionsY,
+    ).toBe(0.6);
+    expect(one([captions("between-halves")]).captionsY).toBe(0.5);
+    expect(one([captions("top")]).captionsY).toBe(0.18);
+  });
+
+  it("draws a mark at once that isn't drawn on, cuts words in and out, and skips an empty overlay", () => {
+    const scene = one([
+      {
+        type: "overlay",
+        ...timed,
+        assetId: null,
+        mark: "tick",
+        color: null,
+        box: { x: 0, y: 0, width: 0.1, height: 0.1 },
+        entry: "cut",
+        exit: "cut",
+      },
+      {
+        type: "overlay",
+        ...timed,
+        assetId: null,
+        mark: null,
+        color: null,
+        box: { x: 0, y: 0, width: 0.1, height: 0.1 },
+        entry: "fade",
+        exit: "fade",
+      },
+      {
+        type: "text",
+        ...timed,
+        style: "title",
+        text: null,
+        position: "top",
+        captionStyle: null,
+        color: null,
+        highlightColor: null,
+      },
+    ]);
+    expect(scene.marks).toEqual([
+      { mark: "tick", box: { x: 0, y: 0, width: 0.1, height: 0.1 }, color: null, drawn: 1 },
+    ]);
+    expect(scene.overlays).toEqual([]);
+    expect(scene.words).toEqual([]);
+  });
+
+  it("holds the last shot's frame past the edit's end", () => {
+    const p = plan([shot(0, 10)], [], []);
+    expect(sceneAt(p, clipsOf(p.shots, [10]), 12).camera).toEqual({
+      x: 0,
+      y: 0,
+      width: 1,
+      height: 1,
+    });
+  });
+
+  it("names a skipped shot with no place by its title alone", () => {
+    const placeless = { ...shot(0, 10), scene: "" };
+    const p = plan([placeless], [], []);
+    expect(gapSlots(p, clipsOf(p.shots, [10], [0]))[0]?.description).toBe("Shot at 0");
+  });
+});
+
 describe("gaps", () => {
   const p = plan(
     [shot(0, 10), shot(10, 20)],
