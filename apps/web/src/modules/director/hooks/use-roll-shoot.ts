@@ -4,7 +4,7 @@ import { nearRecordingLimit, useRecordingSessionQuery } from "@repo/client/api/r
 import type { LiveToolCall, LiveToolResult } from "@repo/contracts/live";
 import { RECORDING_WARN_MS } from "@repo/contracts/recording";
 import { useRouter } from "next/navigation";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { type RefObject, useEffect, useLayoutEffect, useRef } from "react";
 import { wakeLiveAudio } from "../lib/live-audio";
 import { type Roll, shotStates } from "../lib/roll";
 import type { useCamera } from "./use-camera";
@@ -74,6 +74,31 @@ function useRollCamera(roll: Roll, stream: MediaStream | null, wanted: boolean, 
 }
 
 /**
+ * Tells the roll each size the viewfinder's picture takes: a camera settling on its
+ * resolution after it opened, or a phone turned, records in a part of its own.
+ */
+function useRollPicture(roll: Roll, video: RefObject<HTMLVideoElement | null>) {
+  useEffect(() => {
+    const viewfinder = video.current;
+    if (!viewfinder) {
+      return;
+    }
+    const resized = () => {
+      const shown = viewfinder.srcObject;
+      // No size before the first frame, and nothing to record without a camera.
+      if (shown instanceof MediaStream && viewfinder.videoWidth > 0) {
+        void roll.reframe(shown, {
+          width: viewfinder.videoWidth,
+          height: viewfinder.videoHeight,
+        });
+      }
+    };
+    viewfinder.addEventListener("resize", resized);
+    return () => viewfinder.removeEventListener("resize", resized);
+  }, [roll, video]);
+}
+
+/**
  * The roll on the shoot screen, wired to the camera and Director: it starts with the
  * camera's first picture, starts a new part on each flip, tells Director where it is
  * (and keeps it from seeing or hearing a pause), pauses when the tab is hidden, and
@@ -87,6 +112,7 @@ export function useRollShoot({ props, camera, live, wanted }: Options) {
     latest.current = { props, camera, live };
   });
   useRollCamera(roll, camera.stream, wanted, latest);
+  useRollPicture(roll, camera.video);
 
   // Director (re)joined while the roll goes on: it hears where it is.
   useEffect(() => {

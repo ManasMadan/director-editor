@@ -33,6 +33,24 @@ describe("the shot card", () => {
     await expect.element(page.getByText("“Morning. Coffee first. Then the window.”")).toBeVisible();
   });
 
+  it("shows the whole line to say, however long, on a phone", async () => {
+    const long =
+      "While travelling around India, I've noticed four variations of the head nod, and it is a whole language of its own once you know how to read it.";
+    const page = await renderPage(
+      <div style={{ width: 360 }}>
+        <ShotCard
+          shot={planShot({ script: [{ startSeconds: 0, endSeconds: 9, text: long }] })}
+          index={0}
+        />
+      </div>,
+    );
+    const say = page.getByText(`“${long}”`);
+    await expect.element(say).toBeVisible();
+    // Nothing of it is cut off: it's what the member has to say.
+    const element = say.element();
+    expect(element.scrollHeight).toBeLessThanOrEqual(element.clientHeight);
+  });
+
   it("falls back on the pose without steps, and leaves out Say without lines", async () => {
     const shot = planShot({
       steps: [],

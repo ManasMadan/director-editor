@@ -24,6 +24,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { type FormEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { authClient } from "@/lib/auth-client";
 import { DirectorGate, YouTubeEmbed } from "@/modules/shorts";
 import { DirectorCaptions, DirectorOrb, useLiveFailure } from "../components/director-captions";
 import { MarksLayer } from "../components/marks-layer";
@@ -113,16 +114,47 @@ function introOf(first: boolean, roll: boolean) {
   return first ? "intro.first" : "intro.again";
 }
 
+/**
+ * The start screen's top: ✕ back where the member came from (the short, or the editor
+ * for a retake), and which short and shot this is. Before Start nothing is at stake,
+ * so ✕ just goes.
+ */
+function StartHeader({ props, title }: { props: StudioShot; title: string }) {
+  const t = useTranslations("director.shoot");
+  return (
+    <header className="flex items-center gap-3">
+      <LeaveLink
+        videoId={props.videoId}
+        href={props.retake ? nextPage(props) : `/director/${props.videoId}`}
+      />
+      <div className="min-w-0">
+        <p className="truncate text-[0.9375rem] font-semibold">{title}</p>
+        <p className="text-sm text-studio-foreground/75">
+          {t("shotOf", { index: props.index + 1, count: props.count })}
+        </p>
+      </div>
+    </header>
+  );
+}
+
 function StartCard({
+  props,
+  title,
   first,
   roll,
+  sharedDemo,
   leftoverMs,
   ready,
   onStart,
 }: {
+  props: StudioShot;
+  /** The short's title. */
+  title: string;
   first: boolean;
   /** The shoot records as one roll (else take by take, on the shutter). */
   roll: boolean;
+  /** The shared demo account, where takes record on the shutter: it's said up front. */
+  sharedDemo: boolean;
   /** Footage an earlier visit left on this device, being sent now. */
   leftoverMs: number;
   /** Whether it's known yet if Director can join here. */
@@ -132,33 +164,79 @@ function StartCard({
   const t = useTranslations("director.shoot");
   const leftover = Math.ceil(leftoverMs / 1000);
   return (
-    <div className="absolute inset-x-4 bottom-[max(1.5rem,env(safe-area-inset-bottom))] flex flex-col gap-3">
-      <section
-        aria-labelledby="shoot-intro"
-        className={cn("live-motion animate-[live-rise_300ms_ease-out_both] rounded-3xl p-5", GLASS)}
-      >
-        <h1 id="shoot-intro" className="text-xl font-bold">
-          {t("intro.title")}
-        </h1>
-        <p className="mt-2 text-[0.9375rem] leading-snug text-studio-foreground/85">
-          {t(introOf(first, roll))}
-        </p>
-        {leftover > 0 ? (
-          <p role="status" className="mt-2 text-sm text-studio-foreground/80">
-            {t("roll.leftover", { seconds: leftover })}
+    // The whole screen, not the 9:16 column: a phone held sideways has the width, and
+    // the card scrolls rather than running off the top.
+    <div className="absolute inset-0 flex flex-col gap-3 overflow-y-auto px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+      <StartHeader props={props} title={title} />
+      <div className="mx-auto mt-auto flex w-full max-w-lg flex-col gap-3">
+        <section
+          aria-labelledby="shoot-intro"
+          className={cn(
+            "live-motion animate-[live-rise_300ms_ease-out_both] rounded-3xl p-5",
+            GLASS,
+          )}
+        >
+          <h1 id="shoot-intro" className="text-xl font-bold">
+            {t("intro.title")}
+          </h1>
+          <p className="mt-2 text-[0.9375rem] leading-snug text-studio-foreground/85">
+            {t(introOf(first, roll))}
           </p>
-        ) : null}
-      </section>
-      <button
-        type="button"
-        onClick={onStart}
-        disabled={!ready}
-        className="h-14 rounded-full bg-studio-foreground text-lg font-semibold text-studio shadow-xl transition-transform active:scale-95 disabled:opacity-60"
-      >
-        {t("start")}
-      </button>
+          {sharedDemo ? (
+            <p className="mt-2 text-sm text-studio-foreground/80">{t("intro.sharedDemo")}</p>
+          ) : null}
+          {leftover > 0 ? (
+            <p role="status" className="mt-2 text-sm text-studio-foreground/80">
+              {t("roll.leftover", { seconds: leftover })}
+            </p>
+          ) : null}
+        </section>
+        <button
+          type="button"
+          onClick={onStart}
+          disabled={!ready}
+          className="h-14 shrink-0 rounded-full bg-studio-foreground text-lg font-semibold text-studio shadow-xl transition-transform active:scale-95 disabled:opacity-60"
+        >
+          {t("start")}
+        </button>
+      </div>
     </div>
   );
+}
+
+/**
+ * The shared demo account (everyone trying Director without a guest of their own signs in
+ * as it), as the API tells it apart: a demo user at the demo's address. The API won't
+ * record its whole shoots, since they'd be everyone's to see.
+ */
+function useSharedDemo() {
+  const system = useSystemInfoQuery();
+  const { data } = authClient.useSession();
+  const demo = system.data?.demo;
+  return (
+    demo !== null &&
+    demo !== undefined &&
+    data?.user.demo === true &&
+    data.user.email === demo.email
+  );
+}
+
+/**
+ * How this screen records: as one roll with Director on, or take by take on the shutter
+ * without it, where the browser can't record, or on the shared demo account. That last is
+ * known before Start, so the start card says what will really happen.
+ */
+function useRecordingMode() {
+  const system = useSystemInfoQuery();
+  const liveOn = system.data?.features.live === true;
+  const sharedDemo = useSharedDemo();
+  const canRoll = liveOn && typeof MediaRecorder !== "undefined";
+  return {
+    liveOn,
+    rollOn: canRoll && !sharedDemo,
+    /** The roll would be on, but not on this account: the start card says why. */
+    demoNoRoll: canRoll && sharedDemo,
+  };
 }
 
 /** No camera to show: why, and the way back to one. */
@@ -900,13 +978,11 @@ function Review({ shoot }: { shoot: ReturnType<typeof useShoot> }) {
  */
 function ShootScreen(shootProps: ShootProps) {
   const system = useSystemInfoQuery();
-  const liveOn = system.data?.features.live === true;
+  const { liveOn, rollOn, demoNoRoll } = useRecordingMode();
   const memory = useMemory();
   const [started, setStarted] = useState(false);
   const shoot = useShoot(shootProps);
   const { camera, live, studio } = shoot;
-  // With Director on, the shoot records as one roll; without it, take by take.
-  const rollOn = liveOn && typeof MediaRecorder !== "undefined";
   const roll = useRollShoot({ props: shoot.props, camera, live, wanted: started && rollOn });
   useLayoutEffect(() => {
     shoot.mark.current = roll.mark;
@@ -935,15 +1011,6 @@ function ShootScreen(shootProps: ShootProps) {
           />
         ) : null}
         {started ? <MatchGhost {...shootProps} facing={camera.facing} /> : null}
-        {started ? null : (
-          <StartCard
-            first={memory.before.sessions === 0}
-            roll={rollOn}
-            leftoverMs={roll.upload.behindMs}
-            ready={system.data !== undefined}
-            onStart={start}
-          />
-        )}
         {roll.phase === "paused" ? <PausedVeil onResume={roll.resume} /> : null}
         {started && !blocked && !reviewing ? (
           <Overlay
@@ -970,6 +1037,18 @@ function ShootScreen(shootProps: ShootProps) {
         <LeaveDialog leaving={leaving} />
         {blocked ? <CameraBlocked camera={camera} /> : null}
       </div>
+      {started ? null : (
+        <StartCard
+          props={shoot.props}
+          title={shootProps.plan.title}
+          first={memory.before.sessions === 0}
+          roll={rollOn}
+          sharedDemo={demoNoRoll}
+          leftoverMs={roll.upload.behindMs}
+          ready={system.data !== undefined}
+          onStart={start}
+        />
+      )}
     </div>
   );
 }

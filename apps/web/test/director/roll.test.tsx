@@ -100,6 +100,30 @@ describe("the roll", { tags: ["files"] }, () => {
       .toBeVisible();
   });
 
+  it("records in a new part when the camera's picture changes size", async () => {
+    canvasCamera();
+    await signUp();
+    const videoId = await plannedShort(2);
+    const page = await openShoot(videoId);
+    await startRoll(page);
+    const [session] = await api.recording.sessions();
+    if (!session) {
+      throw new Error("the roll opened no session");
+    }
+    const parts = async () =>
+      (await api.recording.session({ sessionId: session.id })).parts.map((part) => part.index);
+    expect(await parts()).toEqual([0]);
+    // The camera settles on another size (or the phone turns): its frames change size.
+    const shown = document.querySelector("video")?.srcObject;
+    const [track] = shown instanceof MediaStream ? shown.getVideoTracks() : [];
+    if (!(track instanceof CanvasCaptureMediaStreamTrack)) {
+      throw new Error("the viewfinder isn't showing the canvas camera");
+    }
+    track.canvas.width = 640;
+    track.canvas.height = 360;
+    await expect.poll(parts, { timeout: 10_000 }).toEqual([0, 1]);
+  });
+
   it("finishes the session when the page goes, and carries on an open one on return", async () => {
     canvasCamera();
     await signUp();

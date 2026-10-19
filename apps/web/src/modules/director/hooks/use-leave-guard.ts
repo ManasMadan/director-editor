@@ -20,8 +20,9 @@ function pushEntry(pushed: { current: boolean }) {
 /**
  * Leaving the shoot without losing a take by accident. While `guarded` (a countdown, a
  * recording, a take not kept yet), ✕ and the browser's back ask first instead of leaving:
- * `halt` runs at once (the count called off, the recording stopped, so the question sits
- * over a still take), and `asking` turns on until the member picks Leave or Stay.
+ * `halt` runs at once (a countdown is called off, so recording never starts behind the
+ * question; a recording carries on, so Stay keeps it whole), and `asking` turns on until
+ * the member picks Leave or Stay.
  *
  * The back gesture can't be cancelled, so while guarded an extra history entry for this
  * same page sits on top: back pops that one, which asks; Stay puts it back. When the take

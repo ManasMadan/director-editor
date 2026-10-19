@@ -7,10 +7,16 @@
  *
  * A part is one run of the recorder. A camera flip starts a new one (a recorder can't
  * switch tracks), and so does resuming after the browser stopped the recorder (the tab
- * hidden, the phone locked). A part's clock is the media it recorded: pauses don't count.
- * Pausing stops the recording; only the member's touch resumes it.
+ * hidden, the phone locked), and so does the camera's picture changing size: an MP4
+ * recorder keeps the first size's codec description for the whole file, and the frames
+ * after the change come out unreadable. A part's clock is the media it recorded: pauses
+ * don't count. Pausing stops the recording; only the member's touch resumes it.
+ *
+ * A part that ends before it has recorded half a second (a picture that changed size as
+ * the camera settled, a flip straight after another) is dropped whole: the clipper cuts
+ * nothing that short, and its slices would be a file with no frames in it.
  */
-import type { QueuedItem } from "@repo/client/api/recording/slice-store";
+import type { QueuedItem, QueuedSlice } from "@repo/client/api/recording/slice-store";
 import type { RecordingAttempt } from "@repo/contracts/api";
 import type { RecordingSessionId } from "@repo/contracts/ids";
 import type { Facing, LiveToolResult } from "@repo/contracts/live";
@@ -36,6 +42,12 @@ export function shotStates(
 
 /** How often the recorder hands over a slice. */
 export const SLICE_MS = 10 * SECOND_MS;
+
+/**
+ * The least a part records for its slices to be uploaded: the clipper's shortest cut
+ * (MIN_CLIP_MS in apps/ai/app/clipping.py), so a part shorter than this holds no take.
+ */
+export const MIN_PART_MS = SECOND_MS / 2;
 
 export type RollPhase =
   | "off"
@@ -116,8 +128,18 @@ export interface RollOptions {
   onChange: () => void;
 }
 
+/** The size of the picture a camera shows, as the viewfinder reports it. */
+export interface PictureSize {
+  width: number;
+  height: number;
+}
+
 class Part {
   slices = 0;
+  /** Slices made before the part had recorded MIN_PART_MS, not queued until it has. */
+  held: QueuedSlice[] = [];
+  /** The picture's size it records at ("1080x1920"), once the viewfinder has said. */
+  picture: string | null = null;
   /** Where the next slice starts, in the part's clock. */
   edgeMs = 0;
   /** Media recorded before the current run of it, and when that run began. */
@@ -128,6 +150,8 @@ class Part {
 
   constructor(
     readonly index: number,
+    readonly stream: MediaStream,
+    readonly camera: Facing,
     private readonly now: () => number,
   ) {}
 
@@ -153,6 +177,8 @@ export class Roll {
   private attempts = 0;
   /** A camera flipped while the roll was starting: it records once the roll has begun. */
   private flipped: { stream: MediaStream; camera: Facing } | null = null;
+  /** The latest picture size the viewfinder reported, and for which stream. */
+  private picture: { stream: MediaStream; size: string } | null = null;
 
   constructor(private readonly options: RollOptions) {}
 
@@ -275,12 +301,26 @@ export class Roll {
       this.flipped = { stream, camera };
       return;
     }
-    if (this.phase !== "recording" && this.phase !== "paused") {
+    await this.nextPart(stream, camera);
+  }
+
+  /**
+   * The viewfinder's picture of `stream` is now `size`. The first size a part sees is the
+   * one it records at; another (the camera settling on its resolution, a phone turned)
+   * ends the part, and the same camera goes on in the next one.
+   */
+  async reframe(stream: MediaStream, size: PictureSize) {
+    const picture = `${size.width}x${size.height}`;
+    this.picture = { stream, size: picture };
+    const part = this.part;
+    if (!part || part.stream !== stream || part.picture === picture) {
       return;
     }
-    await this.endPart();
-    if (this.phase === "recording") {
-      await this.openPart(stream, camera);
+    const known = part.picture !== null;
+    // Set now, so the same size reported again while the next part opens changes nothing.
+    part.picture = picture;
+    if (known) {
+      await this.nextPart(stream, part.camera);
     }
   }
 
@@ -345,9 +385,21 @@ export class Roll {
     return { sessionId: this.session(), partIndex: part.index, atMs: Math.round(part.clock()) };
   }
 
+  /** This part ends, and `stream` records in the next one (once the roll isn't paused). */
+  private async nextPart(stream: MediaStream, camera: Facing) {
+    if (this.phase !== "recording" && this.phase !== "paused") {
+      return;
+    }
+    await this.endPart();
+    if (this.phase === "recording") {
+      await this.openPart(stream, camera);
+    }
+  }
+
   private async openPart(stream: MediaStream, camera: Facing) {
     const sessionId = this.session();
-    const part = new Part(this.parts, this.options.now);
+    const part = new Part(this.parts, stream, camera, this.options.now);
+    part.picture = this.picture?.stream === stream ? this.picture.size : null;
     this.parts += 1;
     await this.options.api.addPart({
       sessionId,
@@ -386,7 +438,7 @@ export class Roll {
     part.edgeMs = startMs + durationMs;
     const index = part.slices;
     part.slices += 1;
-    void this.options.enqueue({
+    part.held.push({
       kind: "slice",
       sessionId: this.session(),
       partIndex: part.index,
@@ -395,20 +447,37 @@ export class Roll {
       durationMs,
       bytes,
     });
+    if (part.clock() >= MIN_PART_MS) {
+      this.release(part);
+    }
   }
 
-  /** The recorder stopped (asked to, or by the browser): the part's end is queued. */
+  /** Queues the slices a part held back, in order, now it has recorded enough to keep. */
+  private release(part: Part) {
+    for (const slice of part.held.splice(0)) {
+      void this.options.enqueue(slice);
+    }
+  }
+
+  /**
+   * The recorder stopped (asked to, or by the browser): the part's end is queued, with
+   * no slices at all when it ended too short to keep.
+   */
   private async closed(part: Part) {
     part.freeze();
     if (this.part === part) {
       this.part = null;
       this.endedMs += part.activeMs;
     }
+    const kept = part.activeMs >= MIN_PART_MS;
+    if (kept) {
+      this.release(part);
+    }
     await this.options.enqueue({
       kind: "part-end",
       sessionId: this.session(),
       partIndex: part.index,
-      sliceCount: part.slices,
+      sliceCount: kept ? part.slices : 0,
     });
   }
 

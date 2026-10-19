@@ -3,6 +3,7 @@
 import type { Shot } from "@repo/contracts/api";
 import { cn } from "@repo/ui/lib/utils";
 import { RotateCcw, SwitchCamera, X } from "lucide-react";
+import type { Route } from "next";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { timecode } from "../lib/track";
@@ -65,15 +66,18 @@ export function RecordingPill({ seconds }: { seconds: number }) {
  */
 export function LeaveLink({
   videoId,
+  href,
   onClick,
 }: {
   videoId: string;
-  onClick: (event: { preventDefault: () => void }) => void;
+  /** Where ✕ leads, when not the short's page (a retake goes back to the editor). */
+  href?: Route;
+  onClick?: (event: { preventDefault: () => void }) => void;
 }) {
   const t = useTranslations("director.shoot");
   return (
     <Link
-      href={`/director/${videoId}`}
+      href={href ?? `/director/${videoId}`}
       onClick={onClick}
       aria-label={t("leave")}
       title={t("leave")}
@@ -91,17 +95,19 @@ export function LeaveLink({
 function ChangedText({
   text,
   label,
+  whole,
   onRestore,
 }: {
   text: string;
   label: string;
+  whole: boolean;
   onRestore: (() => void) | undefined;
 }) {
   const t = useTranslations("director.shoot.card");
   return (
     // Keyed on the text by the card, so a further change glows again.
     <dd className="-mx-1 animate-[live-changed_1.6s_ease-out_both] rounded-md px-1">
-      <span className="line-clamp-2">{text}</span>
+      <span className={cn(!whole && "line-clamp-2")}>{text}</span>
       <span className="flex items-center gap-1 text-xs text-guide">
         {t("changed")}
         {onRestore ? (
@@ -123,7 +129,8 @@ function ChangedText({
 /**
  * What to do in this shot, as the member has it: where, what, the line to say and, once
  * Director changed it, the framing. A row Director changed for them glows once, says so,
- * and has ↺ to put the original back (`onRestore`).
+ * and has ↺ to put the original back (`onRestore`). The line is shown whole: it's what the
+ * member has to say, and the teleprompter only shows it once the take records.
  */
 export function ShotCard({
   shot,
@@ -162,10 +169,11 @@ export function ShotCard({
                 key={row.text}
                 text={row.text}
                 label={t(row.id)}
+                whole={row.id === "say"}
                 onRestore={onRestore ? () => onRestore(row.id) : undefined}
               />
             ) : (
-              <dd className="line-clamp-2">{row.text}</dd>
+              <dd className={cn(row.id !== "say" && "line-clamp-2")}>{row.text}</dd>
             )}
           </div>
         ))}

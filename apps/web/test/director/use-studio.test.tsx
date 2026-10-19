@@ -359,7 +359,7 @@ describe("useStudio", () => {
     expect(hook.events.onCancelled).toHaveBeenCalledTimes(2);
   });
 
-  it("halts a take where it is: the count called off, the recording stopped and kept on screen", async () => {
+  it("calls off a countdown, and leaves a recording to run (the Leave question sits over it)", async () => {
     const { api } = director();
     const hook = await renderStudio(
       {
@@ -383,8 +383,11 @@ describe("useStudio", () => {
     hook.current.actions.shutter();
     await ticking(() => expect(hook.current.phase).toBe("recording"));
     vi.useRealTimers();
+    const at = hook.current.seconds;
     hook.current.actions.halt();
-    await until(() => expect(hook.current.phase).toBe("preview"));
-    expect(hook.current.take).not.toBeNull();
+    // Still recording a moment later: the clock moved on, and no take is in review.
+    await until(() => expect(hook.current.seconds).toBeGreaterThan(at + 0.5));
+    expect(hook.current.phase).toBe("recording");
+    expect(hook.current.take).toBeNull();
   });
 });

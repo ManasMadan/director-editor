@@ -1,7 +1,7 @@
 import type { QueuedItem } from "@repo/client/api/recording/slice-store";
 import { recordingSessionIdSchema } from "@repo/contracts/ids";
 import { describe, expect, it, vi } from "vitest";
-import { type PartRecorder, Roll, type RollApi, SLICE_MS } from "./roll";
+import { MIN_PART_MS, type PartRecorder, Roll, type RollApi, SLICE_MS } from "./roll";
 
 const SESSION = recordingSessionIdSchema.parse("6b1d3a52-8d1e-4c3b-9a55-2f1e7c9d0a11");
 const stream = {} as MediaStream;
@@ -219,7 +219,9 @@ describe("the roll", () => {
       ["end", 1, 2],
     ]);
     roll.leave();
-    await vi.waitFor(() => expect(slices(queued).at(-1)).toEqual(["end", 2, 1]));
+    // Left the moment it opened: part 2 recorded nothing, so none of it is sent.
+    await vi.waitFor(() => expect(slices(queued).at(-1)).toEqual(["end", 2, 0]));
+    expect(slices(queued).filter(([part]) => part === 2)).toEqual([]);
     // Gone already: leaving again, flipping or pausing does nothing.
     roll.leave();
     await roll.flip(stream, "back");
@@ -239,11 +241,8 @@ describe("the roll", () => {
     quiet.roll.pause();
     await quiet.roll.done();
     expect(quiet.roll.phase).toBe("done");
-    expect(slices(quiet.queued)).toEqual([
-      [0, 0, 0, 1],
-      [0, 1, 1, 1],
-      ["end", 0, 2],
-    ]);
+    // Paused and done before a moment was recorded: the part's slices hold no frames.
+    expect(slices(quiet.queued)).toEqual([["end", 0, 0]]);
   });
 
   it("hands over what it has recorded on a pause, and when the page goes", async () => {
@@ -335,5 +334,82 @@ describe("the roll", () => {
     );
     await roll.start("abcdefghijk", stream, "front");
     expect(slices(queued)).toEqual([["end", 0, 1]]);
+  });
+
+  it("starts a new part when the camera's picture changes size", async () => {
+    const { roll, api, queued, recorders, tick } = setup();
+    const front = new EventTarget() as MediaStream;
+    const back = new EventTarget() as MediaStream;
+    // The viewfinder showed the camera before the roll began: the first part records at it.
+    await roll.reframe(front, { width: 720, height: 1280 });
+    await roll.start("abcdefghijk", front, "front");
+    tick(3_000);
+    await roll.reframe(front, { width: 720, height: 1280 });
+    // Another camera's picture isn't this part's.
+    await roll.reframe(back, { width: 1080, height: 1920 });
+    expect(api.addPart).toHaveBeenCalledTimes(1);
+    await roll.reframe(front, { width: 1080, height: 1920 });
+    expect(api.addPart).toHaveBeenLastCalledWith(
+      expect.objectContaining({ index: 1, camera: "front" }),
+    );
+    expect(recorders.map((recorder) => recorder.stream)).toEqual([front, front]);
+    expect(slices(queued)).toEqual([
+      [0, 0, 0, 3_000],
+      ["end", 0, 1],
+    ]);
+
+    // A flipped camera's part takes the first size it's shown at, then changes like any.
+    tick(2_000);
+    await roll.flip(back, "back");
+    await roll.reframe(back, { width: 1080, height: 1920 });
+    expect(api.addPart).toHaveBeenCalledTimes(3);
+    tick(1_000);
+    await roll.reframe(back, { width: 1920, height: 1080 });
+    expect(api.addPart).toHaveBeenLastCalledWith(
+      expect.objectContaining({ index: 3, camera: "back" }),
+    );
+
+    // Paused, the part ends on a new size, and the next opens on the touch that resumes.
+    tick(1_000);
+    roll.pause();
+    await roll.reframe(back, { width: 1080, height: 1920 });
+    expect(recorders.at(-1)?.current).toBe("inactive");
+    expect(api.addPart).toHaveBeenCalledTimes(4);
+    await roll.resume(back, "back");
+    expect(api.addPart).toHaveBeenCalledTimes(5);
+    // The part that opened knows the size already: the same size again changes nothing.
+    await roll.reframe(back, { width: 1080, height: 1920 });
+    expect(api.addPart).toHaveBeenCalledTimes(5);
+  });
+
+  it("sends nothing of a part that ends before it records half a second", async () => {
+    const { roll, queued, tick } = setup();
+    const camera = new EventTarget() as MediaStream;
+    await roll.reframe(camera, { width: 640, height: 480 });
+    await roll.start("abcdefghijk", camera, "front");
+    tick(MIN_PART_MS - 200);
+    // Paused at once: what it hands over waits until the part has recorded enough.
+    roll.pause();
+    expect(queued).toEqual([]);
+    await roll.resume(camera, "front");
+    tick(100);
+    // The camera settled on its own size: the first part never reached half a second.
+    await roll.reframe(camera, { width: 720, height: 1280 });
+    expect(slices(queued)).toEqual([["end", 0, 0]]);
+
+    // The next part held its first slice too, and sends it once it has recorded enough.
+    tick(MIN_PART_MS - 100);
+    roll.pause();
+    expect(slices(queued)).toEqual([["end", 0, 0]]);
+    await roll.resume(camera, "front");
+    tick(200);
+    roll.flush();
+    expect(slices(queued)).toEqual([
+      ["end", 0, 0],
+      [1, 0, 0, MIN_PART_MS - 100],
+      [1, 1, MIN_PART_MS - 100, 200],
+    ]);
+    await roll.done();
+    expect(slices(queued).at(-1)).toEqual(["end", 1, 3]);
   });
 });

@@ -199,12 +199,14 @@ export function useStudio(studio: StudioShot, camera: Camera, events: TakeEvents
     startOver();
     latest.current.onDiscarded();
   };
-  /** Holds the take where it is: the count called off, or the recording stopped to keep. */
+  /**
+   * The Leave question is up: a countdown is called off (it would start recording behind
+   * the question), but a recording carries on, so Stay never leaves a cut-short take.
+   * Leave goes, and the recording goes with the screen.
+   */
   const halt = () => {
     if (counting) {
       stopCounting();
-    } else if (phase === "recording") {
-      recorder.stop();
     }
   };
   return {
