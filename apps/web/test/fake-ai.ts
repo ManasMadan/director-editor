@@ -9,6 +9,11 @@
  * indexing a short adds to it as the real service does: once per member, a short already
  * there answered with its plan. A short's asset slots are what the test sets (`assets`),
  * else none.
+ * Describing a template of your own: Director's replies are what a test sets for the
+ * workspace (`PUT /__fake/brief/<orgId>`, the `fakeBrief` command), one per turn, and a
+ * turn with none left fails as Gemini being down would, and writing the shots queues a
+ * plan of its own. What each call was sent is kept for the test to read back
+ * (`GET /__fake/brief/<orgId>`).
  * A cut's YouTube post, and the cut as publishing reads it, are what a test sets
  * for it (`PUT /__fake/cuts/<cutId>`, the `fakeCut` command). Where publishing got is
  * what the API wrote on the cut's row in the tests' database, read back as apps/ai reads
@@ -45,6 +50,12 @@ function orgOf(request: IncomingMessage): string {
     org?: string;
   };
   return claims.org ?? "";
+}
+
+/** A workspace's brief: Director's replies still to give, and what each call was sent. */
+interface Brief {
+  replies: Record<string, unknown>[];
+  sent: { route: string; body: Record<string, unknown> }[];
 }
 
 /** What Director answers for one short: set by the test, takes added as they're sent. */
@@ -128,6 +139,12 @@ export async function startFakeAi(databaseUrl: string) {
     libraries.set(orgId, found);
     return found;
   };
+  const briefs = new Map<string, Brief>();
+  const brief = (orgId: string) => {
+    const found = briefs.get(orgId) ?? { replies: [], sent: [] };
+    briefs.set(orgId, found);
+    return found;
+  };
   const server = createServer(async (request, response) => {
     const reply = (status: number, payload?: unknown) => {
       response.writeHead(status, { "content-type": "application/json" });
@@ -145,6 +162,10 @@ export async function startFakeAi(databaseUrl: string) {
     const indexed = libraryRoute(route, input, orgOf(request), library, short);
     if (indexed) {
       return reply(indexed.status, indexed.body);
+    }
+    const described = briefRoute(route, input, brief(orgOf(request)), brief, short);
+    if (described) {
+      return reply(described.status, described.body);
     }
     const director =
       directorRoute(route, input, short) ??
@@ -242,6 +263,42 @@ function libraryRoute(
   found.indexUsed = true;
   short(videoId).plan = plan;
   return { status: 200, body: plan };
+}
+
+/**
+ * Describing a template (apps/ai/app/create.py): the test sets a workspace's replies and
+ * reads back what was sent; a brainstorm turn takes the next reply, and writing the shots
+ * queues a new short's plan.
+ */
+function briefRoute(
+  route: string,
+  input: Record<string, unknown>,
+  caller: Brief,
+  brief: (orgId: string) => Brief,
+  short: (videoId: string) => DirectorShort,
+): { status: number; body?: unknown } | null {
+  const set = /^(PUT|GET) \/__fake\/brief\/([\w-]+)$/.exec(route);
+  if (set?.[2]) {
+    const found = brief(set[2]);
+    if (set[1] === "GET") {
+      return { status: 200, body: found.sent };
+    }
+    found.replies = (input.replies as Record<string, unknown>[] | undefined) ?? [];
+    return { status: 204 };
+  }
+  if (route === "POST /v1/director/brainstorm") {
+    caller.sent.push({ route, body: input });
+    const next = caller.replies.shift();
+    return next ? { status: 200, body: next } : failure(502, "UPSTREAM_UNAVAILABLE");
+  }
+  if (route === "POST /v1/director/created") {
+    caller.sent.push({ route, body: input });
+    const videoId = randomUUID().replaceAll("-", "").slice(0, 11);
+    const plan = planBody(videoId, { source: "created", status: "pending", plan: null });
+    short(videoId).plan = plan;
+    return { status: 201, body: plan };
+  }
+  return null;
 }
 
 /** Director's routes (apps/ai/app/director.py), answered from what the test set. */

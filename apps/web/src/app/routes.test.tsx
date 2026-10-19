@@ -13,9 +13,19 @@ import {
   TwoFactorPage,
   VerifyEmailPage,
 } from "@/modules/auth";
-import { DirectorPage, EditPage, LibraryPage, MediaPage, ShootPage } from "@/modules/director";
+import {
+  CreatedPage,
+  CreatePage,
+  DirectorPage,
+  EditPage,
+  LibraryPage,
+  MediaPage,
+  ShootPage,
+} from "@/modules/director";
 import { LegalPage } from "@/modules/marketing";
 import { ProfileSettingsPage, SecuritySettingsPage, SettingsLayout } from "@/modules/settings";
+import * as created from "./(app)/create/[videoId]/page";
+import * as create from "./(app)/create/page";
 import * as edit from "./(app)/director/[videoId]/edit/page";
 import * as director from "./(app)/director/[videoId]/page";
 import * as shoot from "./(app)/director/[videoId]/shoot/page";
@@ -42,6 +52,7 @@ interface Route {
 
 const pages: [string, Route, string, unknown][] = [
   ["/library", library, en.common.library, LibraryPage],
+  ["/create", create, en.create.title, CreatePage],
   ["/media", media, en.director.media.title, MediaPage],
   ["/settings", profile, en.settings.profile.title, ProfileSettingsPage],
   ["/settings/security", security, en.settings.security.title, SecuritySettingsPage],
@@ -117,6 +128,14 @@ describe("route files", () => {
     expect(await director.generateMetadata()).toEqual({ title: en.director.title });
     expect(await shoot.generateMetadata()).toEqual({ title: en.director.title });
     expect(await edit.generateMetadata()).toEqual({ title: en.director.editor.title });
+  });
+
+  it("serves a described template's shots, by its id", async () => {
+    const params = Promise.resolve({ videoId: "Ab3_x-9QzLk" });
+    expect(await rendered(created.default, { params })).toEqual(
+      <CreatedPage videoId="Ab3_x-9QzLk" />,
+    );
+    expect(await created.generateMetadata()).toEqual({ title: en.create.plan.title });
   });
 
   it("renders the sign-in steps, which read the query string, inside a Suspense boundary", () => {

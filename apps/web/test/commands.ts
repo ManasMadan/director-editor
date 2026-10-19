@@ -519,6 +519,30 @@ const fakeLibrary: BrowserCommand<
   }
 };
 
+/**
+ * Director's replies, one per turn, while the workspace `orgId`'s member describes a
+ * template (test/fake-ai.ts); answers what the AI stand-in was sent for it so far: each
+ * brainstorm turn, the brief the shots were written from and the member's changes.
+ */
+const fakeBrief: BrowserCommand<[orgId: string, state?: { replies: object[] }]> = async (
+  _context,
+  orgId,
+  state,
+) => {
+  const url = `${(await services()).aiUrl}/__fake/brief/${orgId}`;
+  if (state) {
+    const set = await fetch(url, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(state),
+    });
+    if (!set.ok) {
+      throw new Error(`the AI stand-in answered ${set.status}`);
+    }
+  }
+  return (await fetch(url)).json() as Promise<{ route: string; body: Record<string, unknown> }[]>;
+};
+
 /** A cut as the AI stand-in answers it, and the YouTube post Gemini writes for it. */
 const fakeCut: BrowserCommand<[cutId: string, state: { cut: object; copy?: object }]> = async (
   _context,
@@ -646,6 +670,7 @@ export const commands = {
   linkYouTube,
   storeFile,
   fakeLibrary,
+  fakeBrief,
   checkUpload,
   fakeDirector,
   publishRealtime,
@@ -695,6 +720,10 @@ declare module "vitest/browser" {
         indexError?: { status: number; code: string };
       },
     ): Promise<void>;
+    fakeBrief(
+      orgId: string,
+      state?: { replies: object[] },
+    ): Promise<{ route: string; body: Record<string, unknown> }[]>;
     publishRealtime(channel: string, message: { type: string }): Promise<void>;
     realtimeListeners(channel: string): Promise<number>;
     storageCors(): Promise<void>;
