@@ -45,6 +45,7 @@ describe("the library", () => {
     const orgId = await member();
     const grwm = seed("Office GRWM");
     const mine = newVideoId();
+    const described = newVideoId();
     const indexing = newVideoId();
     const broken = newVideoId();
     await commands.fakeLibrary(orgId, {
@@ -52,15 +53,20 @@ describe("the library", () => {
         { videoId: indexing, status: "analyzing", stage: "writing", plan: null },
         { videoId: broken, status: "failed", stage: "failed", plan: null },
         { ...seed("My dance", mine), source: "user" },
+        { ...seed("My morning coffee", described), source: "created" },
         grwm,
       ],
     });
     await showLibrary();
+    // One the member described has no YouTube picture behind it.
+    const own = page.getByRole("link", { name: /My morning coffee/ });
+    await expect.element(own).toHaveAttribute("href", `/director/${described}`);
+    expect(own.element().querySelector("img")).toBeNull();
 
     await expect
       .element(page.getByRole("heading", { level: 1, name: "Pick a Short. Shoot your own." }))
       .toBeVisible();
-    await expect.element(page.getByText("4 Shorts")).toBeVisible();
+    await expect.element(page.getByText("5 Shorts")).toBeVisible();
     const starter = page.getByRole("link", { name: /Office GRWM/ });
     await expect.element(starter).toHaveAttribute("href", `/director/${grwm.videoId}`);
     await expect.element(starter).toMatchTextContent(/Starter/);
@@ -181,6 +187,24 @@ describe("indexing a short of your own", () => {
     await expect.element(page.getByText("Ready to shoot")).toBeVisible();
     await userEvent.click(page.getByRole("link", { name: "See the shots" }));
     expect(currentUrl()).toBe(`/director/${videoId}`);
+  });
+
+  it("opens a short that came ready while the page still showed it indexing", async () => {
+    const orgId = await member();
+    const videoId = newVideoId();
+    await commands.fakeLibrary(orgId, {
+      templates: [{ videoId, status: "analyzing", stage: "writing", plan: null }],
+    });
+    await showLibrary();
+    await expect.element(page.getByRole("link", { name: /Writing the shot list/ })).toBeVisible();
+    // Ready by now, though no word of it reached the page.
+    await commands.fakeLibrary(orgId, {
+      templates: [{ ...seed("My own short", videoId), source: "user" }],
+      indexUsed: true,
+    });
+    await userEvent.fill(link(), `https://www.youtube.com/shorts/${videoId}`);
+    await userEvent.click(page.getByRole("button", { name: "Index it" }));
+    await expect.poll(currentUrl).toBe(`/director/${videoId}`);
   });
 
   it("refuses a second short with the AI credit used, offering the starters instead", async () => {

@@ -62,6 +62,21 @@ describe("the shot card", () => {
     await expect.element(page.getByText("Arms crossed.")).toBeVisible();
     expect(page.getByText("Say").query()).toBeNull();
   });
+
+  it("shows the framing once Director changed it, and nothing to put back where that can't be", async () => {
+    const page = await renderPage(
+      <ShotCard
+        shot={planShot({ framing: { ...planShot().framing, note: "Head and shoulders." } })}
+        index={0}
+        changed={new Set(["framing", "do"])}
+      />,
+    );
+    const card = page.getByRole("region", { name: "Shot 1" });
+    await expect.element(card.getByText("Framing")).toBeVisible();
+    await expect.element(card.getByText("Head and shoulders.")).toBeVisible();
+    expect(card.getByText("changed for you").elements()).toHaveLength(2);
+    expect(card.getByRole("button").query()).toBeNull();
+  });
 });
 
 describe("the teleprompter", () => {
