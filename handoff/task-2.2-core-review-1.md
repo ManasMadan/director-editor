@@ -1,0 +1,13 @@
+(Review 1 of tasks 2.2.1+2.2.3 — fix items 1-6 as ruled; file:line refer to your branch at 4344558.)
+
+Important
+1. packages/contracts/src/files.ts:40 — director-cut-video maxBytes 200_000_000 → 100_000_000 (controller ruling: ClamAV's default StreamMaxLength is 100 MB and the worker buffers files); update the comment at 34-36 (the editor renders ~720x1280 at ≈4 Mbps, so a 3-minute Short fits).
+2. migration.sql:85-97 — keeping each member's newest legacy plan attributed is wrong: under the old flow every plan came from merely opening a Short, so every existing member (the demo account included) would start with their one index already used, and a legacy plan on a seed video stays source='user'. RULING: de-attribute every legacy user plan (`UPDATE ai.director_plan SET created_by = NULL WHERE source = 'user'` before the index build); drop the correlated dedupe; keep the rest (stage update, FORCE handling, index in the same transaction). The migration isn't shipped, so edit it in place. Update the report/comments accordingly and the legacy-shaped-data check you ran.
+
+Minor
+3. apps/ai/app/director.py:439-455 / tests/test_director.py:712 — two requests for the same Short can still end in DIRECTOR_INDEX_LIMIT (the second unique index raises UniqueViolation instead of the ON CONFLICT arbiter's DO NOTHING). RULING: take `pg_advisory_xact_lock(hashtextextended(<user id>::text, 0))` at the top of the claim to serialise each user's index requests; keep the IntegrityError → DIRECTOR_INDEX_LIMIT mapping as the backstop; make the double-request test deterministic.
+4. apps/ai/app/director.py:287 — `_index_used` sees only the current workspace (RLS) while the unique index is global. RULING: fix it properly: a SECURITY DEFINER function `ai.index_used(user_id uuid) returns boolean` (owner-owned, search_path pinned, EXECUTE granted only to app_ai), following the db rules' pattern for owner functions, used by `_index_used`; test that a member with a user plan in workspace A sees indexUsed=true in workspace B.
+5. migration.sql:3-10 — the rollout comment and the report must say the previous release's request_plan returns a 500 (unhandled IntegrityError) for a member who already has a plan during the rollout window (acceptable, short window, marked `!`).
+6. apps/api/src/modules/ai/ai.service.ts:21 — don't pass the generic NOT_FOUND through. Add a specific code (e.g. DIRECTOR_TAKE_NOT_FOUND) via the add-error-code skill for a pick that isn't the caller's take of that plan/shot, used by the ai service and passed on by the api; remove NOT_FOUND from PASSED_ON.
+
+Not for this round: item 7 (template page "Try again" spends the index) — task 2.3.5 replaces that page.

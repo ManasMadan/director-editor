@@ -1,0 +1,16 @@
++ type-coverage@2.29.7
+##[group]Run bun run type-coverage
+bun run type-coverage
+$ bun scripts/type-coverage.ts
+/home/runner/work/director-editor/director-editor/apps/web/src/modules/director/hooks/use-leave-guard.ts:41:47: state
+  ✖ apps/web
+/home/runner/work/director-editor/director-editor/apps/web/src/modules/director/hooks/use-leave-guard.ts:91:49: state
+error: script "type-coverage" exited with code 1
+Coverage	Every file at 100%	2026-10-18T12:31:55.2547421Z   ✖ apps/web/src/modules/director/components/caption-layer.tsx: lines 32; branches on 31, 37
+Coverage	Every file at 100%	2026-10-18T12:31:55.2550104Z   ✖ apps/web/src/modules/director/components/shoot-parts.tsx: branches on 90
+Coverage	Every file at 100%	2026-10-18T12:31:55.2552133Z   ✖ apps/web/src/modules/director/components/take-review.tsx: lines 26, 28; functions (anonymous_3)
+Coverage	Every file at 100%	2026-10-18T12:31:55.2553738Z   ✖ apps/web/src/modules/director/components/teleprompter.tsx: lines 32; branches on 14, 31
+Coverage	Every file at 100%	2026-10-18T12:31:55.2555071Z   ✖ apps/web/src/modules/director/hooks/use-camera.ts: branches on 77
+Coverage	Every file at 100%	2026-10-18T12:31:55.2556544Z   ✖ apps/web/src/modules/director/hooks/use-leave-guard.ts: lines 90, 91; branches on 56, 89
+Coverage	Every file at 100%	2026-10-18T12:31:55.2557893Z   ✖ apps/web/src/modules/director/hooks/use-studio.ts: branches on 125, 175
+Coverage	Every file at 100%	2026-10-18T12:31:55.2559317Z   ✖ apps/web/src/modules/director/lib/live-audio.ts: lines 124, 125; functions setMuted

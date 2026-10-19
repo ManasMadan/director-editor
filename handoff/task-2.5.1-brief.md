@@ -1,0 +1,4 @@
+#### Task 2.5.1: Relay in the api
+**Files:** create `apps/api/src/modules/live/live.gateway.ts` (Fastify websocket route), `live.relay.ts` (upstream client to `wss://{LOCATION}-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1.LlmBidiService/BidiGenerateContent` with an OAuth token from the metadata server, setup message with `model: projects/{p}/locations/{l}/publishers/google/models/{LIVE_MODEL}`, `responseModalities: ["AUDIO"]`, input/output transcription on, system instruction built from the plan + current shot, the five tools as function declarations), rate limit 1 concurrent call per user, max 10 minutes.
+- [ ] Unit tests with a fake upstream WebSocket: setup carries the shot's script and tools; audio and frames are forwarded; upstream tool call → client `tool` message; upstream close/token error → client `error` then close. **[RF 4]**
+
