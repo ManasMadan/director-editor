@@ -436,7 +436,9 @@ def _shot(plan: DirectorPlan, shot_index: int) -> Shot:
 
 def _pick_ms(pick: CutPick, shots: list[Shot], takes: Mapping[UUID, DirectorTake]) -> int:
     """How long a picked take lasts in a cut: a video take's best part once it's reviewed,
-    otherwise its shot's length (for a photo, how long it's shown). DIRECTOR_SHOT_NOT_FOUND
+    otherwise its shot's length (for a photo, how long it's shown). A best part under
+    MIN_BEST_MS, kept by a review from before that floor, counts as no best part: the
+    editor plays the whole take then. DIRECTOR_SHOT_NOT_FOUND
     for a shot the plan hasn't, DIRECTOR_TAKE_NOT_FOUND for a take that isn't the caller's
     take of that shot."""
     if pick.shotIndex >= len(shots):
@@ -445,7 +447,9 @@ def _pick_ms(pick: CutPick, shots: list[Shot], takes: Mapping[UUID, DirectorTake
     if take is None or take.shot_index != pick.shotIndex:
         raise AppError("DIRECTOR_TAKE_NOT_FOUND")
     if take.best_start_ms is not None and take.best_end_ms is not None:
-        return take.best_end_ms - take.best_start_ms
+        best = take.best_end_ms - take.best_start_ms
+        if best >= MIN_BEST_MS:
+            return best
     return round(shots[pick.shotIndex].durationSeconds * 1000)
 
 

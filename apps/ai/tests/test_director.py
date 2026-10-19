@@ -1373,11 +1373,27 @@ def test_a_cut_keeps_its_picks_and_how_long_they_last(
         save_cut(client, org, user, [(0, unreviewed.id)]).content
     )
     assert second.durationMs == 4_000
+    # A take an older review kept a tenth of a second of plays whole in the editor, so it
+    # lasts its shot's length here too.
+    with migrator() as db:
+        db.execute(
+            "UPDATE ai.director_take SET best_start_ms = 1000, best_end_ms = 1100 WHERE id = %s",
+            (unreviewed.id,),
+        )
+    flash = DirectorCutOut.model_validate_json(
+        save_cut(client, org, user, [(0, unreviewed.id)]).content
+    )
+    assert flash.durationMs == 4_000
     assert [c.id for c in cuts_of(client, org, user, f"/v1/director/plans/{VIDEO}/cuts")] == [
+        flash.id,
         second.id,
         cut.id,
     ]
-    assert [c.id for c in cuts_of(client, org, user, "/v1/director/cuts")] == [second.id, cut.id]
+    assert [c.id for c in cuts_of(client, org, user, "/v1/director/cuts")] == [
+        flash.id,
+        second.id,
+        cut.id,
+    ]
     # Each member's cuts are their own; another workspace has none of them.
     teammate = uuid4()
     with migrator() as db:
