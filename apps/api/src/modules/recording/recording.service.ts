@@ -26,6 +26,7 @@ import {
   type OrgId,
   type RecordingSessionId,
   recordingAttemptIdSchema,
+  recordingSessionIdSchema,
   type UserId,
   type VideoId,
 } from "@repo/contracts/ids";
@@ -111,7 +112,12 @@ export class RecordingService {
     @Inject(DIRECTOR_QUEUE) private readonly director: Producer<"ai-director">,
   ) {}
 
-  /** Opens a session on a ready plan, unless the member's footage is at its allowance. */
+  /**
+   * Opens a session on a ready plan, unless the member's footage is at its allowance. A
+   * session of theirs still recording for the same short (the tab closed or crashed
+   * before Done) is carried on instead: a second one would leave the first open forever,
+   * its takes never reaching the editor as a finished shoot.
+   */
   async start(
     { orgId, userId, demo, sharedDemo }: Recorder,
     videoId: VideoId,
@@ -128,6 +134,10 @@ export class RecordingService {
     );
     if (bytes >= RECORDING_FOOTAGE_MAX_BYTES) {
       throw new AppError("RECORDING_STORAGE_FULL");
+    }
+    const open = await this.recordings.openSession(orgId, userId, videoId);
+    if (open) {
+      return this.session({ orgId, userId }, recordingSessionIdSchema.parse(open.id));
     }
     const row = await this.recordings.createSession(orgId, {
       userId,

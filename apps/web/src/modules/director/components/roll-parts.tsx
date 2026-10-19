@@ -2,6 +2,8 @@
 
 import { cn } from "@repo/ui/lib/utils";
 import { Pause, Play } from "lucide-react";
+import type { Route } from "next";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useEffect } from "react";
 import type { ShotState } from "../lib/roll";
@@ -53,7 +55,7 @@ export function RecIndicator({
         aria-label={paused ? t("roll.resume") : t("roll.pause")}
         title={paused ? t("roll.resume") : t("roll.pause")}
         className={cn(
-          "flex size-9 items-center justify-center rounded-full transition-transform active:scale-90",
+          "flex size-11 items-center justify-center rounded-full transition-transform active:scale-90",
           GLASS,
         )}
       >
@@ -68,6 +70,18 @@ export function RecIndicator({
 }
 
 /**
+ * Whether Space already does something where it was pressed: typing in a box, pressing
+ * a button, or answering a dialog (the Leave question's Stay). Resuming then too would
+ * start recording behind the member's back.
+ */
+function spaceHasAJob(target: EventTarget | null) {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+  return target.closest("input, textarea, button, [role='dialog'], [role='alertdialog']") !== null;
+}
+
+/**
  * Paused: the picture greys out, and only a touch (Resume, or Space) starts recording
  * again. Nothing said restarts it.
  */
@@ -75,7 +89,7 @@ export function PausedVeil({ onResume }: { onResume: () => void }) {
   const t = useTranslations("director.shoot.roll");
   useEffect(() => {
     const space = (event: KeyboardEvent) => {
-      if (event.code === "Space" && !(event.target instanceof HTMLInputElement)) {
+      if (event.code === "Space" && !spaceHasAJob(event.target)) {
         event.preventDefault();
         onResume();
       }
@@ -117,7 +131,8 @@ const MARKS: Record<ShotState, string> = { take: "✓", tried: "•", todo: "○
 
 /**
  * The progress strip: a mark per shot (✓ a take, • tried, ○ to do), the one on screen
- * lit. Tapping one goes there, and Director with it.
+ * lit. Tapping one goes there, and Director with it. Each mark is a full-size target, so
+ * a long plan scrolls sideways rather than widening the screen.
  */
 export function RollProgress({
   index,
@@ -132,7 +147,10 @@ export function RollProgress({
   return (
     <nav
       aria-label={t("progress")}
-      className={cn("flex gap-0.5 rounded-full px-1.5 py-0.5", GLASS)}
+      className={cn(
+        "flex max-w-full gap-0.5 self-start overflow-x-auto rounded-full px-1 [scrollbar-width:none]",
+        GLASS,
+      )}
     >
       {states.map((state, shot) => (
         <button
@@ -142,7 +160,7 @@ export function RollProgress({
           aria-label={t("shot", { index: shot + 1, state })}
           aria-current={shot === index ? "step" : undefined}
           className={cn(
-            "flex size-7 items-center justify-center rounded-full text-sm font-semibold",
+            "flex size-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
             shot === index ? "bg-studio-foreground text-studio" : "text-studio-foreground/80",
           )}
         >
@@ -153,15 +171,73 @@ export function RollProgress({
   );
 }
 
-/** After Done: the footage still on this device uploads before the editor opens. */
-export function SavingFootage({ behindMs }: { behindMs: number }) {
+/**
+ * What the roll's upload needs the member to know, over the picture: footage lost for
+ * good (the shoot's 20 minutes up, the member's allowance full) and why; footage waiting
+ * for a connection, kept on the device; and the shoot's time nearly up.
+ */
+export function UploadNotice({
+  lost,
+  waiting,
+  nearLimit,
+}: {
+  /** Why footage was dropped, already in words. */
+  lost: string | null;
+  waiting: boolean;
+  nearLimit: boolean;
+}) {
+  const t = useTranslations("director.shoot.roll");
+  const note = cn("rounded-2xl px-3.5 py-2.5 text-sm font-semibold", GLASS);
+  return (
+    <>
+      {lost === null ? null : (
+        <p role="alert" className={cn(note, "text-studio-error")}>
+          {lost}
+        </p>
+      )}
+      {lost === null && waiting ? (
+        <p role="status" className={note}>
+          {t("uploadTrouble")}
+        </p>
+      ) : null}
+      {nearLimit ? (
+        <p role="status" className={note}>
+          {t("nearLimit")}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * After Done: the footage still on this device uploads before the editor opens. The
+ * member needn't wait for it: the queue is kept on the device, and the editor goes on
+ * sending it.
+ */
+export function SavingFootage({
+  behindMs,
+  waiting,
+  editor,
+}: {
+  behindMs: number;
+  /** The upload is waiting for a connection. */
+  waiting: boolean;
+  editor: Route;
+}) {
   const t = useTranslations("director.shoot.roll");
   const seconds = Math.ceil(behindMs / 1000);
   return (
-    <div className="absolute inset-0 flex items-center justify-center bg-studio/80 p-8 text-center">
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-studio/80 p-8 text-center">
       <p role="status" className="text-lg font-semibold">
         {seconds > 0 ? t("savingBehind", { seconds }) : t("saving")}
       </p>
+      {waiting ? <p className="max-w-xs text-sm">{t("uploadTrouble")}</p> : null}
+      <Link
+        href={editor}
+        className="min-h-11 content-center rounded-full px-5 text-sm font-semibold underline underline-offset-4"
+      >
+        {t("openEditor")}
+      </Link>
     </div>
   );
 }

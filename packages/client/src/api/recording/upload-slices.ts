@@ -11,9 +11,11 @@
  * its 20 minutes, the member's footage allowance full, the workspace left) drops that
  * slice and says why, so one slice never holds up the rest.
  *
- * The queue holds at most five minutes of footage (a phone short of storage, a network
- * gone for long): a slice past that is refused, and `full` says so until one is sent, for
- * the shoot screen to pause recording meanwhile.
+ * The queue is meant to hold at most five minutes of footage (a phone short of storage, a
+ * network gone for long): from there `full` says so until it's below again, for the shoot
+ * screen to pause recording meanwhile. A slice is never refused, though, even past the
+ * five minutes (the recorder's last, handed over as the screen pauses): one missing from
+ * the middle of a part would leave a hole no take could be cut across.
  */
 import type { ErrorCode } from "@repo/contracts/errors";
 import { RECORDING_QUEUE_MAX_MS } from "@repo/contracts/recording";
@@ -56,11 +58,16 @@ interface UploadState {
   behindMs: number;
   /** The last failure, until something is sent again. */
   error: ErrorCode | null;
-  /** A slice was refused for the queue's five minutes, and none has been sent since. */
+  /**
+   * The last failure, when it was a refusal that dropped footage (the shoot's 20 minutes
+   * up, the member's allowance full): the error itself, for its message and its params.
+   */
+  lost: unknown;
+  /** The queue holds five minutes of footage or more: the shoot screen pauses. */
   full: boolean;
 }
 
-const IDLE: UploadState = { pending: 0, behindMs: 0, error: null, full: false };
+const IDLE: UploadState = { pending: 0, behindMs: 0, error: null, lost: null, full: false };
 
 /** Sends a slice's bytes to storage with the headers its upload was signed with. */
 async function put(upload: { url: string; headers: Record<string, string> }, bytes: Blob) {
@@ -106,21 +113,24 @@ class SliceUploader {
   snapshot = () => this.state;
 
   /**
-   * Queues a slice or a part's end, and sends it (after whatever is ahead of it). False
-   * when a slice is refused: the queue holds five minutes already.
+   * Queues a slice or a part's end, and starts sending it (after whatever is ahead of it).
+   * Resolves once it's kept, not once it's sent: the roll ends a part (a camera flip)
+   * with this, and mustn't wait minutes for a backlog to upload first. `send` resolves
+   * once the queue has drained.
    */
   enqueue = async (item: QueuedItem) => {
-    await this.loaded();
-    const behind = this.state.behindMs;
-    if (item.kind === "slice" && behind + item.durationMs > RECORDING_QUEUE_MAX_MS) {
-      this.update({ full: true });
-      return false;
+    try {
+      await this.loaded();
+      await this.store.put(item);
+    } catch (error) {
+      // The device couldn't keep it (its storage full, IndexedDB gone): it's lost, and
+      // the screen says so rather than recording on as if it were safe.
+      this.update({ error: errorCode(error), lost: error });
+      return;
     }
-    await this.store.put(item);
     this.queued.set(keyOf(item), durationOf(item));
     this.update({});
-    await this.send();
-    return true;
+    void this.send();
   };
 
   /**
@@ -133,6 +143,9 @@ class SliceUploader {
     this.sending ??= this.drain();
     return this.sending;
   };
+
+  /** What's still to send, in order: a dead tab's leftovers included. */
+  leftover = () => this.store.all();
 
   /** Stops sending (the shoot screen closed): what's queued stays for next time. */
   stop = () => {
@@ -165,7 +178,7 @@ class SliceUploader {
     } catch (error) {
       // The store itself failed (IndexedDB unavailable for now): shown, and tried again.
       this.sending = null;
-      this.update({ error: errorCode(error) });
+      this.update({ error: errorCode(error), lost: null });
       this.retryLater();
     }
   }
@@ -194,20 +207,22 @@ class SliceUploader {
    */
   private async sendAndForget(next: QueuedItem) {
     let failed: ErrorCode | null = null;
+    let lost: unknown = null;
     try {
       await this.sendOne(next);
     } catch (error) {
       failed = errorCode(error);
-      this.update({ error: failed });
       if (!FINAL.has(failed)) {
+        this.update({ error: failed, lost: null });
         return false;
       }
+      lost = error;
     }
     // The error stays shown only while it's the latest news.
     this.failures = 0;
     await this.store.remove(next);
     this.queued.delete(keyOf(next));
-    this.update({ error: failed, full: false });
+    this.update({ error: failed, lost });
     return true;
   }
 
@@ -241,13 +256,15 @@ class SliceUploader {
   }
 
   /** The state with `change`, its counts from what's queued, told to the listeners. */
-  private update(change: Partial<Pick<UploadState, "error" | "full">>) {
+  private update(change: Partial<Pick<UploadState, "error" | "lost">>) {
     const durations = [...this.queued.values()];
+    const behindMs = durations.reduce((sum, ms) => sum + ms, 0);
     this.state = {
       ...this.state,
       ...change,
       pending: durations.length,
-      behindMs: durations.reduce((sum, ms) => sum + ms, 0),
+      behindMs,
+      full: behindMs >= RECORDING_QUEUE_MAX_MS,
     };
     for (const listener of this.listeners) {
       listener();
@@ -267,5 +284,5 @@ export function useSliceUploader(store?: SliceStore) {
     return uploader.stop;
   }, [uploader]);
   const state = useSyncExternalStore(uploader.subscribe, uploader.snapshot, uploader.snapshot);
-  return { ...state, enqueue: uploader.enqueue, send: uploader.send };
+  return { ...state, enqueue: uploader.enqueue, send: uploader.send, leftover: uploader.leftover };
 }

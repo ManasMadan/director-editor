@@ -347,6 +347,13 @@ describe("talking it through with Director", () => {
     await tell(page, "ok I'm going", "You said: ok I'm going");
     expect(performance.now() - sent).toBeLessThan(1500);
     await tell(page, "can you say my line again?", `It's: "Morning. Coffee first."`);
+    // Typing there from a keyboard, the box shows where focus is (WCAG 2.4.7).
+    const box = page.getByRole("textbox", { name: "Tell Director" }).element();
+    if (box instanceof HTMLElement) {
+      box.focus();
+    }
+    const form = box.closest("form");
+    expect(form && getComputedStyle(form).outlineStyle).not.toBe("none");
   });
 
   it("puts the member's twist on the card, says so, and keeps it for the shoot", async () => {

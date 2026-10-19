@@ -199,6 +199,21 @@ describe("starting a session", () => {
     expect(Math.round(kept / HOUR_MS)).toBe(7 * 24);
   });
 
+  it("carries on the member's open session of the short, not a second one, until it's done", async () => {
+    // A closed tab or a crash left it recording: back on the shoot screen, it goes on.
+    const { rpc, sessionId } = await recording();
+    await mark(rpc, sessionId, "start", 1, 1_000);
+    const again = await rpc.start({ videoId: SEED.videoId });
+    expect(again.id).toBe(sessionId);
+    expect(again.parts.map((part) => part.index)).toEqual([0]);
+    expect(again.attempts.map((attempt) => attempt.number)).toEqual([1]);
+    // Done: the next start is a new session.
+    await rpc.finish({ sessionId });
+    const next = await rpc.start({ videoId: SEED.videoId });
+    expect(next.id).not.toBe(sessionId);
+    expect(next.parts).toEqual([]);
+  });
+
   it("keeps a demo guest's footage a day", async () => {
     const { me, email, password } = await signedIn();
     await sql('UPDATE auth."user" SET demo = true WHERE id = $1', [me.id]);
@@ -229,24 +244,37 @@ describe("starting a session", () => {
 });
 
 /**
- * Fills the member's footage allowance up to `bytes`, in another session of theirs (so
- * the session under test keeps its own 20 minutes).
+ * Fills the member's footage allowance up to `bytes`, in an earlier session of theirs (so
+ * the session under test keeps its own 20 minutes). It's written here, finished: starting
+ * the same short again would carry on the session under test.
  */
-async function footageElsewhere(rpc: Rpc, bytes: number) {
-  const other = await rpc.start({ videoId: SEED.videoId });
-  await rpc.addPart({ sessionId: other.id, index: 0, camera: "front", contentType: "video/webm" });
+async function footageElsewhere(sessionId: RecordingSessionId, bytes: number) {
+  const [other] = await sql<{ id: string }>(
+    `INSERT INTO app.recording_session
+       (org_id, user_id, plan_id, video_id, shot_count, demo, status, finished_at, expires_at, updated_at)
+     SELECT org_id, user_id, plan_id, video_id, shot_count, demo, 'done', now(), expires_at, now()
+       FROM app.recording_session WHERE id = $1
+     RETURNING id::text`,
+    [sessionId],
+  );
+  const id = required(other, "the earlier session").id;
+  await sql(
+    `INSERT INTO app.recording_part (session_id, org_id, index, camera, content_type)
+     SELECT id, org_id, 0, 'front', 'video/webm' FROM app.recording_session WHERE id = $1`,
+    [id],
+  );
   await sql(
     `INSERT INTO app.recording_slice (session_id, org_id, part_index, index, start_ms, duration_ms, size)
      SELECT id, org_id, 0, 0, 0, 10000, $2 FROM app.recording_session WHERE id = $1`,
-    [other.id, bytes],
+    [id, bytes],
   );
-  return other.id;
+  return id;
 }
 
 describe("the limits", () => {
   it("refuses once the member's footage is at its allowance, and past 20 minutes", async () => {
     const { rpc, sessionId, session } = await recording();
-    const elsewhere = await footageElsewhere(rpc, 999_999_000);
+    const elsewhere = await footageElsewhere(sessionId, 999_999_000);
     await expectError(rpc.uploadSlice(slice(sessionId, 0, 0, 2_000)), "RECORDING_STORAGE_FULL");
     await sql("UPDATE app.recording_slice SET size = 10 WHERE session_id = $1", [elsewhere]);
     await sql(
@@ -286,7 +314,7 @@ describe("the limits", () => {
   it("fits only as many uploads at once as the allowance holds", async () => {
     const { rpc, sessionId, me } = await recording();
     // Room for four more 8 MB slices.
-    await footageElsewhere(rpc, 1_000_000_000 - 4 * 8_000_000);
+    await footageElsewhere(sessionId, 1_000_000_000 - 4 * 8_000_000);
     const racing = await Promise.allSettled(
       Array.from({ length: 10 }, (_, n) => rpc.uploadSlice(slice(sessionId, 0, n, 8_000_000))),
     );

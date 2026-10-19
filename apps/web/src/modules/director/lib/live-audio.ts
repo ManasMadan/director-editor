@@ -44,21 +44,55 @@ registerProcessor("${CAPTURE_PROCESSOR}", Capture);
 `;
 
 let shared: AudioContext | null = null;
+/** Put to rest on purpose (the shoot screen left): nothing wakes it but `liveAudio`. */
+let resting = false;
 const loaded = new WeakSet<AudioContext>();
+
+/** Asks a sleeping context to run again; one the browser won't wake yet waits for a tap. */
+function wake(context: AudioContext) {
+  if (context.state !== "running") {
+    context.resume().catch(() => {
+      // Refused without a touch (iOS): the shoot screen's next tap tries again.
+      return undefined;
+    });
+  }
+}
 
 /**
  * The page's one audio context for Director live. Browsers let a page make sound only
  * once the member has interacted with it: made (or woken) by the "Start shooting" tap,
  * the same context then serves every reconnection after it, which start by themselves.
+ *
+ * iOS suspends it ("interrupted") when the phone locks, the member switches apps or a
+ * call comes in, and the microphone's worklet runs in it too: asleep, Director is silent
+ * and deaf. So it's woken whenever its state changes while the page is in view, and the
+ * shoot screen wakes it on return and on every tap (`wakeLiveAudio`).
  */
 export function liveAudio(): AudioContext {
-  shared ??= new AudioContext();
-  void shared.resume();
+  resting = false;
+  if (!shared) {
+    const context = new AudioContext();
+    context.addEventListener("statechange", () => {
+      if (!resting && document.visibilityState === "visible") {
+        wake(context);
+      }
+    });
+    shared = context;
+  }
+  wake(shared);
   return shared;
+}
+
+/** Wakes Director's sound after the browser put it to sleep; makes none, wakes none at rest. */
+export function wakeLiveAudio() {
+  if (shared && !resting) {
+    wake(shared);
+  }
 }
 
 /** Lets the audio hardware rest once the shoot screen is left. */
 export function restLiveAudio() {
+  resting = true;
   void shared?.suspend();
 }
 

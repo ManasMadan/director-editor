@@ -243,16 +243,18 @@ export function TellDirector({
         {status ? <p className="text-sm text-studio-foreground/70">{status}</p> : null}
       </div>
       <form onSubmit={submit} className="flex items-center gap-2">
-        <label className="flex min-h-11 flex-1 items-center rounded-full bg-studio-foreground/10 pr-1 pl-4 focus-within:outline-2 focus-within:outline-record">
-          <span className="sr-only">{t("label")}</span>
-          <input
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            placeholder={t("placeholder")}
-            maxLength={500}
-            enterKeyHint="send"
-            className="min-w-0 flex-1 bg-transparent py-2 text-base outline-none placeholder:text-studio-foreground/50"
-          />
+        <div className="flex min-h-11 flex-1 items-center rounded-full bg-studio-foreground/10 pr-1 pl-4 focus-within:outline-2 focus-within:outline-record">
+          <label className="flex min-w-0 flex-1">
+            <span className="sr-only">{t("label")}</span>
+            <input
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              placeholder={t("placeholder")}
+              maxLength={500}
+              enterKeyHint="send"
+              className="min-w-0 flex-1 bg-transparent py-2 text-base outline-none placeholder:text-studio-foreground/50"
+            />
+          </label>
           <button
             type="submit"
             aria-label={t("send")}
@@ -261,7 +263,7 @@ export function TellDirector({
           >
             <SendHorizontal className="size-5" aria-hidden />
           </button>
-        </label>
+        </div>
         <button
           type="button"
           aria-label={voice.listening ? t("stop") : t("talk")}

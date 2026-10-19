@@ -14,7 +14,8 @@ import {
   type EditorState,
   editorGrades,
 } from "@repo/contracts/api";
-import type { DirectorTakeId } from "@repo/contracts/ids";
+import { type DirectorTakeId, directorTakeIdSchema } from "@repo/contracts/ids";
+import * as z from "zod";
 import { type CaptionLine, type CaptionStyle, captionStyles } from "./captions";
 import type { Clip } from "./edit";
 import type { Picks } from "./picks";
@@ -47,6 +48,21 @@ export interface EditorChoices {
   grades: Readonly<Record<number, EditorGrade>>;
   fixes: readonly CaptionFix[];
 }
+
+// A shot's index, as JSON keeps it in an object's keys.
+const shotKey = z.string().regex(/^\d+$/);
+
+/** The choices as kept between visits (lib/drafts.ts): read back only when they parse. */
+export const editorChoicesSchema = z.object({
+  style: z.enum(captionStyles),
+  sound: z.boolean(),
+  picks: z.record(shotKey, directorTakeIdSchema),
+  order: z.array(z.number().int().nonnegative()).nullable(),
+  dropped: z.array(z.number().int().nonnegative()),
+  trims: z.record(shotKey, z.object({ from: z.number(), to: z.number() })),
+  grades: z.record(shotKey, z.enum(editorGrades)),
+  fixes: z.array(z.object({ text: z.string(), replacement: z.string() })),
+}) satisfies z.ZodType<EditorChoices>;
 
 export const UNARRANGED = {
   order: null,

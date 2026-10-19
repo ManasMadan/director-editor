@@ -744,6 +744,7 @@ declare const messages: {
       "leaving": {
         "title": "Leave?",
         "body": "This take isn't kept yet.",
+        "rollBody": "Leaving ends this shoot. What's recorded so far is kept, and your takes wait for you in the editor.",
         "leave": "Leave",
         "stay": "Stay"
       },
@@ -817,6 +818,7 @@ declare const messages: {
         "done": "Done",
         "saving": "Saving your footage…",
         "savingBehind": "Saving your footage, {seconds, number} seconds to go…",
+        "openEditor": "Open the editor now. Your footage keeps uploading there.",
         "leftover": "{seconds, number} seconds of footage didn't upload last time. Sending it now.",
         "nearLimit": "About three minutes of recording left in this shoot.",
         "uploadTrouble": "Your footage is waiting to upload. It's kept on this device and sent as soon as it can be.",
@@ -943,7 +945,6 @@ declare const messages: {
       "gaps": {
         "title": "Moments to fill",
         "hint": "Cutaways the original had, and shots you skipped. Pick a photo, a clip or stock for each; empty ones hold your nearest shot.",
-        "fill": "Fill: {description}",
         "filled": "Filled",
         "empty": "Holds your shot",
         "skipped": "Skipped shot"

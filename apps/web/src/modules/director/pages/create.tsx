@@ -15,13 +15,36 @@ import { ArrowLeft, Mic, MicOff, SendHorizontal, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
+import * as z from "zod";
+import { authClient } from "@/lib/auth-client";
 import { DirectorGate } from "@/modules/shorts";
 import { type BriefPhoto, BriefPhotos } from "../components/brief-photos";
 import { useDictation } from "../hooks/use-dictation";
+import { dropDraft, keepDraft, readDraft } from "../lib/drafts";
 
 // The member's answer to a question: as long as a turn may be.
 const ANSWER_MAX_LENGTH = 500;
+
+/**
+ * The brief as kept in this tab (lib/drafts.ts), per member: the idea and the talk so
+ * far. Not the photos: their previews are this page's own copies of the files, gone with
+ * a reload, so they're added again.
+ */
+const draftSchema = z.object({
+  text: z.string().max(DIRECTOR_BRIEF_MAX_LENGTH),
+  messages: z
+    .array(
+      z.object({
+        role: z.enum(["member", "director"]),
+        text: z.string().min(1).max(ANSWER_MAX_LENGTH),
+      }) satisfies z.ZodType<BriefTurn>,
+    )
+    .max(DIRECTOR_MAX_BRIEF_TURNS),
+});
+type Draft = z.infer<typeof draftSchema>;
+const EMPTY: Draft = { text: "", messages: [] };
+const draftKey = (owner: string) => `director.create.${owner}`;
 
 function Header() {
   const t = useTranslations("create");
@@ -92,14 +115,22 @@ function Conversation({ messages, thinking }: { messages: BriefTurn[]; thinking:
   );
 }
 
-function Answer({ disabled, onSend }: { disabled: boolean; onSend: (text: string) => void }) {
+function Answer({
+  disabled,
+  answer,
+  setAnswer,
+  onSend,
+}: {
+  disabled: boolean;
+  answer: string;
+  setAnswer: (update: (current: string) => string) => void;
+  onSend: (text: string) => void;
+}) {
   const t = useTranslations("create");
-  const [answer, setAnswer] = useState("");
   const id = useId();
   const send = () => {
     if (answer.trim()) {
       onSend(answer.trim());
-      setAnswer("");
     }
   };
   return (
@@ -116,7 +147,10 @@ function Answer({ disabled, onSend }: { disabled: boolean; onSend: (text: string
       <input
         id={id}
         value={answer}
-        onChange={(event) => setAnswer(event.target.value)}
+        onChange={(event) => {
+          const typed = event.target.value;
+          setAnswer(() => typed);
+        }}
         placeholder={t("answerPlaceholder")}
         maxLength={ANSWER_MAX_LENGTH}
         disabled={disabled}
@@ -137,26 +171,90 @@ function Answer({ disabled, onSend }: { disabled: boolean; onSend: (text: string
   );
 }
 
-function Create() {
+/** The brief kept for `owner` in this tab, read once, and kept again as it changes. */
+function useBriefDraft(owner: string | null) {
+  const [draft] = useState(() => (owner ? readDraft(draftKey(owner), draftSchema) : null));
+  const [text, setText] = useState((draft ?? EMPTY).text);
+  const [messages, setMessages] = useState<BriefTurn[]>((draft ?? EMPTY).messages);
+  useEffect(() => {
+    if (owner) {
+      keepDraft(draftKey(owner), { text, messages } satisfies Draft);
+    }
+  }, [owner, text, messages]);
+  return {
+    text,
+    setText,
+    messages,
+    setMessages,
+    /** The brief became a template: there's nothing left to come back to. */
+    done: () => {
+      if (owner) {
+        dropDraft(draftKey(owner));
+      }
+    },
+  };
+}
+
+/** The idea in the member's words, typed or said. */
+function Idea({
+  text,
+  setText,
+}: {
+  text: string;
+  setText: (update: (current: string) => string) => void;
+}) {
+  const t = useTranslations("create");
+  const ideaId = useId();
+  return (
+    <div className="flex flex-col gap-2">
+      <label htmlFor={ideaId} className="text-xs font-medium text-studio-foreground/80">
+        {t("label")}
+      </label>
+      <div className="flex items-start gap-2">
+        <textarea
+          id={ideaId}
+          value={text}
+          onChange={(event) => {
+            const typed = event.target.value;
+            setText(() => typed);
+          }}
+          placeholder={t("placeholder")}
+          maxLength={DIRECTOR_BRIEF_MAX_LENGTH}
+          rows={3}
+          className="min-h-24 flex-1 rounded-2xl border border-studio-foreground/20 bg-studio-foreground/5 p-3 text-base placeholder:text-studio-foreground/45"
+        />
+        <Dictate onText={(said) => setText((current) => `${current} ${said}`.trim())} />
+      </div>
+    </div>
+  );
+}
+
+function Create({ owner }: { owner: string | null }) {
   const t = useTranslations("create");
   const errorMessage = useApiErrorMessage();
   const router = useRouter();
   const brainstorm = useBrainstormMutation();
   const create = useCreateTemplateMutation();
-  const [text, setText] = useState("");
+  const { text, setText, messages, setMessages, done } = useBriefDraft(owner);
   const [photos, setPhotos] = useState<BriefPhoto[]>([]);
-  const [messages, setMessages] = useState<BriefTurn[]>([]);
-  const ideaId = useId();
+  const [answer, setAnswer] = useState("");
   const uploading = photos.some((photo) => photo.fileId === null && !photo.failed);
   const brief = (turns: BriefTurn[]) => ({
     text: text.trim(),
     messages: turns,
     photos: photos.flatMap((photo) => (photo.fileId ? [photo.fileId] : [])),
   });
+  // A turn Director couldn't answer is taken back (its words stay in the box to send
+  // again): otherwise the next answer would be the member's second turn in a row.
   const talk = (turns: BriefTurn[]) => {
+    const before = messages;
     setMessages(turns);
     brainstorm.mutate(brief(turns), {
-      onSuccess: (reply) => setMessages([...turns, { role: "director", text: reply.reply }]),
+      onSuccess: (reply) => {
+        setMessages([...turns, { role: "director", text: reply.reply }]);
+        setAnswer(() => "");
+      },
+      onError: () => setMessages(before),
     });
   };
   const busy = brainstorm.isPending || create.isPending || uploading;
@@ -167,23 +265,7 @@ function Create() {
   return (
     <div className="flex flex-col gap-6 px-4 pt-2 pb-36">
       <h2 className="text-2xl font-semibold tracking-tight">{t("heading")}</h2>
-      <div className="flex flex-col gap-2">
-        <label htmlFor={ideaId} className="text-xs font-medium text-studio-foreground/80">
-          {t("label")}
-        </label>
-        <div className="flex items-start gap-2">
-          <textarea
-            id={ideaId}
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            placeholder={t("placeholder")}
-            maxLength={DIRECTOR_BRIEF_MAX_LENGTH}
-            rows={3}
-            className="min-h-24 flex-1 rounded-2xl border border-studio-foreground/20 bg-studio-foreground/5 p-3 text-base placeholder:text-studio-foreground/45"
-          />
-          <Dictate onText={(said) => setText((current) => `${current} ${said}`.trim())} />
-        </div>
-      </div>
+      <Idea text={text} setText={setText} />
       <BriefPhotos photos={photos} onChange={setPhotos} />
       {messages.length === 0 ? (
         <Button
@@ -201,7 +283,9 @@ function Create() {
       {canAnswer && !ready ? (
         <Answer
           disabled={busy}
-          onSend={(answer) => talk([...messages, { role: "member", text: answer }])}
+          answer={answer}
+          setAnswer={setAnswer}
+          onSend={(said) => talk([...messages, { role: "member", text: said }])}
         />
       ) : null}
       {error ? (
@@ -209,19 +293,42 @@ function Create() {
           {errorMessage(error)}
         </p>
       ) : null}
-      <div className="fixed inset-x-0 bottom-0 z-10 bg-linear-to-t from-studio via-studio/95 to-transparent px-4 pt-10 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-        <Button
-          className="mx-auto flex h-14 w-full max-w-lg rounded-full bg-record text-lg font-bold text-record-foreground hover:bg-record/90"
-          disabled={!text.trim() || busy}
-          onClick={() =>
-            create.mutate(brief(messages), {
-              onSuccess: (plan) => router.push(`/create/${plan.videoId}`),
-            })
-          }
-        >
-          {create.isPending ? t("writing") : t("write")}
-        </Button>
-      </div>
+      <WriteBar
+        disabled={!text.trim() || busy}
+        writing={create.isPending}
+        onWrite={() =>
+          create.mutate(brief(messages), {
+            onSuccess: (plan) => {
+              done();
+              router.push(`/create/${plan.videoId}`);
+            },
+          })
+        }
+      />
+    </div>
+  );
+}
+
+/** "Write my shots", held at the bottom of the screen. */
+function WriteBar({
+  disabled,
+  writing,
+  onWrite,
+}: {
+  disabled: boolean;
+  writing: boolean;
+  onWrite: () => void;
+}) {
+  const t = useTranslations("create");
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-10 bg-linear-to-t from-studio via-studio/95 to-transparent px-4 pt-10 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+      <Button
+        className="mx-auto flex h-14 w-full max-w-lg rounded-full bg-record text-lg font-bold text-record-foreground hover:bg-record/90"
+        disabled={disabled}
+        onClick={onWrite}
+      >
+        {writing ? t("writing") : t("write")}
+      </Button>
     </div>
   );
 }
@@ -231,11 +338,15 @@ function Create() {
  * a short talk with Director, then Gemini writes the shots.
  */
 export function CreatePage() {
+  const session = authClient.useSession();
   return (
     <DirectorGate>
       <div className="mx-auto max-w-lg">
         <Header />
-        <Create />
+        {/* Whose brief it is decides which draft comes back: known before it's read. */}
+        {session.isPending ? null : (
+          <Create key={session.data?.user.id ?? "nobody"} owner={session.data?.user.id ?? null} />
+        )}
       </div>
     </DirectorGate>
   );
