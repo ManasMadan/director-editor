@@ -384,7 +384,7 @@ beforeAll(async () => {
   });
   stock = createServer(stockRoute);
   stockUrl = await listen(stock);
-  harness = await startApi(27, {
+  harness = await startApi(31, {
     ...LOCAL_STORAGE,
     AI_URL: await listen(ai),
     AI_SERVICE_SECRET: SECRET,
@@ -478,6 +478,14 @@ describe("the asset picker", () => {
     expect(logo?.defaultImage).toBeNull();
     expect(gone?.defaultImage).toBeNull();
     expect(JSON.stringify(assets)).not.toContain("files/");
+  });
+
+  it("serves a drawn default image without an id while the AI service lists no row for it", async () => {
+    const { session, org } = await signedIn();
+    readyPlan(org);
+    slotOf(org, VIDEO, "chart").candidates = [];
+    const [chart] = (await session.rpc.assets.list({ videoId: VIDEO })).slots;
+    expect(chart?.defaultImage).toMatchObject({ id: null, status: "ready" });
   });
 
   it("lists slots with no default images while the plan is being written", async () => {

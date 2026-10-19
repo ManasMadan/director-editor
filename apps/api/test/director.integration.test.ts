@@ -53,6 +53,8 @@ let ai: Server;
 let google: Awaited<ReturnType<typeof startFakeGoogle>>;
 /** Workspaces whose AI allowance the AI service says is spent. */
 const spentOrgs = new Set<string>();
+/** Workspaces whose turns the AI service's ledger fails to settle. */
+const unsettledOrgs = new Set<string>();
 const youtubeCalls: URL[] = [];
 const aiCalls: { route: string; org: string; user: string; body: unknown }[] = [];
 /** The presigned read the AI service was last handed for a take. */
@@ -296,7 +298,10 @@ function chatLedgerRoute(route: string, who: { org: string }) {
       ? failure(429, "AI_BUDGET_EXCEEDED")
       : { status: 201, body: { tokens: 20_000 } };
   }
-  return route === "POST /v1/director/chat-usage" ? { status: 204, body: undefined } : null;
+  if (route !== "POST /v1/director/chat-usage") {
+    return null;
+  }
+  return unsettledOrgs.has(who.org) ? failure(500, "INTERNAL") : { status: 204, body: undefined };
 }
 
 /** The AI service's Director routes, per organization, as apps/ai answers them. */
@@ -1381,6 +1386,18 @@ describe("Director's slower line", () => {
     expect(ledgerCalls(org).map((call) => call.body)).toEqual([
       { model: expect.any(String) },
       { model: expect.any(String), reserved: 20_000, inputTokens: 20_000, outputTokens: 0 },
+    ]);
+  });
+
+  it("answers the member even when the ledger fails to settle the turn", async () => {
+    const { session, me } = await signedIn();
+    const org = String(me.activeOrganizationId);
+    readyTemplate(org, "ChatShort07");
+    unsettledOrgs.add(org);
+    expect((await session.rpc.director.chat(turn("ChatShort07"))).reply).toBe("Got it.");
+    expect(ledgerCalls(org).map((call) => call.route)).toEqual([
+      "POST /v1/director/chat-reservations",
+      "POST /v1/director/chat-usage",
     ]);
   });
 

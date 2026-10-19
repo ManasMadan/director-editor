@@ -41,6 +41,13 @@ describe("the member's version in Director's brief", () => {
     expect(text).toContain("on the front camera.");
   });
 
+  it("puts what they do in the first step of a shot that has steps", () => {
+    const version = { ...EMPTY_VERSION, shots: [{ shot: 0, action: "Pour it fast" }] };
+    const text = systemInstruction(plan, 0, version);
+    expect(text).toContain("- at 0s: Pour it fast (camera: static)");
+    expect(text).not.toContain("Pour slowly");
+  });
+
   it("puts what they do in the pose of a shot with no steps", () => {
     const version = { ...EMPTY_VERSION, shots: [{ shot: 1, action: "Sip, then smile" }] };
     expect(systemInstruction(plan, 1, version)).toContain("Pose: Sip, then smile");
