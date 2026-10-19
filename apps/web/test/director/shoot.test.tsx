@@ -386,6 +386,28 @@ describe("talking it through with Director", () => {
       .toContainEqual(
         expect.stringContaining('- What they do: "You and your grandma do it together"'),
       );
+
+    // ↺ puts the original back, and Director hears it.
+    await userEvent.click(card.getByRole("button", { name: "Put the original back: Do" }));
+    await expect.element(card.getByText("Walk towards the camera.")).toBeVisible();
+    expect(card.getByText("changed for you").query()).toBeNull();
+    await expect
+      .poll(turns)
+      .toContainEqual(expect.stringContaining("[They put the original back for"));
+  });
+
+  it("shows what Director remembers, and forgets a note when the member takes it away", async () => {
+    canvasCamera();
+    const { page } = await openShoot({ shots: [walkIn, smile] });
+    await startShooting(page);
+    await send(page, "I'm switching indoors");
+    const chips = page.getByRole("list", { name: "What Director remembers" });
+    await expect.element(chips.getByText("Indoors")).toBeVisible();
+    await userEvent.click(page.getByRole("button", { name: "Forget “Indoors”" }));
+    await expect.element(chips).not.toBeInTheDocument();
+    await expect
+      .poll(turns)
+      .toContainEqual(expect.stringContaining('[They removed "Indoors" from what you remember'));
   });
 });
 
