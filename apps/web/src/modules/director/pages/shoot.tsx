@@ -164,9 +164,11 @@ function StartCard({
   const t = useTranslations("director.shoot");
   const leftover = Math.ceil(leftoverMs / 1000);
   return (
-    <div className="absolute inset-0 flex flex-col gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+    // The whole screen, not the 9:16 column: a phone held sideways has the width, and
+    // the card scrolls rather than running off the top.
+    <div className="absolute inset-0 flex flex-col gap-3 overflow-y-auto px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <StartHeader props={props} title={title} />
-      <div className="mt-auto flex flex-col gap-3">
+      <div className="mx-auto mt-auto flex w-full max-w-lg flex-col gap-3">
         <section
           aria-labelledby="shoot-intro"
           className={cn(
@@ -1009,18 +1011,6 @@ function ShootScreen(shootProps: ShootProps) {
           />
         ) : null}
         {started ? <MatchGhost {...shootProps} facing={camera.facing} /> : null}
-        {started ? null : (
-          <StartCard
-            props={shoot.props}
-            title={shootProps.plan.title}
-            first={memory.before.sessions === 0}
-            roll={rollOn}
-            sharedDemo={demoNoRoll}
-            leftoverMs={roll.upload.behindMs}
-            ready={system.data !== undefined}
-            onStart={start}
-          />
-        )}
         {roll.phase === "paused" ? <PausedVeil onResume={roll.resume} /> : null}
         {started && !blocked && !reviewing ? (
           <Overlay
@@ -1047,6 +1037,18 @@ function ShootScreen(shootProps: ShootProps) {
         <LeaveDialog leaving={leaving} />
         {blocked ? <CameraBlocked camera={camera} /> : null}
       </div>
+      {started ? null : (
+        <StartCard
+          props={shoot.props}
+          title={shootProps.plan.title}
+          first={memory.before.sessions === 0}
+          roll={rollOn}
+          sharedDemo={demoNoRoll}
+          leftoverMs={roll.upload.behindMs}
+          ready={system.data !== undefined}
+          onStart={start}
+        />
+      )}
     </div>
   );
 }
