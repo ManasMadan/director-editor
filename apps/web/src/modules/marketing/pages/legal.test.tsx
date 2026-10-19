@@ -24,6 +24,31 @@ describe.each(documents)("the %s page", (document, title, doc) => {
     expect(html.length).toBeGreaterThan(4000);
   });
 
+  it("opens with the demo notice, before anything else is said", async () => {
+    const html = await render();
+    const notice = html.indexOf('role="note"');
+    expect(notice).toBeGreaterThan(html.indexOf("</h1>"));
+    expect(notice).toBeLessThan(html.indexOf("On this page"));
+    expect(html.slice(notice)).toMatch(
+      /^role="note"[^>]*><p><strong[^>]*>Director is an experimental demo built for a hackathon\.<\/strong>/,
+    );
+    expect(html).toContain("&quot;as is&quot; and &quot;as available&quot;");
+    expect(html).toContain("shut down without notice");
+  });
+
+  it("promises nothing the demo can't keep", async () => {
+    const html = await render();
+    for (const promise of [
+      /within 30 days/,
+      /we&#x27;ll (tell|send|delete|answer|say)/i,
+      /US dollars/,
+      /before it takes effect/,
+      /where we can/,
+    ]) {
+      expect(html).not.toMatch(promise);
+    }
+  });
+
   it("renders every section of the catalog, in order, with a contents entry linking to it", async () => {
     // Nothing in the catalog is left out of the page, and nothing on it is missing there.
     expect([...LEGAL_SECTIONS[document]]).toEqual(Object.keys(doc.sections));
@@ -53,7 +78,7 @@ describe.each(documents)("the %s page", (document, title, doc) => {
   });
 });
 
-describe("what the pages promise", () => {
+describe("what the pages say", () => {
   it("says what's recorded, where it goes and for how long", async () => {
     const html = await renderHtml(await LegalPage({ document: "privacy" }));
     for (const fact of [
@@ -62,7 +87,8 @@ describe("what the pages promise", () => {
       "ten-second pieces",
       "deleted 7 days",
       "never more than 14 days",
-      "after 15 days",
+      "15 days after it was uploaded",
+      "BigQuery&#x27;s US multi-region",
       "24 hours",
       "90 days",
       "BigQuery",
@@ -80,7 +106,10 @@ describe("what the pages promise", () => {
     const html = await renderHtml(await LegalPage({ document: "terms" }));
     expect(html).toContain("altered or synthetic content");
     expect(html).toContain("a credit to the original creator");
-    expect(html).toContain("&quot;as is&quot;");
+    expect(html).toContain("experimental demo built for a hackathon");
+    expect(html).toContain("To the fullest extent permitted by law");
+    expect(html).toContain("at least 13");
+    expect(html).toContain("You keep ownership of it.");
     expect(html).toContain('href="https://www.youtube.com/t/terms"');
     expect(html).toContain('href="/privacy"');
   });

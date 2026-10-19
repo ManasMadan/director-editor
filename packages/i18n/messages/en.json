@@ -326,14 +326,15 @@
     "terms": "Terms of service",
     "privacy": "Privacy policy",
     "lastUpdated": "Last updated {date}",
+    "demoNotice": "<p><b>Director is an experimental demo built for a hackathon.</b> It's provided \"as is\" and \"as available\", with no warranties of any kind, and you use it at your own risk. It may have bugs, get things wrong, lose or delete your data and footage at any time, change, or shut down without notice. Don't upload or film anything you can't afford to lose or don't want processed.</p>",
     "contents": "On this page",
     "nav": "Legal",
     "termsDoc": {
       "intro": "<p>These terms are the agreement between you and Manas Madan, who runs Director (\"we\" and \"us\"), for using Director at director.mmadan.in. Please read them with the <privacy>privacy policy</privacy>, which says what Director does with your data.</p>",
       "sections": {
         "status": {
-          "title": "Director is an early demo",
-          "body": "<p>Director is an early, experimental product, offered free of charge while it's being built and shown. It runs on a limited budget, so its features, limits and availability can change, it may be slow or unavailable at times, and it may close. If it closes, we'll say so on the site first where we can, and delete the data it holds.</p>"
+          "title": "An experimental demo",
+          "body": "<p>Director is an experimental demo built for a hackathon, offered free of charge to show what it can do. It is not a finished or supported product. In particular:</p><ul><li>It may contain bugs, and what it says, plans, scores or makes may be wrong.</li><li>It may lose or delete your account, data and footage at any time, for any reason.</li><li>It may change, stop working, or shut down at any time, without notice.</li><li>There is no service level, support or availability of any kind.</li></ul><p>You use Director entirely at your own risk. Don't upload or film anything you can't afford to lose or don't want processed as the privacy policy describes.</p>"
         },
         "using": {
           "title": "Using Director",
@@ -341,7 +342,7 @@
         },
         "account": {
           "title": "Your account",
-          "body": "<p>Give accurate details when you sign up and keep your sign-in safe: you're responsible for what's done with your account. If you think someone else has got into it, tell us at <mail>manasmadan08@gmail.com</mail>.</p><p>Demo guests and the shared demo account are for trying Director only. They're deleted after a day, and everyone who uses the shared account can see what's filmed in it.</p>"
+          "body": "<p>Give accurate details when you sign up and keep your sign-in safe: you're responsible for what's done with your account. If you think someone else has got into it, you can tell us at <mail>manasmadan08@gmail.com</mail>.</p><p>Demo guests and the shared demo account are for trying Director only. They're deleted after a day, and everyone who uses the shared account can see what's filmed in it.</p>"
         },
         "rules": {
           "title": "What you may not do",
@@ -349,7 +350,7 @@
         },
         "content": {
           "title": "Your content",
-          "body": "<p>What you film, say, write and upload, and the videos you make with it, are yours (\"your content\"). You keep ownership of it.</p><p>So that Director can work, you give us a licence to store, copy, process, adapt and show your content, and to pass it to the services listed in the privacy policy, only to run Director for you: to direct your shoot, cut and review your takes, edit your video, and post it to YouTube when you ask. The licence is worldwide and free, and it ends when your content is deleted, apart from copies kept for a short time in backups. We don't use your content to advertise, we don't sell it, and we don't use it to train AI models.</p><p>You're responsible for your content. You confirm that you have the rights to everything in it, including the permission of everyone who appears in it or whose voice it records, and of the owners of any music, pictures or other material you add.</p>"
+          "body": "<p>What you film, say, write and upload, and the videos you make with it, are yours (\"your content\"). You keep ownership of it.</p><p>So that Director can work, you give us a licence to store, copy, process, adapt and show your content, and to pass it to the services listed in the privacy policy, to run Director for you: to direct your shoot, cut and review your takes, edit your video, and post it to YouTube when you ask. The licence is worldwide and free, and it ends when your content is deleted, apart from copies that remain for a while in backups.</p><p>You're responsible for your content. You confirm that you have the rights to everything in it, including the permission of everyone who appears in it or whose voice it records, and of the owners of any music, pictures or other material you add. Keep your own copy of anything that matters to you: Director may lose it.</p>"
         },
         "templates": {
           "title": "Other people's Shorts as templates",
@@ -357,7 +358,7 @@
         },
         "ai": {
           "title": "AI and its limits",
-          "body": "<p>Director is powered by Google's Gemini models. Its plans, directions, reviews, scores, transcripts, captions, pictures, clips and the posts it drafts are made by AI. They can be wrong, incomplete or not right for you, and Director can misunderstand what it sees and hears. Check them before you rely on them or post them: you decide what you film and publish. Director's suggestions aren't professional advice, so stay safe and aware of your surroundings while you film.</p><p>If your video uses a clip Director made with Google's Veo, Director tells YouTube that it contains altered or synthetic content when you post it, and YouTube labels it. Any other disclosure YouTube asks of you is up to you.</p><p>Director has limits so it can run on its budget: a monthly AI allowance per account, one Short of your own to index, at most 20 minutes of recording per shoot, at most 30 minutes per call with Director, and a daily limit on how many videos Director posts. We may change them.</p>"
+          "body": "<p>Director is powered by Google's Gemini models. Its plans, directions, reviews, scores, transcripts, captions, pictures, clips and the posts it drafts are made by AI. They can be wrong, incomplete or not right for you, and Director can misunderstand what it sees and hears. Check them before you rely on them or post them: you decide what you film and publish. Director's suggestions aren't professional advice, so stay safe and aware of your surroundings while you film.</p><p>If your video uses a clip Director made with Google's Veo, Director tells YouTube that it contains altered or synthetic content when you post it, and YouTube labels it. Any other disclosure YouTube asks of you is up to you.</p><p>Director has limits so it can run on its budget, such as a monthly AI allowance per account, one Short of your own to index, at most 20 minutes of recording per shoot, at most 30 minutes per call with Director, and a daily limit on how many videos Director posts. They may change at any time.</p>"
         },
         "youtube": {
           "title": "Posting to YouTube",
@@ -369,19 +370,19 @@
         },
         "ending": {
           "title": "Ending",
-          "body": "<p>You can stop using Director and delete your account at any time in Settings. We may suspend or close an account that breaks these terms or puts Director, its members or others at risk, and we may end Director altogether. The parts of these terms that by their nature should last, such as those on warranties and liability, still apply afterwards.</p>"
+          "body": "<p>You can stop using Director and delete your account at any time in Settings. We may suspend, close or delete any account, or end Director altogether, at any time, for any reason, without notice. The parts of these terms that by their nature should last, such as those on warranties and liability, still apply afterwards.</p>"
         },
         "warranty": {
           "title": "No warranty",
-          "body": "<p>Director is provided free, \"as is\" and \"as available\". As far as the law allows, we make no promises about it, including that it will be available, accurate, secure, free of errors or fit for a particular purpose, or that your content will be kept safe. Keep your own copy of anything that matters to you: download your videos when you save them.</p>"
+          "body": "<p>Director is provided \"as is\" and \"as available\", with all its faults and without warranties of any kind, express or implied, including any warranty of merchantability, fitness for a particular purpose, title, non-infringement, accuracy, availability, security, or that your data and footage will be kept.</p>"
         },
         "liability": {
           "title": "Liability",
-          "body": "<p>As far as the law allows, we aren't liable for any indirect, incidental, special or consequential loss, or for lost content, data, profits or opportunities, arising from your use of Director, and our total liability to you for anything to do with Director is limited to 50 US dollars. Nothing in these terms limits a liability the law doesn't allow to be limited, or takes away rights you have as a consumer where you live.</p>"
+          "body": "<p>To the fullest extent permitted by law, Manas Madan and anyone who helps run Director are not liable to you for any damages or loss of any kind, whether direct, indirect, incidental, special, consequential, exemplary or punitive, including lost footage, content, data, profits or opportunities, arising from or related to Director or these terms, however caused and on any theory of liability, even if told it might happen.</p><p>Some places don't allow some of these exclusions. Where that's so, they apply as far as the law there allows, and nothing in these terms takes away rights that law gives you and doesn't let you give up.</p>"
         },
         "changes": {
           "title": "Changes to these terms",
-          "body": "<p>We may change these terms. We'll update the date at the top and, for a change that matters, say so on the site before it takes effect. If you keep using Director after that, the new terms apply; if you don't agree to them, stop using Director and delete your account.</p>"
+          "body": "<p>We may change these terms at any time, without notice. The date at the top shows the latest version. If you keep using Director after a change, the new terms apply; if you don't agree to them, stop using Director and delete your account.</p>"
         },
         "contact": {
           "title": "Contact",
@@ -390,11 +391,11 @@
       }
     },
     "privacyDoc": {
-      "intro": "<p>Director helps you film your own version of a YouTube Short, with Gemini directing you through your camera. To do that it handles your camera, your microphone and the videos you make, so this page sets out exactly what Director collects, where it goes, how long it's kept and how to delete it.</p><p>Director is made and run by Manas Madan (\"we\" and \"us\" on this page). Questions go to <mail>manasmadan08@gmail.com</mail>.</p>",
+      "intro": "<p>Director helps you film your own version of a YouTube Short, with Gemini directing you through your camera. To do that it handles your camera, your microphone and the videos you make, so this page sets out what Director collects, where it goes, how long it's kept and how to delete it. It describes Director as it runs today, a demo: read the notice above before you use it.</p><p>Director is made and run by Manas Madan (\"we\" and \"us\" on this page). Questions go to <mail>manasmadan08@gmail.com</mail>.</p>",
       "sections": {
         "summary": {
           "title": "The short version",
-          "body": "<ul><li>Director uses your camera and microphone only on the shoot screen, once you've allowed them in your browser.</li><li>While you shoot, what your camera sees and what you say go to Gemini on Google Cloud's Vertex AI, so Director can talk you through each shot. Under Google Cloud's terms, Google doesn't use it to train its AI models.</li><li>Director records the whole time you're shooting, your chat with Director included, until you tap Done. You can pause at any time. That raw recording is deleted automatically after 7 days, or at most 14 if you saved a video from it.</li><li>Your takes and saved videos stay in your account until you delete your account, or ask us to delete them.</li><li>Nothing goes to YouTube unless you tap to post it, and Director asks for permission to upload only when you first do.</li><li>No ads, no advertising trackers, and we never sell your data.</li><li>You can delete your account, and everything in it, from Settings at any time.</li></ul>"
+          "body": "<ul><li>Director is an experimental demo: anything you put in it may be lost or deleted at any time.</li><li>Director uses your camera and microphone only on the shoot screen, once you've allowed them in your browser.</li><li>While you shoot, what your camera sees and what you say go to Gemini on Google Cloud's Vertex AI, so Director can talk you through each shot. Under Google Cloud's terms, Google doesn't use it to train its AI models.</li><li>Director records the whole time you're shooting, your chat with Director included, until you tap Done. You can pause at any time. That raw recording is deleted automatically after 7 days, or at most 14 if you saved a video from it.</li><li>Your takes and saved videos stay in your account until you delete your account, unless they're lost or deleted sooner.</li><li>Nothing goes to YouTube unless you tap to post it, and Director asks for permission to upload only when you first do.</li><li>Director has no ads or advertising trackers, and doesn't sell your data.</li><li>You can delete your account, and everything in it, from Settings.</li></ul>"
         },
         "account": {
           "title": "Your account",
@@ -418,7 +419,7 @@
         },
         "analytics": {
           "title": "Analytics and logs",
-          "body": "<ul><li><b>Product analytics.</b> To understand how Director is used, we record events such as a call started, a take reviewed, or a video saved or posted, in Google BigQuery. An event holds ids (yours, the template's and the Short's), the time, counts, scores and timings, such as how long Director took to answer. It never holds your name, your email address, your footage, or the words you or Director said.</li><li><b>Server logs.</b> Our servers log what happens on them, to keep Director running and secure: who did what (your account id, name and email address), your IP address and your browser.</li><li><b>Security log.</b> A record of security events on accounts (account created, signed in and out, password and two-step changes, account deleted), with ids rather than content.</li></ul><p>How long each is kept is in \"How long we keep it\" below.</p>"
+          "body": "<ul><li><b>Product analytics.</b> To understand how Director is used, we record events such as a call started, a take reviewed, or a video saved or posted, in Google BigQuery. An event holds ids (yours, the template's and the Short's), the time, counts, scores and timings, such as how long Director took to answer. It never holds your name, your email address, your footage, or the words you or Director said.</li><li><b>Server logs.</b> Our servers log what happens on them, to keep Director running and secure: who did what (your account id, name and email address), your IP address and your browser.</li><li><b>Security log.</b> A record of security events on accounts (account created, signed in and out, password and two-step changes, account deleted), with ids rather than content.</li></ul><p>How long each is kept is in \"How long it's kept\" below.</p>"
         },
         "sharing": {
           "title": "Who else handles your data",
@@ -426,15 +427,15 @@
         },
         "location": {
           "title": "Where your data is",
-          "body": "<p>Director runs on Google Cloud in the United States, in the us-central1 region (Iowa), and so does Gemini Live. Director's other Gemini requests go through Vertex AI's global endpoint, which Google may serve from any of its locations. If you live outside the United States, your data is transferred there.</p>"
+          "body": "<p>Director runs on Google Cloud in the United States. Its server, its database and its Cloud Storage bucket are in the us-central1 region (Iowa), and so is Gemini Live. Product analytics are in BigQuery's US multi-region, which Google may serve from any of its locations in the United States. Director's other Gemini requests go through Vertex AI's global endpoint, which Google may serve from any of its locations. If you live outside the United States, your data is transferred there.</p>"
         },
         "retention": {
-          "title": "How long we keep it",
-          "body": "<ul><li><b>Raw recordings</b> (everything recorded while you shoot): deleted 7 days after they're recorded. Saving a video from one keeps it for 7 days from that save, but never more than 14 days after it was recorded. As a backstop, Cloud Storage deletes any raw recording still there after 15 days.</li><li><b>Demo guests</b>: deleted with everything in them 24 hours after they're made. The shared demo account's takes and videos: after a day.</li><li><b>Takes, reviews, saved videos, photos, templates and your versions</b>: until you delete your account. To have something deleted sooner, email us.</li><li><b>Director's spoken lines</b> (audio of Director's voice, kept so the same line isn't made twice): 90 days.</li><li><b>Signed-in sessions</b>: about 7 days after you last use them.</li><li><b>Server logs</b>: 30 days.</li><li><b>Records of the emails we send you</b>: 90 days.</li><li><b>Security log</b>: 13 months.</li><li><b>Database backups</b>: 14 days, so something deleted can stay in a backup for up to 14 days more.</li><li><b>Analytics events</b>: these hold no name, email address or content, and have no set expiry yet.</li></ul>"
+          "title": "How long it's kept",
+          "body": "<p>These are the deletion schedules Director is set up with. As a demo, it may also lose or delete anything sooner.</p><ul><li><b>Raw recordings</b> (everything recorded while you shoot): deleted 7 days after they're recorded. Saving a video from one keeps it for 7 days from that save, but never more than 14 days after it was recorded. Cloud Storage also deletes any raw recording still there 15 days after it was uploaded.</li><li><b>Demo guests</b>: deleted with everything in them 24 hours after they're made. The shared demo account's takes and videos: after a day.</li><li><b>Takes, reviews, saved videos, photos, templates and your versions</b>: until you delete your account.</li><li><b>Director's spoken lines</b> (audio of Director's voice, kept so the same line isn't made twice): Cloud Storage deletes them 90 days after they're made.</li><li><b>Signed-in sessions</b>: about 7 days after you last use them.</li><li><b>Server logs</b>: 30 days.</li><li><b>Records of the emails we send you</b>: 90 days.</li><li><b>Security log</b>: 13 months.</li><li><b>Database backups</b>: 14 days, so something deleted can stay in a backup for up to 14 days more.</li><li><b>Analytics events</b>: these hold no name, email address or content, and have no set expiry.</li></ul>"
         },
         "rights": {
           "title": "Your choices and rights",
-          "body": "<ul><li><b>Delete your account</b> in Settings, under Security. It asks for your password: if you signed up with Google and never set one, use \"Forgot password\" on the sign-in page to set one first, or email us and we'll delete it for you. Deleting your account deletes everything in it: templates, recordings, takes, videos, photos and your versions. Their files leave storage within about an hour, apart from the backups, logs and analytics described above.</li><li><b>Get a copy.</b> You can download each video when you save it. There's no one-click export of everything yet: email us and we'll send you a copy of what we hold about you.</li><li><b>Correct it.</b> Change your name, email address, language, time zone and profile picture in Settings.</li><li><b>Withdraw YouTube access</b> in your Google Account at any time, as described above.</li><li><b>Turn off the camera or microphone</b> in your browser whenever you like. Director can't use them without your permission.</li></ul><p>Depending on where you live (for example under the GDPR in the European Union and the UK, or in California), you may have further rights: to access, correct, delete or move your data, to object to or restrict how we use it, and to complain to your data protection authority. Email us to use any of them, and we'll answer within 30 days.</p><p>We use your data to provide Director to you under its terms; for logs, security and analytics, because we have a legitimate interest in keeping Director safe and working well; and for your camera and microphone, with your consent, which you can withdraw at any time by stopping.</p>"
+          "body": "<ul><li><b>Delete your account</b> in Settings, under Security. It asks for your password: if you signed up with Google and never set one, use \"Forgot password\" on the sign-in page to set one first. Deleting your account deletes everything in it: templates, recordings, takes, videos, photos and your versions. Their files are usually gone from storage within the hour, apart from the backups, logs and analytics described above.</li><li><b>Keep a copy.</b> You can download each video when you save it. Director has no export of everything else.</li><li><b>Correct it.</b> Change your name, email address, language, time zone and profile picture in Settings.</li><li><b>Withdraw YouTube access</b> in your Google Account at any time, as described above.</li><li><b>Turn off the camera or microphone</b> in your browser whenever you like. Director can't use them without your permission.</li></ul><p>Depending on where you live (for example under the GDPR in the European Union and the UK, or in California), the law may give you further rights over your data, such as to access, correct, delete or move it, to object to or restrict how it's used, and to complain to your data protection authority. You can send any request to <mail>manasmadan08@gmail.com</mail>; we may consider it at our discretion, as far as the law allows.</p><p>Director uses your data to provide the demo to you under its terms; for logs, security and analytics, to keep the demo running and learn from it; and for your camera and microphone, with your consent, which you can withdraw at any time by stopping.</p>"
         },
         "cookies": {
           "title": "Cookies and storage on your device",
@@ -442,19 +443,19 @@
         },
         "security": {
           "title": "Security",
-          "body": "<p>Connections to Director are encrypted. Passwords are hashed, and Google access tokens and two-step backup codes are encrypted in our database. The database itself keeps each account's data apart from every other's. Recordings, videos and photos are stored privately and reached only through links that expire soon after they're made. Takes are cut on a separate service with no access to our database or secrets. No system is perfectly secure: if something goes wrong that affects your data, we'll tell you.</p>"
+          "body": "<p>Connections to Director are encrypted. Passwords are hashed, and Google access tokens and two-step backup codes are encrypted in the database. The database itself keeps each account's data apart from every other's. Recordings, videos and photos are stored privately and reached only through links that expire soon after they're made. Takes are cut on a separate service with no access to the database or secrets. None of this makes Director secure: it's a demo, and no system is perfectly secure.</p>"
         },
         "children": {
           "title": "Children",
-          "body": "<p>Director isn't meant for children under 13, and we don't knowingly collect their data. If you think a child has an account, email us and we'll delete it.</p>"
+          "body": "<p>Director isn't meant for anyone under 13. If you think a child has an account, email us; we may delete it.</p>"
         },
         "changes": {
           "title": "Changes to this policy",
-          "body": "<p>When this policy changes, we'll update the date at the top and, for a change that matters, say so on the site before it takes effect.</p>"
+          "body": "<p>This policy may change at any time, without notice, as Director does. The date at the top shows the latest version.</p>"
         },
         "contact": {
           "title": "Contact",
-          "body": "<p>Questions, requests or complaints: <mail>manasmadan08@gmail.com</mail>.</p>"
+          "body": "<p>Questions: <mail>manasmadan08@gmail.com</mail>.</p>"
         }
       }
     }
