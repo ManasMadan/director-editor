@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useSystemInfoQuery } from "@repo/client/api/system/info";
 import { Button } from "@repo/ui/components/button";
 import { FieldGroup, FieldSeparator } from "@repo/ui/components/field";
+import { cn } from "@repo/ui/lib/utils";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -50,13 +51,45 @@ function NoAccount() {
   );
 }
 
+/**
+ * Google first for everyone else: it's how a member posts to their channel. Until the
+ * page knows whether Google is on, its button and the "or" under it keep their room,
+ * drawn unseen: the form would otherwise jump down when they appear.
+ */
+function GoogleOption() {
+  const t = useTranslations();
+  const next = useNextPath();
+  const { data: system, isPending } = useSystemInfoQuery();
+  if (!(isPending || system?.features.google)) {
+    return null;
+  }
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        // Wraps on a narrow phone rather than running past its own edges.
+        className={cn(
+          "h-auto min-h-8 py-1.5 whitespace-normal text-balance",
+          isPending && "invisible",
+        )}
+        disabled={isPending}
+        onClick={() => authClient.signIn.social({ provider: "google", callbackURL: next })}
+      >
+        {t("auth.googleToPost")}
+      </Button>
+      <FieldSeparator className={isPending ? "invisible" : undefined}>
+        {t("common.or")}
+      </FieldSeparator>
+    </>
+  );
+}
+
 export function SignInPage() {
   const t = useTranslations();
   const router = useRouter();
-  const next = useNextPath();
   const stepHref = useAuthStepHref();
   const errorMessage = useAuthErrorMessage();
-  const { data: system } = useSystemInfoQuery();
   const heading = useHeading();
   const schemas = useAuthSchemas();
   const schema = z.object({ email: schemas.email, password: schemas.password });
@@ -98,21 +131,7 @@ export function SignInPage() {
       <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
         <FieldGroup>
           <DemoOffer onUse={(demo) => form.reset(demo)} onSignedIn={done} />
-          {/* Google first for everyone else: it's how a member posts to their channel. */}
-          {system?.features.google ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                // Wraps on a narrow phone rather than running past its own edges.
-                className="h-auto min-h-8 py-1.5 whitespace-normal text-balance"
-                onClick={() => authClient.signIn.social({ provider: "google", callbackURL: next })}
-              >
-                {t("auth.googleToPost")}
-              </Button>
-              <FieldSeparator>{t("common.or")}</FieldSeparator>
-            </>
-          ) : null}
+          <GoogleOption />
           <TextField
             control={form.control}
             name="email"

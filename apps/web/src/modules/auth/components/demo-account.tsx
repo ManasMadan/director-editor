@@ -3,7 +3,7 @@
 import { useSystemInfoQuery } from "@repo/client/api/system/info";
 import { GUEST_SIGN_IN_PATH } from "@repo/client/auth";
 import { Button } from "@repo/ui/components/button";
-import { GeminiLoader } from "@repo/ui/components/gemini-loader";
+import { GeminiLoader, GeminiShimmer } from "@repo/ui/components/gemini-loader";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
@@ -40,6 +40,9 @@ export function DemoOffer({ onUse, onSignedIn }: DemoProps) {
   if (wanted && isPending) {
     return <GeminiLoader label={t("auth.demo.loading")} showLabel size="sm" className="mx-auto" />;
   }
+  if (isPending) {
+    return <DemoRoom />;
+  }
   const shared = system?.demo ?? null;
   if (system?.features.demoGuests) {
     return <GuestOffer shared={shared} wanted={wanted} onUse={onUse} onSignedIn={onSignedIn} />;
@@ -47,6 +50,29 @@ export function DemoOffer({ onUse, onSignedIn }: DemoProps) {
   return shared ? (
     <SharedOffer demo={shared} wanted={wanted} onUse={onUse} onSignedIn={onSignedIn} />
   ) : null;
+}
+
+/**
+ * The demo card's room, shimmering, while it isn't known yet which demo there is: the
+ * form under it would otherwise jump down when the card appears, under the thumb of
+ * someone already typing their email. Sized by the guest card itself, drawn unseen.
+ */
+function DemoRoom() {
+  const t = useTranslations();
+  return (
+    <div aria-hidden data-testid="demo-room" className="relative">
+      <div inert className="invisible">
+        <DemoCard
+          title={t("auth.demo.guestTitle")}
+          description={t("auth.demo.guestDescription")}
+          action={t("auth.demo.start")}
+          disabled
+          onAction={() => undefined}
+        />
+      </div>
+      <GeminiShimmer className="absolute inset-0 rounded-lg" />
+    </div>
+  );
 }
 
 /**

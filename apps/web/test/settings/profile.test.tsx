@@ -4,7 +4,7 @@ import { commands, userEvent } from "vitest/browser";
 import { ProfileSettingsPage } from "@/modules/settings";
 import { EmailCard } from "@/modules/settings/components/email-card";
 import { ProfileCard } from "@/modules/settings/components/profile-card";
-import { renderPage, router } from "../render";
+import { cleanup, renderPage, router } from "../render";
 import { currentSession, rateLimit, signOut, signUp, takeOtp, type User } from "../users";
 
 const other = (code: string) => (code === "000000" ? "111111" : "000000");
@@ -20,6 +20,21 @@ describe("the profile page", () => {
 });
 
 describe("the profile", () => {
+  it("keeps the form's room while the profile loads, so the cards under it don't jump", async () => {
+    await signUp();
+    const height = () =>
+      document.querySelector('[data-slot="card"]')?.getBoundingClientRect().height;
+    let page = await renderPage(<ProfileCard />, { url: "/settings" });
+    await expect.element(page.getByLabelText("Name")).toBeVisible();
+    const settled = height();
+    cleanup();
+    // The same card while the profile hasn't come yet (the API retries a 503).
+    await commands.failRequests("/rpc/user/me", { status: 503 });
+    page = await renderPage(<ProfileCard />, { url: "/settings" });
+    await expect.element(page.getByTestId("profile-room")).toBeInTheDocument();
+    expect(height()).toBe(settled);
+  });
+
   it("saves the name, language and time zone, and re-renders in them", async () => {
     await signUp();
     const page = await renderPage(<ProfileCard />, { url: "/settings" });

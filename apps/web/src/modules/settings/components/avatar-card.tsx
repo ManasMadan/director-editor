@@ -22,7 +22,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@repo/ui/components/card";
-import { GeminiLoader } from "@repo/ui/components/gemini-loader";
+import { GeminiLoader, GeminiShimmer } from "@repo/ui/components/gemini-loader";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -108,6 +108,25 @@ function useAvatarUpload() {
 }
 
 /**
+ * The card's room while it isn't known yet whether uploads are on, or whose picture it is:
+ * the cards under it would otherwise jump down when it appears.
+ */
+function AvatarRoom() {
+  const t = useTranslations("settings.profile.avatar");
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("title")}</CardTitle>
+        <CardDescription>{t("description")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <GeminiShimmer className="size-16 rounded-full" />
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
  * The profile picture. A chosen image is uploaded, checked by the worker (virus scan,
  * re-encoded without metadata), and only then becomes the picture. Hidden when the
  * deployment has uploads off.
@@ -120,7 +139,7 @@ export function AvatarCard() {
   const { choose, remove, uploading, busy, problem } = useAvatarUpload();
 
   if (!system?.features.files || !me) {
-    return null;
+    return system?.features.files === false ? null : <AvatarRoom />;
   }
   return (
     <Card>
