@@ -18,6 +18,7 @@ Off without MEDIA_BUCKET: there would be nowhere to keep them.
 """
 
 import asyncio
+import datetime
 import re
 from dataclasses import dataclass
 from uuid import UUID
@@ -35,7 +36,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent, BinaryContent
 from pydantic_ai.models.google import GoogleModel
 from redis.asyncio import Redis
-from sqlalchemy import Integer, func, select, type_coerce, update
+from sqlalchemy import Integer, and_, func, or_, select, type_coerce, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -69,6 +70,9 @@ _DRAWN_AS: dict[AspectRatio, str] = {"9:8": "5:4"}
 # One image takes a few seconds; past this the call has failed.
 DRAW_TIMEOUT_MS = 60_000
 KEY_PREFIX = "director-assets"
+# A row "generating" longer than this was left by a job that died: the longest a making
+# takes is a Veo clip's (app/clips.py, six minutes of polling), well under it.
+CLAIM_STALE_MINUTES = 15
 _EXTENSIONS = {"image/png": "png", "image/jpeg": "jpg"}
 _GENERIC_PERSON = (
     "Anyone in it is a generic, anonymous adult, not a likeness of any real or recognisable person."
@@ -594,7 +598,8 @@ class AssetMaker:
     async def _film(self, org_id: UUID, plan_id: UUID, job: _Job, filmmaker: Filmmaker) -> None:
         """Makes a gap's Veo clip, counted against the workspace's allowance as a fixed
         `per_clip` (Veo is priced by the second, not by tokens)."""
-        await self._set(org_id, job.row_id, status="generating")
+        if not await self._claim(org_id, job.row_id):
+            return
         reservation = await reserve(
             org_id,
             job.user_id,
@@ -637,7 +642,8 @@ class AssetMaker:
         if job.clip and self._filmmaker is not None:
             await self._film(org_id, plan_id, job, self._filmmaker)
             return
-        await self._set(org_id, job.row_id, status="generating")
+        if not await self._claim(org_id, job.row_id):
+            return
         reservation = await reserve(
             org_id,
             job.user_id,
@@ -711,6 +717,33 @@ class AssetMaker:
             "inputTokens": used[0],
             "outputTokens": used[1],
         }
+
+    async def _claim(self, org_id: UUID, row_id: UUID) -> bool:
+        """Takes the row for this job to draw, in one statement: whether it got it. Every
+        picker drawing and created plan queues a job for the whole plan, and two jobs can
+        list the same rows, so only the one whose update lands draws it (a Veo clip twice
+        is billed twice). A row left "generating" past CLAIM_STALE_MINUTES by a job that died is
+        taken again."""
+        stale = func.now() - datetime.timedelta(minutes=CLAIM_STALE_MINUTES)
+        async with tenant(org_id) as session:
+            claimed = await session.scalar(
+                update(DirectorAsset)
+                .where(
+                    DirectorAsset.id == row_id,
+                    or_(
+                        DirectorAsset.status == "pending",
+                        and_(
+                            DirectorAsset.status == "generating",
+                            DirectorAsset.updated_at < stale,
+                        ),
+                    ),
+                )
+                .values(status="generating", updated_at=func.now())
+                .returning(DirectorAsset.id)
+            )
+        if claimed is None:
+            log.info("an asset another job is making", row_id=str(row_id))
+        return claimed is not None
 
     async def _set(self, org_id: UUID, row_id: UUID, **values: str) -> None:
         async with tenant(org_id) as session:
