@@ -112,5 +112,7 @@ describe("the soundtrack", () => {
     const mono = new Float32Array([0.3]);
     expect(mixDown([mono])).toBe(mono);
     expect(mixDown([])).toHaveLength(0);
+    // A channel shorter than the first is silence past its end.
+    expect([...mixDown([new Float32Array([1, 1]), new Float32Array([1])])]).toEqual([1, 0.5]);
   });
 });

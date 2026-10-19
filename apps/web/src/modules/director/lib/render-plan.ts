@@ -85,11 +85,11 @@ export const FADE_SAMPLES = 240;
 export function mixInto(soundtrack: Float32Array, part: SoundPart, fade = FADE_SAMPLES) {
   const ramp = Math.min(fade, Math.floor(part.length / 2));
   const available = Math.max(0, Math.min(part.length, part.source.length - part.from));
-  for (let i = 0; i < available; i += 1) {
+  part.source.subarray(part.from, part.from + available).forEach((sample, i) => {
     const edge = Math.min(i, part.length - 1 - i);
     const gain = edge < ramp ? edge / ramp : 1;
-    soundtrack[part.start + i] = (part.source[part.from + i] ?? 0) * gain;
-  }
+    soundtrack[part.start + i] = sample * gain;
+  });
 }
 
 /** The take's channels averaged into one: takes are a phone microphone's voice. */
@@ -100,9 +100,10 @@ export function mixDown(channels: readonly Float32Array[]): Float32Array {
   }
   const mono = new Float32Array(first.length);
   for (const channel of channels) {
-    for (let i = 0; i < mono.length; i += 1) {
-      mono[i] = (mono[i] ?? 0) + (channel[i] ?? 0) / channels.length;
-    }
+    // A channel shorter than the first is silent past its end.
+    mono.forEach((sum, i) => {
+      mono[i] = sum + (channel[i] ?? 0) / channels.length;
+    });
   }
   return mono;
 }
