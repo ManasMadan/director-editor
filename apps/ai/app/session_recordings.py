@@ -369,8 +369,15 @@ def create_session_pass(settings: Settings, redis: Redis) -> tuple[SessionPass, 
     allowance = Allowance(settings.monthly_tokens_per_org, settings.monthly_tokens_per_demo_guest)
 
     async def reserve_pass(org_id: UUID, user_id: UUID | None, most: int) -> Reservation | None:
+        # Its whole size or nothing: a pass sized from its footage can't make do with less.
         return await reserve(
-            org_id, user_id, "director-pass", model_name, most=most, allowance=allowance
+            org_id,
+            user_id,
+            "director-pass",
+            model_name,
+            most=most,
+            allowance=allowance,
+            least=most,
         )
 
     async def changed(org_id: UUID) -> None:

@@ -8,14 +8,21 @@ from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
+from google.genai.types import MediaResolution
 from pydantic_ai import VideoUrl
+from pydantic_ai.exceptions import ModelHTTPError, UsageLimitExceeded
+from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
 from redis.asyncio import Redis
 
 from app.errors import AppError
 from app.schemas import ShotPlan
 from app.session_pass import (
-    PASS_TOKENS,
+    PASS_MAX_TOKENS,
+    PASS_OVERHEAD_TOKENS,
+    PASS_TIMEOUT_SECONDS,
+    PASS_TOKENS_PER_SECOND,
     FoundAttempt,
     GeminiWatcher,
     KnownAttempt,
@@ -26,6 +33,7 @@ from app.session_pass import (
     SessionFootage,
     SessionPass,
     pass_prompt,
+    pass_tokens,
     reconcile,
 )
 from app.session_recordings import (
@@ -165,13 +173,13 @@ class Recording:
 
 
 class Watching:
-    def __init__(self, answer: list[FoundAttempt] | AppError) -> None:
+    def __init__(self, answer: list[FoundAttempt] | Exception) -> None:
         self._answer = answer
         self.watched = 0
 
     async def watch(self, org_id: UUID, footage: SessionFootage) -> list[FoundAttempt]:
         self.watched += 1
-        if isinstance(self._answer, AppError):
+        if isinstance(self._answer, Exception):
             raise self._answer
         return self._answer
 
@@ -221,6 +229,28 @@ def test_the_pass_leaves_a_session_alone_when_there_s_nothing_to_do() -> None:
     assert changes.orgs == []
 
 
+def test_a_failure_trying_again_won_t_fix_is_never_retried() -> None:
+    """A refusal or an answer over its cap is the same next time: the live marks stand
+    rather than the job paying for the footage three times over."""
+    recording = Recording(footage())
+    for refusal in (
+        ModelHTTPError(400, "gemini-test", {"error": "the video can't be read"}),
+        UsageLimitExceeded("Exceeded the total_tokens_limit"),
+    ):
+        refused = SessionPass(Watching(refusal), recording, recording, Changes())
+        assert asyncio.run(refused.run(ORG, SESSION, final=False)) == (0, 0)
+
+
+def test_an_outage_is_retried_until_the_last_attempt() -> None:
+    recording = Recording(footage())
+    outage = ModelHTTPError(503, "gemini-test", {"error": "unavailable"})
+    down = SessionPass(Watching(outage), recording, recording, Changes())
+    with pytest.raises(ModelHTTPError):
+        asyncio.run(down.run(ORG, SESSION, final=False))
+    # The last attempt: the live marks stand.
+    assert asyncio.run(down.run(ORG, SESSION, final=True)) == (0, 0)
+
+
 def test_without_a_recording_backend_the_pass_finds_no_session() -> None:
     stand_in = NoRecordings()
     assert asyncio.run(stand_in.footage(ORG, SESSION)) is None
@@ -249,13 +279,48 @@ class Allowance:
 
 def test_gemini_watches_within_the_allowance_and_settles_what_it_used() -> None:
     answer = found(5.0, 8.0).model_dump()
-    allowance = Allowance(PASS_TOKENS)
+    # 90 seconds of footage in two parts.
+    needed = pass_tokens(90_000)
+    allowance = Allowance(needed)
     model = TestModel(custom_output_args={"attempts": [answer]})
     watcher = GeminiWatcher(model, allowance.reserve, allowance.settle)
     assert asyncio.run(watcher.watch(ORG, footage())) == [found(5.0, 8.0)]
-    assert allowance.asked == [PASS_TOKENS]
+    assert allowance.asked == [needed]
     [(used_in, _)] = allowance.settled
     assert used_in > 0
+
+
+def test_the_reservation_is_sized_from_the_footage_and_read_at_low_resolution() -> None:
+    """A session's footage is watched in full: its tokens follow its length (low media
+    resolution, about a hundred a second), not a fixed guess a long session runs over
+    after it's paid for."""
+    assert pass_tokens(600_000) == 600 * PASS_TOKENS_PER_SECOND + PASS_OVERHEAD_TOKENS
+    assert pass_tokens(1_200_000) > pass_tokens(600_000)
+    settings: list[object] = []
+
+    def answer(_messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        settings.append(info.model_settings)
+        return ModelResponse(parts=[ToolCallPart("final_result", {"attempts": []})])
+
+    allowance = Allowance(pass_tokens(90_000))
+    watcher = GeminiWatcher(FunctionModel(answer), allowance.reserve, allowance.settle)
+    assert asyncio.run(watcher.watch(ORG, footage())) == []
+    # (The stand-in model drops `thinking`, which only Gemini takes.)
+    assert settings == [
+        {
+            "timeout": PASS_TIMEOUT_SECONDS,
+            "google_video_resolution": MediaResolution.MEDIA_RESOLUTION_LOW,
+        }
+    ]
+
+
+def test_footage_longer_than_a_pass_may_watch_is_left_as_marked() -> None:
+    long = PartFootage(0, "front", "gs://bucket/recordings/s/0.webm", "video/webm", 4 * 3_600_000)
+    allowance = Allowance(PASS_MAX_TOKENS)
+    watcher = GeminiWatcher(TestModel(), allowance.reserve, allowance.settle)
+    too_long = SessionFootage(user_id=uuid4(), plan=PLAN_TWO_SHOTS, parts=(long,), known=())
+    assert asyncio.run(watcher.watch(ORG, too_long)) == []
+    assert allowance.asked == []
 
 
 def test_gemini_isn_t_asked_when_the_workspace_has_nothing_left() -> None:
