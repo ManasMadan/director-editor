@@ -95,6 +95,11 @@ describe("stitching the short", () => {
     expect(progress.every((done) => done >= 0 && done <= 1)).toBe(true);
     expect(progress[0]).toBeLessThan(0.1);
     expect(progress.at(-1)).toBe(1);
+    // As long as the edit (1.4 s), though the last part runs past its take's end: a take
+    // that ran out used to end its part early, and the video came out shorter than the edit.
+    const frames = await playedFrames(short);
+    expect((frames.at(-1)?.time ?? 0) + FRAME).toBeGreaterThanOrEqual(1.4);
+    expect(frames.find((frame) => frame.time > 1.2)?.hue).toBe("blue");
   });
 
   it("keeps every cut's picture and sound together, sub-second parts and gaps too, with no frame held long", {
@@ -198,8 +203,10 @@ describe("stitching the short", () => {
     const short = await rendering;
     expect(resume).toHaveBeenCalledOnce();
     const frames = await playedFrames(short);
+    // The hidden time isn't in the video: at most a frame or two where it paused and went
+    // on (the recorder and the clock stop a few milliseconds apart), never the time away.
     const steps = frames.slice(1).map((frame, index) => frame.time - (frames[index]?.time ?? 0));
-    expect(Math.max(...steps)).toBeLessThan(0.1);
+    expect(Math.max(...steps)).toBeLessThan(5 * FRAME);
     expect((frames.at(-1)?.time ?? 0) + FRAME).toBeLessThan(1 + 6 * FRAME);
   });
 

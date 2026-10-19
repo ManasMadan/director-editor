@@ -10,7 +10,7 @@
  * Boxes are fractions of the 9:16 frame from its top-left.
  */
 import type { FrameBox, ShotPlan } from "@repo/contracts/api";
-import type { Clip } from "./edit";
+import { type Clip, playsAsGap } from "./edit";
 import { FILTERS } from "./slot-preview";
 
 type Edit = ShotPlan["edits"][number];
@@ -156,8 +156,8 @@ function assetOfShot(plan: ShotPlan, clip: Clip): Asset | undefined {
 }
 
 function gapAt(plan: ShotPlan, clips: readonly Clip[], at: number, clip: Clip | undefined) {
-  // A shot the version leaves as a gap is one for all of its length.
-  if (clip && clip.state === "gap") {
+  // A shot left as a gap, or not filmed, is one for all of its length.
+  if (clip && playsAsGap(clip)) {
     return { slotId: shotSlotId(clip.index + 1), seconds: at - clip.at, length: clip.seconds };
   }
   let n = 0;
@@ -308,14 +308,12 @@ export function gapSlots(plan: ShotPlan, clips: readonly Clip[]): GapSlot[] {
       span: spanOf(clips, edit),
       shotIndex: null,
     }));
-  const skipped = clips
-    .filter((clip) => clip.state === "gap")
-    .map((clip) => ({
-      slotId: shotSlotId(clip.index + 1),
-      description: clip.shot.scene ? `${clip.shot.title}: ${clip.shot.scene}` : clip.shot.title,
-      span: { start: clip.at, end: clip.at + clip.seconds },
-      shotIndex: clip.index,
-    }));
+  const skipped = clips.filter(playsAsGap).map((clip) => ({
+    slotId: shotSlotId(clip.index + 1),
+    description: clip.shot.scene ? `${clip.shot.title}: ${clip.shot.scene}` : clip.shot.title,
+    span: { start: clip.at, end: clip.at + clip.seconds },
+    shotIndex: clip.index,
+  }));
   return [...fromEdits, ...skipped].sort((a, b) => a.span.start - b.span.start);
 }
 

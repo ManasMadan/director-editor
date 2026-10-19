@@ -700,7 +700,7 @@
       "missing": "Not filmed yet",
       "film": "Film it",
       "retake": "Retake",
-      "left": "{count, plural, one {# shot} other {# shots}} still to film.",
+      "left": "{count, plural, one {# shot isn't filmed: it plays as a gap you can fill below, or film it now.} other {# shots aren't filmed: they play as gaps you can fill below, or film them now.}}",
       "download": "Download",
       "silent": "It's silent on purpose: add the original sound when you post it on YouTube (Use this sound)."
     },
@@ -792,7 +792,7 @@
       "openMedia": "Open My media",
       "wrap": {
         "title": "That's a wrap!",
-        "body": "I cut your takes together, best moments first. Make any last changes, then tap Next."
+        "body": "I cut your takes together, best moments first. Make any last changes, then tap Save video."
       },
       "talk": {
         "label": "Tell Director what to change",

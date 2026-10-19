@@ -1,7 +1,15 @@
 import type { DirectorTake, Shot } from "@repo/contracts/api";
 import { directorTakeIdSchema, fileIdSchema } from "@repo/contracts/ids";
 import { describe, expect, it } from "vitest";
-import { clipAt, clipsOf, complete, editLines, editSeconds, MIN_KEPT_SECONDS } from "./edit";
+import {
+  clipAt,
+  clipsOf,
+  complete,
+  editLines,
+  editSeconds,
+  MIN_KEPT_SECONDS,
+  playsAsGap,
+} from "./edit";
 import { FPS, renderPlan, segmentAt } from "./render-plan";
 
 /** Shot 0 is skipped, shot 1 left as a gap, shot 2 filmed. */
@@ -102,7 +110,7 @@ describe("the edit", () => {
     expect(MIN_KEPT_SECONDS).toBe(0.5);
   });
 
-  it("keeps a shot the member's version leaves as a gap, with no take and no captions", () => {
+  it("keeps a shot left as a gap, or not filmed, with no take: a gap, with no captions", () => {
     const script = [{ startSeconds: 0, endSeconds: 2, text: "Over the B-roll" }];
     const clips = clipsOf(
       [shot("video", 2, script), shot("video", 3, script), shot("video", 1)],
@@ -119,6 +127,7 @@ describe("the edit", () => {
         [2, "missing", null, 3, 1],
       ],
     );
+    expect(clips.map(playsAsGap)).toEqual([true, true]);
     expect(editLines(clips)).toEqual([]);
   });
 
@@ -174,7 +183,12 @@ describe("the edit", () => {
       { text: "Hi", startSeconds: 2.5, endSeconds: 4 },
       { text: "Past the end", startSeconds: 4.2, endSeconds: 4.5 },
     ]);
-    // Not filmed yet: the script runs from the shot's start.
-    expect(editLines(clipsOf(shots, new Map()))[0]).toMatchObject({ text: "Cut", startSeconds: 0 });
+    // Still being reviewed: the script runs from the shot's start. Not filmed: a gap.
+    const reviewing = take(0, { status: "reviewing" });
+    expect(editLines(clipsOf(shots, new Map([[0, reviewing]])))[0]).toMatchObject({
+      text: "Cut",
+      startSeconds: 0,
+    });
+    expect(editLines(clipsOf(shots, new Map()))).toEqual([]);
   });
 });
