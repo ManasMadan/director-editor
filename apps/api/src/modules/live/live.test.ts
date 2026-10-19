@@ -78,6 +78,10 @@ const PERSONA_RULES = [
   "If a mark comes back refused, don't call it again",
   "Speak before you act",
   'Never say "plan", "replan"',
+  "not what's in front of their camera",
+  "say you can't make it out",
+  "Never praise a look, a gesture or a line you didn't see or hear",
+  "Never nudge on your own",
 ];
 
 const shot: Shot = {
@@ -359,7 +363,7 @@ describe("a live call", () => {
       // The instruction arrives as JSON, its quotes escaped.
       expect(text).toContain(JSON.stringify(rule).slice(1, -1));
     }
-    expect(PERSONA_VERSION).toBe(6);
+    expect(PERSONA_VERSION).toBe(7);
     const tools = setup.tools as { functionDeclarations: { name: string }[] }[];
     expect(tools[0]?.functionDeclarations.map((tool) => tool.name)).toEqual([
       ...LIVE_TOOLS,
