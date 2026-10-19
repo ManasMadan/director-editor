@@ -15,6 +15,8 @@ const GHOST_WIDTH = 360;
 const GHOST_HEIGHT = 640;
 /** How far before the kept part's end the frame is taken: the last frame really shown. */
 const BEFORE_END_SECONDS = 0.05;
+/** Past any take's end, for a WebM that doesn't say how long it is. */
+const PAST_ANY_END = 1e9;
 
 /** The take the editor would play for a shot: its pick, else its newest filmed video. */
 function ghostTake(shot: DirectorShot | undefined): DirectorTake | undefined {
@@ -34,7 +36,9 @@ async function lastFrame(source: string, endMs: number | null): Promise<string> 
   try {
     const video = await loadedVideo(url);
     const end = endMs === null ? video.duration : endMs / 1000;
-    video.currentTime = Math.max(0, end - BEFORE_END_SECONDS);
+    // A take recorded in the browser is a WebM with no duration in it: moved far past any
+    // take's end, it shows its last frame (a non-finite time would throw instead).
+    video.currentTime = Number.isFinite(end) ? Math.max(0, end - BEFORE_END_SECONDS) : PAST_ANY_END;
     await new Promise((resolve) => {
       video.onseeked = resolve;
     });
