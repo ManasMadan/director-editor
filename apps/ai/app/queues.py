@@ -34,6 +34,8 @@ from app.contracts.ai_director_plan_job import AiDirectorPlanJob
 from app.contracts.ai_review_job_name import AiReviewJobName
 from app.contracts.ai_review_review_take_job import AiReviewReviewTakeJob
 from app.contracts.queue_setting import QueueSetting
+from app.contracts.recording_clip_job import RecordingClipJob
+from app.contracts.recording_job_name import RecordingJobName
 from app.contracts.shared_queue_name import SharedQueueName
 
 SETTINGS = TypeAdapter(dict[SharedQueueName, QueueSetting]).validate_json(
@@ -41,6 +43,7 @@ SETTINGS = TypeAdapter(dict[SharedQueueName, QueueSetting]).validate_json(
 )
 DIRECTOR: SharedQueueName = "ai-director"
 REVIEW: SharedQueueName = "ai-review"
+RECORDING: SharedQueueName = "recording"
 _JOB_OPTIONS = TypeAdapter(JobOptions)
 # Python's bullmq reads a backoff's type and delay only, so a jittered exponential
 # backoff (packages/jobs gives every queue one) is added under this type, which this
@@ -176,6 +179,33 @@ def _meta(org_id: UUID, request_id: str | None, user_id: UUID | None) -> dict[st
         "userId": str(user_id) if user_id else None,
         "orgId": str(org_id),
     }
+
+
+class ClipQueue:
+    """The `recording` queue, as apps/api adds to it: the attempt's id is the job's, so an
+    attempt is cut once however often it's queued."""
+
+    def __init__(self, redis_url: str) -> None:
+        options: QueueBaseOptions = {"connection": redis_url, "prefix": SETTINGS[RECORDING].prefix}
+        self._queue = Queue(RECORDING, options)
+
+    async def add_clip(self, org_id: UUID, attempt_id: UUID, user_id: UUID) -> None:
+        data = RecordingClipJob.model_validate(
+            {
+                "meta": {"orgId": str(org_id), "userId": str(user_id)},
+                "payload": {"attemptId": attempt_id, "orgId": org_id},
+            }
+        )
+        # The job's name, checked against the queue's contract (packages/jobs).
+        name: RecordingJobName = "clip"
+        await self._queue.add(  # pyright: ignore[reportUnknownMemberType]  # bullmq leaves the job's data untyped
+            name,
+            data.model_dump(mode="json", exclude_none=True),
+            job_options(RECORDING, str(attempt_id)),
+        )
+
+    async def close(self) -> None:
+        await self._queue.close()
 
 
 class JobLike(Protocol):

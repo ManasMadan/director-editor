@@ -12,8 +12,9 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, TypeAdapter
 
+from app.queues import ClipQueue
 from app.session_pass import NewAttempt, PartFootage, Refinement
-from app.session_recordings import COMPOSE_MOST, ClipQueue, DbRecordings, GcsJoiner, slice_key
+from app.session_recordings import COMPOSE_MOST, DbRecordings, GcsJoiner, slice_key
 from tests.fakes import MEDIA_BUCKET, Reply, serve
 from tests.support import REDIS_URL, as_org, migrator, new_org, on_app_loop, stored_job
 from tests.test_director import VIDEO, insert_plan

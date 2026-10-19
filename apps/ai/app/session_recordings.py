@@ -22,21 +22,17 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 from uuid import UUID
 
-from bullmq import Queue  # pyright: ignore[reportMissingTypeStubs]  # no stubs shipped
-from bullmq.types import QueueBaseOptions  # pyright: ignore[reportMissingTypeStubs]
 from google.cloud import storage  # pyright: ignore[reportMissingTypeStubs]  # no stubs shipped
 from pydantic import BaseModel, TypeAdapter
 from redis.asyncio import Redis
 from sqlalchemy import text
 
 from app.contracts.realtime_message import DirectorChanged
-from app.contracts.recording_clip_job import RecordingClipJob
-from app.contracts.recording_job_name import RecordingJobName
 from app.db.models import DirectorPlan
 from app.db.session import tenant
 from app.director import create_google_model
 from app.log import log
-from app.queues import SETTINGS, job_options
+from app.queues import ClipQueue
 from app.realtime import publish_to_org
 from app.schemas import ShotPlan
 from app.session_pass import (
@@ -52,7 +48,6 @@ from app.session_pass import (
 from app.settings import Settings
 from app.usage import Allowance, Reservation, reserve, settle
 
-RECORDING = "recording"
 CHANGED = DirectorChanged(type="director.changed")
 # Cloud Storage composes at most this many objects at once; more are joined in rounds.
 COMPOSE_MOST = 32
@@ -181,33 +176,6 @@ class GcsJoiner:
         bucket = storage.Client().bucket(self._bucket)  # pyright: ignore[reportUnknownMemberType]  # untyped client
         for key in keys:
             bucket.blob(key).delete()  # pyright: ignore[reportUnknownMemberType]  # untyped client
-
-
-class ClipQueue:
-    """The `recording` queue, as apps/api adds to it: the attempt's id is the job's, so an
-    attempt is cut once however often it's queued."""
-
-    def __init__(self, redis_url: str) -> None:
-        options: QueueBaseOptions = {"connection": redis_url, "prefix": SETTINGS[RECORDING].prefix}
-        self._queue = Queue(RECORDING, options)
-
-    async def add_clip(self, org_id: UUID, attempt_id: UUID, user_id: UUID) -> None:
-        data = RecordingClipJob.model_validate(
-            {
-                "meta": {"orgId": str(org_id), "userId": str(user_id)},
-                "payload": {"attemptId": attempt_id, "orgId": org_id},
-            }
-        )
-        # The job's name, checked against the queue's contract (packages/jobs).
-        name: RecordingJobName = "clip"
-        await self._queue.add(  # pyright: ignore[reportUnknownMemberType]  # bullmq leaves the job's data untyped
-            name,
-            data.model_dump(mode="json", exclude_none=True),
-            job_options(RECORDING, str(attempt_id)),
-        )
-
-    async def close(self) -> None:
-        await self._queue.close()
 
 
 class DbRecordings:
