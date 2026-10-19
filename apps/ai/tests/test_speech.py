@@ -195,11 +195,20 @@ def test_with_no_budget_left_nothing_is_said(client: TestClient, gemini: Gemini)
     assert gemini[0].received == []
 
 
-def test_less_than_a_whole_line_s_budget_left_is_none(client: TestClient, gemini: Gemini) -> None:
+@pytest.mark.parametrize(
+    "leaving",
+    # Under the smallest reservation there is, and enough for one but not for a whole line
+    # (DIRECTOR_TOKENS_PER_SPEECH, 3,000 in the tests).
+    [100, 1_500],
+    ids=["nothing-to-reserve", "part-of-a-line"],
+)
+def test_less_than_a_whole_line_s_budget_left_is_none(
+    client: TestClient, gemini: Gemini, leaving: int
+) -> None:
     """Vertex refuses a cap on a TTS model's output (max_output_tokens), so a line can't be
     cut off at what's left: it waits for a budget that holds a whole one."""
     org, user = new_org()
-    spend_the_month(org, leaving=100)
+    spend_the_month(org, leaving=leaving)
     response = speak(client, org, user)
     assert (response.status_code, error_of(response).code) == (429, "AI_BUDGET_EXCEEDED")
     assert gemini[0].received == []
