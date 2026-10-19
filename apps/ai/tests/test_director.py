@@ -1321,6 +1321,7 @@ def save_cut(
     picks: list[tuple[int, UUID]],
     *,
     file_id: UUID | None = None,
+    duration_ms: int | None = None,
 ) -> httpx.Response:
     return client.post(
         "/v1/director/cuts",
@@ -1329,6 +1330,7 @@ def save_cut(
             "title": "My look",
             "fileId": str(file_id or new_file(user, "director-cut-video")),
             "picks": [{"shotIndex": shot, "takeId": str(take)} for shot, take in picks],
+            **({} if duration_ms is None else {"durationMs": duration_ms}),
         },
         headers=headers(org, user),
     )
@@ -1384,12 +1386,21 @@ def test_a_cut_keeps_its_picks_and_how_long_they_last(
         save_cut(client, org, user, [(0, unreviewed.id)]).content
     )
     assert flash.durationMs == 4_000
+    # As long as the editor says it rendered, gaps and all, when it says.
+    rendered = save_cut(client, org, user, [(0, unreviewed.id)], duration_ms=14_233)
+    assert DirectorCutOut.model_validate_json(rendered.content).durationMs == 14_233
+    for wrong in (0, 10 * 60_000 + 1):
+        refused = save_cut(client, org, user, [(0, unreviewed.id)], duration_ms=wrong)
+        assert error_of(refused).code == "VALIDATION_FAILED", wrong
+    rendered_id = DirectorCutOut.model_validate_json(rendered.content).id
     assert [c.id for c in cuts_of(client, org, user, f"/v1/director/plans/{VIDEO}/cuts")] == [
+        rendered_id,
         flash.id,
         second.id,
         cut.id,
     ]
     assert [c.id for c in cuts_of(client, org, user, "/v1/director/cuts")] == [
+        rendered_id,
         flash.id,
         second.id,
         cut.id,

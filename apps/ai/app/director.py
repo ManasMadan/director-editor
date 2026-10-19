@@ -1304,7 +1304,8 @@ class Director:
         self, org_id: UUID, user_id: UUID, body: DirectorCutCreate
     ) -> tuple[DirectorCut, DirectorPlan]:
         """Records the caller's cut of a ready plan, from takes of theirs picked one per
-        shot, and works out how long it lasts. The file was checked by apps/api."""
+        shot, with how long it lasts: as the editor rendered it (its gaps included), or
+        added up from the picks when it doesn't say. The file was checked by apps/api."""
         plan = await self.plan(org_id, body.videoId)
         shots = _ready_shots(plan)
         if len({pick.shotIndex for pick in body.picks}) != len(body.picks):
@@ -1320,7 +1321,8 @@ class Director:
                     )
                 )
             }
-            duration_ms = sum(_pick_ms(pick, shots, takes) for pick in body.picks)
+            picked_ms = sum(_pick_ms(pick, shots, takes) for pick in body.picks)
+            duration_ms = picked_ms if body.durationMs is None else body.durationMs
             cut = DirectorCut(
                 org_id=org_id,
                 plan_id=plan.id,

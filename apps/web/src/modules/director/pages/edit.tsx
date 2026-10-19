@@ -19,6 +19,7 @@ import type {
 import { uploadPurposes } from "@repo/contracts/files";
 import { type DirectorTakeId, videoIdSchema } from "@repo/contracts/ids";
 import { required } from "@repo/contracts/objects";
+import { SECOND_MS } from "@repo/contracts/time";
 import { buttonVariants } from "@repo/ui/components/button";
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "@repo/ui/components/dialog";
 import { GeminiLoader, GeminiShimmer } from "@repo/ui/components/gemini-loader";
@@ -72,7 +73,7 @@ import { captionInk } from "../lib/ink";
 import type { MatchCutTransform } from "../lib/match-cuts";
 import { cutPicks, pickedTakes } from "../lib/picks";
 import { gapSlots } from "../lib/scene";
-import { MAX_SECONDS, type Segment, stitch } from "../lib/stitch";
+import { MAX_SECONDS, renderedSeconds, type Segment, stitch } from "../lib/stitch";
 import { timecode } from "../lib/track";
 import {
   loadVisuals,
@@ -211,6 +212,10 @@ function useSaveVideo(videoId: string, title: string) {
         videoId,
         title,
         picks: input.picks,
+        // What My media shows: the video as rendered, gaps and all.
+        durationMs: Math.round(
+          renderedSeconds(segmentsOf(input.clips, input.media, input.transforms)) * SECOND_MS,
+        ),
         file: new File([video], `director-${videoId}.${extension}`, { type: video.type }),
         signal,
       });

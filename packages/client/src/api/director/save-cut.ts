@@ -17,6 +17,8 @@ interface CutInput {
   videoId: string;
   picks: DirectorCut["picks"];
   title: string;
+  /** How long the rendered video is, in milliseconds. */
+  durationMs: number;
   file: File;
   /**
    * The member cancelled or left: the upload stops, and no cut is saved. A cancel that

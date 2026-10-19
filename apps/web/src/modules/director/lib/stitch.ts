@@ -178,6 +178,12 @@ export function totalSeconds(segments: Segment[]) {
   return segments.reduce((sum, segment) => sum + lengthOf(segment), 0);
 }
 
+/** How long the video of `segments` comes out: whole frames, as the render lays them. */
+export function renderedSeconds(segments: Segment[]) {
+  const plan = renderPlan(segments, lengthOf);
+  return plan.frames / plan.fps;
+}
+
 export interface Captions {
   /** On the edit's clock (lib/edit.ts editLines). */
   lines: readonly CaptionLine[];
