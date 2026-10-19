@@ -105,12 +105,7 @@ export function GapStrip({
           videoId={videoId}
           plan={plan}
           asset={gapAsset(picking, slotOf(picking))}
-          open
-          onOpenChange={(open) => {
-            if (!open) {
-              setPicking(null);
-            }
-          }}
+          onClose={() => setPicking(null)}
         />
       ) : null}
     </section>

@@ -107,12 +107,7 @@ export function WhatYouNeed({ videoId, plan }: { videoId: string; plan: ServedSh
           videoId={videoId}
           plan={plan}
           asset={picking}
-          open={picking !== null}
-          onOpenChange={(open) => {
-            if (!open) {
-              setPicking(null);
-            }
-          }}
+          onClose={() => setPicking(null)}
         />
       ) : null}
     </section>

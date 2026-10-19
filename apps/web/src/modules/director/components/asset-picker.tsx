@@ -15,6 +15,7 @@ import {
   type AssetImage,
   type AssetSlot,
   type ServedShotPlan,
+  type StockCredit,
   type StockPhoto,
 } from "@repo/contracts/api";
 import { Button } from "@repo/ui/components/button";
@@ -170,7 +171,9 @@ function Results({
         <PictureTile
           key={image.id}
           label={
-            image.credit ? t("stockBy", creditParams(image)) : t("yours", { index: index + 1 })
+            image.credit
+              ? t("stockBy", creditParams(image.credit))
+              : t("yours", { index: index + 1 })
           }
           image={image}
           selected={selected === image.id}
@@ -188,11 +191,8 @@ function Results({
 
 const PROVIDERS = { pexels: "Pexels", pixabay: "Pixabay" } as const;
 
-function creditParams(image: Pick<AssetImage, "credit">) {
-  return {
-    author: image.credit?.author ?? "",
-    provider: image.credit ? PROVIDERS[image.credit.provider] : "",
-  };
+function creditParams(credit: StockCredit) {
+  return { author: credit.author, provider: PROVIDERS[credit.provider] };
 }
 
 /** "Add your photo as reference": a photo of the member's to draw from, checked first. */
@@ -308,12 +308,14 @@ function CreateTab({
   const promptId = useId();
   const baseId = selected === "default" ? slot.defaultImage?.id : selected;
   const busy = draw.isPending || left <= 0;
+  // A box left empty draws (and edits) from the slot's own prompt.
+  const asked = prompt.trim() || slot.prompt;
   const create = (event?: FormEvent, clip = false) => {
     event?.preventDefault();
     draw.mutate({
       videoId,
       assetId: slot.assetId,
-      prompt: prompt.trim() || slot.prompt,
+      prompt: asked,
       ...(reference && !clip && { reference }),
       ...(clip && { clip }),
     });
@@ -376,7 +378,7 @@ function CreateTab({
           busy={busy}
           onEdit={(instruction, done) =>
             draw.mutate(
-              { videoId, assetId: slot.assetId, prompt, instruction, baseId },
+              { videoId, assetId: slot.assetId, prompt: asked, instruction, baseId },
               { onSuccess: done },
             )
           }
@@ -717,29 +719,28 @@ function PickerBody({
  * The asset picker: one sheet for one of the template's asset slots, with three sources
  * (Upload, Create with AI, Stock when it's on), the suggested one open first, a preview
  * of the selected picture in the member's video, and "Use this", which the slot keeps
- * with its history (undo).
+ * with its history (undo). Shown open while it's rendered: it has no trigger of its own,
+ * so the one change it reports is the member closing it (`onClose`).
  */
 export function AssetPicker({
   videoId,
   plan,
   asset,
-  open,
-  onOpenChange,
+  onClose,
 }: {
   videoId: string;
   plan: ServedShotPlan;
   asset: Asset;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  onClose: () => void;
 }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] gap-4 overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold">{asset.title}</DialogTitle>
           <DialogDescription>{asset.role}</DialogDescription>
         </DialogHeader>
-        {open ? <PickerBody videoId={videoId} plan={plan} asset={asset} /> : null}
+        <PickerBody videoId={videoId} plan={plan} asset={asset} />
       </DialogContent>
     </Dialog>
   );
