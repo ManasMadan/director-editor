@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { renderHook, standIn, until } from "../../../test/stand-in";
 import { useReviseMutation } from "./revise";
 import { useSaveYourVersionMutation } from "./save-your-version";
+import { useYourVersionQuery } from "./your-version";
 
 const videoId = videoIdSchema.parse("dQw4w9WgXcQ");
 const inside: YourVersion = { ...EMPTY_VERSION, notes: [{ kind: "place", note: "Inside" }] };
@@ -44,5 +45,22 @@ describe("the member's version", () => {
     replanned.resolve();
     await Promise.all([revising, saving]);
     expect(order).toEqual(["revise started", "revise saved", "save"]);
+  });
+});
+
+describe("the member's version, read", () => {
+  it("is read once when the screen opens", async () => {
+    const version = { ...EMPTY_VERSION, notes: [{ kind: "place" as const, note: "Kitchen" }] };
+    const api = standIn((os) => ({
+      yourVersion: {
+        get: os.yourVersion.get.handler(({ input }) => {
+          expect(input).toEqual({ videoId });
+          return version;
+        }),
+      },
+    }));
+    const { result } = renderHook(() => useYourVersionQuery(videoId), api);
+    await until(() => expect(result.current.data).toEqual(version));
+    expect(api.calls).toEqual(["yourVersion/get"]);
   });
 });
