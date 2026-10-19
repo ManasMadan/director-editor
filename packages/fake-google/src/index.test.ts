@@ -149,6 +149,13 @@ describe("the mock Gemini", () => {
     expect(usage).toMatchObject({ usageMetadata: { promptTokenCount: 1_200 } });
     const watched = (await gemini(ask("shots", [watch("HasaZYkwYds")]))).json;
     expect(watched).toMatchObject({ usageMetadata: { promptTokenCount: 18_000 } });
+    // An image is 258 tokens, whatever its size.
+    const pictured = (
+      await gemini(
+        ask("bestStartSeconds", [{ inlineData: { mimeType: "image/jpeg", data: "A".repeat(4) } }]),
+      )
+    ).json;
+    expect(pictured).toMatchObject({ usageMetadata: { promptTokenCount: 258 } });
     const photo = zTakeReview.parse(
       argsOf(
         (await gemini(ask("bestStartSeconds", [shotPart({ title: "Fit", kind: "photo" })]))).json,

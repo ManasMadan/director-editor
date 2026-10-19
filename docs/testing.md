@@ -153,14 +153,14 @@ shell, for one).
   fails here (see [database.md](database.md#test-databases)).
 - Each suite uses its own Valkey database number, and 0 is the dev stack's. Valkey has
   32 (the `--databases` flag in `docker-compose.yml`, which CI's integration job runs too).
-  Taken: the api's files 1 to 5, 7 to 10 and 13 (one per file, `startApi(<n>)`),
+  Taken: the api's files 2 to 4, 7 to 9 and 13 (one per file, `startApi(<n>)`),
   webhooks 11, nest-common 12, notifications 14, worker 15, webhooks' Stalwart suite 16,
   the api's breached-password suite 17, the web's browser tests 18, jobs 19, the jobs
   CLI's suite 20 (its worker fails every job on a real queue, so it shares with nothing),
   Python 6, the pre-push hook's end-to-end run 21 (emptied before each run), and the
-  api's files 24 to 26, 28, 29 (the activity log) and 30 (the demo guests), the
-  worker's recording suite 22 and the api's 23. A new suite takes the next free number:
-  27 or 31;
+  api's files 24 to 26, 27 (your version), 28, 29 (the activity log), 30 (the demo
+  guests) and 31 (the asset picker), the worker's recording suite 22 and the api's 23.
+  A new suite takes a free number: 1, 5 or 10;
   `scripts/redis-databases.test.ts` fails when two suites that flush share one. A change
   to the flag needs the local container recreated (`docker compose up -d valkey`).
 - Tests never read your `.env`: they run with `.env.example`'s values (the ports docker

@@ -7,13 +7,15 @@ import { HOUR_MS } from "@repo/contracts/time";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { imageKeyAllowed } from "../assets.service";
 import { createStockProviders } from "./providers";
-import { interleave, StockLibrary } from "./stock";
+import { interleave, StockLibrary, type StockProvider } from "./stock";
 
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
 let base = "";
 let server: Server;
 const seen: string[] = [];
 let failPixabay = false;
+/** Both providers answer 404 to everything but the image files. */
+let gone = false;
 
 function pexelsPhoto(id: number) {
   return {
@@ -42,6 +44,34 @@ function pixabayHit(id: number) {
   };
 }
 
+/** Pexels' photo by id: 3 has no alt text, and its full-size link on another host. */
+function pexelsById(id: number) {
+  const photo = pexelsPhoto(id);
+  return id === 3
+    ? { ...photo, alt: null, src: { ...photo.src, large2x: "https://elsewhere.test/3.jpg" } }
+    : photo;
+}
+
+/** The image files: whole JPEGs, one that doesn't say its type, one too big to keep. */
+function imageFile(path: string, response: ServerResponse) {
+  if (path === "/images/1.jpg" || path === "/images/10.jpg") {
+    response.writeHead(200, { "content-type": "image/jpeg", "content-length": JPEG.length });
+    response.end(JPEG);
+  } else if (path === "/images/4.jpg") {
+    response.writeHead(200);
+    response.end(JPEG);
+  } else if (path === "/images/6.jpg") {
+    // Sent without saying its length up front.
+    response.writeHead(200, { "content-type": "image/jpeg", "transfer-encoding": "chunked" });
+    response.write(Buffer.alloc(8_000_000));
+    response.write(Buffer.alloc(8_000_000));
+    response.end();
+  } else {
+    return false;
+  }
+  return true;
+}
+
 function answer(request: IncomingMessage, response: ServerResponse) {
   const url = new URL(request.url ?? "/", base);
   seen.push(`${url.pathname}${url.search} ${request.headers.authorization ?? ""}`);
@@ -49,12 +79,18 @@ function answer(request: IncomingMessage, response: ServerResponse) {
     response.writeHead(status, { "content-type": "application/json" });
     response.end(JSON.stringify(body));
   };
+  if (imageFile(url.pathname, response)) {
+    return;
+  }
+  if (gone) {
+    return json(404, { error: "not found" });
+  }
   if (url.pathname === "/v1/search") {
     return json(200, { photos: [pexelsPhoto(1), pexelsPhoto(2)] });
   }
-  const photo = /^\/v1\/photos\/([12])$/.exec(url.pathname);
+  const photo = /^\/v1\/photos\/([1-46])$/.exec(url.pathname);
   if (photo) {
-    return json(200, pexelsPhoto(Number(photo[1])));
+    return json(200, pexelsById(Number(photo[1])));
   }
   if (url.pathname.startsWith("/v1/photos/")) {
     return json(404, { error: "not found" });
@@ -65,10 +101,6 @@ function answer(request: IncomingMessage, response: ServerResponse) {
     }
     const id = url.searchParams.get("id");
     return json(200, { hits: id === "99" ? [] : [pixabayHit(id ? Number(id) : 10)] });
-  }
-  if (url.pathname === "/images/1.jpg" || url.pathname === "/images/10.jpg") {
-    response.writeHead(200, { "content-type": "image/jpeg", "content-length": JPEG.length });
-    return response.end(JPEG);
   }
   response.writeHead(200, { "content-type": "text/html" });
   response.end("<html></html>");
@@ -185,6 +217,60 @@ describe("stock photos", () => {
     await expect(library().copy("pexels", "2")).rejects.toMatchObject({
       code: "UPSTREAM_UNAVAILABLE",
     });
+  });
+
+  it("copies nothing from another host, without a type, or too big to keep", async () => {
+    for (const id of ["3", "4", "6"]) {
+      await expect(library().copy("pexels", id)).rejects.toMatchObject({
+        code: "UPSTREAM_UNAVAILABLE",
+      });
+    }
+    await expect(library().copy("pixabay", "../x")).rejects.toMatchObject({
+      code: "DIRECTOR_ASSET_NOT_FOUND",
+    });
+  });
+
+  it("reads a photo with no alt text as having none", async () => {
+    const [pexels] = createStockProviders({
+      PEXELS_API_KEY: "pexels-key",
+      PEXELS_API_URL: base,
+      PIXABAY_API_URL: base,
+    });
+    expect((await pexels?.photo("3"))?.alt).toBe("");
+  });
+
+  it("finds nothing where both providers have nothing", async () => {
+    gone = true;
+    try {
+      await expect(library().search("nothing", "portrait")).resolves.toEqual([]);
+      await expect(library().copy("pixabay", "10")).rejects.toMatchObject({
+        code: "DIRECTOR_ASSET_NOT_FOUND",
+      });
+    } finally {
+      gone = false;
+    }
+  });
+
+  it("keeps the latest searches, forgetting the oldest once it holds 500", async () => {
+    const asked: string[] = [];
+    const counting: StockProvider = {
+      name: "pexels",
+      imageHosts: [],
+      search: (query) => {
+        asked.push(query);
+        return Promise.resolve([]);
+      },
+      photo: () => Promise.resolve(null),
+    };
+    const stock = new StockLibrary([counting], () => 0);
+    for (let index = 0; index <= 500; index++) {
+      await stock.search(`query ${index}`, "square");
+    }
+    asked.length = 0;
+    await stock.search("query 1", "square");
+    expect(asked).toEqual([]);
+    await stock.search("query 0", "square");
+    expect(asked).toEqual(["query 0"]);
   });
 
   it("is off without a key", async () => {

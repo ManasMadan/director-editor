@@ -335,6 +335,175 @@ describe("Director's calls", () => {
   });
 });
 
+describe("the asset picker's calls", () => {
+  const slot = { videoId: VIDEO, assetId: "a1" };
+  const candidate = {
+    assetId: "a1",
+    createdAt: "2026-01-01T00:00:00Z",
+    credit: null,
+    error: null,
+    fileId: null,
+    id: "0b6f1c9e-8d4a-4f3e-9a2b-1c2d3e4f5a70",
+    objectKey: null,
+    origin: "created",
+    prompt: "A red umbrella on a white table",
+    status: "pending",
+  };
+  const slots = {
+    imagesPerDay: 20,
+    imagesPerVideo: 6,
+    imagesToday: 1,
+    imagesUsed: 1,
+    slots: [{ assetId: "a1", candidates: [candidate], chosenId: null, history: [], prompt: "x" }],
+  };
+
+  it("list a plan's slots, draw, add and choose an image, each at its slot's path", async () => {
+    handler = (request, response) => {
+      const path = request.url ?? "";
+      if (path.endsWith("/choice")) {
+        json(response, 204, undefined);
+      } else if (request.method === "GET") {
+        json(response, 200, slots);
+      } else {
+        json(response, 201, candidate);
+      }
+    };
+    const { director } = client();
+    await expect(director.listAssets(caller, VIDEO)).resolves.toEqual(slots);
+    const drawing = {
+      baseId: null,
+      demo: false,
+      instruction: null,
+      prompt: "A red umbrella on a white table",
+      referenceKey: null,
+    };
+    await expect(director.drawAsset(caller, slot, drawing)).resolves.toEqual(candidate);
+    const upload = {
+      credit: null,
+      fileId: "0b6f1c9e-8d4a-4f3e-9a2b-1c2d3e4f5a71",
+      objectKey: "files/0b6f1c9e-8d4a-4f3e-9a2b-1c2d3e4f5a71",
+      origin: "upload" as const,
+    };
+    await expect(director.addAsset(caller, slot, upload)).resolves.toEqual(candidate);
+    await expect(
+      director.chooseAsset(caller, slot, { candidateId: candidate.id }),
+    ).resolves.toBeUndefined();
+
+    const base = `/v1/director/plans/${VIDEO}/assets`;
+    expect(seen.map(({ method, path }) => `${method} ${path}`)).toEqual([
+      `GET ${base}`,
+      `POST ${base}/a1/drawings`,
+      `POST ${base}/a1/images`,
+      `POST ${base}/a1/choice`,
+    ]);
+    expect(JSON.parse(String(seen[1]?.body))).toMatchObject(drawing);
+    expect(JSON.parse(String(seen[2]?.body))).toEqual(upload);
+    expect(JSON.parse(String(seen[3]?.body))).toEqual({ candidateId: candidate.id });
+  });
+
+  it("throw the service's error when a choice is refused", async () => {
+    handler = (_request, response) =>
+      json(response, 404, failure("NOT_FOUND", 404, { params: {} }));
+    const error = await failed(client().director.chooseAsset(caller, slot, { candidateId: null }));
+    expect(error).toMatchObject({ status: 404, code: "NOT_FOUND" });
+  });
+});
+
+describe("a template of the member's own", () => {
+  const brief = { messages: [], photos: [], text: "My morning coffee routine" };
+  const shotPlan = {
+    title: "Morning coffee",
+    format: "Routine",
+    summary: "Making a coffee, start to finish.",
+    audio: "speech" as const,
+    durationSeconds: 4,
+    shots: [
+      {
+        kind: "video" as const,
+        title: "The pour",
+        purpose: "Show the coffee going in.",
+        sourceStartSeconds: 0,
+        sourceEndSeconds: 4,
+        durationSeconds: 4,
+        camera: "back" as const,
+        scene: "A kitchen counter",
+        sceneLandmark: null,
+        framing: {
+          shotSize: "close-up" as const,
+          subject: { x: 0.2, y: 0.2, width: 0.6, height: 0.6 },
+          note: "The cup fills the frame.",
+        },
+        phoneAngle: { height: "chest" as const, pitch: -10, roll: 0, tolerance: 8 },
+        pose: { description: "Hands at the cup.", keypoints: [] },
+        script: [],
+        steps: [{ atSeconds: 0, cameraMove: "static" as const, instruction: "Pour slowly." }],
+      },
+    ],
+  };
+
+  it("brainstorm, create and edit it, each on its own route", async () => {
+    const reply = { questionsLeft: 2, ready: false, reply: "What do you drink it from?" };
+    handler = (request, response) =>
+      request.url === "/v1/director/brainstorm"
+        ? json(response, 200, reply)
+        : json(response, request.method === "POST" ? 201 : 200, plan);
+    const { director } = client();
+    await expect(director.brainstorm(caller, brief)).resolves.toEqual(reply);
+    await expect(director.createTemplate(caller, brief)).resolves.toEqual(plan);
+    await expect(
+      director.editTemplate(caller, { videoId: VIDEO, plan: shotPlan }),
+    ).resolves.toEqual(plan);
+    expect(seen.map(({ method, path }) => `${method} ${path}`)).toEqual([
+      "POST /v1/director/brainstorm",
+      "POST /v1/director/created",
+      "PUT /v1/director/created",
+    ]);
+    expect(JSON.parse(String(seen[0]?.body))).toEqual(brief);
+    expect(JSON.parse(String(seen[2]?.body))).toMatchObject({ videoId: VIDEO });
+  });
+
+  it("revise the member's version from one instruction", async () => {
+    const version = {
+      gaps: [],
+      notes: [],
+      shots: [{ shot: 0, where: "On the balcony" }],
+      skipped: [],
+    };
+    const revised = { summary: "Moved the first shot to the balcony.", version };
+    handler = (_request, response) => json(response, 200, revised);
+    const body = { instruction: "Film the first shot on my balcony", version };
+    await expect(client().director.revise(caller, VIDEO, body)).resolves.toEqual(revised);
+    expect(seen[0]).toMatchObject({
+      method: "POST",
+      path: `/v1/director/plans/${VIDEO}/revisions`,
+    });
+    expect(JSON.parse(String(seen[0]?.body))).toEqual(body);
+  });
+});
+
+describe("the conversational editor", () => {
+  it("asks the editor and returns its reply", async () => {
+    const reply = {
+      actions: [],
+      choices: [],
+      heard: "make it black and white",
+      outcome: "applied",
+      say: "Done: it's black and white now.",
+    };
+    handler = (_request, response) => json(response, 200, reply);
+    const body = {
+      audio: null,
+      audioType: null,
+      text: "make it black and white",
+      videoId: VIDEO,
+      state: { captions: "pop" as const, fixes: [], music: true, sound: true, shots: [] },
+    };
+    await expect(client().director.askEditor(caller, body)).resolves.toEqual(reply);
+    expect(seen[0]).toMatchObject({ method: "POST", path: "/v1/director/editor-requests" });
+    expect(JSON.parse(String(seen[0]?.body))).toEqual(body);
+  });
+});
+
 describe("cutting a recorded attempt", () => {
   const mp4 = Buffer.from("\x00\x00\x00\x20ftypisom", "latin1");
   const request = {

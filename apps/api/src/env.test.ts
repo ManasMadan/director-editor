@@ -88,6 +88,15 @@ describe("the environment", () => {
       },
       "LIVE_API_URL must be wss:// in production",
     ],
+    [
+      "the mock Google's Vertex AI",
+      {
+        WEBHOOK_ALLOWED_PRIVATE_ADDRESSES: "",
+        YOUTUBE_API_URL: "https://www.googleapis.com/youtube/v3",
+        CHAT_API_URL: "http://localhost:12112/v1/projects/p/models/m:generateContent",
+      },
+      "CHAT_API_URL must be https:// in production",
+    ],
   ])("refuses %s in production", async (_, variables, message) => {
     await expect(load({ NODE_ENV: "production", ...variables })).rejects.toThrow(message);
   });

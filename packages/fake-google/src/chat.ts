@@ -9,7 +9,8 @@
  * shot N" gets go_to_shot with only the call (so the API asks again for the words, with
  * the call's answer), an answer to a call gets a word that it's done, other notes in
  * square brackets get a line, and anything else gets "Got it." The server's
- * `chatOutage(true)` has it answer 503 to everything, as Gemini out of reach.
+ * `chatOutage(true)` has it answer 503 to everything, as Gemini out of reach, and
+ * `chatUncounted(true)` leaves out what each answer cost, as Vertex may.
  */
 import * as z from "zod";
 
@@ -56,7 +57,8 @@ export function chatAnswer(body: unknown): object | null {
     return null;
   }
   const { systemInstruction, contents } = parsed.data;
-  const last = contents.at(-1)?.parts ?? [];
+  // The last turn's parts (the schema holds at least one turn).
+  const last = contents.slice(-1).flatMap((content) => content.parts);
   if (last.some((p) => p.functionResponse)) {
     return answer("Done, you're there.");
   }

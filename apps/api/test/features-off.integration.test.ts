@@ -86,13 +86,15 @@ describe("features off", () => {
     expect(error.data?.params).toEqual({ feature: "ai" });
   });
 
-  it("answers FEATURE_DISABLED for indexing a short without a YouTube key", async () => {
+  it("answers FEATURE_DISABLED for indexing a short without the AI service", async () => {
     const session = await signedIn();
+    // The library is looked in first (a short already there opens without YouTube), and
+    // it's the AI service's. Without a YouTube key alone: director-assets.integration.
     const error = await expectError(
       session.rpc.director.index({ url: "https://youtu.be/dQw4w9WgXcQ" }),
       "FEATURE_DISABLED",
     );
-    expect(error.data?.params).toEqual({ feature: "director" });
+    expect(error.data?.params).toEqual({ feature: "ai" });
   });
 
   it("answers FEATURE_DISABLED for publishing without Google sign-in", async () => {

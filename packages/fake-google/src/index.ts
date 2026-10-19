@@ -104,21 +104,35 @@ async function bytesOf(request: IncomingMessage) {
 
 type Uploads = ReturnType<typeof createYouTubeUploads>;
 
+/** What's wrong with the slower line: Gemini out of reach, or answers that don't say their cost. */
+interface ChatTrouble {
+  chatDown: boolean;
+  chatUncounted: boolean;
+}
+
 /** Director's slower line (./chat.ts), with the Live API's bearer token; 503 while it's down. */
 async function chat(
   request: IncomingMessage,
   response: ServerResponse,
   token: string,
-  down: boolean,
+  trouble: ChatTrouble,
 ) {
   if (request.headers.authorization !== `Bearer ${token}`) {
     return refuse(response, 401, "UNAUTHENTICATED");
   }
-  if (down) {
+  if (trouble.chatDown) {
     return refuse(response, 503, "UNAVAILABLE");
   }
   const answered = chatAnswer(JSON.parse((await body(request)) || "{}"));
-  return answered ? send(response, 200, answered) : refuse(response, 400, "INVALID_ARGUMENT");
+  if (!answered) {
+    return refuse(response, 400, "INVALID_ARGUMENT");
+  }
+  // Left out, as Vertex may: JSON drops a field that's undefined.
+  return send(
+    response,
+    200,
+    trouble.chatUncounted ? { ...answered, usageMetadata: undefined } : answered,
+  );
 }
 
 /**
@@ -129,14 +143,14 @@ function modelRoute(
   request: IncomingMessage,
   response: ServerResponse,
   url: URL,
-  context: { apiKey: string; liveToken: string; trouble: { chatDown: boolean } },
+  context: { apiKey: string; liveToken: string; trouble: ChatTrouble },
 ): boolean {
   if (request.method !== "POST") {
     return false;
   }
   const failed = () => refuse(response, 400, "INVALID_ARGUMENT");
   if (CHAT_API_PATH.test(url.pathname)) {
-    chat(request, response, context.liveToken, context.trouble.chatDown).catch(failed);
+    chat(request, response, context.liveToken, context.trouble).catch(failed);
     return true;
   }
   const asked = GEMINI.exec(url.pathname);
@@ -178,6 +192,39 @@ async function accountRoute(
   return null;
 }
 
+/**
+ * What a test can have go wrong, and the switches it says so with: the project's daily
+ * YouTube quota spent, YouTube failing the files it's sent, and the slower line out of
+ * reach or not saying what its answers cost.
+ */
+function troubleSwitches() {
+  const trouble = {
+    quotaSpent: false,
+    uploadsBroken: false,
+    chatDown: false,
+    chatUncounted: false,
+  };
+  const switches = {
+    /** Has YouTube refuse reads and uploads as over the project's quota, or stop. */
+    exhaustQuota: (spent: boolean) => {
+      trouble.quotaSpent = spent;
+    },
+    /** Has YouTube fail the file of every upload (a 503) once its session is open, or stop. */
+    breakUploads: (broken: boolean) => {
+      trouble.uploadsBroken = broken;
+    },
+    /** Has Director's slower line answer 503, as Gemini out of reach, or stop. */
+    chatOutage: (down: boolean) => {
+      trouble.chatDown = down;
+    },
+    /** Has Director's slower line answer without saying what the answer cost, or stop. */
+    chatUncounted: (uncounted: boolean) => {
+      trouble.chatUncounted = uncounted;
+    },
+  };
+  return { trouble, switches };
+}
+
 export async function startFakeGoogle({
   apiKey,
   port = 0,
@@ -187,9 +234,7 @@ export async function startFakeGoogle({
   const oauth = createOAuth();
   // Known once the server listens; upload sessions link back to it.
   const address = { url: "" };
-  // Whether the project's daily YouTube quota is spent, and whether YouTube fails the
-  // files it's sent: a test says so (exhaustQuota, breakUploads).
-  const trouble = { quotaSpent: false, uploadsBroken: false, chatDown: false };
+  const { trouble, switches } = troubleSwitches();
   const uploads = createYouTubeUploads({
     url: () => address.url,
     audited: youtubeAudited,
@@ -232,18 +277,7 @@ export async function startFakeGoogle({
     url: address.url,
     /** Every video uploaded to the mock YouTube, oldest first. */
     uploads: uploads.uploads,
-    /** Has YouTube refuse reads and uploads as over the project's quota, or stop. */
-    exhaustQuota: (spent: boolean) => {
-      trouble.quotaSpent = spent;
-    },
-    /** Has YouTube fail the file of every upload (a 503) once its session is open, or stop. */
-    breakUploads: (broken: boolean) => {
-      trouble.uploadsBroken = broken;
-    },
-    /** Has Director's slower line answer 503, as Gemini out of reach, or stop. */
-    chatOutage: (down: boolean) => {
-      trouble.chatDown = down;
-    },
+    ...switches,
     /** Director live: each connection made to the Live API, and its warning that one closes soon. */
     live: { sessions: live.sessions, goAway: live.goAway },
     close: () =>

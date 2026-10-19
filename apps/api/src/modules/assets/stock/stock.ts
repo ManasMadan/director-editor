@@ -10,6 +10,7 @@
  * `createStockProviders`. Nothing else names a provider.
  */
 import type { StockCredit, StockPhoto, StockProviderName } from "@repo/contracts/api";
+import { required } from "@repo/contracts/objects";
 import { DAY_S, PROVIDER_TIMEOUT_MS, SECOND_MS } from "@repo/contracts/time";
 import { AppError } from "@repo/nest-common";
 
@@ -115,10 +116,9 @@ export class StockLibrary {
 
   private remember(key: string, photos: StockPhoto[]) {
     if (this.cache.size >= CACHE_ENTRIES) {
-      const oldest = this.cache.keys().next();
-      if (!oldest.done) {
-        this.cache.delete(oldest.value);
-      }
+      // A Map keeps its keys in the order they were added: the first is the oldest.
+      const [oldest] = this.cache.keys();
+      this.cache.delete(required(oldest, "the oldest search, in a full cache"));
     }
     this.cache.set(key, { at: this.now(), photos });
   }

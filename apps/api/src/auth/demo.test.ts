@@ -1,5 +1,6 @@
+import { runWithContext } from "@repo/nest-common";
 import { describe, expect, it } from "vitest";
-import { ownSessionOnly, refuseDemoProfileChange, refuseForDemo } from "./demo";
+import { ownSessionOnly, refuseDemoProfileChange, refuseForDemo, visitorLimitKey } from "./demo";
 
 const DEMO = { id: "u", demo: true, name: "Director Demo" };
 const SOMEONE = { id: "v", demo: false };
@@ -49,5 +50,19 @@ describe("the demo account's device list", () => {
     expect(ownSessionOnly({ not: "a list" }, { user: DEMO, session: { id: "mine" } })).toBe(
       undefined,
     );
+  });
+});
+
+describe("whose allowance a per-user limit spends", () => {
+  it("is the user's, or on the shared demo the user's from their address", () => {
+    const visit = (sharedDemo: boolean) =>
+      runWithContext({ requestId: "r", ip: "203.0.113.7" }, () => visitorLimitKey("u", sharedDemo));
+    expect(visit(false)).toBe("u");
+    expect(visit(true)).toBe("u:203.0.113.7");
+  });
+
+  it("is one allowance for the shared demo when no address is known", () => {
+    expect(visitorLimitKey("u", true)).toBe("u:unknown");
+    expect(runWithContext({ requestId: "r" }, () => visitorLimitKey("u", true))).toBe("u:unknown");
   });
 });
