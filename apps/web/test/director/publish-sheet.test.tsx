@@ -11,13 +11,16 @@ import {
   fileIdSchema,
   videoIdSchema,
 } from "@repo/contracts/ids";
+import { required } from "@repo/contracts/objects";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
+import { authClient } from "@/lib/auth-client";
 import { MediaPage } from "@/modules/director";
 import { PublishButton } from "@/modules/director/components/publish-sheet";
 import { cleanup, currentUrl, renderPage } from "../render";
 import { auth, currentSession, signUp } from "../users";
+import { shotPlan } from "./support";
 
 const COPY = {
   title: "Three looks, one mirror",
@@ -237,6 +240,70 @@ describe("publishing a cut", { tags: ["files"] }, () => {
       [cut.id],
     );
     expect(stored).toEqual({ publish_status: "published", visibility: "private" });
+  });
+
+  it("says before posting that a video with an AI clip goes up as synthetic content", async () => {
+    const { cut } = await aCut();
+    const clip = crypto.randomUUID();
+    const gap = (objectKey: string, id = clip) => ({
+      id,
+      assetId: "gap-1",
+      origin: "created",
+      status: "ready",
+      objectKey,
+      fileId: null,
+      error: null,
+      prompt: "A kettle coming to the boil",
+      credit: null,
+      createdAt: new Date().toISOString(),
+    });
+    const slots = (chosen: ReturnType<typeof gap>) => ({
+      slots: [
+        {
+          assetId: "gap-1",
+          prompt: "A kettle coming to the boil",
+          candidates: [chosen],
+          chosenId: chosen.id,
+          history: [],
+        },
+      ],
+      imagesUsed: 1,
+      imagesPerVideo: 12,
+      imagesToday: 1,
+      imagesPerDay: 30,
+    });
+    await commands.fakeDirector(cut.videoId, {
+      plan: { status: "ready", plan: shotPlan() },
+      assets: slots(gap(`director-assets/${cut.videoId}/gap-1/${clip}.mp4`)),
+    });
+    await open(cut);
+    const notice = page.getByText("Your video uses an AI clip", { exact: false });
+    await expect.element(notice).toBeVisible();
+
+    // A drawn still for the gap is no clip: nothing to declare.
+    await commands.fakeDirector(cut.videoId, {
+      assets: slots(gap(`director-assets/${cut.videoId}/gap-1/${clip}.png`)),
+    });
+    cleanup();
+    const listed = await commands.answeredRequests("assets/list");
+    await open(cut);
+    await expect.element(page.getByLabelText("Title")).toHaveValue(COPY.title);
+    await expect.poll(() => commands.answeredRequests("assets/list")).toBeGreaterThan(listed);
+    expect(notice.query()).toBeNull();
+  });
+
+  it("offers nothing to open while it isn't known whose session it is", async () => {
+    const { cut } = await aCut();
+    const view = await renderPage(<Card cut={cut} />, { url: "/media" });
+    await expect.element(view.getByRole("button", { name: "Publish", exact: true })).toBeVisible();
+    // The session is read again (a refresh): it could still turn out to be the demo's.
+    const session = required(authClient.$store.atoms.session, "the session atom");
+    session.set({ ...session.get(), isPending: true });
+    await expect
+      .element(view.getByRole("button", { name: "Publish", exact: true }))
+      .not.toBeInTheDocument();
+    authClient.$store.notify("$sessionSignal");
+    await expect.element(view.getByRole("button", { name: "Publish", exact: true })).toBeVisible();
   });
 
   it("says nothing more when YouTube gave it the privacy asked for", async () => {

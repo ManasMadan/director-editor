@@ -12,6 +12,7 @@ import { mkdirSync, openSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { createTestDatabase, prepareTemplate } from "@repo/db/testing";
 import { LIVE_API_PATH, startFakeGoogle } from "@repo/fake-google";
+import { Redis } from "ioredis";
 import { DEMO } from "./demo";
 import { startFakeAi } from "./fake-ai";
 import { API, CAPTCHA, REDIS_URL, type Services, SITE } from "./services";
@@ -59,6 +60,21 @@ export default async function setup() {
   };
 }
 
+/**
+ * The demo's count of live guests (apps/api/src/auth/guest.ts) lasts a day in Valkey, but
+ * the guests it counts were in earlier runs' databases, dropped since: left alone, a day
+ * of runs fills the demo, and every guest sign-in after that is refused. Without the key,
+ * the API counts again from this run's own database.
+ */
+async function forgetEarlierGuests() {
+  const redis = new Redis(REDIS_URL);
+  try {
+    await redis.del("demo:live-guests");
+  } finally {
+    redis.disconnect();
+  }
+}
+
 async function start(): Promise<Services> {
   // The API runs as it does in production: its own build, in its own process (it reads
   // its environment once, so each set of features needs a process of its own). Built
@@ -74,6 +90,7 @@ async function start(): Promise<Services> {
 
   await prepareTemplate();
   const database = await createTestDatabase();
+  await forgetEarlierGuests();
   const ai = await startFakeAi(database.urlFor("postgres"));
   const google = await startFakeGoogle({ apiKey: "web-tests-youtube-key" });
 
