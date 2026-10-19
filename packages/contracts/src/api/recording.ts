@@ -153,6 +153,8 @@ export const recordingContract = {
    * Starts recording a ready plan (DIRECTOR_PLAN_NOT_READY before then), unless the
    * member's raw footage is at its allowance (RECORDING_STORAGE_FULL). Not on the shared
    * demo account (DEMO_ACCOUNT_LOCKED): everyone on it would see everyone's footage.
+   * The member's session of the short still recording (a tab closed before Done) is
+   * answered instead, its parts and attempts included, for the shoot screen to carry on.
    */
   start: route("POST", "/recording/sessions", "Start recording a short")
     .meta({

@@ -140,6 +140,15 @@ export class RecordingRepository {
     });
   }
 
+  /** The member's session of `videoId` still recording (not Done, not expired), if any. */
+  openSession(orgId: OrgId, userId: UserId, videoId: string) {
+    return this.read(orgId).recordingSession.findFirst({
+      where: { userId, videoId, status: "recording", expiresAt: { gt: new Date() } },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: { id: true },
+    });
+  }
+
   session(orgId: OrgId, userId: UserId, sessionId: RecordingSessionId) {
     return this.read(orgId).recordingSession.findFirst({
       where: { id: sessionId, userId },
