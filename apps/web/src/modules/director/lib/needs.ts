@@ -6,7 +6,7 @@
  */
 import type { ShotPlan } from "@repo/contracts/api";
 
-type Presence = "on-camera" | "voice-only" | "on-camera-and-voice" | "nobody";
+type Presence = "on-camera" | "on-camera-silent" | "voice-only" | "on-camera-and-voice" | "nobody";
 
 type EditingKey =
   | "split"
@@ -36,12 +36,25 @@ export interface Needs {
 const TRIES_PER_SHOT = 4;
 const SECONDS_PER_MINUTE = 60;
 
+/**
+ * Who's in the video. A shot the member films ("on-camera" mode) isn't always one of
+ * them talking: one with no line is them without a word, and one with no one in it (no
+ * pose's joints: hands and a mug, the view) is just the things they film. A no-talking
+ * brief must never read as "talking to the camera".
+ */
 function presenceOf(plan: ShotPlan): Presence {
-  const modes = new Set(plan.shots.map((shot) => shot.mode));
-  if (modes.has("on-camera")) {
-    return modes.has("voice-over") ? "on-camera-and-voice" : "on-camera";
+  const filmed = plan.shots.filter((shot) => shot.mode === "on-camera");
+  const voice = plan.shots.some((shot) => shot.mode === "voice-over");
+  if (filmed.length === 0) {
+    return voice ? "voice-only" : "nobody";
   }
-  return modes.has("voice-over") ? "voice-only" : "nobody";
+  if (voice) {
+    return "on-camera-and-voice";
+  }
+  if (filmed.some((shot) => shot.script.length > 0)) {
+    return "on-camera";
+  }
+  return filmed.some((shot) => shot.pose.keypoints.length > 0) ? "on-camera-silent" : "nobody";
 }
 
 type Edit = ShotPlan["edits"][number];

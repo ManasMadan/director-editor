@@ -118,6 +118,7 @@ describe("what you'll need", () => {
   it("reads a talking head with a chart under it, captions and an end card", () => {
     const needs = needsOf(
       plan({
+        shots: [shot({ script: [{ startSeconds: 0, endSeconds: 28, text: "Twelve types." }] })],
         edits: [
           SPLIT,
           CAPTIONS,
@@ -141,6 +142,18 @@ describe("what you'll need", () => {
     expect(needsOf(plan({ shots: [shot(), voice] })).presence).toBe("on-camera-and-voice");
     // Nothing filmed still takes a minute to set up.
     expect(needsOf(plan({ shots: [still] }))).toMatchObject({ presence: "nobody", minutes: 1 });
+  });
+
+  it("never says talking to the camera when no shot has a line", () => {
+    // "No talking, just hands and the mug": filmed, nobody in it, nothing said.
+    expect(needsOf(plan({ shots: [shot(), shot()] })).presence).toBe("nobody");
+    // On camera, without a word.
+    const posed = shot({
+      pose: { description: "Smiling.", keypoints: [{ name: "nose", x: 0.5, y: 0.3 }] },
+    });
+    expect(needsOf(plan({ shots: [posed, shot()] })).presence).toBe("on-camera-silent");
+    const said = shot({ script: [{ startSeconds: 0, endSeconds: 2, text: "Hi" }] });
+    expect(needsOf(plan({ shots: [posed, said] })).presence).toBe("on-camera");
   });
 
   it("names each kind of editing once", () => {
