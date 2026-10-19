@@ -66,11 +66,22 @@ describe("Director's page for a ready plan", () => {
 
   it("shows a template the member described by its storyboard, with no original's sound to choose", async () => {
     const videoId = newVideoId();
-    await commands.fakeDirector(videoId, { plan: { status: "ready", source: "created", plan } });
+    const id = crypto.randomUUID();
+    await commands.fakeDirector(videoId, {
+      plan: {
+        id,
+        status: "ready",
+        source: "created",
+        plan,
+        // The second shot's card won't come: its sketch in the list says why.
+        storyboards: [{ shotIndex: 1, status: "failed", objectKey: null }],
+      },
+    });
     const page = await showPlan(videoId);
     await expect
       .element(page.getByText("Director is still drawing this shot").first())
       .toBeInTheDocument();
+    await expect.element(page.getByText("Director couldn't draw this shot").last()).toBeVisible();
     // No YouTube video behind it, and no original sound to film along to.
     expect(document.querySelector("iframe")).toBeNull();
     expect(page.getByRole("radio").query()).toBeNull();

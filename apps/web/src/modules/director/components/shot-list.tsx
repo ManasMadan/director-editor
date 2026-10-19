@@ -2,6 +2,7 @@
 
 import { takeInProgress } from "@repo/client/api/director/latest";
 import type { DirectorShot, ServedShotPlan, Shot, StoryboardState } from "@repo/contracts/api";
+import { required } from "@repo/contracts/objects";
 import { cn } from "@repo/ui/lib/utils";
 import { Camera, CircleCheck, Pause, Play, RotateCcw, Video } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -94,10 +95,8 @@ function useShownInStrip(watching: number | null) {
 function useMoreToTheRight(strip: RefObject<HTMLOListElement | null>) {
   const [more, setMore] = useState(false);
   useEffect(() => {
-    const list = strip.current;
-    if (!list) {
-      return;
-    }
+    // The strip is always drawn: it's there once the effect runs.
+    const list = required(strip.current, "the storyboard strip");
     const check = () => setMore(list.scrollLeft + list.clientWidth < list.scrollWidth - 1);
     check();
     const resized = new ResizeObserver(check);

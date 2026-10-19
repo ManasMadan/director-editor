@@ -42,7 +42,13 @@ describe("a created template's storyboard", () => {
   });
 
   it("says so under a shot's sketch too", async () => {
-    const page = await renderPage(<StoryboardStateNote state="failed" />);
+    const page = await renderPage(
+      <>
+        <StoryboardStateNote state="failed" />
+        <StoryboardStateNote state="drawing" />
+      </>,
+    );
     await expect.element(page.getByText("Director couldn't draw this shot")).toBeVisible();
+    await expect.element(page.getByText("Director is still drawing this shot")).toBeVisible();
   });
 });
