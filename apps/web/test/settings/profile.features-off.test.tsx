@@ -10,7 +10,8 @@ describe("the profile page with uploads off and captcha on", () => {
     const user = await signUp();
     const page = await renderPage(<ProfileSettingsPage />, { url: "/settings" });
     await expect.element(page.getByText(user.email, { exact: true })).toBeVisible();
-    expect(page.getByText("Profile picture").query()).toBeNull();
+    // Its room shows while the page learns whether uploads are on, then goes.
+    await expect.poll(() => page.getByText("Profile picture").query()).toBeNull();
 
     await expect.element(page.getByTestId("captcha")).toHaveAttribute("data-widget");
     await userEvent.click(page.getByRole("button", { name: "Change email" }));
