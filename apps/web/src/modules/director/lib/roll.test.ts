@@ -1,7 +1,7 @@
 import type { QueuedItem } from "@repo/client/api/recording/slice-store";
 import { recordingSessionIdSchema } from "@repo/contracts/ids";
 import { describe, expect, it, vi } from "vitest";
-import { MIN_PART_MS, type PartRecorder, Roll, type RollApi, SLICE_MS } from "./roll";
+import { MIN_PART_MS, type PartRecorder, Roll, type RollApi, SLICE_MS, shotStates } from "./roll";
 
 const SESSION = recordingSessionIdSchema.parse("6b1d3a52-8d1e-4c3b-9a55-2f1e7c9d0a11");
 const stream = {} as MediaStream;
@@ -101,6 +101,18 @@ const slices = (queued: QueuedItem[]) =>
       ? [item.partIndex, item.index, item.startMs, item.durationMs]
       : ["end", item.partIndex, item.sliceCount],
   );
+
+describe("each shot's place in the roll", () => {
+  it("is a take once an attempt was cut from it, tried once attempted, else to do", () => {
+    expect(
+      shotStates(3, [
+        { shotIndex: 0, status: "clipped" },
+        { shotIndex: 0, status: "failed" },
+        { shotIndex: 1, status: "open" },
+      ]),
+    ).toEqual(["take", "tried", "todo"]);
+  });
+});
 
 describe("the roll", () => {
   it("records the whole shoot in ten-second slices, on the recording's own clock", async () => {
@@ -380,6 +392,55 @@ describe("the roll", () => {
     // The part that opened knows the size already: the same size again changes nothing.
     await roll.reframe(back, { width: 1080, height: 1920 });
     expect(api.addPart).toHaveBeenCalledTimes(5);
+  });
+
+  it("knows its session once it's open, and refuses to name one before", async () => {
+    const { roll } = setup();
+    expect(roll.currentSession()).toBeNull();
+    // Nothing is sent for a session that was never opened (the roll never asks before).
+    const session: unknown = Reflect.get(roll, "session");
+    expect(() => (typeof session === "function" ? session.call(roll) : null)).toThrow(
+      "the roll has no session yet",
+    );
+    await roll.start("abcdefghijk", stream, "front");
+    expect(roll.currentSession()).toBe(SESSION);
+  });
+
+  it("pauses a part the browser has just stopped, without asking it to pause", async () => {
+    const { roll, api, recorders } = setup();
+    await roll.start("abcdefghijk", stream, "front");
+    const [recorder] = recorders;
+    if (!recorder) {
+      throw new Error("the roll made no recorder");
+    }
+    // Stopped, its stop event still to come.
+    recorder.current = "inactive";
+    const pause = vi.spyOn(recorder, "pause");
+    roll.pause();
+    expect(roll.phase).toBe("paused");
+    expect(pause).not.toHaveBeenCalled();
+    expect(api.pause).toHaveBeenCalledOnce();
+  });
+
+  it("counts a part whose stop comes after the touch that resumed opened the next", async () => {
+    const { roll, queued, recorders, tick } = setup();
+    await roll.start("abcdefghijk", stream, "front");
+    tick(2_000);
+    roll.pause();
+    const [first] = recorders;
+    if (!first) {
+      throw new Error("the roll made no recorder");
+    }
+    // The phone locked while paused: the browser stopped the recorder, its stop on its way.
+    first.current = "inactive";
+    await roll.resume(stream, "front");
+    expect(recorders).toHaveLength(2);
+    tick(1_000);
+    first.events.onStop();
+    await expect.poll(() => slices(queued)).toContainEqual(["end", 0, 1]);
+    // Both parts are on the indicator: the one that ended late, and the one recording.
+    expect(roll.elapsedMs()).toBe(3_000);
+    expect(roll.phase).toBe("recording");
   });
 
   it("sends nothing of a part that ends before it records half a second", async () => {

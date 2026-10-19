@@ -236,13 +236,12 @@ export class Roll {
     const mine = left.filter((item) => item.sessionId === session.id);
     for (const part of open) {
       const queued = mine.filter((item) => item.partIndex === part.index);
-      if (queued.some((item) => item.kind === "part-end")) {
+      const queuedSlices = queued.filter((item) => item.kind === "slice");
+      // Anything else queued is its end, already on its way.
+      if (queuedSlices.length < queued.length) {
         continue;
       }
-      const slices = [
-        ...part.uploaded,
-        ...queued.flatMap((item) => (item.kind === "slice" ? [item.index] : [])),
-      ];
+      const slices = [...part.uploaded, ...queuedSlices.map((item) => item.index)];
       await this.options.enqueue({
         kind: "part-end",
         sessionId: session.id,
@@ -465,9 +464,11 @@ export class Roll {
    */
   private async closed(part: Part) {
     part.freeze();
+    // Counted however late its stop comes: a part the browser stopped while paused can
+    // end after the touch that resumed opened the next one.
+    this.endedMs += part.activeMs;
     if (this.part === part) {
       this.part = null;
-      this.endedMs += part.activeMs;
     }
     const kept = part.activeMs >= MIN_PART_MS;
     if (kept) {
