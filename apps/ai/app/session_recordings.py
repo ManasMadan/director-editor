@@ -83,6 +83,8 @@ class _Attempt(BaseModel):
     shot_index: int
     start_ms: int
     end_ms: int | None
+    status: str
+    origin: str
 
 
 _PARTS = TypeAdapter(list[PartRow])
@@ -275,8 +277,8 @@ class DbRecordings:
                     for row in (
                         await db.execute(
                             text(
-                                "SELECT id, part_index, shot_index, start_ms, end_ms"
-                                " FROM app.recording_attempt WHERE session_id = :id"
+                                "SELECT id, part_index, shot_index, start_ms, end_ms, status,"
+                                " origin FROM app.recording_attempt WHERE session_id = :id"
                                 " ORDER BY number"
                             ),
                             {"id": session_id},
@@ -286,6 +288,12 @@ class DbRecordings:
             )
         if plan is None or plan.plan is None:
             return None
+        # An attempt an earlier run of the pass added and then failed to queue (the queue
+        # unreachable a moment) is among the known ones now, so it won't be added again:
+        # queued here instead, or it's never cut. The queue's job id is the attempt's, so
+        # one that was queued is cut once all the same.
+        for stranded in (a for a in attempts if a.origin == "pass" and a.status == "clipping"):
+            await self._clips.add_clip(org_id, stranded.id, session.user_id)
         stored = stored_parts(parts, slices, session_id)
         joined: list[PartFootage] = []
         self._joined[session_id] = []

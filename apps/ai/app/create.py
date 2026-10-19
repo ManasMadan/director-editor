@@ -376,13 +376,20 @@ class Creator:
             session.add(plan)
             await session.flush()
             await session.refresh(plan)
-        await self._queue.add_create(
-            plan.id,
-            org_id,
-            [photo.url for photo in body.photos],
-            request_id=request_id,
-            user_id=user_id,
-        )
+        try:
+            await self._queue.add_create(
+                plan.id,
+                org_id,
+                [photo.url for photo in body.photos],
+                request_id=request_id,
+                user_id=user_id,
+            )
+        except Exception as error:
+            # Nothing would ever write it: failed now (a failed plan doesn't count against
+            # the day), and the member asks again, rather than a plan waiting for good.
+            log.exception("couldn't queue a created plan", error=type(error).__name__)
+            await self._fail(org_id, plan.id, "DIRECTOR_CREATE_FAILED")
+            raise AppError("UPSTREAM_UNAVAILABLE", {"service": "queue"}) from None
         await publish_to_org(self._redis, org_id, CHANGED)
         return plan
 

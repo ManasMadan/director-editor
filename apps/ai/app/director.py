@@ -1026,8 +1026,11 @@ class Director:
         if take is None:
             # The file is someone else's take: apps/api only hands over the caller's own.
             raise AppError("DIRECTOR_TAKE_NOT_FOUND")
-        if made is None:
+        if made is None and take.status != "pending":
             return take
+        # Queued for a take just made, and again for one still waiting for its review: its
+        # add may have been lost on the way to the queue (the caller retries the whole
+        # add), and the job id is the take's, so a review already queued isn't run twice.
         await self._queue.add_review(
             take.id, org_id, body.sourceUrl, request_id=request_id, user_id=user_id
         )

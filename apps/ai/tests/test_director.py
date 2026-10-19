@@ -2122,10 +2122,15 @@ def test_a_file_added_twice_is_one_take(client: TestClient) -> None:
         "sourceUrl": "http://storage/clip.mp4",
     }
     first = client.post("/v1/director/takes", json=take, headers=headers(org, user))
+    # Its review lost on the way to the queue (Valkey unreachable a moment): adding the
+    # file again, as the caller's retry does, queues the review it's still waiting for.
+    key = f"{{ai-review}}:ai-review:{first.json()['id']}"
+    assert redis_client().delete(key) == 1
     again = client.post("/v1/director/takes", json=take, headers=headers(org, user))
     assert (first.status_code, again.status_code) == (201, 201)
     assert first.json() == again.json()
     assert len(takes_of(client, org, user)) == 1
+    assert stored_job(key)[b"name"] == b"review-take"
     # The file is that member's take: anyone else adding it finds no take of theirs.
     teammate = uuid4()
     with migrator() as db:
