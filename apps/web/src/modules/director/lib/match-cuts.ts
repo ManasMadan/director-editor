@@ -13,7 +13,7 @@
 import type { MatchCutAlignment, MatchCutAsk } from "@repo/contracts/api";
 import type { VideoId } from "@repo/contracts/ids";
 import type { Clip } from "./edit";
-import { OUTPUT_HEIGHT, OUTPUT_WIDTH } from "./stitch";
+import { OUTPUT_HEIGHT, OUTPUT_WIDTH } from "./output";
 
 export type MatchCutTransform = MatchCutAlignment["transform"];
 

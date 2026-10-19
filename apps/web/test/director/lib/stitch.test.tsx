@@ -2,15 +2,9 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { CaptionInk } from "@/modules/director/lib/caption-draw";
 import { recorderFormat } from "@/modules/director/lib/media";
+import { IncompleteRender, OUTPUT_HEIGHT, OUTPUT_WIDTH } from "@/modules/director/lib/output";
 import { lastFrameSeconds } from "@/modules/director/lib/recorded";
-import {
-  type Captions,
-  IncompleteRender,
-  OUTPUT_HEIGHT,
-  OUTPUT_WIDTH,
-  type Segment,
-  stitch,
-} from "@/modules/director/lib/stitch";
+import { type Captions, type Segment, stitch } from "@/modules/director/lib/stitch";
 import { photoOf, playedFrames, recordClip, recordToneClip, toneRuns } from "./footage";
 
 const INK: CaptionInk = {

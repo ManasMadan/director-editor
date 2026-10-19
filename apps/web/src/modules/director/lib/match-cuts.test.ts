@@ -11,7 +11,8 @@ import {
   type PlanLike,
   transformsOf,
 } from "./match-cuts";
-import { applyTransform, OUTPUT_HEIGHT, OUTPUT_WIDTH } from "./stitch";
+import { OUTPUT_HEIGHT, OUTPUT_WIDTH } from "./output";
+import { applyTransform } from "./stitch";
 
 const videoId = videoIdSchema.parse("dQw4w9WgXcQ");
 

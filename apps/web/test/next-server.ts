@@ -30,11 +30,6 @@ vi.mock("next/headers", () => ({
   },
 }));
 
-// Next's compiler replaces next/font calls with the font's generated class names.
-vi.mock("next/font/local", () => ({
-  default: (options: { variable: string }) => ({ className: "", variable: options.variable }),
-}));
-
 beforeEach(() => {
   request.cookies.clear();
   request.headers = new Headers();

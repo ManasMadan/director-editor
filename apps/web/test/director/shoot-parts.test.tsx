@@ -205,6 +205,24 @@ describe("the captions over a video", () => {
     await expect.poll(drawn).toBe(true);
   });
 
+  it("are drawn again only when what they show changes, not every frame", async () => {
+    let now = 0.1;
+    const fillText = vi.spyOn(CanvasRenderingContext2D.prototype, "fillText");
+    await renderPage(
+      <Viewfinder>
+        <CaptionLayer lines={lines} style="pop" clock={() => now} />
+      </Viewfinder>,
+    );
+    await expect.poll(drawn).toBe(true);
+    const once = fillText.mock.calls.length;
+    await frames();
+    await frames();
+    expect(fillText.mock.calls.length).toBe(once);
+    // The second word lights up: drawn again.
+    now = 4.9;
+    await expect.poll(() => fillText.mock.calls.length).toBeGreaterThan(once);
+  });
+
   it("leave the video alone where the browser has no 2D canvas", async () => {
     const getContext = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
     await renderPage(

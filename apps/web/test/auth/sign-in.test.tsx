@@ -336,8 +336,25 @@ describe("sign in", () => {
     await expect
       .element(page.getByRole("button", { name: "Sign in with a passkey" }))
       .toBeVisible();
+    // The card's room goes once the API has given up answering (after its retries).
+    await expect
+      .element(page.getByTestId("demo-room"), { timeout: 15_000 })
+      .not.toBeInTheDocument();
     expect(page.getByText("Just looking? Use the demo.").elements()).toHaveLength(0);
     expect(page.getByText("Try Director with the demo account").elements()).toHaveLength(0);
+  });
+
+  it("keeps the demo card's room while it loads, so the form under it doesn't jump", async () => {
+    const emailTop = () => page.getByLabelText("Email").element().getBoundingClientRect().top;
+    let page = await renderPage(<SignInPage />, { url: "/sign-in" });
+    await expect.element(page.getByRole("button", { name: "Use the demo" })).toBeVisible();
+    const settled = emailTop();
+    cleanup();
+    // The same page while system.info hasn't answered yet (the API retries a 503).
+    await commands.failRequests("/rpc/system/info", { status: 503 });
+    page = await renderPage(<SignInPage />, { url: "/sign-in" });
+    await expect.element(page.getByTestId("demo-room")).toBeInTheDocument();
+    expect(Math.abs(emailTop() - settled)).toBeLessThanOrEqual(1);
   });
 
   it("says it's getting the demo account while ?demo=1 waits for it", async () => {

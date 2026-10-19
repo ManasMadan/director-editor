@@ -44,7 +44,10 @@ registerProcessor("${CAPTURE_PROCESSOR}", Capture);
 `;
 
 let shared: AudioContext | null = null;
-/** Put to rest on purpose (the shoot screen left): nothing wakes it but `liveAudio`. */
+/**
+ * Put to rest on purpose (the shoot screen left), or made ahead and not asked for yet
+ * (`prepareLiveAudio`): nothing wakes it but `liveAudio`.
+ */
 let resting = false;
 const loaded = new WeakSet<AudioContext>();
 
@@ -58,9 +61,20 @@ function wake(context: AudioContext) {
   }
 }
 
+/** A new context, woken whenever its state changes while it's wanted and the page is in view. */
+function created(): AudioContext {
+  const context = new AudioContext();
+  context.addEventListener("statechange", () => {
+    if (!resting && document.visibilityState === "visible") {
+      wake(context);
+    }
+  });
+  return context;
+}
+
 /**
  * The page's one audio context for Director live. Browsers let a page make sound only
- * once the member has interacted with it: made (or woken) by the "Start shooting" tap,
+ * once the member has interacted with it: woken (or made) by the "Start shooting" tap,
  * the same context then serves every reconnection after it, which start by themselves.
  *
  * iOS suspends it ("interrupted") when the phone locks, the member switches apps or a
@@ -70,17 +84,24 @@ function wake(context: AudioContext) {
  */
 export function liveAudio(): AudioContext {
   resting = false;
-  if (!shared) {
-    const context = new AudioContext();
-    context.addEventListener("statechange", () => {
-      if (!resting && document.visibilityState === "visible") {
-        wake(context);
-      }
-    });
-    shared = context;
-  }
+  shared ??= created();
   wake(shared);
   return shared;
+}
+
+/**
+ * Makes the audio context ahead of the "Start shooting" tap, while the member reads the
+ * start card. Making a page's first audio context opens the sound device, which can hold
+ * the page for most of a second on a phone (seconds on some computers); in the tap, that
+ * held the camera and Director's line back with it. Made now, it stays asleep until the
+ * tap wakes it (`liveAudio`): another tap on the screen before then doesn't, so the
+ * member's own music plays on until they start.
+ */
+export function prepareLiveAudio() {
+  if (!shared) {
+    shared = created();
+    resting = true;
+  }
 }
 
 /** Wakes Director's sound after the browser put it to sleep; makes none, wakes none at rest. */

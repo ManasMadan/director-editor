@@ -59,10 +59,29 @@ export function ProfileCard({ nameLocked = false }: { nameLocked?: boolean }) {
             }}
           />
         ) : (
-          <GeminiShimmer className="h-48" />
+          <ProfileRoom nameLocked={nameLocked} />
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * The form's room, shimmering, while the profile loads: the cards under it would
+ * otherwise jump down when it arrives. Sized by the form itself, drawn unseen, so it
+ * stays the form's height whatever size the screen gives its fields.
+ */
+function ProfileRoom({ nameLocked }: { nameLocked: boolean }) {
+  return (
+    <div aria-hidden data-testid="profile-room" className="relative">
+      <div inert className="invisible">
+        <ProfileForm
+          nameLocked={nameLocked}
+          initial={{ name: "", locale: "en", timezone: "UTC" }}
+        />
+      </div>
+      <GeminiShimmer className="absolute inset-0" />
+    </div>
   );
 }
 

@@ -33,18 +33,28 @@ export function CaptionLayer({
     }
     const ink = captionInk();
     let frame = 0;
+    // What the canvas shows now: it's drawn again only when that changes (a word lit, the
+    // style, the size), not every frame, which kept a phone's main thread busy while
+    // nothing moved.
+    let shown = "";
     const draw = () => {
+      frame = requestAnimationFrame(draw);
       const ratio = window.devicePixelRatio || 1;
       const width = Math.round(element.clientWidth * ratio);
       const height = Math.round(element.clientHeight * ratio);
+      const now = latest.current;
+      const words = captionAt(now.lines, now.clock());
+      const next = `${width}x${height} ${now.style} ${words?.map((w) => `${w.state}:${w.text}`).join(" ")}`;
+      if (next === shown) {
+        return;
+      }
+      shown = next;
       if (element.width !== width || element.height !== height) {
         element.width = width;
         element.height = height;
       }
-      const now = latest.current;
       ctx.clearRect(0, 0, width, height);
-      drawCaption(ctx, width, height, captionAt(now.lines, now.clock()), now.style, ink);
-      frame = requestAnimationFrame(draw);
+      drawCaption(ctx, width, height, words, now.style, ink);
     };
     frame = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(frame);

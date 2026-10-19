@@ -8,7 +8,7 @@
  *   await authClient.signUp.email(values, { headers: captcha.headers() });
  *   captcha.reset(); // tokens are single-use
  *
- * With captcha off, `widget` is null, `ready` is true once that's known and `headers()`
+ * With captcha off, `widget` is null once that's known, `ready` is true then and `headers()`
  * is empty, so forms are written once for both setups. The script loads from Cloudflare under the page's
  * nonce CSP ('strict-dynamic' trusts scripts our own bundle adds).
  */
@@ -16,7 +16,7 @@ import { useSystemInfoQuery } from "@repo/client/api/system/info";
 import { SECOND_MS } from "@repo/contracts/time";
 import { useLocale, useTranslations } from "next-intl";
 import { useTheme } from "next-themes";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 
 interface TurnstileApi {
   render(element: HTMLElement, options: Record<string, unknown>): string;
@@ -27,6 +27,29 @@ declare global {
   interface Window {
     turnstile?: TurnstileApi;
   }
+}
+
+/**
+ * Where Turnstile draws its widget, and why there's no token when it can't give one. A
+ * widget in sight (Turnstile's is 65 pixels tall) has its room kept from the first paint,
+ * while it isn't known yet whether there will be one: the form under it would otherwise
+ * jump once it loads, under the thumb of someone already typing.
+ */
+function CaptchaBox({
+  box,
+  inSight,
+  alert,
+}: {
+  box: RefObject<HTMLDivElement | null>;
+  inSight: boolean;
+  alert: ReactNode;
+}) {
+  return (
+    <div>
+      <div ref={box} data-testid="captcha" className={inSight ? "min-h-[65px]" : undefined} />
+      {alert}
+    </div>
+  );
 }
 
 /** How long a widget may take to hand over a token before the form stops waiting for it. */
@@ -70,7 +93,7 @@ function useWaitedTooLong(waiting: boolean) {
 }
 
 export interface Captcha {
-  /** The widget to place in the form, or null when captcha is off. */
+  /** The widget to place in the form, or null once captcha is known to be off. */
   widget: ReactNode;
   /** True once a submit can go through (as soon as the page knows, when captcha is off). */
   ready: boolean;
@@ -114,6 +137,41 @@ const useWidgetTheme = () => (useTheme().resolvedTheme === "dark" ? "dark" : "li
 export function useCaptcha({ interactionOnly = false, alert = true } = {}): Captcha {
   const { data: system } = useSystemInfoQuery();
   const siteKey = system?.captchaSiteKey ?? null;
+  const { container, widgetId, token, setToken, failed } = useTurnstile(siteKey, interactionOnly);
+  const timedOut = useWaitedTooLong(siteKey !== null && token === null);
+  const unavailable = siteKey !== null && (failed || timedOut);
+
+  const reset = useCallback(() => {
+    setToken(null);
+    if (widgetId.current) {
+      window.turnstile?.reset(widgetId.current);
+    }
+  }, [setToken, widgetId]);
+
+  return {
+    widget:
+      siteKey || system === undefined ? (
+        <CaptchaBox
+          box={container}
+          inSight={!interactionOnly}
+          alert={unavailable && alert ? <CaptchaAlert failed={failed} /> : null}
+        />
+      ) : null,
+    // Until system.info answers, a submit might lack the token the API then requires.
+    ready: system !== undefined && (!siteKey || token !== null),
+    token,
+    unavailable,
+    headers: (): Record<string, string> =>
+      siteKey && token ? { "x-captcha-response": token } : {},
+    reset,
+  };
+}
+
+/**
+ * Turnstile's widget, drawn into `container` while there's a site key: its token as it
+ * comes and goes, and whether its script failed to load.
+ */
+function useTurnstile(siteKey: string | null, interactionOnly: boolean) {
   const locale = useLocale();
   const theme = useWidgetTheme();
   const container = useRef<HTMLDivElement>(null);
@@ -162,29 +220,5 @@ export function useCaptcha({ interactionOnly = false, alert = true } = {}): Capt
     };
   }, [siteKey, locale, theme, interactionOnly]);
 
-  const timedOut = useWaitedTooLong(siteKey !== null && token === null);
-  const unavailable = siteKey !== null && (failed || timedOut);
-
-  const reset = useCallback(() => {
-    setToken(null);
-    if (widgetId.current) {
-      window.turnstile?.reset(widgetId.current);
-    }
-  }, []);
-
-  return {
-    widget: siteKey ? (
-      <div>
-        <div ref={container} data-testid="captcha" />
-        {unavailable && alert ? <CaptchaAlert failed={failed} /> : null}
-      </div>
-    ) : null,
-    // Until system.info answers, a submit might lack the token the API then requires.
-    ready: system !== undefined && (!siteKey || token !== null),
-    token,
-    unavailable,
-    headers: (): Record<string, string> =>
-      siteKey && token ? { "x-captcha-response": token } : {},
-    reset,
-  };
+  return { container, widgetId, token, setToken, failed };
 }

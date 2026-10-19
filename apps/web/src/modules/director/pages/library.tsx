@@ -118,6 +118,9 @@ function Library() {
 
 /** The library: the workspace's templates to shoot, and the card to index a short of your own. */
 export function LibraryPage() {
+  // Asked for beside the gate's check that Director is on, not after it: on a phone's
+  // slow line each wait in turn is a round trip before the page shows.
+  useDirectorLibraryQuery();
   return (
     <DirectorGate>
       <Library />

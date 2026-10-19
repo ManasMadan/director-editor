@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  coverRect,
-  MAX_SECONDS,
-  OUTPUT_HEIGHT,
-  OUTPUT_WIDTH,
-  renderedSeconds,
-  totalSeconds,
-} from "./stitch";
+import { MAX_SECONDS, OUTPUT_HEIGHT, OUTPUT_WIDTH } from "./output";
+import { coverRect, renderedSeconds, totalSeconds } from "./stitch";
 
 describe("the stitcher's arithmetic", () => {
   it("covers the 9:16 frame with a picture of any shape, cropping its middle", () => {
