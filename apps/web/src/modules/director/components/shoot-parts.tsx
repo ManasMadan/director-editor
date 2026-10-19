@@ -3,6 +3,7 @@
 import type { Shot } from "@repo/contracts/api";
 import { cn } from "@repo/ui/lib/utils";
 import { RotateCcw, SwitchCamera, X } from "lucide-react";
+import type { Route } from "next";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { timecode } from "../lib/track";
@@ -65,15 +66,18 @@ export function RecordingPill({ seconds }: { seconds: number }) {
  */
 export function LeaveLink({
   videoId,
+  href,
   onClick,
 }: {
   videoId: string;
-  onClick: (event: { preventDefault: () => void }) => void;
+  /** Where ✕ leads, when not the short's page (a retake goes back to the editor). */
+  href?: Route;
+  onClick?: (event: { preventDefault: () => void }) => void;
 }) {
   const t = useTranslations("director.shoot");
   return (
     <Link
-      href={`/director/${videoId}`}
+      href={href ?? `/director/${videoId}`}
       onClick={onClick}
       aria-label={t("leave")}
       title={t("leave")}

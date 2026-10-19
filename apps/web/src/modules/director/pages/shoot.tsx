@@ -113,13 +113,41 @@ function introOf(first: boolean, roll: boolean) {
   return first ? "intro.first" : "intro.again";
 }
 
+/**
+ * The start screen's top: ✕ back where the member came from (the short, or the editor
+ * for a retake), and which short and shot this is. Before Start nothing is at stake,
+ * so ✕ just goes.
+ */
+function StartHeader({ props, title }: { props: StudioShot; title: string }) {
+  const t = useTranslations("director.shoot");
+  return (
+    <header className="flex items-center gap-3">
+      <LeaveLink
+        videoId={props.videoId}
+        href={props.retake ? nextPage(props) : `/director/${props.videoId}`}
+      />
+      <div className="min-w-0">
+        <p className="truncate text-[0.9375rem] font-semibold">{title}</p>
+        <p className="text-sm text-studio-foreground/75">
+          {t("shotOf", { index: props.index + 1, count: props.count })}
+        </p>
+      </div>
+    </header>
+  );
+}
+
 function StartCard({
+  props,
+  title,
   first,
   roll,
   leftoverMs,
   ready,
   onStart,
 }: {
+  props: StudioShot;
+  /** The short's title. */
+  title: string;
   first: boolean;
   /** The shoot records as one roll (else take by take, on the shutter). */
   roll: boolean;
@@ -132,31 +160,37 @@ function StartCard({
   const t = useTranslations("director.shoot");
   const leftover = Math.ceil(leftoverMs / 1000);
   return (
-    <div className="absolute inset-x-4 bottom-[max(1.5rem,env(safe-area-inset-bottom))] flex flex-col gap-3">
-      <section
-        aria-labelledby="shoot-intro"
-        className={cn("live-motion animate-[live-rise_300ms_ease-out_both] rounded-3xl p-5", GLASS)}
-      >
-        <h1 id="shoot-intro" className="text-xl font-bold">
-          {t("intro.title")}
-        </h1>
-        <p className="mt-2 text-[0.9375rem] leading-snug text-studio-foreground/85">
-          {t(introOf(first, roll))}
-        </p>
-        {leftover > 0 ? (
-          <p role="status" className="mt-2 text-sm text-studio-foreground/80">
-            {t("roll.leftover", { seconds: leftover })}
+    <div className="absolute inset-0 flex flex-col gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+      <StartHeader props={props} title={title} />
+      <div className="mt-auto flex flex-col gap-3">
+        <section
+          aria-labelledby="shoot-intro"
+          className={cn(
+            "live-motion animate-[live-rise_300ms_ease-out_both] rounded-3xl p-5",
+            GLASS,
+          )}
+        >
+          <h1 id="shoot-intro" className="text-xl font-bold">
+            {t("intro.title")}
+          </h1>
+          <p className="mt-2 text-[0.9375rem] leading-snug text-studio-foreground/85">
+            {t(introOf(first, roll))}
           </p>
-        ) : null}
-      </section>
-      <button
-        type="button"
-        onClick={onStart}
-        disabled={!ready}
-        className="h-14 rounded-full bg-studio-foreground text-lg font-semibold text-studio shadow-xl transition-transform active:scale-95 disabled:opacity-60"
-      >
-        {t("start")}
-      </button>
+          {leftover > 0 ? (
+            <p role="status" className="mt-2 text-sm text-studio-foreground/80">
+              {t("roll.leftover", { seconds: leftover })}
+            </p>
+          ) : null}
+        </section>
+        <button
+          type="button"
+          onClick={onStart}
+          disabled={!ready}
+          className="h-14 shrink-0 rounded-full bg-studio-foreground text-lg font-semibold text-studio shadow-xl transition-transform active:scale-95 disabled:opacity-60"
+        >
+          {t("start")}
+        </button>
+      </div>
     </div>
   );
 }
@@ -937,6 +971,8 @@ function ShootScreen(shootProps: ShootProps) {
         {started ? <MatchGhost {...shootProps} facing={camera.facing} /> : null}
         {started ? null : (
           <StartCard
+            props={shoot.props}
+            title={shootProps.plan.title}
             first={memory.before.sessions === 0}
             roll={rollOn}
             leftoverMs={roll.upload.behindMs}
