@@ -537,7 +537,7 @@ describe("a live call", () => {
     await vi.waitFor(() => expect(turnsWith(fake, "still here")).toHaveLength(1));
     expect(fake.received.filter((message) => "realtimeInput" in message)).toHaveLength(8);
     expect(browser.socket.readyState).toBe(WebSocket.OPEN);
-    expect(log).toHaveBeenCalledOnce();
+    expect(problemsIn(log)).toHaveLength(1);
     expect(log).toHaveBeenCalledWith("warn", {}, "live microphone over its allowance");
   });
 
@@ -650,7 +650,7 @@ describe("a live call", () => {
     expect(fake.attempts).toBe(1);
     next.socket.close();
     await next.closed;
-    expect(api.log).not.toHaveBeenCalled();
+    expect(problemsIn(api.log)).toEqual([]);
   });
 
   it("tells the browser and hangs up when Gemini can't be reached", async () => {
@@ -687,7 +687,7 @@ describe("a live call", () => {
     await vi.waitFor(() => expect(api.fake.attempts).toBe(2));
     next.socket.close();
     await next.closed;
-    expect(api.log).not.toHaveBeenCalled();
+    expect(problemsIn(api.log)).toEqual([]);
   });
 
   it("ends after half an hour, however many connections to Gemini that took", async () => {

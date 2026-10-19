@@ -302,6 +302,9 @@ export class LiveRelay {
    * what's next.
    */
   private ownMove = false;
+  /** When the relay began, and whether Director's first word has been timed from it. */
+  private readonly createdAt: number;
+  private voiced = false;
   /** Microphone audio is being dropped for running over its allowance (logged once a burst). */
   private audioOver = false;
   /**
@@ -327,6 +330,7 @@ export class LiveRelay {
     private readonly options: RelayOptions,
   ) {
     this.shot = options.shot;
+    this.createdAt = options.now();
     this.timer = setTimeout(() => this.end("TIMEOUT"), options.maxDurationMs);
     this.audio = new SlidingBudget(AUDIO_WINDOW_BYTES, AUDIO_WINDOW_MS, options.now);
     this.turns = new SlidingBudget(TEXT_TURNS, TEXT_WINDOW_MS, options.now);
@@ -675,6 +679,7 @@ export class LiveRelay {
     // What the roll or the take was doing when nobody could hear it yet.
     this.restateScreen(line, this.screen.rollUntold, this.screen.takeUntold);
     this.startedAt = this.options.now();
+    this.options.log("info", { msToReady: this.startedAt - this.createdAt }, "live call ready");
     this.options.onCallStarted();
     this.pacer.heard();
     if (!moved) {
@@ -794,6 +799,7 @@ export class LiveRelay {
       if (part.inlineData?.mimeType.startsWith("audio/pcm")) {
         this.gate.turnGoesOn();
         this.turn.spoke(Buffer.byteLength(part.inlineData.data, "base64"));
+        this.firstVoice();
         this.toClient({ type: "audio", pcm16: part.inlineData.data });
       }
     }
@@ -817,6 +823,19 @@ export class LiveRelay {
       this.options.log("info", { ...turn, shot: this.shot + 1 }, "live turn");
       this.options.onTurn(turn, this.shot);
       this.gate.turnOver();
+    }
+  }
+
+  /**
+   * How long the member waited from the relay starting to Director's first word, once a
+   * call: with "live call checked" (the gateway) and "live call ready" (Gemini's setup), it
+   * shows where a slow start spends its time.
+   */
+  private firstVoice() {
+    if (!this.voiced) {
+      this.voiced = true;
+      const msToVoice = this.options.now() - this.createdAt;
+      this.options.log("info", { msToVoice }, "live first voice");
     }
   }
 
