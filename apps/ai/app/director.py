@@ -1664,7 +1664,7 @@ def create_asset_maker(settings: Settings, redis: Redis) -> AssetMaker | None:
                     settings.veo_location,
                 ),
             )
-            if settings.veo_model
+            if settings.veo_enabled
             else None
         ),
         per_clip=settings.director_tokens_per_clip,

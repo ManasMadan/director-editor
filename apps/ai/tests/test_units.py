@@ -16,13 +16,19 @@ from pydantic_ai.models import ModelRequestParameters
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RunUsage, UsageLimits
+from redis.asyncio import Redis
 
 from app.auth import verify
-from app.director import create_director_model, create_index_model, create_planner_agent
+from app.director import (
+    create_asset_maker,
+    create_director_model,
+    create_index_model,
+    create_planner_agent,
+)
 from app.errors import AppError
 from app.indexing import index_short, youtube_video
 from app.schemas import MAX_PLAN_TOKENS, IndexRequest, ShotPlanDraft
-from app.settings import AlignerSettings, IndexerSettings, Settings
+from app.settings import AlignerSettings, IndexerSettings, Settings, get_settings
 from tests.tokens import SECRET, service_token
 
 USER, ORG = uuid4(), uuid4()
@@ -454,3 +460,41 @@ async def test_a_drafted_callback_that_raises_is_not_retried_as_the_planner_fail
             drafted=drafted,
         )
     assert (len(calls), planner.runs, fallback.runs) == (1, 1, 0)
+
+
+def test_veo_clips_are_on_unless_turned_off() -> None:
+    """VEO_MODEL can't be emptied to turn clips off (an empty setting is read as unset, so
+    as its default): VEO_ENABLED does it."""
+    redis = Redis.from_url("redis://localhost:6379")  # pyright: ignore[reportUnknownMemberType]  # untyped options
+    on = create_asset_maker(
+        _settings(GOOGLE_API_KEY="test-key", GOOGLE_VERTEX="false", MEDIA_BUCKET="media"), redis
+    )
+    off = create_asset_maker(
+        _settings(
+            GOOGLE_API_KEY="test-key",
+            GOOGLE_VERTEX="false",
+            MEDIA_BUCKET="media",
+            VEO_ENABLED="false",
+        ),
+        redis,
+    )
+    # Emptied in the environment, as a deployment would: read as unset, so the default.
+    environment = {
+        "AI_DATABASE_URL": "postgresql://u:p@localhost/db",
+        "REDIS_URL": "redis://localhost:6379",
+        "AI_SERVICE_SECRET": SECRET,
+        "GOOGLE_API_KEY": "test-key",
+        "GOOGLE_VERTEX": "false",
+        "MEDIA_BUCKET": "media",
+        "VEO_MODEL": "",
+    }
+    with patch.dict(os.environ, environment, clear=True):
+        get_settings.cache_clear()
+        emptied = create_asset_maker(get_settings(), redis)
+    get_settings.cache_clear()
+    assert on is not None
+    assert off is not None
+    assert emptied is not None
+    assert on.clip_model == "veo-3.1-lite-generate-001"
+    assert off.clip_model is None
+    assert emptied.clip_model == "veo-3.1-lite-generate-001"
