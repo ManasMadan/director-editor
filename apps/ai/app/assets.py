@@ -226,9 +226,6 @@ class Artist:
         self.model_name = model_name
         self._checker = checker
 
-    async def draw(self, asset: Asset) -> Drawing:
-        return await self.draw_prompt(image_prompt(asset), drawn_aspect_ratio(asset))
-
     async def draw_prompt(
         self, prompt: str, aspect_ratio: str, pictures: tuple[Picture, ...] = ()
     ) -> Drawing:
@@ -594,15 +591,9 @@ class AssetMaker:
             )
         return guarded("\n".join(lines)), quoted_text(prompt), pictures
 
-    async def _film(self, org_id: UUID, plan_id: UUID, job: _Job, *, final: bool) -> None:
+    async def _film(self, org_id: UUID, plan_id: UUID, job: _Job, filmmaker: Filmmaker) -> None:
         """Makes a gap's Veo clip, counted against the workspace's allowance as a fixed
         `per_clip` (Veo is priced by the second, not by tokens)."""
-        filmmaker = self._filmmaker
-        if filmmaker is None:
-            await self._fail(
-                org_id, plan_id, job.row_id, job.asset.id, job.user_id, "FEATURE_DISABLED"
-            )
-            return
         await self._set(org_id, job.row_id, status="generating")
         reservation = await reserve(
             org_id,
@@ -642,8 +633,9 @@ class AssetMaker:
         )
 
     async def _draw(self, org_id: UUID, plan_id: UUID, job: _Job, *, final: bool) -> None:
-        if job.clip:
-            await self._film(org_id, plan_id, job, final=final)
+        # A job is a clip only when its row names Veo's model, which needs the filmmaker.
+        if job.clip and self._filmmaker is not None:
+            await self._film(org_id, plan_id, job, self._filmmaker)
             return
         await self._set(org_id, job.row_id, status="generating")
         reservation = await reserve(

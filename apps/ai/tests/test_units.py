@@ -22,7 +22,7 @@ from app.director import create_director_model, create_index_model, create_plann
 from app.errors import AppError
 from app.indexing import index_short, youtube_video
 from app.schemas import MAX_PLAN_TOKENS, IndexRequest, ShotPlanDraft
-from app.settings import IndexerSettings, Settings
+from app.settings import AlignerSettings, IndexerSettings, Settings
 from tests.tokens import SECRET, service_token
 
 USER, ORG = uuid4(), uuid4()
@@ -234,6 +234,36 @@ def test_production_refuses_plain_http_for_the_indexer_and_google_s_certificates
         _indexer_settings(**production, GOOGLE_CERTS_URL="http://127.0.0.1:1/certs")
     with pytest.raises(ValidationError, match="INDEXER_URL must be HTTPS"):
         _settings(**PRODUCTION, INDEXER_URL="http://indexer.test")
+
+
+def _aligner_settings(**env: str) -> AlignerSettings:
+    """The Cloud Run aligner's settings from exactly these values (see `_settings`)."""
+    base = {
+        "DIRECTOR_MODEL": "gemini-3.5-flash",
+        "ALIGNER_URL": "https://director-aligner-1.us-central1.run.app",
+        "ALIGNER_INVOKER": "director-vm@p.iam.gserviceaccount.com",
+    }
+    with patch.dict(os.environ, {}, clear=True):
+        return AlignerSettings.model_validate({**base, **env})
+
+
+def test_the_aligner_needs_a_way_to_gemini_and_https_in_production() -> None:
+    assert _aligner_settings(GOOGLE_API_KEY="key").google_vertex is False
+    assert _aligner_settings(GOOGLE_VERTEX="true", GOOGLE_CLOUD_PROJECT="p").google_vertex
+    with pytest.raises(ValidationError, match="GOOGLE_VERTEX=true needs GOOGLE_CLOUD_PROJECT"):
+        _aligner_settings(GOOGLE_VERTEX="true")
+    with pytest.raises(ValidationError, match="needs GOOGLE_API_KEY or GOOGLE_VERTEX=true"):
+        _aligner_settings()
+    production = {"NODE_ENV": "production", "GOOGLE_API_KEY": "key"}
+    assert _aligner_settings(**production).aligner_url.startswith("https:")
+    with pytest.raises(ValidationError, match="ALIGNER_URL and GOOGLE_CERTS_URL must be HTTPS"):
+        _aligner_settings(**production, ALIGNER_URL="http://aligner.test")
+    with pytest.raises(ValidationError, match="ALIGNER_URL and GOOGLE_CERTS_URL must be HTTPS"):
+        _aligner_settings(**production, GOOGLE_CERTS_URL="http://127.0.0.1:1/certs")
+    # The service calling it: over HTTPS in production too.
+    assert _settings(**PRODUCTION, ALIGNER_URL="https://aligner.test").aligner_url
+    with pytest.raises(ValidationError, match="ALIGNER_URL must be HTTPS"):
+        _settings(**PRODUCTION, ALIGNER_URL="http://aligner.test")
 
 
 def test_production_clips_only_on_the_cloud_run_clipper_over_https() -> None:

@@ -10,6 +10,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from "node:net";
 import type { INestApplicationContext } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import { zDirectorTakeOut } from "@repo/ai-client/schemas";
 import { orgIdSchema, recordingAttemptIdSchema } from "@repo/contracts/ids";
 import { SESSION_PASS_DELAY_MS } from "@repo/contracts/recording";
 import { createTestDatabase, type TestDatabase } from "@repo/db/testing";
@@ -190,22 +191,28 @@ async function takeRoute(
   if (mode.take === "deleteAfter") {
     await deleteSessionOfFile(take.fileId);
   }
-  return send(response, 201, {
-    id: row?.id,
-    shotIndex: take.shotIndex,
-    fileId: take.fileId,
-    kind: "video",
-    status: "pending",
-    error: null,
-    bestStartMs: null,
-    bestEndMs: null,
-    score: null,
-    feedback: null,
-    reason: null,
-    chosen: false,
-    origin: "shoot",
-    createdAt: new Date().toISOString(),
-  });
+  // Parsed with the service's own schema, so a field the service adds fails here, plainly,
+  // rather than as the client's refusal of the answer.
+  return send(
+    response,
+    201,
+    zDirectorTakeOut.parse({
+      id: row?.id,
+      shotIndex: take.shotIndex,
+      fileId: take.fileId,
+      kind: "video",
+      status: "pending",
+      error: null,
+      bestStartMs: null,
+      bestEndMs: null,
+      score: null,
+      feedback: null,
+      reason: null,
+      chosen: false,
+      origin: "shoot",
+      createdAt: new Date().toISOString(),
+    }),
+  );
 }
 
 /** The AI service's clip and take routes, checking the token the worker signs. */

@@ -5,10 +5,14 @@
  * database holds can't be read back.
  */
 import {
+  assetImageSchema,
   directorCutSchema,
   directorPlanSchema,
   directorTakeSchema,
   fileSchema,
+  recordingAttemptSchema,
+  recordingPartSchema,
+  recordingSessionSchema,
 } from "@repo/contracts/api";
 import pg from "pg";
 import { afterAll, beforeAll, expect, it } from "vitest";
@@ -31,6 +35,24 @@ const expected: Record<string, readonly string[]> = {
   // schema of it (director.service.ts); the contract serves them folded into
   // making/ready/failed, so there's no contract enum of these four to read.
   "ai.director_asset.director_asset_status_check": ["pending", "generating", "ready", "failed"],
+  // The member's own images, plus two the AI service stores in the same table but never
+  // serves among them (its AssetOrigin): a slot's default image, and a created plan's
+  // storyboard cards, which belong to no slot.
+  "ai.director_asset.director_asset_origin_check": [
+    "default",
+    "storyboard",
+    ...assetImageSchema.shape.origin.options,
+  ],
+  "app.recording_session.recording_session_status_check":
+    recordingSessionSchema.shape.status.options,
+  "app.recording_part.recording_part_camera_check": recordingPartSchema.shape.camera.options,
+  "app.recording_part.recording_part_content_type_check":
+    recordingPartSchema.shape.contentType.options,
+  "app.recording_attempt.recording_attempt_status_check":
+    recordingAttemptSchema.shape.status.options,
+  // A slice is served as the indexes of those uploaded (RecordingPart's `uploaded`), so
+  // there's no contract enum of its two states.
+  "app.recording_slice.recording_slice_status_check": ["pending", "uploaded"],
   // The removed Shorts feed's likes and saves: no service reads the table any more, and
   // it goes in a later release's migration; until then its CHECK stays as it was.
   "app.short_reaction.short_reaction_kind_check": ["like", "save"],

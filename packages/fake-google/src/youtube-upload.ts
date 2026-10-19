@@ -35,6 +35,8 @@ const metadataSchema = z.object({
   status: z.object({
     privacyStatus: z.enum(["private", "unlisted", "public"]),
     selfDeclaredMadeForKids: z.boolean().optional(),
+    // Altered or synthetic content: realistic footage made with AI.
+    containsSyntheticMedia: z.boolean().optional(),
   }),
 });
 type Metadata = z.infer<typeof metadataSchema>;

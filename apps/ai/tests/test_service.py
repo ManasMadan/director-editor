@@ -104,12 +104,19 @@ def test_director_is_off_without_its_model(
         response = without.post(
             "/v1/director/plans", json={"videoId": "dQw4w9WgXcQ"}, headers=headers(org, user)
         )
-    error = error_of(response)
-    assert (response.status_code, error.code, error.data.params) == (
-        404,
-        "FEATURE_DISABLED",
-        {"feature": "director"},
-    )
+        # Describing a template of one's own is part of Director, off with it.
+        described = without.post(
+            "/v1/director/brainstorm",
+            json={"text": "My morning coffee", "messages": [], "photos": []},
+            headers=headers(org, user),
+        )
+    for refused in (response, described):
+        error = error_of(refused)
+        assert (refused.status_code, error.code, error.data.params) == (
+            404,
+            "FEATURE_DISABLED",
+            {"feature": "director"},
+        )
 
 
 def test_the_worker_runs_and_stops_cleanly_without_director_s_model(client: TestClient) -> None:

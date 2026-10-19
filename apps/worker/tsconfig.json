@@ -1,1 +1,10 @@
-{ "extends": "@repo/typescript-config/nest.json", "include": ["src", "test", "*.config.ts"] }
+{
+  "extends": "@repo/typescript-config/nest.json",
+  "compilerOptions": {
+    // The generated AI client (packages/ai-client), which the recording clipper calls, is
+    // typed against the DOM's fetch types (BodyInit, RequestInfo); Node implements fetch,
+    // but only the DOM lib names them.
+    "lib": ["ES2024", "DOM"]
+  },
+  "include": ["src", "test", "*.config.ts"]
+}

@@ -1,6 +1,7 @@
 """Lining up a match cut (app/aligning.py, app/aligner.py) on real footage: synthetic
 clips written as MP4 files (tests/match_cut_videos.py), read through ffmpeg and aligned
-with OpenCV, with Gemini's boxes from the local Gemini API (tests/fakes.py)."""
+with OpenCV, with Gemini's boxes from the local Gemini API (tests/fakes.py). The tests
+that run ffmpeg are marked integration, as the clipper's are: the unit run has none."""
 
 import asyncio
 import base64
@@ -9,23 +10,33 @@ import socket
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
+import cv2
 import httpx
 import httpx2
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
 from app import aligning as aligning_module
+from app.aligner import services
 from app.aligning import (
     FPS,
     LocalAligner,
+    Patch,
     RemoteAligner,
     Similarity,
     aligning,
     apply,
     create_locator,
     frame_command,
+    jpeg,
+    match,
+    patch_of,
     pick_cut,
     read_frames,
+    refine,
+    seed_warp,
+    similarity,
     uncovered,
     within_tolerance,
 )
@@ -35,6 +46,7 @@ from app.errors import AppError
 from app.schemas import (
     AlignRequest,
     AlignResult,
+    Box,
     MatchCutAlignment,
     MatchCutTransform,
     TakeVideoType,
@@ -139,6 +151,7 @@ def _align(
 # ------------------------------------------------------------------------ acceptance
 
 
+@pytest.mark.integration
 def test_a_wrist_60_px_off_lines_up_within_tolerance(
     clips: Callable[[Placement, Placement], dict[str, tuple[str, bytes]]],
 ) -> None:
@@ -180,6 +193,7 @@ def test_a_wrist_60_px_off_lines_up_within_tolerance(
     assert b"the watch on the left wrist" in sent
 
 
+@pytest.mark.integration
 def test_a_wrist_held_still_in_both_is_cut_where_asked(
     clips: Callable[[Placement, Placement], dict[str, tuple[str, bytes]]],
 ) -> None:
@@ -190,6 +204,7 @@ def test_a_wrist_held_still_in_both_is_cut_where_asked(
     assert result.alignment.offsetBeforePx <= 2
 
 
+@pytest.mark.integration
 def test_an_anchor_gemini_cant_see_is_a_plain_cut(
     clips: Callable[[Placement, Placement], dict[str, tuple[str, bytes]]],
 ) -> None:
@@ -212,6 +227,7 @@ def test_an_anchor_gemini_cant_see_is_a_plain_cut(
     )
 
 
+@pytest.mark.integration
 def test_a_box_on_something_else_is_a_plain_cut(
     clips: Callable[[Placement, Placement], dict[str, tuple[str, bytes]]],
 ) -> None:
@@ -224,6 +240,7 @@ def test_a_box_on_something_else_is_a_plain_cut(
     assert result.alignment.status == "not-found"
 
 
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "box",
     [
@@ -245,6 +262,7 @@ def test_a_box_that_isnt_one_is_a_plain_cut(
     assert result.alignment.status == "not-found"
 
 
+@pytest.mark.integration
 def test_gemini_failing_is_upstream_unavailable_with_what_it_used(
     clips: Callable[[Placement, Placement], dict[str, tuple[str, bytes]]],
 ) -> None:
@@ -260,6 +278,7 @@ def test_gemini_failing_is_upstream_unavailable_with_what_it_used(
     assert raised.value.params["service"] == "gemini"
 
 
+@pytest.mark.integration
 def test_a_take_that_cant_be_read_is_upstream_unavailable() -> None:
     with serve_files({}) as storage, pytest.raises(AppError) as raised:
         asyncio.run(read_frames(f"{storage.url}/gone.mp4?sig=secret", "video/mp4", 0, 0.5))
@@ -269,6 +288,7 @@ def test_a_take_that_cant_be_read_is_upstream_unavailable() -> None:
     )
 
 
+@pytest.mark.integration
 def test_frames_are_fitted_to_the_finished_frame(tmp_path: Path) -> None:
     path = tmp_path / "a.mp4"
     write_clip(path, 1, Placement(270, 480), 1.0)
@@ -295,6 +315,7 @@ def test_ffmpeg_reads_a_take_in_the_jail_as_its_type_over_its_url_s_protocol_onl
     assert plain[plain.index("-f") + 1] == "mov"
 
 
+@pytest.mark.integration
 def test_a_take_that_isn_t_its_type_or_isn_t_in_storage_is_never_read(tmp_path: Path) -> None:
     path = tmp_path / "a.mp4"
     write_clip(path, 1, Placement(270, 480), 1.0)
@@ -461,6 +482,7 @@ def cloud_run(
     get_aligner_settings.cache_clear()
 
 
+@pytest.mark.integration
 def test_the_cloud_run_aligner_lines_up_a_cut_for_the_account_that_may_call_it(
     cloud_run: TestClient,
     identity: Identity,
@@ -489,6 +511,7 @@ def test_the_cloud_run_aligner_lines_up_a_cut_for_the_account_that_may_call_it(
     assert AlignResult.model_validate_json(response.content).alignment.status == "aligned"
 
 
+@pytest.mark.integration
 def test_a_read_given_up_on_stops_its_ffmpeg(monkeypatch: pytest.MonkeyPatch) -> None:
     """A read that takes too long, or that's cancelled (the other take's read failed), has
     its ffmpeg killed, not left waiting on storage."""
@@ -507,3 +530,61 @@ def test_a_read_given_up_on_stops_its_ffmpeg(monkeypatch: pytest.MonkeyPatch) ->
         assert raised.value.code == "UPSTREAM_UNAVAILABLE"
     finally:
         hung.close()
+
+
+# ------------------------------------------------------------------------ the pieces
+
+# The working frame's size (app/aligning.py), smaller than the finished one.
+WORK_WIDTH, WORK_HEIGHT = aligning_module.WIDTH, aligning_module.HEIGHT
+
+
+def textured() -> np.ndarray[tuple[int, int], np.dtype[np.float32]]:
+    """A working-size gray frame with texture everywhere, for matching to lock on to."""
+    noise = np.random.default_rng(1).random((WORK_HEIGHT, WORK_WIDTH), dtype=np.float32)
+    return np.asarray(cv2.GaussianBlur(noise * 255, (9, 9), 3), dtype=np.float32)
+
+
+def test_the_aligner_s_services_exist_only_while_it_runs() -> None:
+    with pytest.raises(RuntimeError, match="isn't started"):
+        _ = services()
+
+
+def test_a_frame_too_big_to_encode_is_refused() -> None:
+    with pytest.raises(ValueError, match="couldn't be encoded"):
+        _ = jpeg(np.zeros((70_000, 1, 3), dtype=np.uint8))
+
+
+def test_a_patch_too_big_to_grow_is_matched_at_the_sizes_that_fit() -> None:
+    frame = textured()
+    width, height = WORK_WIDTH - 10, WORK_HEIGHT - 10
+    patch = Patch(frame[:height, :width].copy(), 0, 0, width, height)
+    warp, score = match(patch, frame, None, 1.0)
+    assert score == pytest.approx(1, abs=1e-3)
+    assert apply(warp, 0, 0) == (pytest.approx(0), pytest.approx(0))
+
+
+def test_a_sighting_at_the_edge_searches_the_whole_frame() -> None:
+    frame = textured()
+    patch = patch_of(frame, Box(x=0.4, y=0.4, width=0.3, height=0.3))
+    # Gemini's box runs off the frame's corner, so no window around it fits the patch.
+    off_the_edge = Box(x=1, y=1, width=1, height=1)
+    warp, score = match(patch, frame, off_the_edge, 1.0)
+    assert score == pytest.approx(1, abs=1e-3)
+    assert apply(warp, 0, 0) == (pytest.approx(patch.x), pytest.approx(patch.y))
+
+
+def test_refining_keeps_the_seed_when_ecc_can_t_help() -> None:
+    frame = textured()
+    patch = patch_of(frame, Box(x=0.45, y=0.45, width=0.05, height=0.05))
+    seed = seed_warp(1, patch.x, patch.y)
+    # A blank frame: nothing to converge on.
+    blank = np.zeros((WORK_HEIGHT, WORK_WIDTH), dtype=np.float32)
+    assert np.array_equal(refine(patch, blank, seed), seed)
+    # The patch three times its size in the frame: ECC finds it, but that's no scale a
+    # phone moves by between takes.
+    tripled = cv2.resize(patch.pixels, (patch.width * 3, patch.height * 3))
+    zoomed = frame.copy()
+    zoomed[100 : 100 + patch.height * 3, 50 : 50 + patch.width * 3] = tripled
+    seed = seed_warp(3, 50, 100)
+    assert np.array_equal(refine(patch, zoomed, seed), seed)
+    assert similarity(seed)[0] == pytest.approx(3)

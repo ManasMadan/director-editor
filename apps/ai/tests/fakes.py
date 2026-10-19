@@ -42,7 +42,7 @@ def serve(
 ) -> Generator[Fake]:
     """Answers each POSTed path with its handler, and a GET of one of `objects` (by its
     key: its type and bytes) as Cloud Storage's JSON API does, its metadata or, with
-    `alt=media`, its bytes."""
+    `alt=media`, its bytes; a DELETE is a deleted object (204)."""
     fake = Fake(url="")
     stored = objects if objects is not None else {}
 
@@ -53,7 +53,13 @@ def serve(
             path = unquote(self.path)
             found = next(((k, v) for k, v in stored.items() if f"/o/{k}" in path), None)
             if found is None:
-                payload, content_type, status = b'{"error": "not found"}', "application/json", 404
+                # Cloud Storage's error body, which its client reads the code and message from.
+                missing: dict[str, object] = {"error": {"code": 404, "message": "No such object"}}
+                payload, content_type, status = (
+                    json.dumps(missing).encode(),
+                    "application/json",
+                    404,
+                )
             elif "alt=media" in path:
                 (content_type, payload), status = found[1], 200
             else:
@@ -91,6 +97,13 @@ def serve(
             self.send_header("content-length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
+
+        def do_DELETE(self) -> None:
+            # Cloud Storage deleting an object: nothing in the answer.
+            fake.received.append((self.path, b""))
+            fake.authorizations.append(self.headers.get("authorization"))
+            self.send_response(204)
+            self.end_headers()
 
         def log_message(self, format: str, *args: object) -> None:
             pass

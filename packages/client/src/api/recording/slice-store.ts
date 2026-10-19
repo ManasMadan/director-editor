@@ -163,8 +163,9 @@ export class IndexedDbSliceStore implements SliceStore {
   }
 
   async first() {
-    // IndexedDB keeps the items in key order: the first is a cursor's first step.
-    const cursor = await settled((await this.items()).openCursor());
+    // IndexedDB keeps the items in key order: the first is a cursor's first step. Its
+    // value is read as unknown (the DOM types it `any`) and parsed, like `all`'s.
+    const cursor: { value: unknown } | null = await settled((await this.items()).openCursor());
     return cursor ? storedItem.parse(cursor.value) : null;
   }
 

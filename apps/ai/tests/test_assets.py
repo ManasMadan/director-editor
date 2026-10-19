@@ -15,7 +15,12 @@ import pytest
 from fastapi.testclient import TestClient
 from psycopg.types.json import Jsonb
 
-from app.assets import MAX_DEFAULT_ASSETS, AssetsInterrupted, images_lock_key
+from app.assets import (
+    IMAGES_PER_MEMBER_PER_DAY,
+    MAX_DEFAULT_ASSETS,
+    AssetsInterrupted,
+    images_lock_key,
+)
 from app.plan_repair import repair_plan
 from app.schemas import DirectorPlanOut, ShotPlanDraft
 from app.settings import get_settings
@@ -670,3 +675,36 @@ def test_a_created_plan_s_storyboard_cards_are_drawn_and_follow_their_shots(
         (3, "ready"),
     ]
     assert [row[1] for row in images(org, plan.id)] == ["ready", "pending"]
+
+
+def test_a_member_s_full_day_leaves_a_created_plan_without_cards(
+    client: TestClient, google: tuple[Fake, dict[str, Callable[[bytes], Reply]]]
+) -> None:
+    org, user = new_org()
+    with serve_files({"/kitchen.jpg": ("image/jpeg", KITCHEN)}) as storage:
+        response = client.post(
+            "/v1/director/created", json=brief(storage), headers=headers(org, user)
+        )
+        plan = DirectorPlanOut.model_validate_json(response.content)
+        # Every image the member may have drawn today, already drawn.
+        _ = as_org(
+            org,
+            """INSERT INTO ai.director_asset
+                 (org_id, plan_id, user_id, asset_id, origin, status, updated_at)
+               SELECT %s, %s, %s, 'drawn-' || n, 'created', 'failed', now()
+                 FROM generate_series(1, %s) AS n""",
+            (org, plan.id, user, IMAGES_PER_MEMBER_PER_DAY),
+        )
+        google[1][GEMINI_PATH] = gemini_output(WRITTEN)
+        on_app_loop(
+            client,
+            lambda: creator().write(org, plan.id, [storage.url + "/kitchen.jpg"], user),
+        )
+    # The plan is written all the same; its cards wait for a day with room.
+    assert plan_of_created(client, org, user, plan.videoId).status == "ready"
+    cards = as_org(
+        org,
+        "SELECT count(*) FROM ai.director_asset WHERE plan_id = %s AND origin = 'storyboard'",
+        (plan.id,),
+    )
+    assert cards == [(0,)]

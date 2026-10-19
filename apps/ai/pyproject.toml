@@ -111,9 +111,10 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
-# `integration` tests need Postgres and Redis (bun run test:integration); the default
-# run (bun run test) is pure.
-markers = ["integration: needs Postgres and Redis"]
+# `integration` tests need Postgres and Redis, or ffmpeg on the PATH (bun run
+# test:integration); the default run (bun run test) is pure, and CI's unit job has no
+# ffmpeg.
+markers = ["integration: needs Postgres and Redis, or ffmpeg"]
 addopts = "-m 'not integration'"
 
 [tool.coverage.run]

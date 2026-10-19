@@ -1730,6 +1730,7 @@ def test_a_locate_needs_a_jpeg_gemini_and_budget(
     org, user = new_org()
     png = base64.b64encode(b"\x89PNG" + b"\x00" * 200).decode()
     assert error_of(locate(client, org, user, image=png)).code == "VALIDATION_FAILED"
+    assert error_of(locate(client, org, user, image="!" * 200)).code == "VALIDATION_FAILED"
     gemini[1][GEMINI_PATH] = gemini_error(503, "UNAVAILABLE")
     response = locate(client, org, user)
     assert (response.status_code, error_of(response).code) == (502, "UPSTREAM_UNAVAILABLE")
@@ -2021,7 +2022,65 @@ def test_a_take_needs_a_ready_plan_a_real_shot_and_the_shot_s_kind(client: TestC
         headers=headers(org, user),
     )
     assert error_of(response).code == "DIRECTOR_TAKE_KIND_MISMATCH"
+    # The plan has two shots: a third has nothing to take.
+    response = client.post(
+        "/v1/director/takes",
+        json={
+            "videoId": VIDEO,
+            "shotIndex": 2,
+            "fileId": str(new_file(user)),
+            "kind": "video",
+            "contentType": "video/webm",
+            "sourceUrl": "http://storage/x",
+        },
+        headers=headers(org, user),
+    )
+    assert error_of(response).code == "DIRECTOR_SHOT_NOT_FOUND"
     assert takes_of(client, org, user) == []
+
+
+def test_a_take_cut_from_an_attempt_the_pass_found_says_so(client: TestClient) -> None:
+    org, user = new_org()
+    plan = ready_plan(client, org, user)
+    file_id = new_file(user)
+    # The attempt the post-session pass added, and the file the worker cut from it.
+    session = uuid4()
+    with migrator() as db:
+        db.execute(
+            """INSERT INTO app.recording_session
+                 (id, org_id, user_id, plan_id, video_id, shot_count, status, expires_at,
+                  updated_at)
+               VALUES (%s, %s, %s, %s, %s, 2, 'done', now() + interval '1 day', now())""",
+            (session, org, user, plan.id, VIDEO),
+        )
+        db.execute(
+            """INSERT INTO app.recording_part (session_id, org_id, index, camera, content_type)
+               VALUES (%s, %s, 0, 'back', 'video/webm')""",
+            (session, org),
+        )
+        db.execute(
+            """INSERT INTO app.recording_attempt
+                 (org_id, session_id, number, shot_index, part_index, start_ms, end_ms,
+                  status, origin, reason, file_id, updated_at)
+               VALUES (%s, %s, 1, 0, 0, 5000, 8500, 'clipped', 'pass',
+                       'The cleanest delivery.', %s, now())""",
+            (org, session, file_id),
+        )
+    response = client.post(
+        "/v1/director/takes",
+        json={
+            "videoId": VIDEO,
+            "shotIndex": 0,
+            "fileId": str(file_id),
+            "kind": "video",
+            "contentType": "video/webm",
+            "sourceUrl": "http://storage/x",
+        },
+        headers=headers(org, user),
+    )
+    assert response.status_code == 201, response.text
+    take = DirectorTakeOut.model_validate_json(response.content)
+    assert (take.origin, take.reason) == ("pass", "The cleanest delivery.")
 
 
 def test_a_file_added_twice_is_one_take(client: TestClient) -> None:
@@ -2408,6 +2467,9 @@ def test_the_worker_runs_both_director_jobs(
     }
     with pytest.raises(ValidationError):
         on_app_loop(client, lambda: process(Job("unknown", {})))
+    # Without the pass (never, beside Director) a session-pass job can't run.
+    with pytest.raises(RuntimeError, match="without the pass"):
+        on_app_loop(client, lambda: director_processor(director())(session))
 
 
 def test_the_worker_runs_reviews_from_their_own_queue(

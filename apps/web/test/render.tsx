@@ -32,7 +32,8 @@ import { page } from "vitest/browser";
 import { Providers } from "@/app/providers";
 import { authClient } from "@/lib/auth-client";
 
-const mounted: { root: Root; container: HTMLElement }[] = [];
+/** What each test rendered; `live` goes false once it's unmounted. */
+const mounted: { root: Root; container: HTMLElement; live: { current: boolean } }[] = [];
 
 /** The test page's path and query, as the app sees them. */
 export const currentUrl = () => window.location.pathname + window.location.search;
@@ -40,9 +41,15 @@ export const currentUrl = () => window.location.pathname + window.location.searc
 /** How many times the page asked the router to refresh server components. */
 export const router = { refreshes: 0 };
 
-function TestRouter({ children }: { children: ReactNode }) {
+function TestRouter({ children, live }: { children: ReactNode; live: { current: boolean } }) {
   const [url, setUrl] = useState(currentUrl);
   const go = (method: "pushState" | "replaceState") => (href: string) => {
+    // An unmounted page is gone, as after a real page load: work it left running (a
+    // request answering UNAUTHENTICATED late) mustn't move the next test's page off its
+    // path, which would leave that page empty.
+    if (!live.current) {
+      return;
+    }
     window.history[method](null, "", href);
     setUrl(currentUrl());
   };
@@ -101,12 +108,13 @@ export async function renderPage(
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
-  mounted.push({ root, container });
+  const live = { current: true };
+  mounted.push({ root, container, live });
   const messages = await bundledMessages.load(locale);
   await syncSession();
   flushSync(() =>
     root.render(
-      <TestRouter>
+      <TestRouter live={live}>
         <Providers
           locale={locale}
           timeZone={options.timeZone ?? "UTC"}
@@ -125,7 +133,8 @@ export async function renderPage(
 export function cleanup() {
   // Toasts live in sonner's module state: without this, the next test's Toaster shows them.
   toast.dismiss();
-  for (const { root, container } of mounted.splice(0)) {
+  for (const { root, container, live } of mounted.splice(0)) {
+    live.current = false;
     root.unmount();
     container.remove();
   }
