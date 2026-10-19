@@ -183,11 +183,11 @@ describe("the board of shots", () => {
       "Shot 2 · The look",
       "Shot 3 · Wave",
     ]);
-    // 64px a second, within 120 to 360.
+    // 64px a second, within 208 to 360.
     expect(columns.map((column) => (column as HTMLElement).style.width)).toEqual([
       "288px",
-      "120px",
-      "128px",
+      "208px",
+      "208px",
     ]);
     const walkIn = page.getByRole("radiogroup", { name: "Takes of shot 1" });
     const takes = walkIn.getByRole("radio").elements();
@@ -250,6 +250,56 @@ describe("the board of shots", () => {
     await expect
       .element(walkIn.getByRole("link", { name: "Retake" }))
       .toHaveAttribute("href", "/director/abcdefghijk/shoot?shot=0&audio=voice");
+  });
+
+  it("keeps the note on the take playing, not on Director's pick once another is chosen", async () => {
+    const pick = directorTake({ shotIndex: 1, kind: "photo", score: 45, feedback: "Great pose." });
+    const failed = directorTake({ shotIndex: 1, kind: "photo", status: "failed" });
+    const listed = (picks: Picks) =>
+      board({
+        listed: [
+          boardShot(0, [first], { picked: first }),
+          boardShot(1, [failed, pick], { picked: pick, needsRetake: true }),
+          boardShot(2, []),
+        ],
+        picks,
+      });
+    const before = await listed({});
+    const look = before.page.getByRole("group", { name: "Shot 2 · The look" });
+    await expect.element(look.getByText("Great pose.")).toBeVisible();
+    // The member swaps to the take Director couldn't review: the pick's praise goes with it.
+    const after = await listed({ 1: failed.id });
+    const swapped = after.page.getByRole("group", { name: "Shot 2 · The look" }).last();
+    await expect.element(swapped.getByText("Needs a retake")).toBeVisible();
+    expect(swapped.getByText("Great pose.").query()).toBeNull();
+  });
+
+  it("keeps a take's words at full strength when it isn't the one playing", async () => {
+    const failed = directorTake({ status: "failed" });
+    const { page } = await board({
+      listed: [
+        boardShot(0, [failed, first], { picked: first }),
+        boardShot(1, [look], { picked: look }),
+        boardShot(2, []),
+      ],
+    });
+    const words = page.getByText("Director couldn't review this take. Record it again.").element();
+    // Dimming the card faded this red to 4.2:1 against the board, under the 4.5:1 it needs.
+    let opacity = 1;
+    for (let node: Element | null = words; node; node = node.parentElement) {
+      opacity *= Number(getComputedStyle(node).opacity);
+    }
+    expect(opacity).toBe(1);
+  });
+
+  it("gives every control on the board a target of at least 44 px", async () => {
+    const { page } = await board();
+    const targets = [...page.getByRole("button").elements(), ...page.getByRole("link").elements()];
+    // Three headers, a stepper's two, a note's retake, a shot's retake and a "Film it".
+    expect(targets).toHaveLength(8);
+    for (const target of targets) {
+      expect(target.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    }
   });
 
   it("says a note's retake even when Director gave no feedback", async () => {

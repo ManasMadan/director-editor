@@ -65,8 +65,9 @@ function GuestOffer({
 }: DemoProps & { shared: DemoAccount | null; wanted: boolean }) {
   const errorMessage = useAuthErrorMessage();
   // Turnstile, while the API has captcha on: out of sight unless Cloudflare wants a tap,
-  // so the demo is still one tap for a person, and none for a bot.
-  const captcha = useCaptcha({ interactionOnly: true });
+  // so the demo is still one tap for a person, and none for a bot. With a shared account to
+  // fall back on, the fallback's own notice is the one thing said when the check stalls.
+  const captcha = useCaptcha({ interactionOnly: true, alert: shared === null });
   const [guest, setGuest] = useState<GuestState>({ state: wanted ? "starting" : "idle" });
   const start = async () => {
     setGuest({ state: "starting" });

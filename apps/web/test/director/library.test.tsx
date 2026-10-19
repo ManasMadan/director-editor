@@ -83,9 +83,15 @@ describe("the library", () => {
     });
     await showLibrary();
     const quick = page.getByRole("link", { name: /Quick start/ });
-    await expect.element(quick).toHaveAttribute("href", "/director/22k0fZarxh8");
+    // Straight to the shoot: quick means no template page to read first.
+    await expect.element(quick).toHaveAttribute("href", "/director/22k0fZarxh8/shoot");
     await expect.element(quick).toMatchTextContent(/4 Variations of the Indian Head Nod/);
     await expect.element(quick).toMatchTextContent(/Just you, talking to the camera\./);
+    // Under the heading, before the cards to index or describe a short: above a phone's fold.
+    const index = page.getByRole("button", { name: "Index it" }).element();
+    expect(
+      quick.element().compareDocumentPosition(index) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("offers no quick start while that starter isn't in the library", async () => {

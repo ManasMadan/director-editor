@@ -44,7 +44,7 @@ export async function HeroChat() {
           </li>
         </ol>
         <div className="absolute inset-x-3 top-3 flex items-start justify-between gap-2">
-          <p className="grid text-xs font-medium">
+          <p className="grid min-w-0 text-xs font-medium">
             <span
               aria-hidden
               className="hero-before col-start-1 row-start-1 rounded-full bg-studio/70 px-2.5 py-1 backdrop-blur"
@@ -60,7 +60,7 @@ export async function HeroChat() {
           </p>
           <p
             aria-hidden
-            className="flex items-center gap-1.5 rounded-full bg-studio/70 px-2 py-1 font-mono text-xs tabular-nums backdrop-blur"
+            className="flex shrink-0 items-center gap-1.5 rounded-full bg-studio/70 px-2 py-1 font-mono text-xs whitespace-nowrap tabular-nums backdrop-blur"
           >
             <span className="hero-rec size-2 rounded-full bg-record motion-safe:animate-pulse" />
             {t("rec")}

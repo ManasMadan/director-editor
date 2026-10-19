@@ -27,6 +27,7 @@ declare const messages: {
       "system": "System"
     },
     "captchaFailed": "The security check couldn't load. Check your connection, allow challenges.cloudflare.com if you use a blocker, and reload.",
+    "captchaStalled": "The security check didn't finish. If it shows a box, tap it, or reload the page to try again.",
     "nav": "Main"
   },
   "meta": {
@@ -153,6 +154,8 @@ declare const messages: {
   "auth": {
     "signInTitle": "Welcome back",
     "signInDescription": "Sign in with your email and password.",
+    "demoTitle": "Try Director, no sign-up",
+    "demoDescription": "Your own demo opens in a moment. Have an account? Sign in below.",
     "signUpTitle": "Create your account",
     "signUpDescription": "We'll email you a code to verify your address.",
     "google": "Continue with Google",
@@ -933,7 +936,7 @@ declare const messages: {
       "openMedia": "Open My media",
       "wrap": {
         "title": "That's a wrap!",
-        "body": "I cut your takes together, best moments first. Make any last changes, then tap Save video."
+        "body": "Your takes are cut together, best moments first. Make any last changes, then tap {save}."
       },
       "talk": {
         "label": "Tell Director what to change",

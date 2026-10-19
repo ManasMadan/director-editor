@@ -87,19 +87,36 @@ export interface Captcha {
 }
 
 /**
+ * Why no token is coming: the script never loaded, or the widget is there but hasn't
+ * passed (Cloudflare wants a tap, or isn't answering). Calling the second "couldn't load"
+ * contradicted the widget on screen.
+ */
+function CaptchaAlert({ failed }: { failed: boolean }) {
+  const t = useTranslations("common");
+  return (
+    <p role="alert" className="text-sm text-destructive">
+      {failed ? t("captchaFailed") : t("captchaStalled")}
+    </p>
+  );
+}
+
+/**
  * `interactionOnly` keeps the widget out of sight unless Cloudflare wants the person to
  * do something (Turnstile's `appearance: "interaction-only"`): for one-tap flows like the
- * demo, where a box to tick would be one tap too many.
+ * demo, where a box to tick would be one tap too many. `alert: false` leaves saying that
+ * the check can't finish to a form that has its own way on (the demo's shared account),
+ * so the page shows one message, not two.
  */
-export function useCaptcha({ interactionOnly = false } = {}): Captcha {
+export function useCaptcha({ interactionOnly = false, alert = true } = {}): Captcha {
   const { data: system } = useSystemInfoQuery();
   const siteKey = system?.captchaSiteKey ?? null;
   const locale = useLocale();
   const container = useRef<HTMLDivElement>(null);
   const widgetId = useRef<string | undefined>(undefined);
   const [token, setToken] = useState<string | null>(null);
+  // The script never arrived (blocked or offline): not the same as a widget that loaded
+  // and is waiting on the person or on Cloudflare, which mustn't be called unloaded.
   const [failed, setFailed] = useState(false);
-  const t = useTranslations("common");
 
   useEffect(() => {
     const element = container.current;
@@ -154,11 +171,7 @@ export function useCaptcha({ interactionOnly = false } = {}): Captcha {
     widget: siteKey ? (
       <div>
         <div ref={container} data-testid="captcha" />
-        {unavailable ? (
-          <p role="alert" className="text-sm text-destructive">
-            {t("captchaFailed")}
-          </p>
-        ) : null}
+        {unavailable && alert ? <CaptchaAlert failed={failed} /> : null}
       </div>
     ) : null,
     // Until system.info answers, a submit might lack the token the API then requires.

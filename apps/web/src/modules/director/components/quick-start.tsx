@@ -10,13 +10,15 @@ import { thumbnailUrl } from "@/modules/shorts";
 /**
  * The library's "Quick start": the one starter anyone can shoot right away, alone and
  * indoors (QUICK_START_VIDEO_ID), above the rest, so whoever has a few minutes, a judge on
- * the demo most of all, needn't weigh six cards first.
+ * the demo most of all, needn't weigh six cards first. It opens the shoot itself, on the
+ * first shot with the member speaking: the start card there says what happens next, and
+ * the template page would only be one more screen and one more tap.
  */
 export function QuickStart({ plan }: { plan: DirectorPlan }) {
   const t = useTranslations("library.quickStart");
   return (
     <Link
-      href={`/director/${plan.videoId}`}
+      href={`/director/${plan.videoId}/shoot`}
       className="group flex items-center gap-4 rounded-2xl bg-studio-foreground/8 p-3 ring-1 ring-studio-foreground/15 outline-none transition-colors hover:bg-studio-foreground/12 focus-visible:ring-2 focus-visible:ring-studio-foreground motion-reduce:transition-none"
     >
       <span className="relative aspect-9/16 w-16 shrink-0 overflow-hidden rounded-xl bg-studio-foreground/5">

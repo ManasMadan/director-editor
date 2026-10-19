@@ -347,6 +347,15 @@ describe("the editor", { tags: ["files"] }, () => {
       .element(page.getByRole("heading", { name: "Saved to My media" }))
       .not.toBeInTheDocument();
     await expect.element(save).toBeEnabled();
+    // Back in the editor, it still says the video is saved, and where.
+    const savedNote = page.getByRole("status").filter({ hasText: "Saved to My media" });
+    await expect
+      .element(savedNote.getByRole("link", { name: "Open My media" }))
+      .toHaveAttribute("href", "/media");
+    // Until the edit changes: then the saved video is no longer this edit.
+    await userEvent.click(page.getByRole("button", { name: "Captions" }));
+    await userEvent.click(page.getByRole("button", { name: "Classic" }));
+    await expect.element(savedNote).not.toBeInTheDocument();
 
     // And in My media, under its template, ready to play.
     cleanup();

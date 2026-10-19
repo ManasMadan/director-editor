@@ -153,6 +153,8 @@ describe("sign in", () => {
     await expect
       .element(page.getByText("Your own demo couldn't start just now.", { exact: false }))
       .toBeVisible();
+    // One notice, not a second one about the check contradicting it.
+    expect(page.getByRole("alert").elements()).toHaveLength(1);
     const card = page.getByRole("region", { name: "Try Director with the demo account" });
     await expect.element(card.getByText(DEMO.password)).toBeVisible();
     await expect.element(page.getByLabelText("Email")).toHaveValue(DEMO.email);
@@ -203,8 +205,9 @@ describe("sign in", () => {
       const page = await renderPage(<SignInPage />, { url: "/sign-in?demo=1" });
       await expect
         .element(page.getByRole("alert"), { timeout: 12_000 })
+        // The widget did load: it's waiting, so the page doesn't say it couldn't load.
         .toHaveTextContent(
-          "The security check couldn't load. Check your connection, allow challenges.cloudflare.com if you use a blocker, and reload.",
+          "The security check didn't finish. If it shows a box, tap it, or reload the page to try again.",
         );
       const card = page.getByRole("region", { name: "Just looking? Use the demo." });
       await expect.element(card.getByRole("button", { name: "Use the demo" })).toBeDisabled();
@@ -212,6 +215,39 @@ describe("sign in", () => {
     } finally {
       Object.assign(window, { turnstileSilent: false });
     }
+  });
+
+  it("falls back to the shared account with one notice when the check stalls", {
+    timeout: 20_000,
+  }, async () => {
+    await serveSystemInfo(withCaptcha);
+    Object.assign(window, { turnstileSilent: true });
+    try {
+      const page = await renderPage(<SignInPage />, { url: "/sign-in?demo=1" });
+      const card = page.getByRole("region", { name: "Try Director with the demo account" });
+      await expect.element(card, { timeout: 12_000 }).toBeVisible();
+      // The widget loaded and waits: nothing says it couldn't load, and the fallback says why.
+      expect(page.getByRole("alert").elements()).toHaveLength(1);
+      await expect
+        .element(page.getByRole("alert"))
+        .toMatchTextContent(/^Your own demo couldn't start just now\./);
+    } finally {
+      Object.assign(window, { turnstileSilent: false });
+    }
+  });
+
+  it("greets a visitor from the landing page's demo link as one trying it, not as a member", async () => {
+    // Held on this page (no guest to be had), where the greeting can be read.
+    await commands.failRequests("/api/auth/sign-in/guest", {
+      status: 503,
+      body: { code: "DEMO_GUESTS_FULL", message: "Full." },
+    });
+    const page = await renderPage(<SignInPage />, { url: "/sign-in?demo=1" });
+    await expect.element(page.getByText("Try Director, no sign-up")).toBeVisible();
+    expect(page.getByText("Welcome back").query()).toBeNull();
+    cleanup();
+    const member = await renderPage(<SignInPage />, { url: "/sign-in" });
+    await expect.element(member.getByText("Welcome back")).toBeVisible();
   });
 
   it("falls back to the shared demo account, in the form, when no guest can be made", async () => {

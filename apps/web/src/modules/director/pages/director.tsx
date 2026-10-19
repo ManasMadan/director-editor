@@ -41,7 +41,7 @@ function BackLink({ className }: { className?: string }) {
       href="/library"
       aria-label={t("backToLibrary")}
       className={cn(
-        "flex size-10 items-center justify-center rounded-full hover:bg-studio-foreground/10",
+        "flex size-11 items-center justify-center rounded-full hover:bg-studio-foreground/10",
         className,
       )}
     >
@@ -89,7 +89,7 @@ function AudioChoice({
           <label
             key={mode}
             className={cn(
-              "flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold transition-colors has-focus-visible:ring-2 has-focus-visible:ring-studio-foreground/60",
+              "flex flex-1 cursor-pointer items-center justify-center gap-2 min-h-11 rounded-full px-4 text-sm font-semibold transition-colors has-focus-visible:ring-2 has-focus-visible:ring-studio-foreground/60",
               value === mode
                 ? "bg-studio-foreground text-studio"
                 : "bg-studio-foreground/10 text-studio-foreground",
@@ -176,7 +176,7 @@ function TemplateBar({
         type="button"
         onClick={onToggleSound}
         aria-label={muted ? t("unmute") : t("mute")}
-        className="flex size-10 shrink-0 items-center justify-center rounded-full hover:bg-studio-foreground/10"
+        className="flex size-11 shrink-0 items-center justify-center rounded-full hover:bg-studio-foreground/10"
       >
         {muted ? (
           <VolumeX className="size-5" aria-hidden />
@@ -188,7 +188,7 @@ function TemplateBar({
   );
 }
 
-/** The original short, big, with what it takes to make it over its foot. */
+/** The original short, big, with what it takes to make it right under it. */
 function Hero({
   plan,
   videoId,
@@ -211,7 +211,7 @@ function Hero({
   return (
     <>
       <TemplateBar title={plan.title} muted={muted} onToggleSound={toggleSound} />
-      <section className="relative flex justify-center bg-black">
+      <section className="flex justify-center bg-black">
         <YouTubeEmbed
           // A new part to play is a new player: it starts muted, as autoplay must.
           key={watching ?? "all"}
@@ -221,33 +221,39 @@ function Hero({
           options={heroOptions(shot, true)}
           className="pointer-events-none aspect-9/16 h-[min(68dvh,calc(100vw*16/9))]"
         />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-2 bg-linear-to-t from-studio via-studio/70 to-transparent p-4 pt-16">
-          <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-medium">
-            <span className="flex items-center gap-1.5 rounded-full bg-studio/70 px-3 py-1 text-xs font-semibold">
-              <Sparkles className="size-3.5 text-record" aria-hidden />
-              {plan.format}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Clock className="size-4" aria-hidden />
-              {timecode(plan.durationSeconds)}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Film className="size-4" aria-hidden />
-              {t("template.shots", { count: plan.shots.length })}
-            </span>
-          </p>
-          {shot && watching !== null ? (
-            <p className="pointer-events-auto flex items-center gap-3 text-sm">
-              <span className="font-semibold text-record">
-                {t("template.playing", { index: watching + 1, title: shot.title })}
-              </span>
-              <button type="button" onClick={onWatchAll} className="underline underline-offset-4">
-                {t("template.watchAll")}
-              </button>
-            </p>
-          ) : null}
-        </div>
       </section>
+      {/* Under the player, not over its foot: YouTube draws the short's own title, channel
+          and Share button there, and the two read as one jumble. */}
+      <div className="flex flex-col gap-2 px-4 pt-3">
+        <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-medium">
+          <span className="flex items-center gap-1.5 rounded-full bg-studio-foreground/10 px-3 py-1 text-xs font-semibold">
+            <Sparkles className="size-3.5 text-record" aria-hidden />
+            {plan.format}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Clock className="size-4" aria-hidden />
+            {timecode(plan.durationSeconds)}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Film className="size-4" aria-hidden />
+            {t("template.shots", { count: plan.shots.length })}
+          </span>
+        </p>
+        {shot && watching !== null ? (
+          <p className="flex items-center gap-3 text-sm">
+            <span className="font-semibold text-record">
+              {t("template.playing", { index: watching + 1, title: shot.title })}
+            </span>
+            <button
+              type="button"
+              onClick={onWatchAll}
+              className="min-h-11 underline underline-offset-4"
+            >
+              {t("template.watchAll")}
+            </button>
+          </p>
+        ) : null}
+      </div>
     </>
   );
 }
@@ -338,7 +344,7 @@ function Soundtrack({ url, media }: { url: string | undefined; media: MediaLinks
         onClick={toggle}
         aria-label={t("playSoundtrack")}
         aria-pressed={playing}
-        className="flex size-10 shrink-0 items-center justify-center rounded-full bg-studio-foreground text-studio transition-transform active:scale-95"
+        className="flex size-11 shrink-0 items-center justify-center rounded-full bg-studio-foreground text-studio transition-transform active:scale-95"
       >
         {playing ? (
           <Pause className="size-4 fill-current" aria-hidden />
