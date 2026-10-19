@@ -24,6 +24,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { type FormEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { authClient } from "@/lib/auth-client";
 import { DirectorGate, YouTubeEmbed } from "@/modules/shorts";
 import { DirectorCaptions, DirectorOrb, useLiveFailure } from "../components/director-captions";
 import { MarksLayer } from "../components/marks-layer";
@@ -141,6 +142,7 @@ function StartCard({
   title,
   first,
   roll,
+  sharedDemo,
   leftoverMs,
   ready,
   onStart,
@@ -151,6 +153,8 @@ function StartCard({
   first: boolean;
   /** The shoot records as one roll (else take by take, on the shutter). */
   roll: boolean;
+  /** The shared demo account, where takes record on the shutter: it's said up front. */
+  sharedDemo: boolean;
   /** Footage an earlier visit left on this device, being sent now. */
   leftoverMs: number;
   /** Whether it's known yet if Director can join here. */
@@ -176,6 +180,9 @@ function StartCard({
           <p className="mt-2 text-[0.9375rem] leading-snug text-studio-foreground/85">
             {t(introOf(first, roll))}
           </p>
+          {sharedDemo ? (
+            <p className="mt-2 text-sm text-studio-foreground/80">{t("intro.sharedDemo")}</p>
+          ) : null}
           {leftover > 0 ? (
             <p role="status" className="mt-2 text-sm text-studio-foreground/80">
               {t("roll.leftover", { seconds: leftover })}
@@ -193,6 +200,41 @@ function StartCard({
       </div>
     </div>
   );
+}
+
+/**
+ * The shared demo account (everyone trying Director without a guest of their own signs in
+ * as it), as the API tells it apart: a demo user at the demo's address. The API won't
+ * record its whole shoots, since they'd be everyone's to see.
+ */
+function useSharedDemo() {
+  const system = useSystemInfoQuery();
+  const { data } = authClient.useSession();
+  const demo = system.data?.demo;
+  return (
+    demo !== null &&
+    demo !== undefined &&
+    data?.user.demo === true &&
+    data.user.email === demo.email
+  );
+}
+
+/**
+ * How this screen records: as one roll with Director on, or take by take on the shutter
+ * without it, where the browser can't record, or on the shared demo account. That last is
+ * known before Start, so the start card says what will really happen.
+ */
+function useRecordingMode() {
+  const system = useSystemInfoQuery();
+  const liveOn = system.data?.features.live === true;
+  const sharedDemo = useSharedDemo();
+  const canRoll = liveOn && typeof MediaRecorder !== "undefined";
+  return {
+    liveOn,
+    rollOn: canRoll && !sharedDemo,
+    /** The roll would be on, but not on this account: the start card says why. */
+    demoNoRoll: canRoll && sharedDemo,
+  };
 }
 
 /** No camera to show: why, and the way back to one. */
@@ -934,13 +976,11 @@ function Review({ shoot }: { shoot: ReturnType<typeof useShoot> }) {
  */
 function ShootScreen(shootProps: ShootProps) {
   const system = useSystemInfoQuery();
-  const liveOn = system.data?.features.live === true;
+  const { liveOn, rollOn, demoNoRoll } = useRecordingMode();
   const memory = useMemory();
   const [started, setStarted] = useState(false);
   const shoot = useShoot(shootProps);
   const { camera, live, studio } = shoot;
-  // With Director on, the shoot records as one roll; without it, take by take.
-  const rollOn = liveOn && typeof MediaRecorder !== "undefined";
   const roll = useRollShoot({ props: shoot.props, camera, live, wanted: started && rollOn });
   useLayoutEffect(() => {
     shoot.mark.current = roll.mark;
@@ -975,6 +1015,7 @@ function ShootScreen(shootProps: ShootProps) {
             title={shootProps.plan.title}
             first={memory.before.sessions === 0}
             roll={rollOn}
+            sharedDemo={demoNoRoll}
             leftoverMs={roll.upload.behindMs}
             ready={system.data !== undefined}
             onStart={start}

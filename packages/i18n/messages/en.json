@@ -742,7 +742,8 @@
         "first": "Director sees your camera and hears you while you get set, and talks you through each shot. A take records only when you tap the shutter. Your browser asks for the camera and microphone next.",
         "again": "Director sees and hears you while you get set. A take records only when you tap the shutter.",
         "rollFirst": "Director records the whole time you're shooting, chat included, so it can find your best moments. Only the clips you use go in your video. Pause any time. Your browser asks for the camera and microphone next.",
-        "rollAgain": "Director records the whole time you're shooting, chat included. Only the clips you use go in your video. Pause any time."
+        "rollAgain": "Director records the whole time you're shooting, chat included. Only the clips you use go in your video. Pause any time.",
+        "sharedDemo": "On the shared demo account, Director doesn't record the whole shoot, since everyone trying Director uses it. Sign up to have it record everything and find your best moments."
       },
       "start": "Start shooting",
       "starting": "Opening the camera…",

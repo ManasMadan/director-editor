@@ -1,10 +1,14 @@
-/** The shoot screen before "Start shooting": a way out, and which short and shot it is. */
+/**
+ * The shoot screen before "Start shooting": a way out and where you are, and copy that
+ * says what this account really records.
+ */
 import { useSearchParams } from "next/navigation";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { commands, userEvent } from "vitest/browser";
 import { ShootPage } from "@/modules/director";
+import { DEMO } from "../demo";
 import { currentUrl, renderPage } from "../render";
-import { signUp } from "../users";
+import { signIn, signUp } from "../users";
 import { newVideoId, planShot, readyPlan, shotPlan } from "./support";
 
 afterEach(() => {
@@ -45,6 +49,11 @@ describe("before Start shooting", () => {
     const { page, videoId } = await openShoot();
     await expect.element(page.getByText("Morning routine")).toBeVisible();
     await expect.element(page.getByText("Shot 2 of 2")).toBeVisible();
+    // A member's own shoot records the whole time, and the card says so.
+    await expect
+      .element(page.getByText("Director records the whole time", { exact: false }))
+      .toBeVisible();
+    expect(page.getByText("On the shared demo account", { exact: false }).query()).toBeNull();
     await userEvent.click(page.getByRole("link", { name: "Leave the shoot" }));
     await expect.poll(currentUrl).toBe(`/director/${videoId}`);
   });
@@ -55,5 +64,21 @@ describe("before Start shooting", () => {
     await expect
       .element(page.getByRole("link", { name: "Leave the shoot" }))
       .toHaveAttribute("href", `/director/${videoId}/edit?audio=voice`);
+  });
+
+  it("tells the shared demo account up front that takes record on the shutter", async () => {
+    // The shared account, as the API knows it: its address, flagged as the demo (the
+    // tests' database starts without it, so it's made here, then signed in to afresh).
+    const user = await signUp({ email: DEMO.email, password: DEMO.password });
+    await commands.sql('UPDATE auth."user" SET demo = true WHERE id = $1', [user.id]);
+    await signIn(user);
+    const { page } = await openShoot();
+    await expect
+      .element(page.getByText("A take records only when you tap the shutter.", { exact: false }))
+      .toBeVisible();
+    await expect
+      .element(page.getByText("On the shared demo account", { exact: false }))
+      .toBeVisible();
+    expect(page.getByText("records the whole time", { exact: false }).query()).toBeNull();
   });
 });
