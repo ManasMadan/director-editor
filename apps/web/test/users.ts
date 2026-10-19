@@ -5,6 +5,7 @@
 import { createApiClient } from "@repo/client";
 import { commands } from "vitest/browser";
 import { authClient } from "@/lib/auth-client";
+import { DEMO } from "./demo";
 
 /** The typed API client, as the page's signed-in user (for setup the UI doesn't offer). */
 export const api = createApiClient().client;
@@ -88,6 +89,21 @@ export const currentSession = () =>
 /** Signs `user` in on the page (replacing whoever was). */
 export const signIn = (user: Pick<User, "email" | "password">) =>
   auth("/sign-in/email", { email: user.email, password: user.password });
+
+/**
+ * Signs the page in to the demo account (DEMO), making it first when no test has yet.
+ * Every browser test shares one API and database, so a second sign-up of the address
+ * would get no code: whichever file asks first makes it, and the rest sign in.
+ */
+export async function demoAccount(): Promise<User> {
+  const found = await commands.sql('SELECT id FROM auth."user" WHERE email = $1', [DEMO.email]);
+  if (found.length === 0) {
+    return signUp({ ...DEMO, name: "Director Demo" });
+  }
+  await signIn(DEMO);
+  const { user } = await currentSession();
+  return { ...DEMO, name: user.name, id: user.id };
+}
 
 /** Turns on two-step verification for the signed-in user; returns its secret and backup codes. */
 export async function enableTwoFactor(user: User) {

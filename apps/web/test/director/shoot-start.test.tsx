@@ -6,9 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page as browser, commands, userEvent } from "vitest/browser";
 import { ShootPage } from "@/modules/director";
-import { DEMO } from "../demo";
 import { currentUrl, renderPage } from "../render";
-import { signIn, signUp } from "../users";
+import { demoAccount, signIn, signUp } from "../users";
 import { newVideoId, planShot, readyPlan, shotPlan } from "./support";
 
 afterEach(async () => {
@@ -83,8 +82,9 @@ describe("before Start shooting", () => {
 
   it("tells the shared demo account up front that takes record on the shutter", async () => {
     // The shared account, as the API knows it: its address, flagged as the demo (the
-    // tests' database starts without it, so it's made here, then signed in to afresh).
-    const user = await signUp({ email: DEMO.email, password: DEMO.password });
+    // tests' database starts without it, so it's made or found here, then signed in to
+    // afresh for a session that carries the flag).
+    const user = await demoAccount();
     await commands.sql('UPDATE auth."user" SET demo = true WHERE id = $1', [user.id]);
     await signIn(user);
     const { page } = await openShoot();

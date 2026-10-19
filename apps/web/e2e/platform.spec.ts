@@ -161,8 +161,10 @@ test.describe("accessibility (WCAG 2.2 AA)", () => {
   ]) {
     test(`public page ${path}`, async ({ page }) => {
       await page.goto(path);
-      // A form's submit button waits for the captcha; check the page once it's usable.
+      // A form's submit button, and the demo card's, wait for the captcha; check the page
+      // once they're usable, or a button still fading in reads as low contrast.
       await expect(page.locator("button[type=submit]:disabled")).toHaveCount(0);
+      await expect(page.getByRole("button", { name: /the demo$/, disabled: true })).toHaveCount(0);
       await expectAccessible(page);
     });
   }
