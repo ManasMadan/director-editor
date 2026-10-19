@@ -6,7 +6,7 @@
  */
 import { directorSeeds } from "@repo/contracts/director-seeds";
 import { userIdSchema } from "@repo/contracts/ids";
-import { required } from "@repo/contracts/objects";
+import { fieldOf, required } from "@repo/contracts/objects";
 import { factories } from "@repo/db/testing";
 import { DATABASE, type Database } from "@repo/nest-common";
 import pg from "pg";
@@ -363,6 +363,34 @@ describe("what the demo account can't do", () => {
   it.each(writes)("%s answers DEMO_ACCOUNT_LOCKED", async (_name, write) => {
     const session = await signedInAsDemo();
     await expect(write(session.rpc)).rejects.toMatchObject({ code: "DEMO_ACCOUNT_LOCKED" });
+  });
+
+  it("holds each visitor to their own limits, so one can't lock it for everyone", async () => {
+    const one = await signedInAsDemo();
+    const two = await signedInAsDemo();
+    // Director's slower line (off here, so FEATURE_DISABLED once its limit is spent):
+    // ten turns a minute, a visitor.
+    const paste = (session: Awaited<ReturnType<typeof signedInAsDemo>>) =>
+      session.rpc.director
+        .chat({
+          videoId: "dQw4w9WgXcQ",
+          shotIndex: 0,
+          turn: { kind: "said", text: "Hi" },
+          adaptations: [],
+          recent: [],
+          answers: [],
+        })
+        .then(
+          () => "answered",
+          (error: unknown) => fieldOf(error, "code"),
+        );
+    const first: unknown[] = [];
+    for (let i = 0; i < 11; i++) {
+      first.push(await paste(one));
+    }
+    expect(first.at(-1)).toBe("RATE_LIMITED");
+    // Another visitor, from another address, on the same account: not locked out.
+    expect(await paste(two)).not.toBe("RATE_LIMITED");
   });
 
   it("can't rename itself or change its picture, but keeps its own time zone", async () => {

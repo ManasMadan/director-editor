@@ -48,7 +48,7 @@ import {
   updateContext,
 } from "@repo/nest-common";
 import type { Auth } from "../auth/auth";
-import { DEMO_EMAIL } from "../auth/demo";
+import { DEMO_EMAIL, visitorLimitKey } from "../auth/demo";
 import { sessionWithIds } from "../auth/ids";
 import type { Memberships } from "../auth/memberships";
 import { env } from "../env";
@@ -269,7 +269,12 @@ export function createProcedures(auth: Auth, memberships: Memberships, redis: Re
         orgId: result.session.activeOrganizationId ?? undefined,
         locale: required(result.user.locale, "the locale"),
       });
-      await spendLimit(meta, { user: result.user.id }, result.user.guestUntil != null);
+      const sharedDemo = result.user.demo === true && result.user.email === DEMO_EMAIL;
+      await spendLimit(
+        meta,
+        { user: visitorLimitKey(result.user.id, sharedDemo) },
+        result.user.guestUntil != null,
+      );
       return next({ context: { user: result.user, session: result.session } });
     },
   );
@@ -284,7 +289,11 @@ export function createProcedures(auth: Auth, memberships: Memberships, redis: Re
     }) => {
       const caller = await orgCaller(context.headers);
       updateContext({ userId: caller.userId, orgId: caller.orgId });
-      await spendLimit(meta, { user: caller.userId, org: caller.orgId }, caller.guest);
+      await spendLimit(
+        meta,
+        { user: visitorLimitKey(caller.userId, caller.sharedDemo), org: caller.orgId },
+        caller.guest,
+      );
       return next({ context: caller });
     },
   );

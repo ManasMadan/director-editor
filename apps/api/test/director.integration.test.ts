@@ -594,7 +594,7 @@ describe("Director's library", () => {
     });
   });
 
-  it("refuses links that aren't a short Director can film, before the AI service hears of them", async () => {
+  it("refuses links that aren't a short Director can film, before the AI service indexes them", async () => {
     const { session } = await signedIn();
     const before = aiCalls.length;
     const tooLong = await expectError(
@@ -605,7 +605,51 @@ describe("Director's library", () => {
     for (const url of [`https://youtu.be/${GONE}`, "https://example.com/watch?v=x"]) {
       await expectError(session.rpc.director.index({ url }), "DIRECTOR_VIDEO_UNAVAILABLE");
     }
-    expect(aiCalls.length).toBe(before);
+    // Only asked whether the library has them (to open one that is): never to index them.
+    expect(aiCalls.slice(before).map((call) => call.route)).toEqual([
+      `GET /v1/director/plans/${LONG}`,
+      `GET /v1/director/plans/${GONE}`,
+    ]);
+  });
+
+  it("opens a short already in the library as often as asked, and limits only new links", async () => {
+    const { session, me } = await signedIn();
+    const template = readyTemplate(String(me.activeOrganizationId), "Short2xxxxx");
+    const asked = youtubeCalls.length;
+    for (let i = 0; i < 12; i++) {
+      await expect(
+        session.rpc.director.index({ url: `https://www.youtube.com/shorts/Short2xxxxx` }),
+      ).resolves.toMatchObject({ id: template.id });
+    }
+    // Opening one asks YouTube nothing either.
+    expect(youtubeCalls.length).toBe(asked);
+    // Links that aren't in the library cost a lookup each: ten an hour.
+    for (let i = 0; i < 10; i++) {
+      await expectError(
+        session.rpc.director.index({ url: `https://youtu.be/${GONE}` }),
+        "DIRECTOR_VIDEO_UNAVAILABLE",
+      );
+    }
+    await expectError(
+      session.rpc.director.index({ url: `https://youtu.be/${GONE}` }),
+      "RATE_LIMITED",
+    );
+    // Still free to open what's there.
+    await expect(session.rpc.director.index({ url: "Short2xxxxx" })).resolves.toMatchObject({
+      id: template.id,
+    });
+  });
+
+  it("indexes again a short whose plan failed, and passes on a library it can't read", async () => {
+    const { session, me } = await signedIn();
+    readyTemplate(String(me.activeOrganizationId), VIDEO, null, { status: "failed" });
+    const before = aiCalls.length;
+    await session.rpc.director.index({ url: VIDEO });
+    expect(aiCalls.slice(before).map((call) => call.route)).toEqual([
+      `GET /v1/director/plans/${VIDEO}`,
+      "POST /v1/director/plans",
+    ]);
+    await expectError(session.rpc.director.index({ url: BROKEN }), "UPSTREAM_UNAVAILABLE");
   });
 
   it("passes on a second short of the member's own as DIRECTOR_INDEX_LIMIT", async () => {

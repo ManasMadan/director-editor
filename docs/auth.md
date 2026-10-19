@@ -117,10 +117,15 @@ builders (`apps/api/src/rpc/procedures.ts`) apply it once they know who's callin
 user or per workspace, with `createRateLimiter` (`packages/nest-common/src/rate-limit.ts`),
 shared across replicas through Redis; past it the call gets `RATE_LIMITED` with
 `retryAfterSeconds`. Declared limits, per user: file uploads (30 an hour), Director
-plans (30 an hour), indexing a short (10 an hour), finding
-something for one of Director's marks (60 a minute) and takes
-(120 an hour). Everyday changes (the profile, saving a cut) share one allowance of 120 a
-minute per user, which lets Redis outages through.
+plans (30 an hour), finding something for one of Director's marks (60 a minute) and
+takes (120 an hour). Everyday changes (the profile, saving a cut) share one allowance of
+120 a minute per user, which lets Redis outages through. Indexing a short is the one
+limit a service keeps (`DirectorService.index`, 10 an hour): a link to a short already
+in the library only opens it and counts for nothing, which the builders can't know.
+
+On the shared demo account, which everyone signs in to, a per-user limit is kept per
+user and address (`visitorLimitKey` in `apps/api/src/auth/demo.ts`): one visitor who
+uses one up doesn't lock the demo for everyone else.
 
 The client IP comes from `X-Forwarded-For` only when the peer is in `TRUSTED_PROXIES`;
 the API overwrites the header better-auth sees with that resolved address, so a client

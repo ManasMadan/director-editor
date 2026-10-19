@@ -29,10 +29,23 @@
  * account then stays as the fallback for when a guest can't be made.
  */
 import { fieldOf } from "@repo/contracts/objects";
+import { currentContext } from "@repo/nest-common";
 import { APIError } from "better-auth/api";
 
 /** The demo account's address: on Director's own domain, so nobody else can own it. */
 export const DEMO_EMAIL = "demo@director.mmadan.in";
+
+/**
+ * Whose allowance a per-user rate limit spends: the user's, or on the shared demo account,
+ * which everyone signs in to, that user's from this address. Otherwise one visitor who
+ * used it up would lock the demo for everyone else for the rest of the window. A visitor
+ * changing address gets a fresh allowance, but only on an account that can't publish,
+ * change itself or record, and whose AI spend is still bounded by its workspace's monthly
+ * allowance.
+ */
+export function visitorLimitKey(userId: string, sharedDemo: boolean) {
+  return sharedDemo ? `${userId}:${currentContext()?.ip ?? "unknown"}` : userId;
+}
 
 /**
  * The auth endpoints the demo account may not use: changing its password, deleting it,

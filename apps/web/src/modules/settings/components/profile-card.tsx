@@ -38,7 +38,8 @@ const TIME_ZONES = ["UTC", ...Intl.supportedValuesOf("timeZone").filter((zone) =
 const nativeName = (locale: string) =>
   String(new Intl.DisplayNames([locale], { type: "language" }).of(locale));
 
-export function ProfileCard() {
+/** `nameLocked`: the name is shown and not editable (the demo's, until the session says). */
+export function ProfileCard({ nameLocked = false }: { nameLocked?: boolean }) {
   const t = useTranslations("settings.profile");
   const { data: me } = useMeQuery();
   return (
@@ -50,6 +51,7 @@ export function ProfileCard() {
       <CardContent>
         {me ? (
           <ProfileForm
+            nameLocked={nameLocked}
             initial={{
               name: me.name,
               locale: isLocale(me.locale) ? me.locale : "en",
@@ -92,7 +94,13 @@ function LanguageSelect({
   );
 }
 
-function ProfileForm({ initial }: { initial: { name: string; locale: Locale; timezone: string } }) {
+function ProfileForm({
+  initial,
+  nameLocked,
+}: {
+  initial: { name: string; locale: Locale; timezone: string };
+  nameLocked: boolean;
+}) {
   const t = useTranslations();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -132,6 +140,7 @@ function ProfileForm({ initial }: { initial: { name: string; locale: Locale; tim
           name="name"
           label={t("settings.profile.name")}
           autoComplete="name"
+          disabled={nameLocked}
         />
         <Controller
           control={form.control}

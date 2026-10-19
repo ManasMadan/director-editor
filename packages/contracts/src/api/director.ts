@@ -564,9 +564,15 @@ export const directorContract = {
    * (DIRECTOR_VIDEO_UNAVAILABLE) and a Short (DIRECTOR_TOO_LONG). Each member indexes one
    * short of their own (DIRECTOR_INDEX_LIMIT; one that failed doesn't count, and is tried
    * again). A short already in the library is answered with its plan, counting for no one.
+   * Links that aren't are limited (RATE_LIMITED): ten an hour a member.
    */
   index: route("POST", "/director/library", "Index a short")
-    .meta({ rateLimit: { name: "director-index", points: 10, windowSeconds: HOUR_S, per: "user" } })
+    .meta({
+      rateLimit: {
+        exempt:
+          "limited in apps/api's DirectorService.index, which knows what the builders can't: a link to a short already in the library only opens it, costing nothing, so only the others count",
+      },
+    })
     .input(z.object({ url: z.string().trim().min(1).max(SHORT_URL_MAX_LENGTH) }))
     .output(directorPlanSchema),
   /** The workspace's plan for a short (DIRECTOR_PLAN_NOT_FOUND unless it's in the library). */

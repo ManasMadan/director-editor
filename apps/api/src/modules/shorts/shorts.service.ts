@@ -39,6 +39,11 @@ export class ShortsService {
    * when the link isn't a YouTube video or YouTube won't show it (private, removed),
    * DIRECTOR_TOO_LONG past SHORT_MAX_SECONDS.
    */
+  /** The video a pasted link names, without asking YouTube; null when it names none. */
+  videoIdOf(link: string): VideoId | null {
+    return videoIdFromLink(link);
+  }
+
   async filmable(link: string): Promise<Video> {
     const videoId = videoIdFromLink(link);
     const video = videoId ? await this.video(videoId) : null;

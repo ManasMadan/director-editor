@@ -232,6 +232,7 @@ declare const messages: {
   },
   "settings": {
     "title": "Settings",
+    "demoLocked": "This is the demo, so its name, picture, email and security can't be changed. Create your own account to change them.",
     "profile": {
       "title": "Profile",
       "description": "How you appear and how we talk to you.",
