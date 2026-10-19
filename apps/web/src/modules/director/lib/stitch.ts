@@ -29,7 +29,6 @@
  * The takes are read from blobs (fetched through short-lived storage URLs, so the canvas
  * stays CORS-clean: a canvas that drew a cross-origin video can't be recorded).
  */
-import { uploadPurposes } from "@repo/contracts/files";
 import { required } from "@repo/contracts/objects";
 import { SECOND_MS } from "@repo/contracts/time";
 import { type CaptionInk, drawCaption } from "./caption-draw";
@@ -37,6 +36,13 @@ import { type CaptionLine, type CaptionStyle, captionAt } from "./captions";
 import type { Composer, Picture } from "./compose";
 import { caughtUp, type Written } from "./drain";
 import { loadedVideo, recorderFormat } from "./media";
+import {
+  AUDIO_BITS_PER_SECOND,
+  IncompleteRender,
+  OUTPUT_HEIGHT,
+  OUTPUT_WIDTH,
+  VIDEO_BITS_PER_SECOND,
+} from "./output";
 import { lastFrameSeconds } from "./recorded";
 import {
   FPS,
@@ -49,19 +55,6 @@ import {
 } from "./render-plan";
 import { keepScreenOn } from "./wake-lock";
 
-export const OUTPUT_WIDTH = 720;
-export const OUTPUT_HEIGHT = 1280;
-/**
- * About 4 Mbit/s of picture and 128 kbit/s of sound, for 720×1280 with captions: a
- * 3-minute Short comes to about 93 MB, inside a saved video's 100 MB upload (the virus
- * scanner's stream limit). Raising either means raising that limit with it.
- */
-const VIDEO_BITS_PER_SECOND = 4_000_000;
-const AUDIO_BITS_PER_SECOND = 128_000;
-/** The longest video that fits a saved video's upload at those rates. */
-export const MAX_SECONDS =
-  (uploadPurposes["director-cut-video"].maxBytes * 8) /
-  (VIDEO_BITS_PER_SECOND + AUDIO_BITS_PER_SECOND);
 /**
  * How the video is encoded: as it's saved, or lighter (540×960 at half the bitrate,
  * about half the encoder's work) for a second try on a device whose encoder fell behind.
@@ -73,14 +66,6 @@ const QUALITIES: Record<RenderQuality, { scale: number; videoBitsPerSecond: numb
 };
 /** How often the recording is checked while its encoder catches up. */
 const DRAIN_CHECK_MS = 500;
-
-/**
- * The recording came out with less picture than the edit: the encoder fell too far
- * behind (a busy device), and what it hadn't encoded was lost. Not a video to save.
- */
-export class IncompleteRender extends Error {
-  override name = "IncompleteRender";
-}
 
 /** How much a photo slowly zooms in over its time on screen. */
 const PHOTO_ZOOM = 0.06;

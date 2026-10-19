@@ -58,22 +58,16 @@ import { shotPage } from "../hooks/use-studio";
 import { type MediaState, useTakeMedia } from "../hooks/use-take-media";
 import { type AudioMode, parseAudio } from "../lib/audio";
 import { type CaptionLine, webVtt } from "../lib/captions";
-import { composer, type Picture } from "../lib/compose";
+import type { Picture } from "../lib/compose";
 import { type Clip, clipsOf, editLines, editSeconds, playsAsGap } from "../lib/edit";
 import { arrange, editorState, fixLines, UNARRANGED, withPick } from "../lib/editor-actions";
 import { gradeFilter } from "../lib/grades";
 import { captionInk } from "../lib/ink";
 import type { MatchCutTransform } from "../lib/match-cuts";
+import { IncompleteRender, MAX_SECONDS } from "../lib/output";
 import { cutPicks, pickedTakes } from "../lib/picks";
 import { gapSlots } from "../lib/scene";
-import {
-  IncompleteRender,
-  MAX_SECONDS,
-  type RenderQuality,
-  renderedSeconds,
-  type Segment,
-  stitch,
-} from "../lib/stitch";
+import type { RenderQuality, Segment } from "../lib/stitch";
 import { timecode } from "../lib/track";
 import {
   loadVisuals,
@@ -155,9 +149,13 @@ async function render(
   // tap (see lib/stitch.ts).
   const audio = new AudioContext();
   const resumed = audio.resume();
+  // The renderer loads on the first save, not with the editor: opening the editor on a
+  // phone shouldn't wait for code that only runs when a video is made.
+  const renderer = Promise.all([import("../lib/stitch"), import("../lib/compose")]);
   const visuals = await loadVisuals(slots);
   try {
     await resumed;
+    const [{ stitch }, { composer }] = await renderer;
     const hold = await heldPicture(clips, media);
     const once = (quality: RenderQuality) =>
       stitch(segmentsOf(clips, media, transforms), {
@@ -194,9 +192,16 @@ function renderedVideo(input: SaveInput, report: (saving: Saving) => void, signa
   );
 }
 
-/** How long the saved video is, gaps and all, in milliseconds: what My media shows. */
-const renderedMs = (input: SaveInput) =>
-  Math.round(renderedSeconds(segmentsOf(input.clips, input.media, input.transforms)) * SECOND_MS);
+/**
+ * How long the saved video is, gaps and all, in milliseconds: what My media shows. Asked
+ * of the renderer, which the render has loaded by then.
+ */
+async function renderedMs(input: SaveInput) {
+  const { renderedSeconds } = await import("../lib/stitch");
+  return Math.round(
+    renderedSeconds(segmentsOf(input.clips, input.media, input.transforms)) * SECOND_MS,
+  );
+}
 
 /**
  * The first filmed shot's card frame: what a skipped shot at the very start holds when
@@ -240,7 +245,7 @@ function useSaveVideo(videoId: string, title: string) {
         videoId,
         title,
         picks: input.picks,
-        durationMs: renderedMs(input),
+        durationMs: await renderedMs(input),
         file: new File([video], `director-${videoId}.${extension}`, { type: video.type }),
         signal,
       });
@@ -1046,6 +1051,10 @@ function Edit({
 
 /** The editor: the member's takes shot by shot, Director's picks, and saving the video. */
 export function EditPage(props: { videoId: string; audio: string | undefined; wrap: boolean }) {
+  // Asked for beside the gate's check that Director is on, not after it: on a phone's
+  // slow line each wait in turn is a round trip before the page shows.
+  useDirectorPlanQuery(props.videoId);
+  useYourVersionQuery(props.videoId);
   return (
     <DirectorGate>
       <Edit {...props} />
