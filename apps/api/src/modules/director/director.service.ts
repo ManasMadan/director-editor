@@ -9,7 +9,7 @@
  * asset images).
  */
 import { createHash } from "node:crypto";
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import {
   type BrainstormReply,
   type BriefInput,
@@ -44,8 +44,18 @@ import type {
 } from "@repo/contracts/ids";
 import { HOUR_S, MINUTE_S } from "@repo/contracts/time";
 import { TAKE_REVIEW_READ_S } from "@repo/jobs";
-import { AppError, describeError, InjectPinoLogger, PinoLogger } from "@repo/nest-common";
+import {
+  AppError,
+  createRateLimiter,
+  describeError,
+  InjectPinoLogger,
+  PinoLogger,
+  type RateLimiter,
+  REDIS,
+  type Redis,
+} from "@repo/nest-common";
 import * as z from "zod";
+import { visitorLimitKey } from "../../auth/demo";
 import { env } from "../../env";
 import { aiCaller, callAi } from "../ai";
 import { AnalyticsService } from "../analytics";
@@ -155,6 +165,12 @@ function toCut(row: unknown): DirectorCut {
 export class DirectorService {
   /** Director's slower line, for when Gemini Live can't run: off without a Google Cloud project. */
   private readonly chatLine: DirectorChat;
+  /**
+   * Links to index that aren't in the library yet, each a YouTube lookup: ten an hour a
+   * member. Kept here rather than in the contract, which would count opening a template
+   * already in the library too (director.index's meta says so).
+   */
+  private readonly indexLinks: RateLimiter;
 
   constructor(
     private readonly shorts: ShortsService,
@@ -162,7 +178,14 @@ export class DirectorService {
     private readonly recording: RecordingService,
     private readonly analytics: AnalyticsService,
     @InjectPinoLogger(DirectorService.name) private readonly log: PinoLogger,
+    @Inject(REDIS) redis: Redis,
   ) {
+    this.indexLinks = createRateLimiter(redis, {
+      name: "director-index",
+      points: 10,
+      windowSeconds: HOUR_S,
+      onRedisError: "deny",
+    });
     this.chatLine = new DirectorChat(
       chatUpstream({
         project: env.GOOGLE_CLOUD_PROJECT,
@@ -184,11 +207,45 @@ export class DirectorService {
     return { templates: await Promise.all(plans), indexUsed };
   }
 
-  /** Indexes the short a link points at, once it's known to be one Director can film. */
-  async index(userId: UserId, orgId: OrgId, url: string): Promise<DirectorPlan> {
+  /**
+   * Indexes the short a link points at, once it's known to be one Director can film. A
+   * short already in the library is only opened: free, and not asked of YouTube. Anything
+   * else spends the member's index allowance first (per visitor on the shared demo).
+   */
+  async index(
+    caller: { userId: UserId; orgId: OrgId; sharedDemo: boolean },
+    url: string,
+  ): Promise<DirectorPlan> {
+    const { userId, orgId } = caller;
+    const linked = this.shorts.videoIdOf(url);
+    const opened = linked ? await this.inLibrary(userId, orgId, linked) : null;
+    if (opened) {
+      return opened;
+    }
+    await this.indexLinks.take(visitorLimitKey(userId, caller.sharedDemo));
     const { videoId } = await this.shorts.filmable(url);
     const row = await callAi((ai) => ai.director.index(aiCaller(userId, orgId), videoId));
     return this.toPlan(row, { media: false });
+  }
+
+  /**
+   * The workspace's plan of the short, when it has one to open; null otherwise, and for
+   * one that failed, which indexing it again tries again.
+   */
+  private async inLibrary(
+    userId: UserId,
+    orgId: OrgId,
+    videoId: VideoId,
+  ): Promise<DirectorPlan | null> {
+    try {
+      const plan = await this.toPlan(await this.planRow(userId, orgId, videoId), { media: false });
+      return plan.status === "failed" ? null : plan;
+    } catch (error) {
+      if (error instanceof AppError && error.code === "DIRECTOR_PLAN_NOT_FOUND") {
+        return null;
+      }
+      throw error;
+    }
   }
 
   /** A template's own page (director.plan): with a seed's media linked. */

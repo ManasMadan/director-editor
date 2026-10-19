@@ -6,9 +6,7 @@ export const directorRouter = ({ inOrg, inPrivateOrg }: Procedures, director: Di
   library: inOrg.director.library.handler(({ context }) =>
     director.library(context.userId, context.orgId),
   ),
-  index: inOrg.director.index.handler(({ context, input }) =>
-    director.index(context.userId, context.orgId, input.url),
-  ),
+  index: inOrg.director.index.handler(({ context, input }) => director.index(context, input.url)),
   plan: inOrg.director.plan.handler(({ context, input }) =>
     director.plan(context.userId, context.orgId, input.videoId),
   ),
