@@ -68,7 +68,7 @@ describe("the shot card", () => {
       <ShotCard
         shot={planShot({ framing: { ...planShot().framing, note: "Head and shoulders." } })}
         index={0}
-        changed={new Set(["framing", "do"])}
+        changed={new Set(["framing", "do"] as const)}
       />,
     );
     const card = page.getByRole("region", { name: "Shot 1" });

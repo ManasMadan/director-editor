@@ -340,6 +340,15 @@ function directorRoute(
     found.plan = input.plan;
     return { status: 200, body: planBody(videoId, found) };
   }
+  // A re-plan of the member's version: the version as it was sent, the instruction noted
+  // as what changed (Gemini's re-plan is apps/ai's to test).
+  const revise = /^POST \/v1\/director\/plans\/([\w-]{11})\/revisions$/.exec(route);
+  if (revise?.[1]) {
+    return {
+      status: 200,
+      body: { version: input.version, summary: `Re-planned: ${String(input.instruction)}` },
+    };
+  }
   if (route === "POST /v1/director/editor-requests") {
     const next = short(String(input.videoId)).editorReplies?.shift();
     return next ? { status: 200, body: next } : failure(502, "UPSTREAM_UNAVAILABLE");

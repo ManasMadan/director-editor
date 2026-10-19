@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, userEvent } from "vitest/browser";
 import { ShootPage } from "@/modules/director";
 import { currentUrl, renderPage } from "../render";
-import { signUp, type User } from "../users";
+import { api, signUp, type User } from "../users";
 import {
   canvasCamera,
   FakeRecognizer,
@@ -398,16 +398,31 @@ describe("talking it through with Director", () => {
 
   it("shows what Director remembers, and forgets a note when the member takes it away", async () => {
     canvasCamera();
-    const { page } = await openShoot({ shots: [walkIn, smile] });
+    const { page, videoId } = await openShoot({ shots: [walkIn, smile] });
     await startShooting(page);
+    // Director re-plans by what it remembers, and keeps the re-plan.
+    await send(page, "one angle is fine");
+    await expect
+      .element(page.getByRole("list", { name: "What Director remembers" }).getByText("One angle"))
+      .toBeVisible();
+    await expect.poll(() => commands.answeredRequests("/rpc/yourVersion/revise")).toBe(1);
+    // The next re-plan is held on its way, so the member's change comes while it's out.
+    await commands.holdRequests("/rpc/yourVersion/revise");
     await send(page, "I'm switching indoors");
     const chips = page.getByRole("list", { name: "What Director remembers" });
     await expect.element(chips.getByText("Indoors")).toBeVisible();
+    await expect.poll(() => commands.sentHeaders("/rpc/yourVersion/revise")).toHaveLength(2);
     await userEvent.click(page.getByRole("button", { name: "Forget “Indoors”" }));
-    await expect.element(chips).not.toBeInTheDocument();
+    await expect.element(chips.getByText("Indoors")).not.toBeInTheDocument();
+    await commands.releaseRequests("/rpc/yourVersion/revise");
     await expect
       .poll(turns)
       .toContainEqual(expect.stringContaining('[They removed "Indoors" from what you remember'));
+    // The re-plan came back with the note; the member's change made again on top is kept.
+    await expect
+      .poll(async () => (await api.yourVersion.get({ videoId })).notes)
+      .toEqual([{ kind: "angles", note: "One angle" }]);
+    expect(chips.getByText("Indoors").query()).toBeNull();
   });
 });
 
