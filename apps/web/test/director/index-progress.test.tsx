@@ -17,6 +17,16 @@ describe("indexing's progress", () => {
   it("says it's still working, and for how long, once it's taking a while", async () => {
     const page = await renderPage(<IndexProgress step="watching" since={ago(75)} />);
     await expect.element(page.getByText(/^Still working: 01:1\d so far$/)).toBeVisible();
+    // It counts on, a second at a time.
+    await expect.element(page.getByText(/^Still working: 01:1[6-9] so far$/)).toBeVisible();
+  });
+
+  it("says nothing of the time when it doesn't know when the step started", async () => {
+    const page = await renderPage(<IndexProgress step="writing" />);
+    await expect
+      .element(page.getByRole("list", { name: "Indexing progress" }).getByRole("listitem").nth(2))
+      .toHaveAttribute("aria-current", "step");
+    expect(page.getByText("so far", { exact: false }).query()).toBeNull();
   });
 
   it("says when it's taking longer than usual", async () => {

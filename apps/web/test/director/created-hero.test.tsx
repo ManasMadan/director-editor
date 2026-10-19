@@ -25,6 +25,22 @@ describe("a created template's storyboard", () => {
     await expect.element(page.getByText("No drawing: you've made today's images")).toBeVisible();
   });
 
+  it("shows a card that's drawn", async () => {
+    const plan: ServedShotPlan = {
+      ...shotPlan(),
+      shots: [
+        {
+          ...planShot({ title: "Froth", scene: "The kettle" }),
+          storyboardUrl: "https://cdn.test/froth.png",
+        },
+      ],
+    };
+    const page = await renderPage(<CreatedHero plan={plan} videoId="BA1mDsjg5Iw" />);
+    await expect
+      .element(page.getByRole("img", { name: "Storyboard for Froth: The kettle" }))
+      .toHaveAttribute("src", "https://cdn.test/froth.png");
+  });
+
   it("says so under a shot's sketch too", async () => {
     const page = await renderPage(<StoryboardStateNote state="failed" />);
     await expect.element(page.getByText("Director couldn't draw this shot")).toBeVisible();
