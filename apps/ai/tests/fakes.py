@@ -42,7 +42,7 @@ def serve(
 ) -> Generator[Fake]:
     """Answers each POSTed path with its handler, and a GET of one of `objects` (by its
     key: its type and bytes) as Cloud Storage's JSON API does, its metadata or, with
-    `alt=media`, its bytes."""
+    `alt=media`, its bytes; a DELETE is a deleted object (204)."""
     fake = Fake(url="")
     stored = objects if objects is not None else {}
 
@@ -91,6 +91,13 @@ def serve(
             self.send_header("content-length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
+
+        def do_DELETE(self) -> None:
+            # Cloud Storage deleting an object: nothing in the answer.
+            fake.received.append((self.path, b""))
+            fake.authorizations.append(self.headers.get("authorization"))
+            self.send_response(204)
+            self.end_headers()
 
         def log_message(self, format: str, *args: object) -> None:
             pass
