@@ -103,16 +103,20 @@ function trimmed(clip: Clip, trim: Trim | undefined): Clip {
 /** The clips with the member's trims and grades, in their order, laid end to end again. */
 export function arrange(clips: readonly Clip[], choices: EditorChoices): Clip[] {
   let at = 0;
-  return playOrder(choices, indexesOf(clips)).flatMap((index) => {
-    const clip = clipOf(clips, index);
-    if (!clip) {
-      return [];
-    }
-    const grade = choices.grades[index];
-    const placed = { ...trimmed(clip, choices.trims[index]), at, ...(grade ? { grade } : {}) };
-    at += placed.seconds;
-    return [placed];
-  });
+  const order = playOrder(choices, indexesOf(clips));
+  return clips
+    .filter((clip) => order.includes(clip.index))
+    .toSorted((a, b) => order.indexOf(a.index) - order.indexOf(b.index))
+    .map((clip) => {
+      const grade = choices.grades[clip.index];
+      const placed = {
+        ...trimmed(clip, choices.trims[clip.index]),
+        at,
+        ...(grade ? { grade } : {}),
+      };
+      at += placed.seconds;
+      return placed;
+    });
 }
 
 const indexesOf = (clips: readonly Clip[]) => clips.map((clip) => clip.index);

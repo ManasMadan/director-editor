@@ -66,7 +66,8 @@ export function caughtUp(checks: readonly Written[], expected: number, frame: nu
   if (last.picture < expected - piece) {
     return false;
   }
-  const since = last.at - (advances.at(-1)?.at ?? checks[0]?.at ?? last.at);
+  // Since the picture last grew, or since the wait began when it hasn't grown at all.
+  const since = last.at - (advances.at(-1)?.at ?? Math.min(...checks.map((check) => check.at)));
   const rate = pace(advances);
   const remaining = rate ? (expected - last.picture) / rate : 0;
   return since >= Math.max(STALL_MS, remaining);
