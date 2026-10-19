@@ -14,8 +14,8 @@ import {
   VerifyEmailPage,
 } from "@/modules/auth";
 import { DirectorPage, EditPage, LibraryPage, MediaPage, ShootPage } from "@/modules/director";
+import { LegalPage } from "@/modules/marketing";
 import { ProfileSettingsPage, SecuritySettingsPage, SettingsLayout } from "@/modules/settings";
-import { renderHtml } from "../../test/next-server";
 import * as edit from "./(app)/director/[videoId]/edit/page";
 import * as director from "./(app)/director/[videoId]/page";
 import * as shoot from "./(app)/director/[videoId]/shoot/page";
@@ -129,14 +129,10 @@ describe("route files", () => {
     expect(SettingsRouteLayout({ children })).toEqual(<SettingsLayout>{children}</SettingsLayout>);
   });
 
-  it.each([
-    [terms, en.legal.terms, en.legal.termsBody],
-    [privacy, en.legal.privacy, en.legal.privacyBody],
-  ])("renders the legal page %#", async (route, title, body) => {
-    expect(await route.generateMetadata()).toEqual({ title });
-    const html = await renderHtml(await rendered(route.default));
-    expect(html).toContain(title);
-    expect(html).toContain(body.slice(0, 40));
-    expect(html).toContain("September 29, 2026");
+  it("serves the legal pages, titled", async () => {
+    expect(await rendered(terms.default)).toEqual(<LegalPage document="terms" />);
+    expect(await terms.generateMetadata()).toEqual({ title: en.legal.terms });
+    expect(await rendered(privacy.default)).toEqual(<LegalPage document="privacy" />);
+    expect(await privacy.generateMetadata()).toEqual({ title: en.legal.privacy });
   });
 });

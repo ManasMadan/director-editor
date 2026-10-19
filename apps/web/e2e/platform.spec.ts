@@ -156,6 +156,7 @@ test.describe("accessibility (WCAG 2.2 AA)", () => {
     "/sign-up",
     "/forgot-password",
     "/terms",
+    "/privacy",
     "/does-not-exist",
   ]) {
     test(`public page ${path}`, async ({ page }) => {

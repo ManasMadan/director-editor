@@ -325,10 +325,139 @@ declare const messages: {
   "legal": {
     "terms": "Terms of service",
     "privacy": "Privacy policy",
-    "termsBody": "These terms govern your use of this service. Replace this text with your own terms before launch.",
-    "privacyBody": "This policy explains what data we collect and why. Replace this text with your own policy before launch.",
     "lastUpdated": "Last updated {date}",
-    "nav": "Legal"
+    "contents": "On this page",
+    "nav": "Legal",
+    "termsDoc": {
+      "intro": "<p>These terms are the agreement between you and Manas Madan, who runs Director (\"we\" and \"us\"), for using Director at director.mmadan.in. Please read them with the <privacy>privacy policy</privacy>, which says what Director does with your data.</p>",
+      "sections": {
+        "status": {
+          "title": "Director is an early demo",
+          "body": "<p>Director is an early, experimental product, offered free of charge while it's being built and shown. It runs on a limited budget, so its features, limits and availability can change, it may be slow or unavailable at times, and it may close. If it closes, we'll say so on the site first where we can, and delete the data it holds.</p>"
+        },
+        "using": {
+          "title": "Using Director",
+          "body": "<p>By creating an account or using Director, you agree to these terms. You must be at least 13, and old enough where you live to agree to them yourself, or have a parent's or guardian's permission. If you use Director for an organisation, you agree to them for it too.</p>"
+        },
+        "account": {
+          "title": "Your account",
+          "body": "<p>Give accurate details when you sign up and keep your sign-in safe: you're responsible for what's done with your account. If you think someone else has got into it, tell us at <mail>manasmadan08@gmail.com</mail>.</p><p>Demo guests and the shared demo account are for trying Director only. They're deleted after a day, and everyone who uses the shared account can see what's filmed in it.</p>"
+        },
+        "rules": {
+          "title": "What you may not do",
+          "body": "<p>Don't use Director to:</p><ul><li>film or record anyone without their permission, or anywhere recording isn't allowed;</li><li>make, upload or post anything illegal, any sexual content involving someone under 18, harassment, threats or hate, or content that encourages violence or self-harm;</li><li>infringe anyone's copyright, trademark, privacy or other rights;</li><li>make misleading content of a real person, such as making it look as if they said or did something they didn't;</li><li>break YouTube's rules when you post;</li><li>get around Director's limits, such as the AI allowance, the one Short each account may index, rate limits or the sign-in check, for example by making many accounts;</li><li>break into, overload, scrape or disrupt Director, or any account that isn't yours.</li></ul>"
+        },
+        "content": {
+          "title": "Your content",
+          "body": "<p>What you film, say, write and upload, and the videos you make with it, are yours (\"your content\"). You keep ownership of it.</p><p>So that Director can work, you give us a licence to store, copy, process, adapt and show your content, and to pass it to the services listed in the privacy policy, only to run Director for you: to direct your shoot, cut and review your takes, edit your video, and post it to YouTube when you ask. The licence is worldwide and free, and it ends when your content is deleted, apart from copies kept for a short time in backups. We don't use your content to advertise, we don't sell it, and we don't use it to train AI models.</p><p>You're responsible for your content. You confirm that you have the rights to everything in it, including the permission of everyone who appears in it or whose voice it records, and of the owners of any music, pictures or other material you add.</p>"
+        },
+        "templates": {
+          "title": "Other people's Shorts as templates",
+          "body": "<p>Director's templates are YouTube Shorts made by other creators. Director plays them in YouTube's own player and has Gemini study them, so it can suggest shots. That gives you no rights in the original: its video, sound, words and style belong to its creator.</p><p>Your video should be your own take on the idea, made with your own footage. If you film to the original's sound or reuse its words, music or other parts of it, you may need its owner's permission, and getting it is up to you. When you post, Director adds a credit to the original creator and a link to the original Short to your video's description: please keep them. Stock photos come with credits that Director adds too, and their providers' licences apply.</p>"
+        },
+        "ai": {
+          "title": "AI and its limits",
+          "body": "<p>Director is powered by Google's Gemini models. Its plans, directions, reviews, scores, transcripts, captions, pictures, clips and the posts it drafts are made by AI. They can be wrong, incomplete or not right for you, and Director can misunderstand what it sees and hears. Check them before you rely on them or post them: you decide what you film and publish. Director's suggestions aren't professional advice, so stay safe and aware of your surroundings while you film.</p><p>If your video uses a clip Director made with Google's Veo, Director tells YouTube that it contains altered or synthetic content when you post it, and YouTube labels it. Any other disclosure YouTube asks of you is up to you.</p><p>Director has limits so it can run on its budget: a monthly AI allowance per account, one Short of your own to index, at most 20 minutes of recording per shoot, at most 30 minutes per call with Director, and a daily limit on how many videos Director posts. We may change them.</p>"
+        },
+        "youtube": {
+          "title": "Posting to YouTube",
+          "body": "<p>Director posts only when you tap to post, to your own YouTube channel, with the permission you give through Google. By posting you agree to <ytTerms>YouTube's Terms of Service</ytTerms>, and the video is then on YouTube under YouTube's terms. Deleting your Director account doesn't remove it from YouTube: do that on YouTube. You can withdraw Director's access to your Google Account at any time.</p>"
+        },
+        "ours": {
+          "title": "Director itself",
+          "body": "<p>Director's software, design and name belong to us or to those who license them to us. These terms let you use Director as it's offered, and give you no other rights in it. If you send us ideas or feedback, we may use them freely.</p>"
+        },
+        "ending": {
+          "title": "Ending",
+          "body": "<p>You can stop using Director and delete your account at any time in Settings. We may suspend or close an account that breaks these terms or puts Director, its members or others at risk, and we may end Director altogether. The parts of these terms that by their nature should last, such as those on warranties and liability, still apply afterwards.</p>"
+        },
+        "warranty": {
+          "title": "No warranty",
+          "body": "<p>Director is provided free, \"as is\" and \"as available\". As far as the law allows, we make no promises about it, including that it will be available, accurate, secure, free of errors or fit for a particular purpose, or that your content will be kept safe. Keep your own copy of anything that matters to you: download your videos when you save them.</p>"
+        },
+        "liability": {
+          "title": "Liability",
+          "body": "<p>As far as the law allows, we aren't liable for any indirect, incidental, special or consequential loss, or for lost content, data, profits or opportunities, arising from your use of Director, and our total liability to you for anything to do with Director is limited to 50 US dollars. Nothing in these terms limits a liability the law doesn't allow to be limited, or takes away rights you have as a consumer where you live.</p>"
+        },
+        "changes": {
+          "title": "Changes to these terms",
+          "body": "<p>We may change these terms. We'll update the date at the top and, for a change that matters, say so on the site before it takes effect. If you keep using Director after that, the new terms apply; if you don't agree to them, stop using Director and delete your account.</p>"
+        },
+        "contact": {
+          "title": "Contact",
+          "body": "<p>Questions about these terms: <mail>manasmadan08@gmail.com</mail>.</p>"
+        }
+      }
+    },
+    "privacyDoc": {
+      "intro": "<p>Director helps you film your own version of a YouTube Short, with Gemini directing you through your camera. To do that it handles your camera, your microphone and the videos you make, so this page sets out exactly what Director collects, where it goes, how long it's kept and how to delete it.</p><p>Director is made and run by Manas Madan (\"we\" and \"us\" on this page). Questions go to <mail>manasmadan08@gmail.com</mail>.</p>",
+      "sections": {
+        "summary": {
+          "title": "The short version",
+          "body": "<ul><li>Director uses your camera and microphone only on the shoot screen, once you've allowed them in your browser.</li><li>While you shoot, what your camera sees and what you say go to Gemini on Google Cloud's Vertex AI, so Director can talk you through each shot. Under Google Cloud's terms, Google doesn't use it to train its AI models.</li><li>Director records the whole time you're shooting, your chat with Director included, until you tap Done. You can pause at any time. That raw recording is deleted automatically after 7 days, or at most 14 if you saved a video from it.</li><li>Your takes and saved videos stay in your account until you delete your account, or ask us to delete them.</li><li>Nothing goes to YouTube unless you tap to post it, and Director asks for permission to upload only when you first do.</li><li>No ads, no advertising trackers, and we never sell your data.</li><li>You can delete your account, and everything in it, from Settings at any time.</li></ul>"
+        },
+        "account": {
+          "title": "Your account",
+          "body": "<p>To make an account you either sign in with Google or sign up with your email address and a password.</p><ul><li><b>With Google</b>, Google gives us your name, email address and profile picture. At sign-in Director asks Google for your basic profile only.</li><li><b>With an email address</b>, we keep your name, your email address and your password, stored only as a one-way hash that can't be turned back into it. We email you a code to check the address is yours. When you choose a password, Director checks it against passwords leaked in public data breaches through the Have I Been Pwned service, which receives only the first few characters of the password's hash, never the password.</li></ul><p>We also keep the language and time zone your browser reports, so emails and dates read right; a profile picture, if you upload one (we remove its location and camera details); and what you set up to protect your account: passkeys (only their public half) and two-step verification (its secret and backup codes, encrypted).</p><p>Each time you sign in we keep a record of that session, with your IP address and your browser's name, so you can see your signed-in devices in Settings and sign them out. A session ends about 7 days after you last used it.</p><p>We email you only about your account: sign-in and verification codes, password resets, and alerts when something about your account's security changes.</p>"
+        },
+        "demo": {
+          "title": "Trying the demo",
+          "body": "<p>\"Try it now\" signs your browser in as a guest: a private account of its own, with a made-up address that can't receive email. Nobody else sees what a guest films. A guest, and everything made in it (its recordings, takes and videos), is deleted 24 hours after it was created. A guest can't post to YouTube or change its account.</p><p>If no guest can be made at that moment, the sign-in page offers a shared demo account instead. Everyone who uses the shared account can see what's filmed in it, so don't film anything there you wouldn't want strangers to see. Its takes and videos are deleted a day after they're made.</p>"
+        },
+        "shoot": {
+          "title": "When you shoot",
+          "body": "<p>Director uses your camera and microphone only on the shoot screen, and only once you've allowed them in your browser. This is what happens to them.</p><ul><li><b>Talking with Director.</b> While you shoot, your microphone's audio and about one picture a second from your camera go through our server to Gemini Live on Google Cloud's Vertex AI, in Google's us-central1 region in the United States, and Director's voice comes back. Gemini writes down what you both say, so your browser can show it as captions. We don't keep a written log of the conversation: what you say is in the recording described next. A call with Director lasts at most 30 minutes.</li><li><b>Recording.</b> From Start shooting until you tap Done, your browser records your camera and microphone, your chat with Director included, in ten-second pieces, and uploads each one straight to our Google Cloud Storage. Pieces still waiting to upload are kept in your browser's storage on your device until they're sent. Pause stops the recording, and Director can't see or hear you while it's paused. One shoot records at most 20 minutes.</li><li><b>Takes.</b> Each attempt at a shot is cut out of the recording as a take, on a private Google Cloud Run service. A few minutes after you tap Done, Gemini watches the whole recording once, to find good moments the live marks missed. Gemini also reviews every take: a score, a line of feedback, a description of what's in it and a transcript of what's said, kept with the take so you can find it in the editor.</li><li><b>Showing Director something.</b> When you ask Director to find something in view, the camera's current picture goes to Gemini to find it.</li><li><b>When Director can't go live.</b> If Gemini Live isn't available, you can type to Director, or talk through your browser's own speech recognition. That recognition belongs to your browser, so its maker (Google for Chrome, Apple for Safari) may process that audio under its own policy. What you type or say then goes to Gemini as text, and Director's replies are spoken by Gemini's text-to-speech.</li></ul>"
+        },
+        "content": {
+          "title": "What you make",
+          "body": "<ul><li><b>Templates.</b> When you paste a link to a YouTube Short, Gemini watches it on YouTube and writes a shot-by-shot plan, which we keep with a copy of the Short's original audio so you can film along to it. Each account can index one Short of its own.</li><li><b>Templates you describe.</b> If you describe an idea of your own instead, we keep what you typed, your answers to Director and any photos you add, and send them to Gemini to plan it.</li><li><b>Your version.</b> As you talk with Director, it keeps a version of the template that's yours: notes of a few words about what you told it (where you're filming, who's in it, what you'd rather not do), and the shots it changed, skipped or left for the editor to fill.</li><li><b>Takes and videos.</b> Every take, with its review, and every video you save from the editor. Videos are put together in your browser, then uploaded.</li><li><b>Photos and pictures.</b> Photos you upload are checked for viruses on our own server and stored with your account. Pictures and short clips Director makes for you with Google's image and Veo video models are stored too, with the words they were made from.</li><li><b>Likes and saves</b> of Shorts in the library.</li></ul><p>We also count how much of its monthly AI allowance each account uses.</p>"
+        },
+        "youtube": {
+          "title": "YouTube",
+          "body": "<p>Director uses YouTube API Services. Shorts play in YouTube's own player, from its privacy-enhanced domain (youtube-nocookie.com), and Director reads Shorts' public details, such as their title and channel, from YouTube's API. Google's use of that information is covered by the <googlePrivacy>Google Privacy Policy</googlePrivacy>.</p><p>Posting a video is up to you. The first time you post, Director asks Google for permission to upload videos to your YouTube channel, and for nothing more. We keep the access Google gives us, encrypted, and use it only when you tap to post, after you've checked the title, description and visibility (unlisted unless you change it). Once posted, the video is on YouTube under YouTube's terms, and deleting your Director account doesn't remove it from YouTube. You can withdraw Director's access at any time in your <googlePermissions>Google Account's security settings</googlePermissions>.</p>"
+        },
+        "analytics": {
+          "title": "Analytics and logs",
+          "body": "<ul><li><b>Product analytics.</b> To understand how Director is used, we record events such as a call started, a take reviewed, or a video saved or posted, in Google BigQuery. An event holds ids (yours, the template's and the Short's), the time, counts, scores and timings, such as how long Director took to answer. It never holds your name, your email address, your footage, or the words you or Director said.</li><li><b>Server logs.</b> Our servers log what happens on them, to keep Director running and secure: who did what (your account id, name and email address), your IP address and your browser.</li><li><b>Security log.</b> A record of security events on accounts (account created, signed in and out, password and two-step changes, account deleted), with ids rather than content.</li></ul><p>How long each is kept is in \"How long we keep it\" below.</p>"
+        },
+        "sharing": {
+          "title": "Who else handles your data",
+          "body": "<p>We don't sell your data or share it for advertising. These services handle it for us, only to run Director:</p><ul><li><b>Google Cloud</b>: the server Director runs on and its database; Cloud Storage for recordings, takes, videos and photos; Vertex AI's Gemini, Gemini Live, image, Veo and text-to-speech models; Cloud Run, for cutting takes and indexing Shorts; and BigQuery, for analytics.</li><li><b>Cloudflare</b>: Director's domain and the network in front of the site, which every visit passes through, and Turnstile, which checks that a sign-in comes from a person.</li><li><b>Resend</b>: delivers Director's emails.</li><li><b>YouTube</b> (Google): plays Shorts, provides their public details, and receives the videos you choose to post.</li><li><b>Have I Been Pwned</b>: checks new passwords against known breaches, as described above.</li><li><b>Pexels and Pixabay</b>: when stock photo search is available, the words you search for go to them.</li></ul><p>We may also disclose information when the law requires it, or to protect Director, its members or others from harm.</p>"
+        },
+        "location": {
+          "title": "Where your data is",
+          "body": "<p>Director runs on Google Cloud in the United States, in the us-central1 region (Iowa), and so does Gemini Live. Director's other Gemini requests go through Vertex AI's global endpoint, which Google may serve from any of its locations. If you live outside the United States, your data is transferred there.</p>"
+        },
+        "retention": {
+          "title": "How long we keep it",
+          "body": "<ul><li><b>Raw recordings</b> (everything recorded while you shoot): deleted 7 days after they're recorded. Saving a video from one keeps it for 7 days from that save, but never more than 14 days after it was recorded. As a backstop, Cloud Storage deletes any raw recording still there after 15 days.</li><li><b>Demo guests</b>: deleted with everything in them 24 hours after they're made. The shared demo account's takes and videos: after a day.</li><li><b>Takes, reviews, saved videos, photos, templates and your versions</b>: until you delete your account. To have something deleted sooner, email us.</li><li><b>Director's spoken lines</b> (audio of Director's voice, kept so the same line isn't made twice): 90 days.</li><li><b>Signed-in sessions</b>: about 7 days after you last use them.</li><li><b>Server logs</b>: 30 days.</li><li><b>Records of the emails we send you</b>: 90 days.</li><li><b>Security log</b>: 13 months.</li><li><b>Database backups</b>: 14 days, so something deleted can stay in a backup for up to 14 days more.</li><li><b>Analytics events</b>: these hold no name, email address or content, and have no set expiry yet.</li></ul>"
+        },
+        "rights": {
+          "title": "Your choices and rights",
+          "body": "<ul><li><b>Delete your account</b> in Settings, under Security. It asks for your password: if you signed up with Google and never set one, use \"Forgot password\" on the sign-in page to set one first, or email us and we'll delete it for you. Deleting your account deletes everything in it: templates, recordings, takes, videos, photos and your versions. Their files leave storage within about an hour, apart from the backups, logs and analytics described above.</li><li><b>Get a copy.</b> You can download each video when you save it. There's no one-click export of everything yet: email us and we'll send you a copy of what we hold about you.</li><li><b>Correct it.</b> Change your name, email address, language, time zone and profile picture in Settings.</li><li><b>Withdraw YouTube access</b> in your Google Account at any time, as described above.</li><li><b>Turn off the camera or microphone</b> in your browser whenever you like. Director can't use them without your permission.</li></ul><p>Depending on where you live (for example under the GDPR in the European Union and the UK, or in California), you may have further rights: to access, correct, delete or move your data, to object to or restrict how we use it, and to complain to your data protection authority. Email us to use any of them, and we'll answer within 30 days.</p><p>We use your data to provide Director to you under its terms; for logs, security and analytics, because we have a legitimate interest in keeping Director safe and working well; and for your camera and microphone, with your consent, which you can withdraw at any time by stopping.</p>"
+        },
+        "cookies": {
+          "title": "Cookies and storage on your device",
+          "body": "<p>Director uses only the cookies it needs: one that keeps you signed in, ones that remember your language and time zone, and, if you ask, one that remembers a device you trust for two-step verification. Cloudflare's Turnstile may set its own when it checks a sign-in. Director also keeps a little in your browser's storage: footage waiting to upload, your light or dark theme, and how many shoots you've started, so the shoot screen explains itself only the first time. There are no advertising or tracking cookies.</p>"
+        },
+        "security": {
+          "title": "Security",
+          "body": "<p>Connections to Director are encrypted. Passwords are hashed, and Google access tokens and two-step backup codes are encrypted in our database. The database itself keeps each account's data apart from every other's. Recordings, videos and photos are stored privately and reached only through links that expire soon after they're made. Takes are cut on a separate service with no access to our database or secrets. No system is perfectly secure: if something goes wrong that affects your data, we'll tell you.</p>"
+        },
+        "children": {
+          "title": "Children",
+          "body": "<p>Director isn't meant for children under 13, and we don't knowingly collect their data. If you think a child has an account, email us and we'll delete it.</p>"
+        },
+        "changes": {
+          "title": "Changes to this policy",
+          "body": "<p>When this policy changes, we'll update the date at the top and, for a change that matters, say so on the site before it takes effect.</p>"
+        },
+        "contact": {
+          "title": "Contact",
+          "body": "<p>Questions, requests or complaints: <mail>manasmadan08@gmail.com</mail>.</p>"
+        }
+      }
+    }
   },
   "errorPage": {
     "notFoundTitle": "Page not found",
