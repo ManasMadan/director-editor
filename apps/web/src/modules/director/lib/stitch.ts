@@ -305,6 +305,14 @@ function zoomed(
 }
 
 /** Every segment ready to show, in order; what's cued already is let go of on a failure. */
+/** A canvas the size of the video's frame. */
+function frameCanvas() {
+  const canvas = document.createElement("canvas");
+  canvas.width = OUTPUT_WIDTH;
+  canvas.height = OUTPUT_HEIGHT;
+  return canvas;
+}
+
 async function cueAll(plan: RenderPlan<Segment>, scratch: HTMLCanvasElement) {
   const cued: Cued[] = [];
   try {
@@ -685,7 +693,13 @@ function recorderOf(withSound: boolean, audio: AudioContext, quality: RenderQual
     copy();
     send();
   };
-  return { ctx, sound, sendFrame, recorder, written, file };
+  /** Ends the recording's sound where it is; the canvas track keeps the recording going. */
+  const endSound = () => {
+    for (const track of sound.stream.getAudioTracks()) {
+      track.stop();
+    }
+  };
+  return { ctx, sound, sendFrame, recorder, written, file, endSound };
 }
 
 /**
@@ -697,17 +711,14 @@ function recorderOf(withSound: boolean, audio: AudioContext, quality: RenderQual
  */
 export async function stitch(segments: Segment[], options: Options): Promise<Blob> {
   const { audio, withSound, onProgress, captions, signal, look } = options;
-  const { ctx, sound, sendFrame, recorder, written, file } = recorderOf(
+  const { ctx, sound, sendFrame, recorder, written, file, endSound } = recorderOf(
     withSound,
     audio,
     options.quality ?? "full",
   );
   const plan = renderPlan(segments, lengthOf);
   signal?.throwIfAborted();
-  const scratch = document.createElement("canvas");
-  scratch.width = OUTPUT_WIDTH;
-  scratch.height = OUTPUT_HEIGHT;
-  const cued = await cueAll(plan, scratch);
+  const cued = await cueAll(plan, frameCanvas());
   const painter: Painter = look?.(ctx) ?? plainLook(ctx);
   const source = audio.createBufferSource();
   const stopWatching = pauseWhileHidden(audio, recorder);
@@ -738,6 +749,10 @@ export async function stitch(segments: Segment[], options: Options): Promise<Blo
     recorder.start(1000);
     source.start();
     await playThrough({ plan, cued, audio, start: audio.currentTime, lag, draw, signal });
+    // The last frame is drawn and all of the sound has reached the recorder. Left running,
+    // the sound track would go on recording silence through the wait below, so the saved
+    // video's sound would run past its picture by however far behind the encoder is.
+    endSound();
     if (plan.frames > 0 && !signal?.aborted) {
       options.onFinishing?.();
       // Not paused while it waits: Chrome drops the frames still being encoded then.
