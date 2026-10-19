@@ -430,8 +430,23 @@ function soundDelay(audio: AudioContext) {
   return audio.baseLatency + (audio.outputLatency || 0);
 }
 
-function nextFrame() {
-  return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+/**
+ * Resolves on the next frame, or as soon as `signal` cancels: a page the browser has
+ * stopped drawing (hidden, or a frame it throttles) would otherwise keep a cancelled
+ * render waiting for a frame that doesn't come.
+ */
+function nextFrame(signal: AbortSignal | undefined) {
+  return new Promise<void>((resolve) => {
+    const cancelled = () => {
+      cancelAnimationFrame(frame);
+      resolve();
+    };
+    const frame = requestAnimationFrame(() => {
+      signal?.removeEventListener("abort", cancelled);
+      resolve();
+    });
+    signal?.addEventListener("abort", cancelled, { once: true });
+  });
 }
 
 /** Paints each frame of the video; returns where its captions sit (undefined: the default). */
@@ -566,7 +581,7 @@ async function playThrough({ plan, cued, audio, start, lag, draw, signal }: Run)
       draw(frame, index, (frame - placed.firstFrame) / plan.fps);
       drawn = tick;
     }
-    await nextFrame();
+    await nextFrame(signal);
   }
   cued[showing]?.end();
 }

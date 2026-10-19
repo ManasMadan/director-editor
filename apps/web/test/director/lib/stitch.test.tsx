@@ -381,6 +381,22 @@ describe("stitching the short", () => {
     expect(start).not.toHaveBeenCalled();
   });
 
+  it("stops when cancelled while the page draws no frames", async () => {
+    // A page the browser has stopped drawing: no frame comes after the first.
+    vi.spyOn(window, "requestAnimationFrame").mockReturnValue(0);
+    const forget = vi.spyOn(window, "cancelAnimationFrame");
+    const cancel = new AbortController();
+    const rendering = stitch([{ kind: "photo", source: photo, seconds: 1 }], {
+      audio,
+      withSound: false,
+      onProgress: () => setTimeout(() => cancel.abort(), 50),
+      captions: CAPTIONS,
+      signal: cancel.signal,
+    });
+    await expect(rendering).rejects.toThrow(expect.objectContaining({ name: "AbortError" }));
+    expect(forget).toHaveBeenCalledWith(0);
+  });
+
   it("fails in a browser that can't record video, or has no canvas", async () => {
     const options = { audio, withSound: false, onProgress: vi.fn(), captions: CAPTIONS };
     const supported = vi.spyOn(MediaRecorder, "isTypeSupported").mockReturnValue(false);
