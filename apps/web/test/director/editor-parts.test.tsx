@@ -419,6 +419,8 @@ describe("picking another take", () => {
               style="pop"
               sound={false}
               onStall={vi.fn()}
+              // A match cut lined the first shot up: it's drawn moved and turned.
+              transforms={new Map([[0, { x: 72, y: 0, scale: 1.1, rotation: 2 }]])}
             />
           </div>
           <ShotBoard
@@ -443,6 +445,9 @@ describe("picking another take", () => {
     await expect.poll(preview).toEqual([walk1.id, smile.id]);
     // Each card shows its take's frame once it's in memory.
     expect(document.querySelectorAll("label img")).toHaveLength(3);
+    expect(document.querySelector<HTMLElement>(`[data-take="${walk1.id}"]`)?.style.transform).toBe(
+      "translate(10%, 0%) rotate(2deg) scale(1.1)",
+    );
 
     await userEvent.click(page.getByRole("button", { name: "Next take" }));
     await expect.poll(preview).toEqual([walk2.id, smile.id]);
