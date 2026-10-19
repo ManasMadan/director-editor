@@ -371,7 +371,10 @@ describe("talking it through with Director", () => {
     // Only the row that changed says so.
     expect(card.getByText("changed for you").elements()).toHaveLength(1);
     await expect.element(page.getByText(line("There you go."))).toBeVisible();
-    expect((await commands.liveTurns(liveFrom))[0]?.toolResponses).toEqual([{ result: "done" }]);
+    // Done, and where the member is, so Director stays on their shot rather than moving on.
+    expect((await commands.liveTurns(liveFrom))[0]?.toolResponses).toEqual([
+      { result: "done", theyAreOn: { shot: 1, status: "film", say: expect.any(String) } },
+    ]);
     // Their line is the original's still, and Director moves on and back with the change kept.
     await tell(page, "say my line", `It's: "Morning. Coffee first."`);
     await send(page, "go to shot 2");
