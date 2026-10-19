@@ -990,6 +990,50 @@ describe("uploads", { tags: ["files"] }, () => {
     expect(await storage.head(`files/${fileId}`)).toBeNull();
   });
 
+  it("fits an asset picture within 2160px, as a JPEG with its metadata gone", async () => {
+    const photo = await sharp({
+      create: { width: 3000, height: 1500, channels: 3, background: "#3366cc" },
+    })
+      .jpeg()
+      .withExif({ IFD0: { Artist: "Secret Name" } })
+      .toBuffer();
+    const { fileId } = await upload(photo, "image/jpeg", photo.length, "director-asset-image");
+    await files.check(fileId);
+    const stored = await storage.read(`files/${fileId}`, 20_000_000);
+    const metadata = await sharp(stored).metadata();
+    expect(metadata).toMatchObject({ format: "jpeg", width: 2160, height: 1080 });
+    expect(metadata.exif).toBeUndefined();
+    expect(await row(fileId)).toMatchObject({ status: "ready", content_type: "image/jpeg" });
+  });
+
+  it("keeps a cutout's transparency as a PNG, and a small picture at its size", async () => {
+    const cutout = await sharp({
+      create: { width: 300, height: 200, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    })
+      .png()
+      .toBuffer();
+    const { fileId } = await upload(cutout, "image/png", cutout.length, "director-asset-image");
+    await files.check(fileId);
+    const metadata = await sharp(await storage.read(`files/${fileId}`, 20_000_000)).metadata();
+    expect(metadata).toMatchObject({ format: "png", width: 300, height: 200, hasAlpha: true });
+    expect(await row(fileId)).toMatchObject({ status: "ready", content_type: "image/png" });
+  });
+
+  it("rejects an asset picture that doesn't decode", async () => {
+    const jpeg = await sharp({ create: { width: 64, height: 64, channels: 3, background: "red" } })
+      .jpeg()
+      .toBuffer();
+    // Recognisably a JPEG from its first bytes, then garbage the decoder chokes on.
+    const broken = Buffer.concat([jpeg.subarray(0, 20), Buffer.alloc(200, 0xab)]);
+    const { fileId } = await upload(broken, "image/jpeg", broken.length, "director-asset-image");
+    await files.check(fileId);
+    expect(await row(fileId)).toMatchObject({
+      status: "rejected",
+      reject_reason: "FILE_UNREADABLE",
+    });
+    expect(await storage.head(`files/${fileId}`)).toBeNull();
+  });
+
   it.each(["director-take-video", "director-cut-video"] as const)(
     "keeps a Director video (%s) byte for byte, as the type its bytes say",
     async (purpose) => {

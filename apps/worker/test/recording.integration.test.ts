@@ -751,6 +751,42 @@ describe("recording retention", () => {
     await director.close();
   });
 
+  it("queues the passes a batch at a time until none is left", async () => {
+    const director = new Queue("ai-director", {
+      connection: createRedis(process.env.REDIS_URL as string),
+      prefix: queuePrefix("ai-director"),
+    });
+    await director.pause();
+    // More done sessions without a pass than one batch (100) holds.
+    const { org, session } = await recorded(0, { stored: false });
+    const sessions = await sql<{ id: string }>(
+      `INSERT INTO app.recording_session
+              (org_id, user_id, plan_id, video_id, shot_count, status, expires_at, finished_at, updated_at)
+       SELECT org_id, user_id, plan_id, video_id, shot_count, 'done', expires_at, now(), now()
+         FROM app.recording_session, generate_series(1, 120)
+        WHERE id = $1
+       RETURNING id`,
+      [session],
+    );
+    expect(sessions).toHaveLength(120);
+
+    const result = await maintenance.run("recording-retention");
+    expect(result.passes).toBeGreaterThanOrEqual(120);
+    const ids = sessions.map((row) => row.id);
+    const unstamped = await sql(
+      "SELECT id FROM app.recording_session WHERE id = ANY($1) AND pass_queued_at IS NULL",
+      [ids],
+    );
+    expect(unstamped).toEqual([]);
+    for (const id of [ids[0], ids[119]]) {
+      const job = await director.getJob(id as string);
+      expect(job?.data).toEqual({ meta: { orgId: org }, payload: { sessionId: id, orgId: org } });
+    }
+    await director.obliterate({ force: true });
+    await director.resume();
+    await director.close();
+  });
+
   it("finishes a session Done with its footage still to come, once it has stopped coming", async () => {
     const queue = new Queue("recording", {
       connection: createRedis(process.env.REDIS_URL as string),
