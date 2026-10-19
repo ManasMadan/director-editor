@@ -751,7 +751,27 @@ describe("Director live's hook", () => {
     const stream = new AudioContext().createMediaStreamDestination().stream;
     asked.resolve(stream);
     await expect.poll(() => stream.getTracks()[0]?.readyState).toBe("ended");
-    expect(FakeSocket.all).toHaveLength(0);
+    expect(FakeSocket.all.map((socket) => socket.readyState)).toEqual([FakeSocket.CLOSED]);
+  });
+
+  it("connects while the browser still asks for the microphone, and sends it once allowed", async () => {
+    const asked = deferred<MediaStream>();
+    const camera = canvasCamera();
+    camera.getUserMedia.mockReturnValueOnce(asked.promise);
+    const hook = await renderHook(() => useDirectorLive(options()));
+    await userEvent.click(document.body);
+    hook.current.start();
+    // The line to Director doesn't wait for the permission prompt.
+    await expect.poll(() => FakeSocket.all.length).toBe(1);
+    FakeSocket.last.open();
+    await expect.poll(() => hook.current.state).toBe("live");
+    expect(FakeSocket.last.sentOf("audio")).toEqual([]);
+    // The member allows it: a microphone with a tone in it, as the stand-in gives.
+    asked.resolve(await navigator.mediaDevices.getUserMedia({ audio: true }));
+    await expect
+      .poll(() => FakeSocket.last.sentOf("audio").length, { timeout: 10_000 })
+      .toBeGreaterThan(0);
+    await hook.unmount();
   });
 
   it("goes without a microphone when the one it gets has no sound in it", async () => {

@@ -271,17 +271,22 @@ function connect(
     events.onLive();
     send(socket, { type: "context", version: version() });
     tellShot(session);
-    session.microphone?.listen((pcm) => {
-      if (!session.muted) {
-        send(socket, { type: "audio", pcm16: encodePcm16(pcm) });
-      }
-    });
+    listen(session);
     startFrames(session, socket, video);
   };
   socket.onmessage = (event: MessageEvent<unknown>) => receive(session, event.data, events);
   // The API says why before it hangs up; a close without a word is a dropped line.
   socket.onclose = () => finish(session.error ?? "dropped");
   return socket;
+}
+
+/** The member's microphone goes up the line, once both are there, whichever came first. */
+function listen(session: Session) {
+  session.microphone?.listen((pcm) => {
+    if (session.live && !session.muted) {
+      send(session.live, { type: "audio", pcm16: encodePcm16(pcm) });
+    }
+  });
 }
 
 /** The roll (the continuous recording), told to the relay while it's there. */
@@ -344,18 +349,18 @@ export function startSession(target: Target & { shot: number; held: boolean }) {
     session.microphone = null;
     target.events.onDeaf();
   };
-  const begin = (microphone: Microphone | null) => {
+  // The line to Director opens at once, beside the permission prompt: waiting for the
+  // microphone first put the whole prompt in front of Director's first word.
+  socket = connect(session, target, finish);
+  const heard = (microphone: Microphone) => {
     // Left while the browser was still asking for the microphone.
     if (session.over) {
-      return microphone?.stop();
+      return microphone.stop();
     }
     session.microphone = microphone;
-    socket = connect(session, target, finish);
+    listen(session);
   };
-  openMicrophone(context, deaf).then(begin, () => {
-    target.events.onDeaf();
-    begin(null);
-  });
+  openMicrophone(context, deaf).then(heard, () => target.events.onDeaf());
   const whenLive = (act: (live: WebSocket) => void) => {
     if (session.live) {
       act(session.live);

@@ -75,6 +75,11 @@ describe("the captions", () => {
     expect(captions.lines).toEqual([
       { who: "director", text: "Hi! How long have you got?", key: 1, done: false },
     ]);
+    // Gemini's next sentence can come with no space before it: it gets one.
+    captions = withTranscript(captions, "director", "Plenty");
+    captions = withTranscript(captions, "director", "?Sure.");
+    expect(captions.lines[0]?.text).toBe("Hi! How long have you got? Plenty? Sure.");
+    captions = withTranscript(NO_CAPTIONS, "director", "Hi! How long have you got?");
     captions = withTranscript(captions, "you", "Like");
     captions = withTranscript(captions, "you", " ten minutes");
     // The member's answer goes under Director's question, which is finished now.
