@@ -406,14 +406,12 @@ export class Roll {
       camera,
       contentType: this.options.contentType,
     });
-    let stopped = (): void => undefined;
-    part.ended = new Promise((resolve) => {
-      stopped = resolve;
-    });
+    const ended = Promise.withResolvers<void>();
+    part.ended = ended.promise;
     const recorder = this.options.record(stream, {
       onData: (bytes) => this.slice(part, bytes),
       // The part ends whatever became of its end (kept or not): a flip or Done waits on it.
-      onStop: () => void this.closed(part).finally(stopped),
+      onStop: () => void this.closed(part).finally(ended.resolve),
     });
     if (!recorder) {
       throw new Error("this browser can't record the camera");
