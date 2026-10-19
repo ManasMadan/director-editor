@@ -248,6 +248,29 @@ describe("stitching the short", () => {
     expect(await sizeOf(short)).toEqual([OUTPUT_WIDTH, OUTPUT_HEIGHT]);
   });
 
+  it("leaves a photo's frames black where the browser gives no canvas to draw them on", async () => {
+    // The render's own canvas draws; the one it draws a photo onto first gets none.
+    const real = HTMLCanvasElement.prototype.getContext;
+    let first: HTMLCanvasElement | null = null;
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(function (
+      this: HTMLCanvasElement,
+      ...args: Parameters<HTMLCanvasElement["getContext"]>
+    ) {
+      first ??= this;
+      return this === first ? real.apply(this, args) : null;
+    });
+    const short = await stitch([{ kind: "photo", source: photo, seconds: 0.4 }], {
+      audio,
+      withSound: false,
+      onProgress: vi.fn(),
+      captions: { ...CAPTIONS, style: "off" },
+    });
+    vi.restoreAllMocks();
+    const frames = await playedFrames(short);
+    expect(frames.length).toBeGreaterThan(0);
+    expect(frames.some((frame) => frame.hue === "green")).toBe(false);
+  });
+
   it("waits for the recorder to finish writing, then gives back the whole video", async () => {
     const written = vi.spyOn(MediaRecorder.prototype, "requestData");
     const finishing = vi.fn();
