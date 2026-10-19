@@ -5,6 +5,8 @@ else."""
 import ast
 from pathlib import Path
 
+import pytest
+
 from app.queues import DIRECTOR, JITTERED, REVIEW, SETTINGS, jittered_backoff, job_options
 
 APP = Path(__file__).parent.parent / "app"
@@ -53,3 +55,15 @@ def test_each_retry_waits_twice_as_long_as_the_last_shortened_at_random_by_up_to
     spread = {jittered_backoff(REVIEW)(3, JITTERED, None, None) for _ in range(20)}
     assert len(spread) > 1
     assert all(30_000 <= wait <= 60_000 for wait in spread)
+
+
+def test_a_queue_without_jitter_keeps_bullmq_s_own_backoff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """packages/jobs gives every queue a jittered backoff today; one it doesn't is left to
+    bullmq, which computes a plain exponential one itself."""
+    setting = SETTINGS[REVIEW]
+    backoff = setting.options.backoff.model_copy(update={"jitter": None})
+    options = setting.options.model_copy(update={"backoff": backoff})
+    monkeypatch.setitem(SETTINGS, REVIEW, setting.model_copy(update={"options": options}))
+    assert job_options(REVIEW, "take-1").get("backoff") == {"type": "exponential", "delay": 15_000}
