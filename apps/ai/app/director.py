@@ -1422,7 +1422,9 @@ class Director:
         )
         if reservation is None:
             raise AppError("AI_BUDGET_EXCEEDED")
-        used = TokenUsage(inputTokens=0, outputTokens=0)
+        # Unknown until the run says: a failure past Gemini's answer (OpenCV on frames it
+        # can't read) counts the whole reservation, as an index whose usage is unknown does.
+        used = TokenUsage(inputTokens=reservation.tokens, outputTokens=0)
         try:
             result = await self._aligner.align(
                 AlignRequest(

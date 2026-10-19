@@ -40,6 +40,8 @@ from app.errors import AppError
 from app.indexing import PLANNER_RETRIES, IndexFailed, Watched
 from app.queues import DirectorQueue, JobLike
 from app.schemas import (
+    AlignRequest,
+    AlignResult,
     ChatTurnReservation,
     DirectorCutOut,
     DirectorLibraryOut,
@@ -2375,6 +2377,31 @@ def test_a_take_is_never_left_reviewing_after_its_last_attempt(
             on_app_loop(client, lambda: director().review(org, take.id, url, user))
     [failed] = takes_of(client, org, user)
     assert (failed.status, failed.error) == ("failed", "DIRECTOR_REVIEW_FAILED")
+
+
+class _BrokenAligner:
+    """An aligner that fails after Gemini may have answered (OpenCV on frames it can't
+    read): what the run used is unknown."""
+
+    async def align(self, request: AlignRequest) -> AlignResult:
+        raise ValueError(f"no frames to line up for {request.anchor}")
+
+
+def test_an_alignment_that_fails_unexpectedly_counts_its_whole_reservation(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Gemini may have answered before it failed: the run's usage is unknown, so the whole
+    reservation counts, never nothing."""
+    org, user = new_org()
+    monkeypatch.setattr(director(), "_aligner", _BrokenAligner())
+    clip = {"url": "https://storage.test/a.mp4", "atMs": 1_000}
+    with pytest.raises(ValueError, match="no frames"):
+        _ = client.post(
+            "/v1/director/match-cuts",
+            json={"anchor": "the watch", "outgoing": clip, "incoming": {**clip, "atMs": 0}},
+            headers=headers(org, user),
+        )
+    assert usage(org, "director-align") == 12_000
 
 
 def test_a_review_for_a_take_that_s_gone_does_nothing(client: TestClient) -> None:
