@@ -410,7 +410,12 @@ def create_indexer(settings: Settings, http: httpx.AsyncClient) -> Indexer:
     """The Cloud Run indexer when INDEXER_URL names it, so Gemini's long video calls and
     the audio download happen off the VM; otherwise the worker indexes itself."""
     if settings.indexer_url:
-        return RemoteIndexer(settings.indexer_url, http)
+        return RemoteIndexer(
+            settings.indexer_url,
+            http,
+            release=settings.release,
+            fallback=create_local_indexer(settings),
+        )
     return create_local_indexer(settings)
 
 

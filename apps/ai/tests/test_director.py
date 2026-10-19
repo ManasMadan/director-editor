@@ -818,6 +818,8 @@ INDEXED: dict[str, object] = {
     "model": "gemini-on-cloud-run",
     "audio": {"status": "ready", "objectKey": f"audio/{VIDEO}.m4a"},
     "usage": REMOTE_USAGE,
+    # The worker's own release in the tests (RELEASE unset).
+    "release": "dev",
 }
 
 
@@ -901,6 +903,37 @@ def test_with_an_indexer_url_the_cloud_run_indexer_writes_the_plan(
     # What the indexer says the run used is what's counted; Gemini isn't called here.
     assert usage(org, "director-plan") == 4_500
     assert gemini[0].received == []
+
+
+# The worker's ID token comes from the metadata server's stand-in.
+@pytest.mark.usefixtures("identity")
+@pytest.mark.parametrize("release", [None, "sha-58825810"], ids=["no release", "an older one"])
+def test_an_indexer_left_on_another_release_is_used_no_more(
+    monkeypatch: pytest.MonkeyPatch,
+    extra_env: dict[str, str],
+    gemini: tuple[Fake, dict[str, Callable[[bytes], Reply]]],
+    release: str | None,
+) -> None:
+    """The indexer is deployed by hand: one left on an older release wrote plans without
+    assets. Its plan isn't kept; this worker writes it, counts both runs, and doesn't ask
+    that indexer again."""
+    stale = {key: value for key, value in INDEXED.items() if key != "release"}
+    with _with_indexer(monkeypatch, extra_env) as (test_client, remote, handlers):
+        handlers["/v1/index"] = lambda _sent: (200, {**stale, "release": release})
+        org, user = new_org()
+        queued = index_plan(test_client, org, user)
+        on_app_loop(test_client, lambda: director().analyze(org, queued.id, user))
+        plan = plan_of(test_client, org, user)
+        other, someone = new_org()
+        second = index_plan(test_client, other, someone)
+        on_app_loop(test_client, lambda: director().analyze(other, second.id, someone))
+        assert plan_of(test_client, other, someone).status == "ready"
+    assert (plan.status, plan.model) == ("ready", GEMINI_MODEL)
+    # The indexer's run and this worker's were both paid for.
+    assert usage(org, "director-plan") == 4_500 + 1_000
+    # Asked once: the second plan was written here straight away.
+    assert [path for path, _ in remote.received] == ["/v1/index"]
+    assert len(gemini[0].received) == 2
 
 
 @pytest.mark.parametrize(
