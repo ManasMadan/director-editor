@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from app.picker import IMAGES_PER_DEMO_VIDEO, IMAGES_PER_VIDEO, stock_credit_line
 from app.schemas import AssetSlotsOut, StockCredit
+from app.settings import get_settings
 from tests.fakes import (
     ASSET_MODEL,
     ASSET_PATH,
@@ -26,9 +27,9 @@ from tests.fakes import (
     gemini_output,
     serve,
 )
-from tests.support import headers, new_org, on_app_loop
+from tests.support import error_of, headers, new_org, on_app_loop
 from tests.test_assets import ASSET_PLAN, PNG, drawings, images, indexed, make
-from tests.test_director import VIDEO, director, fake_yt_dlp
+from tests.test_director import VIDEO, director, fake_yt_dlp, index_plan
 
 pytestmark = pytest.mark.integration
 
@@ -296,4 +297,109 @@ def test_the_credit_line_names_the_creator_and_the_source() -> None:
     credit = StockCredit.model_validate({**CREDIT, "provider": "pixabay"})
     assert stock_credit_line("B-roll", credit) == (
         "B-roll: Jane Doe on Pixabay (https://www.pexels.com/photo/1/)"
+    )
+
+
+def test_a_drawing_from_a_photo_of_the_member_s_draws_from_it(
+    client: TestClient, google: Google, ready: tuple[UUID, UUID, UUID]
+) -> None:
+    org, user, plan_id = ready
+    photo = f"files/{uuid4()}"
+    STORED[photo] = ("image/jpeg", b"\xff\xd8\xff" + b"\x00" * 64)
+    drawn = draw(client, org, user, referenceKey=photo)
+    assert drawn["http"] == 201
+    make(client, org, plan_id)
+    assert images(org, plan_id)[-1][1] == "ready"
+    # Nano Banana saw the photo, and was told to draw from it.
+    sent = drawings(google[0])[-1]
+    assert b"image/jpeg" in sent
+    assert b"Draw it from the attached photo" in sent
+
+
+@pytest.mark.parametrize("stored", [None, ("text/plain", b"not a picture")])
+def test_a_reference_that_isn_t_a_picture_fails_the_drawing(
+    client: TestClient, ready: tuple[UUID, UUID, UUID], stored: tuple[str, bytes] | None
+) -> None:
+    org, user, plan_id = ready
+    photo = f"files/{uuid4()}"
+    if stored is not None:
+        STORED[photo] = stored
+    assert draw(client, org, user, referenceKey=photo)["http"] == 201
+    make(client, org, plan_id)
+    assert images(org, plan_id)[-1][1:] == ("failed", None, "UPSTREAM_UNAVAILABLE")
+
+
+def test_a_clip_is_only_for_a_gap_and_never_an_edit_or_the_demo_s(
+    client: TestClient, ready: tuple[UUID, UUID, UUID]
+) -> None:
+    org, user, _ = ready
+    # A still's slot can't take a clip.
+    still = draw(client, org, user, clip=True)
+    assert (still["http"], still["code"]) == (404, "DIRECTOR_ASSET_NOT_FOUND")
+    # Nor can a clip be an edit of another image.
+    default = slots(client, org, user).slots[0].candidates[0]
+    edit = draw(client, org, user, asset="shot-1", clip=True, baseId=str(default.id))
+    assert (edit["http"], edit["code"]) == (404, "DIRECTOR_ASSET_NOT_FOUND")
+    # The demo makes no clips at all.
+    demo = draw(client, org, user, asset="shot-1", clip=True, demo=True)
+    assert (demo["http"], demo["code"]) == (429, "DIRECTOR_IMAGE_LIMIT")
+
+
+def test_a_slot_the_plan_doesn_t_have_takes_no_image_or_choice(
+    client: TestClient, ready: tuple[UUID, UUID, UUID]
+) -> None:
+    org, user, _ = ready
+    added = client.post(
+        f"/v1/director/plans/{VIDEO}/assets/nothing/images",
+        json={"origin": "stock", "objectKey": "x", "fileId": None, "credit": CREDIT},
+        headers=headers(org, user),
+    )
+    chosen = client.post(
+        f"/v1/director/plans/{VIDEO}/assets/nothing/choice",
+        json={"candidateId": None},
+        headers=headers(org, user),
+    )
+    for refused in (added, chosen):
+        assert (refused.status_code, error_of(refused).code) == (404, "DIRECTOR_ASSET_NOT_FOUND")
+
+
+def test_a_plan_still_being_written_has_no_slots_yet(client: TestClient) -> None:
+    org, user = new_org()
+    _ = index_plan(client, org, user)
+    response = client.get(f"/v1/director/plans/{VIDEO}/assets", headers=headers(org, user))
+    assert (response.status_code, error_of(response).code) == (409, "DIRECTOR_PLAN_NOT_READY")
+
+
+def test_a_post_for_a_plan_that_s_gone_credits_nothing(client: TestClient) -> None:
+    org, user = new_org()
+    gone = uuid4()
+    assert on_app_loop(client, lambda: director().picker.stock_credits(org, user, gone)) == []
+
+
+def test_drawing_is_off_without_a_bucket_to_keep_images_in(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert client is not None
+    org, user = new_org()
+    monkeypatch.delenv("MEDIA_BUCKET")
+    get_settings.cache_clear()
+    from app.main import app
+
+    with TestClient(app) as without:
+        response = without.post(
+            f"/v1/director/plans/{VIDEO}/assets/chart/drawings",
+            json={
+                "prompt": PROMPT,
+                "instruction": None,
+                "baseId": None,
+                "referenceKey": None,
+                "demo": False,
+            },
+            headers=headers(org, user),
+        )
+    error = error_of(response)
+    assert (response.status_code, error.code, error.data.params) == (
+        404,
+        "FEATURE_DISABLED",
+        {"feature": "director-assets"},
     )

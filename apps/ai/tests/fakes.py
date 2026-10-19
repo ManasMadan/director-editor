@@ -53,7 +53,13 @@ def serve(
             path = unquote(self.path)
             found = next(((k, v) for k, v in stored.items() if f"/o/{k}" in path), None)
             if found is None:
-                payload, content_type, status = b'{"error": "not found"}', "application/json", 404
+                # Cloud Storage's error body, which its client reads the code and message from.
+                missing = {"error": {"code": 404, "message": "No such object", "errors": []}}
+                payload, content_type, status = (
+                    json.dumps(missing).encode(),
+                    "application/json",
+                    404,
+                )
             elif "alt=media" in path:
                 (content_type, payload), status = found[1], 200
             else:
