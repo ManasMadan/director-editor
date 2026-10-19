@@ -504,10 +504,14 @@ const checkUpload: BrowserCommand<[fileId: string, rejectReason?: string]> = asy
 
 /**
  * What the AI stand-in's Director answers for the short `videoId` (test/fake-ai.ts): its
- * plan (merged over an id and timestamps), and the member's takes and cuts.
+ * plan (merged over an id and timestamps), the member's takes and cuts, and its answers in
+ * the editor, one per request.
  */
 const fakeDirector: BrowserCommand<
-  [videoId: string, state: { plan?: object; takes?: object[]; cuts?: object[] }]
+  [
+    videoId: string,
+    state: { plan?: object; takes?: object[]; cuts?: object[]; editorReplies?: object[] },
+  ]
 > = async (_context, videoId, state) => {
   const response = await fetch(`${(await services()).aiUrl}/__fake/director/${videoId}`, {
     method: "PUT",
@@ -737,7 +741,7 @@ declare module "vitest/browser" {
     storeFile(key: string, base64: string, contentType: string): Promise<void>;
     fakeDirector(
       videoId: string,
-      state: { plan?: object; takes?: object[]; cuts?: object[] },
+      state: { plan?: object; takes?: object[]; cuts?: object[]; editorReplies?: object[] },
     ): Promise<void>;
     fakeLibrary(
       orgId: string,

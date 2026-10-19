@@ -302,6 +302,94 @@ describe("the editor", { tags: ["files"] }, () => {
     expect(currentUrl()).toBe(`/director/${videoId}/shoot?shot=2&audio=voice&back=edit`);
   });
 
+  it("tells Director what to change: undoes its change, picks a take it offers, dismisses an answer", {
+    timeout: 60_000,
+  }, async () => {
+    await commands.storageCors();
+    await signUp();
+    const videoId = newVideoId();
+    await readyPlan(
+      videoId,
+      shotPlan({ shots: [planShot({ title: "Walk in" }), planShot({ title: "Wave" })] }),
+    );
+    const walkFile = await uploaded("director-take-video", await recordVideo(2.5));
+    const best = { ...take({ fileId: walkFile, score: 82 }), createdAt: filmedAgo(60) };
+    const again = { ...take({ fileId: walkFile, score: 45 }), createdAt: filmedAgo(30) };
+    const nothing = {
+      shotIndex: null,
+      takeId: null,
+      otherShotIndex: null,
+      position: null,
+      startSeconds: null,
+      endSeconds: null,
+      value: null,
+      level: null,
+      text: null,
+      replacement: null,
+      steps: null,
+    };
+    const answer = (fields: object) => ({
+      heard: "",
+      outcome: "answer",
+      say: "",
+      actions: [],
+      choices: [],
+      ...fields,
+    });
+    await commands.fakeDirector(videoId, {
+      takes: [again, best],
+      editorReplies: [
+        answer({
+          outcome: "applied",
+          say: "Took the other one.",
+          actions: [{ ...nothing, op: "pick_take", shotIndex: 0, takeId: again.id }],
+        }),
+        answer({
+          outcome: "ask",
+          say: "Which one?",
+          choices: [
+            { shotIndex: 0, takeId: again.id, atSeconds: 1, note: "the later one" },
+            // A take that's still being reviewed isn't offered to play.
+            { shotIndex: 0, takeId: crypto.randomUUID(), atSeconds: 1, note: "gone" },
+          ],
+        }),
+        answer({ say: "Captions are on already." }),
+      ],
+    });
+    const page = await openEditor(videoId, "voice");
+    await expect.poll(preview).toEqual([best.id]);
+    const box = page.getByRole("textbox", { name: "Tell Director what to change" });
+
+    await userEvent.fill(box, "use the other take");
+    await userEvent.click(page.getByRole("button", { name: "Send" }));
+    await expect.element(page.getByText("Took the other one.")).toBeVisible();
+    await expect.poll(preview).toEqual([again.id]);
+    // Undo beside Director's answer (the editor's own Undo is elsewhere): its change goes.
+    const undo = page
+      .getByText("Took the other one.")
+      .element()
+      .parentElement?.querySelector("button");
+    if (!undo) {
+      throw new Error("no Undo beside Director's answer");
+    }
+    await userEvent.click(undo);
+    await expect.poll(preview).toEqual([best.id]);
+    expect(page.getByText("Took the other one.").query()).toBeNull();
+
+    await userEvent.fill(box, "which take is better?");
+    await userEvent.click(page.getByRole("button", { name: "Send" }));
+    const choices = page.getByRole("list", { name: "Takes to choose from" });
+    await userEvent.click(choices.getByRole("button", { name: /the later one/ }));
+    await expect.poll(preview).toEqual([again.id]);
+    expect(choices.query()).toBeNull();
+
+    await userEvent.fill(box, "add captions");
+    await userEvent.click(page.getByRole("button", { name: "Send" }));
+    await expect.element(page.getByText("Captions are on already.")).toBeVisible();
+    await userEvent.click(page.getByRole("button", { name: "Dismiss" }));
+    expect(page.getByText("Captions are on already.").query()).toBeNull();
+  });
+
   it("saves the video, silent when it was filmed to the original, and it shows in My media", {
     timeout: 60_000,
   }, async () => {

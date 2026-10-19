@@ -1,8 +1,8 @@
 /**
  * A stand-in for the Python AI service (apps/ai), answering the API the way the real one
  * does. The API checks the contract (packages/ai-client validates every response), and
- * apps/ai's own tests cover the service itself. Director's plans, takes and cuts
- * are what a test sets for its short (`PUT /__fake/director/<videoId>`, the
+ * apps/ai's own tests cover the service itself. Director's plans, takes, cuts and answers
+ * in the editor are what a test sets for its short (`PUT /__fake/director/<videoId>`, the
  * `fakeDirector` command); cuts the editor saves are added, each the caller's own (the
  * `userId` of a cut a test sets), as My media lists them. A workspace's library is what a
  * test sets for it (`PUT /__fake/library/<orgId>`, the `fakeLibrary` command), and
@@ -65,6 +65,11 @@ interface DirectorShort {
   cuts: Record<string, unknown>[];
   /** The asset picker's slots, when the test sets them; none otherwise. */
   assets?: Record<string, unknown>;
+  /**
+   * Director's answers in the editor, one per request, as the test sets them; a request
+   * with none left fails as Gemini being down would.
+   */
+  editorReplies?: Record<string, unknown>[];
 }
 
 /** A plan's asset slots with nothing in them, and the member's images (apps/ai's limits). */
@@ -334,6 +339,10 @@ function directorRoute(
     }
     found.plan = input.plan;
     return { status: 200, body: planBody(videoId, found) };
+  }
+  if (route === "POST /v1/director/editor-requests") {
+    const next = short(String(input.videoId)).editorReplies?.shift();
+    return next ? { status: 200, body: next } : failure(502, "UPSTREAM_UNAVAILABLE");
   }
   // The slower line's turns, counted against the workspace's allowance by the real
   // service: here every turn has room, and what it spent is taken as said.
