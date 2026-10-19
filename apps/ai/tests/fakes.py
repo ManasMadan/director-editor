@@ -54,7 +54,7 @@ def serve(
             found = next(((k, v) for k, v in stored.items() if f"/o/{k}" in path), None)
             if found is None:
                 # Cloud Storage's error body, which its client reads the code and message from.
-                missing = {"error": {"code": 404, "message": "No such object", "errors": []}}
+                missing: dict[str, object] = {"error": {"code": 404, "message": "No such object"}}
                 payload, content_type, status = (
                     json.dumps(missing).encode(),
                     "application/json",
