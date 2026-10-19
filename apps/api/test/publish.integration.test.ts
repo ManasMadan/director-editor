@@ -159,6 +159,11 @@ function assetSlots(videoId: string) {
   });
 }
 
+/** The plan's slots, as apps/ai lists them, unless a test has it fail to. */
+function assetsRoute(videoId: string, response: ServerResponse) {
+  return chosen.unreadable ? send(response, 500, {}) : send(response, 200, assetSlots(videoId));
+}
+
 /** apps/ai's routes for a cut: reading one, its plan's assets, and Gemini's copy for it. */
 async function aiRoute(request: IncomingMessage, response: ServerResponse) {
   const who = await caller(request);
@@ -190,7 +195,7 @@ async function aiRoute(request: IncomingMessage, response: ServerResponse) {
   }
   const assets = /^\/v1\/director\/plans\/([\w-]+)\/assets$/.exec(request.url ?? "");
   if (request.method === "GET" && assets?.[1]) {
-    return chosen.unreadable ? send(response, 500, {}) : send(response, 200, assetSlots(assets[1]));
+    return assetsRoute(assets[1], response);
   }
   if (request.method === "POST" && request.url === "/v1/director/publish-copy") {
     copyAsks.push(body);

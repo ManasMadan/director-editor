@@ -192,6 +192,39 @@ async function accountRoute(
   return null;
 }
 
+/**
+ * What a test can have go wrong, and the switches it says so with: the project's daily
+ * YouTube quota spent, YouTube failing the files it's sent, and the slower line out of
+ * reach or not saying what its answers cost.
+ */
+function troubleSwitches() {
+  const trouble = {
+    quotaSpent: false,
+    uploadsBroken: false,
+    chatDown: false,
+    chatUncounted: false,
+  };
+  const switches = {
+    /** Has YouTube refuse reads and uploads as over the project's quota, or stop. */
+    exhaustQuota: (spent: boolean) => {
+      trouble.quotaSpent = spent;
+    },
+    /** Has YouTube fail the file of every upload (a 503) once its session is open, or stop. */
+    breakUploads: (broken: boolean) => {
+      trouble.uploadsBroken = broken;
+    },
+    /** Has Director's slower line answer 503, as Gemini out of reach, or stop. */
+    chatOutage: (down: boolean) => {
+      trouble.chatDown = down;
+    },
+    /** Has Director's slower line answer without saying what the answer cost, or stop. */
+    chatUncounted: (uncounted: boolean) => {
+      trouble.chatUncounted = uncounted;
+    },
+  };
+  return { trouble, switches };
+}
+
 export async function startFakeGoogle({
   apiKey,
   port = 0,
@@ -201,14 +234,7 @@ export async function startFakeGoogle({
   const oauth = createOAuth();
   // Known once the server listens; upload sessions link back to it.
   const address = { url: "" };
-  // Whether the project's daily YouTube quota is spent, and whether YouTube fails the
-  // files it's sent: a test says so (exhaustQuota, breakUploads).
-  const trouble = {
-    quotaSpent: false,
-    uploadsBroken: false,
-    chatDown: false,
-    chatUncounted: false,
-  };
+  const { trouble, switches } = troubleSwitches();
   const uploads = createYouTubeUploads({
     url: () => address.url,
     audited: youtubeAudited,
@@ -251,22 +277,7 @@ export async function startFakeGoogle({
     url: address.url,
     /** Every video uploaded to the mock YouTube, oldest first. */
     uploads: uploads.uploads,
-    /** Has YouTube refuse reads and uploads as over the project's quota, or stop. */
-    exhaustQuota: (spent: boolean) => {
-      trouble.quotaSpent = spent;
-    },
-    /** Has YouTube fail the file of every upload (a 503) once its session is open, or stop. */
-    breakUploads: (broken: boolean) => {
-      trouble.uploadsBroken = broken;
-    },
-    /** Has Director's slower line answer 503, as Gemini out of reach, or stop. */
-    chatOutage: (down: boolean) => {
-      trouble.chatDown = down;
-    },
-    /** Has Director's slower line answer without saying what the answer cost, or stop. */
-    chatUncounted: (uncounted: boolean) => {
-      trouble.chatUncounted = uncounted;
-    },
+    ...switches,
     /** Director live: each connection made to the Live API, and its warning that one closes soon. */
     live: { sessions: live.sessions, goAway: live.goAway },
     close: () =>
