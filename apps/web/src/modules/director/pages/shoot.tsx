@@ -376,19 +376,19 @@ function RollUpload({ roll }: { roll: RollShoot }) {
   );
 }
 
-/** The top band's left: the roll's indicator and progress strip, or the shot's progress. */
+/**
+ * The top band's left: the roll's indicator, or the shot's progress. The roll's progress
+ * strip has a row of its own under it: next to ✕ it would push ✕ off a phone's screen.
+ */
 function TopLeft({ props, studio, roll }: Pick<Screen, "props" | "studio" | "roll">) {
   if (roll.rolling) {
     return (
-      <div className="flex items-center gap-2">
-        <RecIndicator
-          elapsedMs={roll.elapsedMs}
-          paused={roll.phase === "paused"}
-          onPause={roll.pause}
-          onResume={roll.resume}
-        />
-        <RollProgress index={props.index} states={roll.states} onGo={roll.go} />
-      </div>
+      <RecIndicator
+        elapsedMs={roll.elapsedMs}
+        paused={roll.phase === "paused"}
+        onPause={roll.pause}
+        onResume={roll.resume}
+      />
     );
   }
   if (studio.phase === "recording") {
@@ -448,12 +448,17 @@ function Overlay(screen: Screen) {
     <>
       <div className="absolute inset-x-3 top-[max(0.75rem,env(safe-area-inset-top))] flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
-          <TopLeft props={props} studio={studio} roll={roll} />
-          <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <TopLeft props={props} studio={studio} roll={roll} />
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
             <DirectorPill live={live} />
             <LeaveLink videoId={videoId} onClick={onLeave} />
           </div>
         </div>
+        {roll.rolling ? (
+          <RollProgress index={props.index} states={roll.states} onGo={roll.go} />
+        ) : null}
         <SlowerLine live={live} />
         {roll.rolling ? <RollUpload roll={roll} /> : null}
         {setup ? (
@@ -766,14 +771,6 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
     onDiscarded: () => live.take("discarded"),
     onKept: () => guard.current.go(pageAfter(props, yours.version)),
   });
-  const leaving = useLeaveGuard({
-    guarded: studio.phase !== "setup",
-    away: `/director/${videoId}`,
-    halt: studio.actions.halt,
-  });
-  useLayoutEffect(() => {
-    guard.current = leaving;
-  });
   const marks = useShotMarks({
     video: camera.video,
     facing: camera.facing,
@@ -804,7 +801,7 @@ function useShoot({ videoId, plan, index, audio, retake }: ShootProps) {
     live,
     studio,
     onFlip,
-    leaving,
+    guard,
     marks,
     mark,
     rolling,
@@ -828,8 +825,26 @@ function CameraPicture({ camera }: { camera: Camera }) {
   );
 }
 
-/** "Leave? This take isn't kept yet.", with Leave and Stay. */
-function LeaveDialog({ leaving }: { leaving: ReturnType<typeof useLeaveGuard> }) {
+/**
+ * Leaving the shoot without losing anything by accident: ✕ and back ask first while a
+ * countdown, a take or the roll is on. Leaving mid-roll ends the session there, its
+ * footage kept for the editor.
+ */
+function useShootLeaving(shoot: ReturnType<typeof useShoot>, roll: RollShoot) {
+  const rolling = roll.phase === "recording" || roll.phase === "paused";
+  const leaving = useLeaveGuard({
+    guarded: shoot.studio.phase !== "setup" || rolling,
+    away: `/director/${shoot.props.videoId}`,
+    halt: shoot.studio.actions.halt,
+  });
+  useLayoutEffect(() => {
+    shoot.guard.current = leaving;
+  });
+  return { ...leaving, rolling };
+}
+
+/** "Leave? This take isn't kept yet." (or, mid-roll, that it ends the shoot), with Leave and Stay. */
+function LeaveDialog({ leaving }: { leaving: ReturnType<typeof useShootLeaving> }) {
   const t = useTranslations("director.shoot.leaving");
   // Focus starts on Stay, so Enter on a laptop never leaves by accident.
   const stay = useRef<HTMLButtonElement>(null);
@@ -839,7 +854,9 @@ function LeaveDialog({ leaving }: { leaving: ReturnType<typeof useLeaveGuard> })
       <AlertDialogContent initialFocus={stay}>
         <AlertDialogHeader>
           <AlertDialogTitle>{t("title")}</AlertDialogTitle>
-          <AlertDialogDescription>{t("body")}</AlertDialogDescription>
+          <AlertDialogDescription>
+            {leaving.rolling ? t("rollBody") : t("body")}
+          </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel ref={stay}>{t("stay")}</AlertDialogCancel>
@@ -892,6 +909,7 @@ function ShootScreen(shootProps: ShootProps) {
     shoot.mark.current = roll.mark;
     shoot.rolling.current = () => roll.rolling;
   });
+  const leaving = useShootLeaving(shoot, roll);
   const start = () => {
     camera.start();
     if (liveOn) {
@@ -935,7 +953,7 @@ function ShootScreen(shootProps: ShootProps) {
             liveOn={liveOn}
             roll={roll}
             onFlip={shoot.onFlip}
-            onLeave={shoot.leaving.leave}
+            onLeave={leaving.leave}
           />
         ) : null}
         {roll.phase === "finishing" || roll.phase === "done" ? (
@@ -946,7 +964,7 @@ function ShootScreen(shootProps: ShootProps) {
           />
         ) : null}
         <Review shoot={shoot} />
-        <LeaveDialog leaving={shoot.leaving} />
+        <LeaveDialog leaving={leaving} />
         {blocked ? <CameraBlocked camera={camera} /> : null}
       </div>
     </div>

@@ -615,6 +615,7 @@ declare const messages: {
       "leaving": {
         "title": "Leave?",
         "body": "This take isn't kept yet.",
+        "rollBody": "Leaving ends this shoot. What's recorded so far is kept, and your takes wait for you in the editor.",
         "leave": "Leave",
         "stay": "Stay"
       },

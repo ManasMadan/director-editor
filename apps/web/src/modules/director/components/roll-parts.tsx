@@ -55,7 +55,7 @@ export function RecIndicator({
         aria-label={paused ? t("roll.resume") : t("roll.pause")}
         title={paused ? t("roll.resume") : t("roll.pause")}
         className={cn(
-          "flex size-9 items-center justify-center rounded-full transition-transform active:scale-90",
+          "flex size-11 items-center justify-center rounded-full transition-transform active:scale-90",
           GLASS,
         )}
       >
@@ -131,7 +131,8 @@ const MARKS: Record<ShotState, string> = { take: "✓", tried: "•", todo: "○
 
 /**
  * The progress strip: a mark per shot (✓ a take, • tried, ○ to do), the one on screen
- * lit. Tapping one goes there, and Director with it.
+ * lit. Tapping one goes there, and Director with it. Each mark is a full-size target, so
+ * a long plan scrolls sideways rather than widening the screen.
  */
 export function RollProgress({
   index,
@@ -146,7 +147,10 @@ export function RollProgress({
   return (
     <nav
       aria-label={t("progress")}
-      className={cn("flex gap-0.5 rounded-full px-1.5 py-0.5", GLASS)}
+      className={cn(
+        "flex max-w-full gap-0.5 self-start overflow-x-auto rounded-full px-1 [scrollbar-width:none]",
+        GLASS,
+      )}
     >
       {states.map((state, shot) => (
         <button
@@ -156,7 +160,7 @@ export function RollProgress({
           aria-label={t("shot", { index: shot + 1, state })}
           aria-current={shot === index ? "step" : undefined}
           className={cn(
-            "flex size-7 items-center justify-center rounded-full text-sm font-semibold",
+            "flex size-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
             shot === index ? "bg-studio-foreground text-studio" : "text-studio-foreground/80",
           )}
         >
